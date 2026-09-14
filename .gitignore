@@ -26,3 +26,4 @@ packages/core/test/tmp/
 apps/web/.next/
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+.superpowers/
