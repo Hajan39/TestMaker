@@ -1,0 +1,35 @@
+{
+  "name": "@testmaker/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./extract": "./src/extract/index.ts",
+    "./ai": "./src/ai/index.ts",
+    "./pdf": "./src/pdf/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.53",
+    "@react-pdf/renderer": "^4.9.0",
+    "ai": "^7.0.99",
+    "jszip": "^3.10.1",
+    "ollama-ai-provider-v2": "^4.0.1",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.3.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "testmaker",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "dev": "pnpm --filter @testmaker/web dev",
+    "build": "pnpm --filter @testmaker/web build",
+    "start": "pnpm --filter @testmaker/web start",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @testmaker/web db:generate",
+    "db:migrate": "pnpm --filter @testmaker/web db:migrate",
+    "db:seed": "pnpm --filter @testmaker/web db:seed",
+    "db:studio": "pnpm --filter @testmaker/web db:studio"
+  }
+}

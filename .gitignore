@@ -1,0 +1,25 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Prostředí
+.env
+.env.local
+.env*.local
+
+# Lokální databáze
+*.db
+*.db-journal
+*.sqlite
+local.db*
+
+# Výukové materiály (velké, soukromé)
+sources/
+
+# macOS
+.DS_Store
+packages/core/test/tmp/
