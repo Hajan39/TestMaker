@@ -21,11 +21,57 @@ export interface ParsedPath {
 }
 
 /**
+ * Znaková sada CP437, kterou některé archivační nástroje použijí na názvy
+ * souborů uložené v UTF-8. Výsledkem je zmršený název typu `U╠ünikovka savci`.
+ */
+const CP437_HIGH =
+  'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ '
+
+/** Vrátí bajt CP437 pro daný znak, nebo -1 pokud v této sadě není. */
+function cp437Byte(char: string): number {
+  const code = char.codePointAt(0) ?? -1
+  if (code < 0x80) return code
+  const index = CP437_HIGH.indexOf(char)
+  return index === -1 ? -1 : 0x80 + index
+}
+
+/**
+ * Opraví název, jehož UTF-8 bajty někdo přečetl jako CP437.
+ * Vrátí původní text jen tehdy, když se převod povede beze zbytku.
+ */
+export function repairMojibake(rawName: string): string {
+  // Rámečkové znaky se v názvech souborů běžně nevyskytují a jsou pro tuto
+  // záměnu typické; bez nich se o opravu nepokoušíme.
+  if (!/[\u2500-\u257f]/.test(rawName)) return rawName
+
+  // CP437 zná jen složené znaky, proto se rozložené (u + přehláska) nejdřív složí.
+  const name = rawName.normalize('NFC')
+  const bytes: number[] = []
+  for (const char of name) {
+    const byte = cp437Byte(char)
+    if (byte === -1) return name
+    bytes.push(byte)
+  }
+
+  try {
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes))
+    return decoded.includes('\ufffd') ? rawName : decoded
+  } catch {
+    return rawName
+  }
+}
+
+/**
  * macOS ukládá názvy souborů v NFD (ř = r + háček), Windows a Linux v NFC.
  * Bez sjednocení selžou jak regulární výrazy, tak porovnávání názvů.
  */
 export function normalizePath(relativePath: string): string {
-  return relativePath.normalize('NFC')
+  // Oprava se zkouší po částech cesty — poškozená bývá jen některá složka.
+  return relativePath
+    .split('/')
+    .map((segment) => repairMojibake(segment))
+    .join('/')
+    .normalize('NFC')
 }
 
 export function fileExtension(fileName: string): string {

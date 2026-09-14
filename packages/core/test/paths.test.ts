@@ -86,3 +86,25 @@ describe('normalizace názvů (macOS NFD)', () => {
     expect(parsed.topic).toBe('Státní symboly ČR – omalovánky')
   })
 })
+
+describe('poškozené názvy z archivu', () => {
+  // UTF-8 bajty názvu přečtené jako CP437 — typický výsledek rozbalení ZIPu.
+  const broken = 'sources/PŘÍRODOPIS/únikovka - savci/U╠ünikovka savci/U╠ünikovka Savci barevna╠ü.pdf'
+
+  it('vrátí čitelný název tématu', () => {
+    const parsed = parsePath(broken)
+    expect(parsed.topic).toContain('Únikovka')
+    expect(parsed.topic).not.toContain('╠')
+  })
+
+  it('nepoškozené názvy nechá být', () => {
+    expect(parsePath('sources/ZE/04.Podnebí.pdf').topic).toBe('Podnebí')
+  })
+})
+
+describe('poškozený název v rozloženém tvaru', () => {
+  it('opraví i zápis, kde je přehláska samostatným znakem', () => {
+    const segment = 'U╠ünikovka savci'
+    expect(parsePath(`sources/PŘÍRODOPIS/${segment}/list.pdf`).topic).toContain('Únikovka savci')
+  })
+})

@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
+import { BulkGenerate, type BulkScope } from '@/components/BulkGenerate'
+import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
 
 export const dynamic = 'force-dynamic'
@@ -56,6 +58,21 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      <BulkGenerate
+        ai={aiStatus()}
+        scopes={[
+          ...tree.map((subject): BulkScope => ({ label: `Celý ${subject.name}`, subjectId: subject.id })),
+          ...tree.flatMap((subject) =>
+            subject.grades
+              .filter((grade) => grade.name)
+              .map((grade): BulkScope => ({
+                label: `${subject.name} · ${grade.name}`,
+                gradeId: grade.id,
+              })),
+          ),
+        ]}
+      />
 
       <div className="space-y-5">
         {tree.map((subject) => (
