@@ -8,15 +8,14 @@ import { DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
 export const runtime = 'nodejs'
 
 const enqueueSchema = z.object({
-  /** Zařadit materiály podle rozsahu — jeden z nich. */
-  materialIds: z.array(z.string()).optional(),
+  /** Rozsah zařazení — stačí jeden z údajů. */
   topicIds: z.array(z.string()).optional(),
   gradeId: z.string().optional(),
   subjectId: z.string().optional(),
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
-  /** Přeskočit materiály, které už mají otázky. */
+  /** Přeskočit témata, která už otázky mají. */
   skipWithQuestions: z.boolean().default(true),
 })
 
@@ -44,52 +43,48 @@ export async function POST(request: Request) {
   }
   const input = parsed.data
 
-  let materialIds = input.materialIds ?? []
-  if (materialIds.length === 0) {
-    const topicIds = await resolveTopicIds(input)
-    if (topicIds.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
-    const rows = await db
-      .select({ id: materials.id })
-      .from(materials)
-      // Duplicitní exporty téhož obsahu do fronty nepatří.
-      .where(and(inArray(materials.topicId, topicIds), isNull(materials.duplicateOfId)))
-    materialIds = rows.map((row) => row.id)
-  }
+  const scope = await resolveTopicIds(input)
+  if (scope.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
 
-  if (materialIds.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
+  // Témata bez použitelného textu nemá smysl zařazovat.
+  const withText = await db
+    .selectDistinct({ id: materials.topicId })
+    .from(materials)
+    .where(and(inArray(materials.topicId, scope), isNull(materials.duplicateOfId)))
+  const topicIds = withText.map((row) => row.id)
 
-  // Materiály, které už mají otázky nebo čekají ve frontě, znovu nezařazujeme.
+  // Témata, která už otázky mají nebo čekají ve frontě, znovu nezařazujeme.
   const busy = new Set<string>()
   if (input.skipWithQuestions) {
     const withQuestions = await db
-      .selectDistinct({ id: questions.materialId })
+      .selectDistinct({ id: questions.topicId })
       .from(questions)
-      .where(and(isNotNull(questions.materialId), inArray(questions.materialId, materialIds)))
+      .where(and(isNotNull(questions.topicId), inArray(questions.topicId, topicIds)))
     for (const row of withQuestions) if (row.id) busy.add(row.id)
   }
   const pending = await db
-    .select({ id: generationJobs.materialId })
+    .select({ id: generationJobs.topicId })
     .from(generationJobs)
     .where(
       and(
-        inArray(generationJobs.materialId, materialIds),
+        inArray(generationJobs.topicId, topicIds),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
     )
   for (const row of pending) busy.add(row.id)
 
-  const toEnqueue = materialIds.filter((id) => !busy.has(id))
+  const toEnqueue = topicIds.filter((id) => !busy.has(id))
   if (toEnqueue.length > 0) {
     await db.insert(generationJobs).values(
-      toEnqueue.map((materialId) => ({
+      toEnqueue.map((topicId) => ({
         id: newId(),
-        materialId,
+        topicId,
         params: { count: input.count, types: input.types, difficulty: input.difficulty },
       })),
     )
   }
 
-  return Response.json({ enqueued: toEnqueue.length, skipped: materialIds.length - toEnqueue.length })
+  return Response.json({ enqueued: toEnqueue.length, skipped: topicIds.length - toEnqueue.length })
 }
 
 /** Vyprázdní frontu (čekající úlohy). */

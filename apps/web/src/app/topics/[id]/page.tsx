@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge, Card } from '@testmaker/ui'
+import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { loadQuestions } from '@/lib/questions'
@@ -56,37 +56,11 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         <h1 className="mt-1 text-xl font-semibold text-ink-900">{topic.name}</h1>
       </div>
 
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink-900">Materiály ({materialRows.length})</h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {materialRows.map((material) => {
-            const original = materialRows.find((row) => row.id === material.duplicateOfId)
-            return (
-              <li key={material.id} className="flex flex-wrap items-center gap-2">
-                <span className={material.duplicateOfId ? 'text-ink-400' : 'text-ink-800'}>
-                  {material.fileName}
-                </span>
-                <span className="text-ink-400">
-                  {material.charCount.toLocaleString('cs')} znaků
-                  {material.pageCount ? `, ${material.pageCount} str.` : ''}
-                </span>
-                {material.needsOcr ? <Badge tone="warn">skoro bez textu</Badge> : null}
-                {material.duplicateOfId ? (
-                  <span className="text-xs text-ink-500">
-                    stejný obsah jako {original?.fileName ?? 'jiný materiál'}
-                    {material.duplicateScore
-                      ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)`
-                      : ''}
-                  </span>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
-      </Card>
+      <TopicGroup topicId={topic.id} topicName={topic.name} materials={materialRows} />
 
       <TopicWorkspace
         topicId={topic.id}
+        topicName={topic.name}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
         ai={aiStatus()}

@@ -1,5 +1,5 @@
 import 'server-only'
-import { eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type QuestionType } from '@testmaker/core/schema'
 import { db, grades, materials, questions, subjects, topics } from '@/db'
@@ -21,53 +21,66 @@ export interface GenerateOutcome {
   created: number
   rejected: number
   topicId: string
+  /** Z kolika materiálů se generovalo. */
+  sources: number
+}
+
+/** Text celé skupiny materiálů jednoho tématu, s hlavičkami podle souborů. */
+export async function loadTopicSource(topicId: string): Promise<{
+  text: string
+  topicName: string
+  gradeName: string
+  subjectName: string
+  sources: number
+} | null> {
+  const [meta] = await db
+    .select({ topicName: topics.name, gradeName: grades.name, subjectName: subjects.name })
+    .from(topics)
+    .innerJoin(grades, eq(grades.id, topics.gradeId))
+    .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+    .where(eq(topics.id, topicId))
+    .limit(1)
+  if (!meta) return null
+
+  // Duplicitní exporty téhož obsahu do zdroje nepatří — jen by otázky zdvojily.
+  const rows = await db
+    .select({ fileName: materials.fileName, text: materials.text })
+    .from(materials)
+    .where(and(eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .orderBy(asc(materials.fileName))
+
+  const text = rows
+    .map((row) => `=== ${row.fileName} ===\n${row.text}`)
+    .join('\n\n')
+    .trim()
+
+  return { ...meta, text, sources: rows.length }
 }
 
 /**
- * Vygeneruje otázky k jednomu materiálu a uloží je jako koncepty.
- * Už existující otázky k tématu předá modelu jako seznam, kterému se má vyhnout.
+ * Vygeneruje otázky z celé skupiny materiálů jednoho tématu.
+ * Jeden soubor často na písemku nestačí a generování po souborech vede
+ * k opakujícím se otázkám, proto je vstupem vždy celé téma.
  */
-export async function generateForMaterial(
-  materialId: string,
+export async function generateForTopic(
+  topicId: string,
   params: GenerateParams,
   options: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
 ): Promise<GenerateOutcome> {
-  const [row] = await db
-    .select({
-      material: materials,
-      topicName: topics.name,
-      gradeName: grades.name,
-      subjectName: subjects.name,
-    })
-    .from(materials)
-    .innerJoin(topics, eq(topics.id, materials.topicId))
-    .innerJoin(grades, eq(grades.id, topics.gradeId))
-    .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(eq(materials.id, materialId))
-    .limit(1)
-
-  if (!row) throw new Error('Materiál nenalezen')
-  if (row.material.duplicateOfId) {
-    throw new Error(
-      'Tento materiál je jiný export už naimportovaného obsahu. Generuj z původního materiálu.',
-    )
-  }
-  if (row.material.text.trim().length < 200) {
-    throw new Error('Materiál obsahuje příliš málo textu na generování otázek')
+  const source = await loadTopicSource(topicId)
+  if (!source) throw new Error('Téma nenalezeno')
+  if (source.text.trim().length < 200) {
+    throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
   }
 
-  const existing = await db
-    .select()
-    .from(questions)
-    .where(eq(questions.topicId, row.material.topicId))
-    .limit(60)
+  const existing = await db.select().from(questions).where(eq(questions.topicId, topicId)).limit(80)
 
   const result = await generateQuestions(
     {
-      text: row.material.text,
-      topicName: row.topicName,
-      subjectName: row.subjectName,
-      gradeName: row.gradeName || null,
+      text: source.text,
+      topicName: source.topicName,
+      subjectName: source.subjectName,
+      gradeName: source.gradeName || null,
       count: params.count,
       types: params.types,
       difficulty: params.difficulty,
@@ -76,16 +89,12 @@ export async function generateForMaterial(
     { signal: options.signal, onChunk: options.onProgress },
   )
 
-  await insertQuestions(result.questions, {
-    topicId: row.material.topicId,
-    materialId: row.material.id,
-    source: 'ai',
-    status: 'draft',
-  })
+  await insertQuestions(result.questions, { topicId, source: 'ai', status: 'draft' })
 
   return {
     created: result.questions.length,
     rejected: result.rejected.length,
-    topicId: row.material.topicId,
+    topicId,
+    sources: source.sources,
   }
 }

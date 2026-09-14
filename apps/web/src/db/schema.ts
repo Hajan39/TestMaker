@@ -110,9 +110,10 @@ export const generationJobs = sqliteTable(
   'generation_jobs',
   {
     id: text('id').primaryKey(),
-    materialId: text('material_id')
+    /** Generuje se vždy z celé skupiny materiálů, tedy z tématu. */
+    topicId: text('topic_id')
       .notNull()
-      .references(() => materials.id, { onDelete: 'cascade' }),
+      .references(() => topics.id, { onDelete: 'cascade' }),
     params: text('params', { mode: 'json' }).notNull().$type<GenerationJobParams>(),
     status: text('status').notNull().default('queued').$type<'queued' | 'running' | 'done' | 'error'>(),
     producedCount: integer('produced_count').notNull().default(0),

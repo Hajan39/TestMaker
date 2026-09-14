@@ -8,6 +8,7 @@ import { normalizeText, UnsupportedFileError, type ExtractionResult } from './ty
 
 export * from './paths'
 export * from './similarity'
+export * from './grouping'
 export * from './types'
 export { extractDocx, extractHtml, extractOdf, extractPdf }
 

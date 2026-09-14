@@ -23,18 +23,20 @@ interface MaterialSummary {
 
 export function TopicWorkspace({
   topicId,
+  topicName,
   materials,
   questions,
   ai,
 }: {
   topicId: string
+  topicName: string
   materials: MaterialSummary[]
   questions: Question[]
   ai: { configured: boolean; provider: string; model: string }
 }) {
   const router = useRouter()
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
-  const [busyMaterial, setBusyMaterial] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -46,6 +48,8 @@ export function TopicWorkspace({
   })
   const abortRef = useRef<AbortController | null>(null)
 
+  const totalChars = materials.reduce((sum, material) => sum + material.charCount, 0)
+
   const visible = useMemo(() => {
     const needle = filters.search.trim().toLocaleLowerCase('cs')
     return questions.filter((question) => {
@@ -56,16 +60,18 @@ export function TopicWorkspace({
     })
   }, [questions, filters])
 
-  async function generate(materialId: string) {
+  async function generate() {
     setError(null)
-    setBusyMaterial(materialId)
+    setGenerating(true)
+    setStatus('Generuji…')
     abortRef.current = new AbortController()
     try {
-      await generateQuestionsStream({ materialId, ...settings }, (event) => {
+      await generateQuestionsStream({ topicId, ...settings }, (event) => {
         if (event.type === 'progress') setStatus(`Zpracovávám část ${event.done} z ${event.total}`)
         else if (event.type === 'done') {
           setStatus(
-            `Vytvořeno ${event.created} otázek` + (event.rejected > 0 ? `, ${event.rejected} zahozeno` : ''),
+            `Vytvořeno ${event.created} otázek z ${event.sources} materiálů` +
+              (event.rejected > 0 ? `, ${event.rejected} zahozeno` : ''),
           )
           router.refresh()
         } else if (event.type === 'error') setError(event.message)
@@ -73,7 +79,7 @@ export function TopicWorkspace({
     } catch (streamError) {
       setError(streamError instanceof Error ? streamError.message : String(streamError))
     } finally {
-      setBusyMaterial(null)
+      setGenerating(false)
     }
   }
 
@@ -112,30 +118,21 @@ export function TopicWorkspace({
         {ai.configured ? (
           <>
             <p className="mt-1 text-sm text-ink-500">
-              Model {ai.model}. Otázky vzniknou jako koncepty, které pak schválíš.
+              Zdrojem je celá skupina „{topicName}“: {materials.length}{' '}
+              {materials.length === 1 ? 'materiál' : 'materiálů'},{' '}
+              {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
+              otázky neopakovaly. Vzniknou jako koncepty ke schválení.
             </p>
             <div className="mt-3">
-              <GenerateSettingsForm value={settings} onChange={setSettings} disabled={busyMaterial !== null} />
+              <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
             </div>
-            <div className="mt-4 space-y-2">
-              {materials.map((material) => (
-                <div key={material.id} className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm text-ink-700">{material.fileName}</span>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={busyMaterial !== null}
-                    onClick={() => void generate(material.id)}
-                  >
-                    Vygenerovat
-                  </Button>
-                  {busyMaterial === material.id ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
-                </div>
-              ))}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button variant="primary" disabled={generating || materials.length === 0} onClick={() => void generate()}>
+                Vygenerovat ze skupiny
+              </Button>
+              {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
+              {!generating && status ? <span className="text-sm text-brand-700">{status}</span> : null}
             </div>
-            {busyMaterial === null && status ? (
-              <p className="mt-3 text-sm text-brand-700">{status}</p>
-            ) : null}
             {error ? <p className="mt-3 text-sm text-danger-600">{error}</p> : null}
           </>
         ) : (
@@ -153,9 +150,7 @@ export function TopicWorkspace({
               <Label>Typ</Label>
               <Select
                 value={filters.type}
-                onChange={(event) =>
-                  setFilters({ ...filters, type: event.target.value as QuestionType | '' })
-                }
+                onChange={(event) => setFilters({ ...filters, type: event.target.value as QuestionType | '' })}
               >
                 <option value="">Všechny</option>
                 {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
@@ -169,9 +164,7 @@ export function TopicWorkspace({
               <Label>Stav</Label>
               <Select
                 value={filters.status}
-                onChange={(event) =>
-                  setFilters({ ...filters, status: event.target.value as QuestionStatus | '' })
-                }
+                onChange={(event) => setFilters({ ...filters, status: event.target.value as QuestionStatus | '' })}
               >
                 <option value="">Všechny</option>
                 <option value="draft">Koncept</option>
@@ -215,22 +208,14 @@ export function TopicWorkspace({
           <div className="mt-4">
             <EmptyState
               title={questions.length === 0 ? 'K tématu zatím nejsou otázky' : 'Filtru nic neodpovídá'}
-              hint={
-                questions.length === 0
-                  ? 'Vygeneruj je z materiálu výše, nebo přidej vlastní.'
-                  : undefined
-              }
+              hint={questions.length === 0 ? 'Vygeneruj je ze skupiny materiálů, nebo přidej vlastní.' : undefined}
             />
           </div>
         ) : (
           <ul className="mt-3 divide-y divide-ink-100">
             {visible.map((question) => (
               <li key={question.id} className="flex gap-3 py-3">
-                <Checkbox
-                  className="mt-1"
-                  checked={selected.has(question.id)}
-                  onChange={() => toggle(question.id)}
-                />
+                <Checkbox className="mt-1" checked={selected.has(question.id)} onChange={() => toggle(question.id)} />
                 <div className="min-w-0 flex-1">
                   <QuestionPreview question={question} />
                 </div>

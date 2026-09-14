@@ -1,6 +1,10 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createElement } from 'react'
+import { renderToBuffer } from '@react-pdf/renderer'
+import type { RenderableTest } from '../schema/test'
 import { FONT_FILES, registerFonts } from './fonts'
+import { TestDocument } from './TestDocument'
 
 /** Adresář s TTF soubory dodávanými s balíčkem. */
 export const FONT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../assets/fonts')
@@ -15,4 +19,13 @@ export function registerServerFonts(fontDir = FONT_DIR): void {
       italic: resolve(fontDir, FONT_FILES[family].italic),
     })),
   )
+}
+
+/**
+ * Vykreslí test do PDF. Registrace fontů i render musí proběhnout nad touž
+ * instancí react-pdf, proto je celý render tady a ne u volajícího.
+ */
+export async function renderTestToBuffer(renderable: RenderableTest): Promise<Buffer> {
+  registerServerFonts()
+  return renderToBuffer(createElement(TestDocument, renderable) as never)
 }

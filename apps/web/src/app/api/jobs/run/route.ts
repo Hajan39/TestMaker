@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
-import { generateForMaterial } from '@/lib/generation'
+import { generateForTopic } from '@/lib/generation'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -34,7 +34,7 @@ export async function POST() {
   if (claimed.length === 0) return Response.json({ processed: false, remaining: await remaining() })
 
   try {
-    const outcome = await generateForMaterial(job.materialId, job.params)
+    const outcome = await generateForTopic(job.topicId, job.params)
     await db
       .update(generationJobs)
       .set({

@@ -1,5 +1,6 @@
 import 'server-only'
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
+import { findMatchingTopic, preferredTopicName } from '@testmaker/core/extract'
 import { db, grades, materials, questions, subjects, topics } from '@/db'
 import { newId } from './ids'
 
@@ -74,11 +75,18 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
   }))
 }
 
-/** Najde nebo založí téma podle názvů předmětu, ročníku a tématu. */
+/**
+ * Najde nebo založí téma podle názvů předmětu, ročníku a tématu.
+ *
+ * Když `group` platí, soubor se připojí k existujícímu tématu se stejným
+ * obsahovým názvem („Měkkýši“ a „6.22 Měkkýši (Mollusca)“). Jedno téma je
+ * skupina materiálů, ze které se pak generuje dohromady.
+ */
 export async function ensureTopic(input: {
   subject: string
   grade: string | null
   topic: string
+  group?: boolean
 }): Promise<string> {
   const subjectName = input.subject.trim()
   const gradeName = (input.grade ?? '').trim()
@@ -103,15 +111,37 @@ export async function ensureTopic(input: {
         .onConflictDoNothing(),
   )
 
-  return upsertReturningId(
-    () =>
-      db
-        .select({ id: topics.id })
-        .from(topics)
-        .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
-        .limit(1),
-    (id) => db.insert(topics).values({ id, gradeId, name: topicName }).onConflictDoNothing(),
-  )
+  const [exact] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
+    .limit(1)
+  if (exact) return exact.id
+
+  if (input.group !== false) {
+    const siblings = await db
+      .select({ id: topics.id, name: topics.name })
+      .from(topics)
+      .where(eq(topics.gradeId, gradeId))
+    const match = findMatchingTopic(siblings, topicName)
+    if (match) {
+      // Stručnější z obou názvů popisuje skupinu lépe.
+      const preferred = preferredTopicName(match.name, topicName)
+      if (preferred !== match.name) {
+        await db.update(topics).set({ name: preferred }).where(eq(topics.id, match.id))
+      }
+      return match.id
+    }
+  }
+
+  const id = newId()
+  await db.insert(topics).values({ id, gradeId, name: topicName }).onConflictDoNothing()
+  const [created] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
+    .limit(1)
+  return created?.id ?? id
 }
 
 /** Ročník řadíme číselně, prázdný ("bez ročníku") jde první. */

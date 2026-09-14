@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1789416347592,
-      "tag": "0000_milky_nitro",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1789417557354,
-      "tag": "0001_duplicates",
+      "when": 1789418077295,
+      "tag": "0000_initial",
       "breakpoints": true
     }
   ]

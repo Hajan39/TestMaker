@@ -8,7 +8,7 @@ CREATE TABLE `assets` (
 --> statement-breakpoint
 CREATE TABLE `generation_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
-	`material_id` text NOT NULL,
+	`topic_id` text NOT NULL,
 	`params` text NOT NULL,
 	`status` text DEFAULT 'queued' NOT NULL,
 	`produced_count` integer DEFAULT 0 NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE `generation_jobs` (
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`started_at` text,
 	`finished_at` text,
-	FOREIGN KEY (`material_id`) REFERENCES `materials`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `generation_jobs_status_idx` ON `generation_jobs` (`status`);--> statement-breakpoint
@@ -41,12 +41,15 @@ CREATE TABLE `materials` (
 	`page_count` integer,
 	`needs_ocr` integer DEFAULT false NOT NULL,
 	`content_hash` text NOT NULL,
+	`duplicate_of_id` text,
+	`duplicate_score` real,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`topic_id`) REFERENCES `topics`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `materials_hash_idx` ON `materials` (`content_hash`);--> statement-breakpoint
 CREATE INDEX `materials_topic_idx` ON `materials` (`topic_id`);--> statement-breakpoint
+CREATE INDEX `materials_duplicate_idx` ON `materials` (`duplicate_of_id`);--> statement-breakpoint
 CREATE TABLE `questions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`topic_id` text,

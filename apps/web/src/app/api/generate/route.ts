@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { isAiConfigured } from '@testmaker/core/ai'
-import { DEFAULT_GENERATE_PARAMS, generateForMaterial } from '@/lib/generation'
+import { DEFAULT_GENERATE_PARAMS, generateForTopic } from '@/lib/generation'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 const bodySchema = z.object({
-  materialId: z.string().min(1),
+  topicId: z.string().min(1),
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
@@ -32,8 +32,8 @@ export async function POST(request: Request) {
 
       try {
         send({ type: 'start' })
-        const outcome = await generateForMaterial(
-          parsed.data.materialId,
+        const outcome = await generateForTopic(
+          parsed.data.topicId,
           {
             count: parsed.data.count,
             types: parsed.data.types,

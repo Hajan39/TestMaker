@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "661d6798-4e62-459d-bc06-4aec1c5ccdfa",
+  "id": "624f4dd9-8bf5-4c8e-a795-0f19513a5a29",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "assets": {
@@ -60,8 +60,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "material_id": {
-          "name": "material_id",
+        "topic_id": {
+          "name": "topic_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -130,12 +130,12 @@
         }
       },
       "foreignKeys": {
-        "generation_jobs_material_id_materials_id_fk": {
-          "name": "generation_jobs_material_id_materials_id_fk",
+        "generation_jobs_topic_id_topics_id_fk": {
+          "name": "generation_jobs_topic_id_topics_id_fk",
           "tableFrom": "generation_jobs",
-          "tableTo": "materials",
+          "tableTo": "topics",
           "columnsFrom": [
-            "material_id"
+            "topic_id"
           ],
           "columnsTo": [
             "id"
@@ -291,6 +291,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "duplicate_of_id": {
+          "name": "duplicate_of_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "duplicate_score": {
+          "name": "duplicate_score",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -312,6 +326,13 @@
           "name": "materials_topic_idx",
           "columns": [
             "topic_id"
+          ],
+          "isUnique": false
+        },
+        "materials_duplicate_idx": {
+          "name": "materials_duplicate_idx",
+          "columns": [
+            "duplicate_of_id"
           ],
           "isUnique": false
         }

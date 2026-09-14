@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
 
+  const groupMaterials = new URL(request.url).searchParams.get('group') !== '0'
   const hashes = parsed.data.materials.map((m) => m.contentHash)
   const existing = await db
     .select({ hash: materials.contentHash })
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
       subject: material.subject,
       grade: material.grade,
       topic: material.topic,
+      group: groupMaterials,
     })
     await db.insert(materials).values({
       id,

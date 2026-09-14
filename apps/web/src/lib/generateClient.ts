@@ -3,7 +3,7 @@
 import type { QuestionType } from '@testmaker/core/schema'
 
 export interface GenerateOptions {
-  materialId: string
+  topicId: string
   count: number
   types: QuestionType[]
   difficulty: 1 | 2 | 3 | 'mix'
@@ -12,7 +12,7 @@ export interface GenerateOptions {
 export type GenerateEvent =
   | { type: 'start' }
   | { type: 'progress'; done: number; total: number }
-  | { type: 'done'; created: number; rejected: number; topicId: string }
+  | { type: 'done'; created: number; rejected: number; topicId: string; sources: number }
   | { type: 'error'; message: string }
 
 /** Volá generování a předává jednotlivé události ze streamu. */
