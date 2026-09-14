@@ -47,6 +47,11 @@ export async function generateForMaterial(
     .limit(1)
 
   if (!row) throw new Error('Materiál nenalezen')
+  if (row.material.duplicateOfId) {
+    throw new Error(
+      'Tento materiál je jiný export už naimportovaného obsahu. Generuj z původního materiálu.',
+    )
+  }
   if (row.material.text.trim().length < 200) {
     throw new Error('Materiál obsahuje příliš málo textu na generování otázek')
   }

@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, topics } from '@/db'
@@ -51,7 +51,8 @@ export async function POST(request: Request) {
     const rows = await db
       .select({ id: materials.id })
       .from(materials)
-      .where(inArray(materials.topicId, topicIds))
+      // Duplicitní exporty téhož obsahu do fronty nepatří.
+      .where(and(inArray(materials.topicId, topicIds), isNull(materials.duplicateOfId)))
     materialIds = rows.map((row) => row.id)
   }
 

@@ -35,6 +35,8 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         charCount: materials.charCount,
         pageCount: materials.pageCount,
         needsOcr: materials.needsOcr,
+        duplicateOfId: materials.duplicateOfId,
+        duplicateScore: materials.duplicateScore,
       })
       .from(materials)
       .where(eq(materials.topicId, id))
@@ -57,22 +59,35 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
       <Card className="p-4">
         <h2 className="text-sm font-semibold text-ink-900">Materiály ({materialRows.length})</h2>
         <ul className="mt-2 space-y-1 text-sm">
-          {materialRows.map((material) => (
-            <li key={material.id} className="flex flex-wrap items-center gap-2">
-              <span className="text-ink-800">{material.fileName}</span>
-              <span className="text-ink-400">
-                {material.charCount.toLocaleString('cs')} znaků
-                {material.pageCount ? `, ${material.pageCount} str.` : ''}
-              </span>
-              {material.needsOcr ? <Badge tone="warn">skoro bez textu</Badge> : null}
-            </li>
-          ))}
+          {materialRows.map((material) => {
+            const original = materialRows.find((row) => row.id === material.duplicateOfId)
+            return (
+              <li key={material.id} className="flex flex-wrap items-center gap-2">
+                <span className={material.duplicateOfId ? 'text-ink-400' : 'text-ink-800'}>
+                  {material.fileName}
+                </span>
+                <span className="text-ink-400">
+                  {material.charCount.toLocaleString('cs')} znaků
+                  {material.pageCount ? `, ${material.pageCount} str.` : ''}
+                </span>
+                {material.needsOcr ? <Badge tone="warn">skoro bez textu</Badge> : null}
+                {material.duplicateOfId ? (
+                  <span className="text-xs text-ink-500">
+                    stejný obsah jako {original?.fileName ?? 'jiný materiál'}
+                    {material.duplicateScore
+                      ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)`
+                      : ''}
+                  </span>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       </Card>
 
       <TopicWorkspace
         topicId={topic.id}
-        materials={materialRows}
+        materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
         ai={aiStatus()}
       />

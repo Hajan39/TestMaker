@@ -59,11 +59,19 @@ export const materials = sqliteTable(
     pageCount: integer('page_count'),
     needsOcr: integer('needs_ocr', { mode: 'boolean' }).notNull().default(false),
     contentHash: text('content_hash').notNull(),
+    /**
+     * Vyplněno, když jde o jiný export téhož obsahu (typicky PDF vytištěné
+     * z prezentace). Takový materiál se při generování přeskakuje.
+     */
+    duplicateOfId: text('duplicate_of_id'),
+    /** Míra shody s materiálem v `duplicateOfId` (0–1). */
+    duplicateScore: real('duplicate_score'),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [
     uniqueIndex('materials_hash_idx').on(table.contentHash),
     index('materials_topic_idx').on(table.topicId),
+    index('materials_duplicate_idx').on(table.duplicateOfId),
   ],
 )
 

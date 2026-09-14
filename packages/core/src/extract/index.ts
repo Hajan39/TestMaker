@@ -7,6 +7,7 @@ import { fileExtension, parsePath, skipReason } from './paths'
 import { normalizeText, UnsupportedFileError, type ExtractionResult } from './types'
 
 export * from './paths'
+export * from './similarity'
 export * from './types'
 export { extractDocx, extractHtml, extractOdf, extractPdf }
 

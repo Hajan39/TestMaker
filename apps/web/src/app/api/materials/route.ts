@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { db, materials } from '@/db'
 import { newId } from '@/lib/ids'
+import { linkDuplicates } from '@/lib/duplicates'
 import { ensureTopic } from '@/lib/library'
 
 export const runtime = 'nodejs'
@@ -23,19 +24,21 @@ export async function POST(request: Request) {
 
   let imported = 0
   let duplicates = 0
+  let sameContent = 0
 
   for (const material of parsed.data.materials) {
     if (known.has(material.contentHash)) {
       duplicates += 1
       continue
     }
+    const id = newId()
     const topicId = await ensureTopic({
       subject: material.subject,
       grade: material.grade,
       topic: material.topic,
     })
     await db.insert(materials).values({
-      id: newId(),
+      id,
       topicId,
       fileName: material.fileName,
       relativePath: material.relativePath,
@@ -49,9 +52,14 @@ export async function POST(request: Request) {
     })
     known.add(material.contentHash)
     imported += 1
+
+    // Stejný obsah v jiném formátu (PDF vytištěné z prezentace) označíme,
+    // ať se z něj negenerují tytéž otázky podruhé.
+    const link = await linkDuplicates(id)
+    if (link.duplicateOfId) sameContent += 1
   }
 
-  return NextResponse.json({ imported, duplicates })
+  return NextResponse.json({ imported, duplicates, sameContent })
 }
 
 /** Smaže materiál i otázky, které z něj vznikly (cizí klíč je `set null`, proto mažeme ručně). */
