@@ -79,8 +79,9 @@ export function topicFromFileName(fileName: string): string {
  * Kořenová složka výběru se ignoruje, pokud za ní následují další úrovně.
  */
 export function parsePath(rawPath: string): ParsedPath {
-  const segments = normalizePath(rawPath).split('/').filter(Boolean)
-  const fileName = segments.at(-1) ?? relativePath
+  const normalized = normalizePath(rawPath)
+  const segments = normalized.split('/').filter(Boolean)
+  const fileName = segments.at(-1) ?? normalized
   const dirs = segments.slice(0, -1)
   // Kořen výběru (např. `sources`) zahodíme, když pod ním ještě něco je.
   const meaningful = dirs.length > 1 && /^sources?$|^materi/i.test(dirs[0] ?? '') ? dirs.slice(1) : dirs

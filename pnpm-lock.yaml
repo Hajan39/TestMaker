@@ -147,6 +147,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@testmaker/core':
+        specifier: workspace:*
+        version: link:../core
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
