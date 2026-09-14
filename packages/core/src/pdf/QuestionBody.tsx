@@ -1,9 +1,9 @@
 import { Image, Text, View } from '@react-pdf/renderer'
-import type { Block } from '../schema/blocks.js'
-import type { Question } from '../schema/question.js'
-import type { QuestionStyle, TemplateConfig } from '../schema/template.js'
-import { displayOrder } from './shuffle.js'
-import { LETTERS } from './styles.js'
+import type { Block } from '../schema/blocks'
+import type { Question } from '../schema/question'
+import type { QuestionStyle, TemplateConfig } from '../schema/template'
+import { displayOrder } from './shuffle'
+import { LETTERS } from './styles'
 
 interface Props {
   question: Question

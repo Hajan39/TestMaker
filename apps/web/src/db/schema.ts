@@ -1,0 +1,179 @@
+import { sql } from 'drizzle-orm'
+import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import type { Block, QuestionContent, TemplateConfig, TestHeaderConfig } from '@testmaker/core/schema'
+
+const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
+
+export const subjects = sqliteTable(
+  'subjects',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [uniqueIndex('subjects_name_idx').on(table.name)],
+)
+
+export const grades = sqliteTable(
+  'grades',
+  {
+    id: text('id').primaryKey(),
+    subjectId: text('subject_id')
+      .notNull()
+      .references(() => subjects.id, { onDelete: 'cascade' }),
+    /** Prázdné pro předměty bez členění na ročníky. */
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+  },
+  (table) => [uniqueIndex('grades_subject_name_idx').on(table.subjectId, table.name)],
+)
+
+export const topics = sqliteTable(
+  'topics',
+  {
+    id: text('id').primaryKey(),
+    gradeId: text('grade_id')
+      .notNull()
+      .references(() => grades.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    position: integer('position').notNull().default(0),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [uniqueIndex('topics_grade_name_idx').on(table.gradeId, table.name)],
+)
+
+export const materials = sqliteTable(
+  'materials',
+  {
+    id: text('id').primaryKey(),
+    topicId: text('topic_id')
+      .notNull()
+      .references(() => topics.id, { onDelete: 'cascade' }),
+    fileName: text('file_name').notNull(),
+    relativePath: text('relative_path').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    text: text('text').notNull(),
+    charCount: integer('char_count').notNull(),
+    pageCount: integer('page_count'),
+    needsOcr: integer('needs_ocr', { mode: 'boolean' }).notNull().default(false),
+    contentHash: text('content_hash').notNull(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [
+    uniqueIndex('materials_hash_idx').on(table.contentHash),
+    index('materials_topic_idx').on(table.topicId),
+  ],
+)
+
+export const assets = sqliteTable('assets', {
+  id: text('id').primaryKey(),
+  mimeType: text('mime_type').notNull(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  createdAt: text('created_at').notNull().default(now),
+})
+
+export const questions = sqliteTable(
+  'questions',
+  {
+    id: text('id').primaryKey(),
+    topicId: text('topic_id').references(() => topics.id, { onDelete: 'cascade' }),
+    materialId: text('material_id').references(() => materials.id, { onDelete: 'set null' }),
+    type: text('type').notNull().$type<QuestionContent['type']>(),
+    payload: text('payload', { mode: 'json' }).notNull().$type<QuestionContent['payload']>(),
+    blocks: text('blocks', { mode: 'json' }).notNull().default(sql`'[]'`).$type<Block[]>(),
+    points: real('points').notNull().default(1),
+    difficulty: integer('difficulty').notNull().default(2),
+    explanation: text('explanation'),
+    source: text('source').notNull().default('ai').$type<'ai' | 'manual'>(),
+    status: text('status').notNull().default('draft').$type<'draft' | 'approved' | 'rejected'>(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [
+    index('questions_topic_idx').on(table.topicId),
+    index('questions_material_idx').on(table.materialId),
+    index('questions_status_idx').on(table.status),
+  ],
+)
+
+export const generationJobs = sqliteTable(
+  'generation_jobs',
+  {
+    id: text('id').primaryKey(),
+    materialId: text('material_id')
+      .notNull()
+      .references(() => materials.id, { onDelete: 'cascade' }),
+    params: text('params', { mode: 'json' }).notNull().$type<GenerationJobParams>(),
+    status: text('status').notNull().default('queued').$type<'queued' | 'running' | 'done' | 'error'>(),
+    producedCount: integer('produced_count').notNull().default(0),
+    error: text('error'),
+    createdAt: text('created_at').notNull().default(now),
+    startedAt: text('started_at'),
+    finishedAt: text('finished_at'),
+  },
+  (table) => [index('generation_jobs_status_idx').on(table.status)],
+)
+
+export interface GenerationJobParams {
+  count: number
+  types: QuestionContent['type'][]
+  difficulty: 1 | 2 | 3 | 'mix'
+}
+
+export const templates = sqliteTable(
+  'templates',
+  {
+    id: text('id').primaryKey(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    config: text('config', { mode: 'json' }).notNull().$type<TemplateConfig>(),
+    builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
+    position: integer('position').notNull().default(0),
+  },
+  (table) => [uniqueIndex('templates_slug_idx').on(table.slug)],
+)
+
+export const tests = sqliteTable('tests', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  /** Test na známky — bez toho se netisknou body ani políčko na známku. */
+  graded: integer('graded', { mode: 'boolean' }).notNull().default(true),
+  templateId: text('template_id')
+    .notNull()
+    .references(() => templates.id),
+  header: text('header', { mode: 'json' }).notNull().$type<TestHeaderConfig>(),
+  variants: integer('variants').notNull().default(1),
+  showKey: integer('show_key', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull().default(now),
+  updatedAt: text('updated_at').notNull().default(now),
+})
+
+export const testItems = sqliteTable(
+  'test_items',
+  {
+    id: text('id').primaryKey(),
+    testId: text('test_id')
+      .notNull()
+      .references(() => tests.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    kind: text('kind').notNull().$type<'question' | 'heading' | 'instruction' | 'page_break'>(),
+    questionId: text('question_id').references(() => questions.id, { onDelete: 'cascade' }),
+    text: text('text'),
+    pointsOverride: real('points_override'),
+  },
+  (table) => [index('test_items_test_idx').on(table.testId, table.position)],
+)
+
+export type SubjectRow = typeof subjects.$inferSelect
+export type GradeRow = typeof grades.$inferSelect
+export type TopicRow = typeof topics.$inferSelect
+export type MaterialRow = typeof materials.$inferSelect
+export type QuestionRow = typeof questions.$inferSelect
+export type TemplateRow = typeof templates.$inferSelect
+export type TestRow = typeof tests.$inferSelect
+export type TestItemRow = typeof testItems.$inferSelect
+export type GenerationJobRow = typeof generationJobs.$inferSelect

@@ -5,9 +5,9 @@ import {
   questionContentSchema,
   validateQuestionContent,
   type QuestionContent,
-} from '../schema/question.js'
-import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt.js'
-import { getModel, readAiConfig, type AiConfig } from './provider.js'
+} from '../schema/question'
+import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt'
+import { getModel, readAiConfig, type AiConfig } from './provider'
 
 /** Maximální délka materiálu v jednom volání; delší se dělí na části. */
 const MAX_CHARS_PER_CALL = 120_000

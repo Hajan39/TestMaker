@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { normalizeText, type ExtractionResult } from './types.js'
+import { normalizeText, type ExtractionResult } from './types'
 
 /**
  * ODP / ODT / ODS — ZIP s `content.xml`. U prezentací zachovává hranice slidů

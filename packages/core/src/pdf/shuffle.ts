@@ -1,5 +1,5 @@
-import type { Question, QuestionContent } from '../schema/question.js'
-import type { ResolvedTestItem } from '../schema/test.js'
+import type { Question, QuestionContent } from '../schema/question'
+import type { ResolvedTestItem } from '../schema/test'
 
 /** Deterministický generátor (mulberry32) — varianta B vyjde vždy stejně. */
 export function seededRandom(seed: number): () => number {

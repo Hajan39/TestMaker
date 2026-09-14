@@ -1,4 +1,4 @@
-import { QUESTION_TYPE_LABELS, type QuestionType } from '../schema/question.js'
+import { QUESTION_TYPE_LABELS, type QuestionType } from '../schema/question'
 
 export interface GenerationRequest {
   /** Text materiálu. */

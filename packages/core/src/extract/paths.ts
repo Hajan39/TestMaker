@@ -1,4 +1,8 @@
-/** Složky a soubory, které se při importu přeskakují. */
+/**
+ * Složky, jejichž obsah se při importu ignoruje.
+ * `~BROMIUM` je cache izolovaného prohlížeče — obsahuje jen několikasetbajtové
+ * zástupné soubory s příponou .pdf, ne skutečné dokumenty.
+ */
 const SKIP_DIR_PATTERNS = [/^~BROMIUM$/i, /^__MACOSX$/, /_files$/i, /^\.\w/]
 const SKIP_FILE_PATTERNS = [/^\./, /\.tmp$/i, /^~\$/, /^lu\w+\.tmp$/i]
 
@@ -16,14 +20,22 @@ export interface ParsedPath {
   extension: string
 }
 
+/**
+ * macOS ukládá názvy souborů v NFD (ř = r + háček), Windows a Linux v NFC.
+ * Bez sjednocení selžou jak regulární výrazy, tak porovnávání názvů.
+ */
+export function normalizePath(relativePath: string): string {
+  return relativePath.normalize('NFC')
+}
+
 export function fileExtension(fileName: string): string {
   const i = fileName.lastIndexOf('.')
   return i === -1 ? '' : fileName.slice(i + 1).toLowerCase()
 }
 
 /** Vrátí důvod přeskočení, nebo null pokud se soubor má zpracovat. */
-export function skipReason(relativePath: string): SkipReason | null {
-  const segments = relativePath.split('/').filter(Boolean)
+export function skipReason(rawPath: string): SkipReason | null {
+  const segments = normalizePath(rawPath).split('/').filter(Boolean)
   const fileName = segments.at(-1) ?? ''
   const dirs = segments.slice(0, -1)
 
@@ -42,7 +54,8 @@ export function skipReason(relativePath: string): SkipReason | null {
 const GRADE_RE = /^\s*(\d+)\s*\.?\s*(ročník|tř(?:ída|\.)|roc)/i
 
 /** Rozpozná ročník ze jména složky, např. "8. ročník", "6.ročník", "VKO 6. třída". */
-export function parseGrade(segment: string): string | null {
+export function parseGrade(rawSegment: string): string | null {
+  const segment = normalizePath(rawSegment)
   const direct = GRADE_RE.exec(segment)
   if (direct) return `${direct[1]}. ročník`
   const embedded = /(\d+)\s*\.?\s*(ročník|tř(?:ída|\.))/i.exec(segment)
@@ -51,7 +64,7 @@ export function parseGrade(segment: string): string | null {
 
 /** Název tématu ze jména souboru: bez přípony, bez pořadového prefixu, bez kopie-suffixu. */
 export function topicFromFileName(fileName: string): string {
-  const base = fileName.replace(/\.[^.]+$/, '')
+  const base = normalizePath(fileName).replace(/\.[^.]+$/, '')
   return base
     // Pořadový prefix: "11. ", "04.", "6.22 " — číslo bez tečky se nechá ("1000 let…").
     .replace(/^\s*\d+(\.\d+)*[.)]\s*(?=\D)/, '')
@@ -65,8 +78,8 @@ export function topicFromFileName(fileName: string): string {
  * Z relativní cesty odvodí Předmět / Ročník / Téma.
  * Kořenová složka výběru se ignoruje, pokud za ní následují další úrovně.
  */
-export function parsePath(relativePath: string): ParsedPath {
-  const segments = relativePath.split('/').filter(Boolean)
+export function parsePath(rawPath: string): ParsedPath {
+  const segments = normalizePath(rawPath).split('/').filter(Boolean)
   const fileName = segments.at(-1) ?? relativePath
   const dirs = segments.slice(0, -1)
   // Kořen výběru (např. `sources`) zahodíme, když pod ním ještě něco je.
@@ -86,9 +99,11 @@ export function parsePath(relativePath: string): ParsedPath {
   }
 
   const subject = subjectParts[0]?.trim() || 'Nezařazeno'
-  // Podsložky pod ročníkem se promítnou do názvu tématu.
-  const extraDirs = subjectParts.slice(1)
+  // Podsložky pod ročníkem se promítnou do názvu tématu, pokud už v něm nejsou.
   const base = topicFromFileName(fileName)
+  const extraDirs = subjectParts
+    .slice(1)
+    .filter((dir) => !base.toLocaleLowerCase('cs').includes(dir.toLocaleLowerCase('cs')))
   const topic = extraDirs.length > 0 ? `${extraDirs.join(' / ')} – ${base}` : base
 
   return { subject, grade, topic, fileName, extension: fileExtension(fileName) }

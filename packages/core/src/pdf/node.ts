@@ -1,6 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { FONT_FILES, registerFonts } from './fonts.js'
+import { FONT_FILES, registerFonts } from './fonts'
 
 /** Adresář s TTF soubory dodávanými s balíčkem. */
 export const FONT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../assets/fonts')

@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@import "@testmaker/ui/styles.css";
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+}

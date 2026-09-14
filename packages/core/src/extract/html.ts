@@ -1,4 +1,4 @@
-import { normalizeText, type ExtractionResult } from './types.js'
+import { normalizeText, type ExtractionResult } from './types'
 
 /** HTML — textový obsah bez skriptů, stylů a navigace. */
 export function extractHtml(html: string): ExtractionResult {

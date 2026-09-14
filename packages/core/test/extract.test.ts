@@ -8,9 +8,9 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { JSDOM } from 'jsdom'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { extractDocx } from '../src/extract/docx.js'
-import { extractHtml } from '../src/extract/html.js'
-import { extractOdf } from '../src/extract/odf.js'
+import { extractDocx } from '../src/extract/docx'
+import { extractHtml } from '../src/extract/html'
+import { extractOdf } from '../src/extract/odf'
 
 const SOURCES = resolve(import.meta.dirname, '../../../sources')
 const hasSources = existsSync(SOURCES)

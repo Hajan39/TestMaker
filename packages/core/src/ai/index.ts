@@ -1,3 +1,3 @@
-export * from './provider.js'
-export * from './prompt.js'
-export * from './generate.js'
+export * from './provider'
+export * from './prompt'
+export * from './generate'

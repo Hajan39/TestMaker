@@ -1,0 +1,51 @@
+{
+  "name": "@testmaker/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "import:local": "tsx scripts/import-local.ts"
+  },
+  "dependencies": {
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@testmaker/core": "workspace:*",
+    "@testmaker/ui": "workspace:*",
+    "@libsql/client": "^0.18.0",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.6.5",
+    "@react-pdf/renderer": "^4.9.0",
+    "pdfjs-dist": "^6.3.289",
+    "jszip": "^3.10.1",
+    "ai": "^7.0.99",
+    "@ai-sdk/anthropic": "^4.0.53",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "nanoid": "^5.1.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.20.6",
+    "jsdom": "^30.0.1",
+    "@types/jsdom": "^27.0.0"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

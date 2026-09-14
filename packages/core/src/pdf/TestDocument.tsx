@@ -1,11 +1,11 @@
 import { Document, Page, Text, View } from '@react-pdf/renderer'
-import type { Question } from '../schema/question.js'
-import { resolveQuestionStyle, type TemplateConfig } from '../schema/template.js'
-import type { RenderableTest, ResolvedTestItem } from '../schema/test.js'
-import { formatAnswer } from './answerKey.js'
-import { QuestionBody } from './QuestionBody.js'
-import { buildVariant } from './shuffle.js'
-import { pagePadding, questionLabel } from './styles.js'
+import type { Question } from '../schema/question'
+import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
+import type { RenderableTest, ResolvedTestItem } from '../schema/test'
+import { formatAnswer } from './answerKey'
+import { QuestionBody } from './QuestionBody'
+import { buildVariant } from './shuffle'
+import { pagePadding, questionLabel } from './styles'
 
 const LIGHT = '0.6pt solid #999'
 

@@ -1,4 +1,4 @@
-import type { TemplateConfig } from '../schema/template.js'
+import type { TemplateConfig } from '../schema/template'
 
 /** Milimetry na body (1 pt = 1/72", 1 mm = 2.8346 pt). */
 export const mm = (value: number): number => value * 2.834645669

@@ -1,7 +1,7 @@
-import type { Question } from '../src/schema/question.js'
-import type { ResolvedTestItem, Test } from '../src/schema/test.js'
-import { BUILT_IN_TEMPLATES } from '../src/pdf/builtInTemplates.js'
-import type { Template } from '../src/schema/template.js'
+import type { Question } from '../src/schema/question'
+import type { ResolvedTestItem, Test } from '../src/schema/test'
+import { BUILT_IN_TEMPLATES } from '../src/schema/builtInTemplates'
+import type { Template } from '../src/schema/template'
 
 let counter = 0
 const id = (prefix: string) => `${prefix}-${(counter += 1)}`

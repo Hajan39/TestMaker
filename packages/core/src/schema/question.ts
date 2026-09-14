@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { blockSchema } from './blocks.js'
+import { blockSchema } from './blocks'
 
 /** Typy otázek podporované aplikací. */
 export const QUESTION_TYPES = [
@@ -139,8 +139,8 @@ export type QuestionContent = z.infer<typeof questionContentSchema>
 export const QUESTION_STATUSES = ['draft', 'approved', 'rejected'] as const
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number]
 
-/** Otázka načtená z databáze. */
-export interface Question extends QuestionContent {
+/** Otázka načtená z databáze — metadata plus obsah (diskriminovaná unie podle `type`). */
+export interface QuestionMeta {
   id: string
   topicId: string | null
   materialId: string | null
@@ -148,6 +148,8 @@ export interface Question extends QuestionContent {
   status: QuestionStatus
   createdAt: string
 }
+
+export type Question = QuestionContent & QuestionMeta
 
 /** Výchozí počet bodů podle typu otázky. */
 export const DEFAULT_POINTS: Record<QuestionType, number> = {

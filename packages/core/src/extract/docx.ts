@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { normalizeText, type ExtractionResult } from './types.js'
+import { normalizeText, type ExtractionResult } from './types'
 
 /** DOCX — ZIP s `word/document.xml`; čte odstavce, zalomení a buňky tabulek. */
 export async function extractDocx(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {

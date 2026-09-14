@@ -1,4 +1,4 @@
-import { normalizeText, type ExtractionResult } from './types.js'
+import { normalizeText, type ExtractionResult } from './types'
 
 /**
  * PDF přes pdf.js. Import je dynamický, aby balíček šel načíst i na serveru,
@@ -6,7 +6,7 @@ import { normalizeText, type ExtractionResult } from './types.js'
  */
 export async function extractPdf(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {
   const pdfjs = await import('pdfjs-dist')
-  const doc = await pdfjs.getDocument({ data, useSystemFonts: true, isEvalSupported: false }).promise
+  const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise
 
   const numPages = doc.numPages
   const pages: string[] = []
@@ -28,7 +28,7 @@ export async function extractPdf(data: ArrayBuffer | Uint8Array): Promise<Extrac
       page.cleanup()
     }
   } finally {
-    await doc.destroy()
+    await doc.cleanup()
   }
 
   const text = normalizeText(pages.join('\n\n'))

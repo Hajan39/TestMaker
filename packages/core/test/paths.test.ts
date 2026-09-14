@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseGrade, parsePath, skipReason, topicFromFileName } from '../src/extract/paths.js'
+import { parseGrade, parsePath, skipReason, topicFromFileName } from '../src/extract/paths'
 
 describe('parseGrade', () => {
   it('rozpozná běžné zápisy ročníku', () => {
@@ -21,8 +21,9 @@ describe('topicFromFileName', () => {
 
 describe('skipReason', () => {
   it('přeskočí systémové, dočasné a nepodporované soubory', () => {
-    expect(skipReason('sources/PŘÍRODOPIS/~BROMIUM/x.pdf')).toBe('systemova-slozka')
     expect(skipReason('sources/x/__MACOSX/y.pdf')).toBe('systemova-slozka')
+    // ~BROMIUM obsahuje jen zástupné soubory izolovaného prohlížeče, ne skutečná PDF.
+    expect(skipReason('sources/PŘÍRODOPIS/~BROMIUM/fotosyntéza.pdf')).toBe('systemova-slozka')
     expect(skipReason('sources/PŘÍRODOPIS/7.ročník/lu54246y22.tmp')).toBe('docasny')
     expect(skipReason('sources/.DS_Store')).toBe('skryty')
     expect(skipReason('sources/VKO/omalovánky/vlajka.jpg')).toBe('obrazek')
@@ -61,8 +62,27 @@ describe('parsePath', () => {
   })
 
   it('podsložku promítne do názvu tématu', () => {
-    const parsed = parsePath('sources/VKO 6. třída/Státní symboly ČR/státní symboly ČR – 6.docx')
+    const parsed = parsePath('sources/PŘÍRODOPIS/8. ročník/Opakování/Kostra.pdf')
+    expect(parsed.grade).toBe('8. ročník')
+    expect(parsed.topic).toBe('Opakování – Kostra')
+  })
+})
+
+describe('normalizace názvů (macOS NFD)', () => {
+  const nfd = 'sources/VKO 6. třída/Státní svátky – 6.A.odp'.normalize('NFD')
+
+  it('rozpozná ročník i v NFD zápisu', () => {
+    expect(parseGrade('VKO 6. třída'.normalize('NFD'))).toBe('6. ročník')
+  })
+
+  it('odvodí předmět a ročník z NFD cesty', () => {
+    const parsed = parsePath(nfd)
+    expect(parsed.subject).toBe('VKO')
     expect(parsed.grade).toBe('6. ročník')
-    expect(parsed.topic).toContain('Státní symboly ČR')
+  })
+
+  it('nezdvojuje název podsložky v tématu', () => {
+    const parsed = parsePath('sources/VKO 6. třída/Státní symboly ČR/Státní symboly ČR – omalovánky.pdf')
+    expect(parsed.topic).toBe('Státní symboly ČR – omalovánky')
   })
 })

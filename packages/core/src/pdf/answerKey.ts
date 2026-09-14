@@ -1,6 +1,6 @@
-import type { Question } from '../schema/question.js'
-import { LETTERS } from './styles.js'
-import { displayOrder } from './shuffle.js'
+import type { Question } from '../schema/question'
+import { LETTERS } from './styles'
+import { displayOrder } from './shuffle'
 
 /** Textová podoba správné odpovědi pro klíč učitele. */
 export function formatAnswer(question: Question, variant: 'A' | 'B'): string {

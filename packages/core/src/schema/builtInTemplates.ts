@@ -1,4 +1,4 @@
-import { templateConfigSchema, type TemplateConfig } from '../schema/template.js'
+import { templateConfigSchema, type TemplateConfig } from './template'
 
 const STANDARD_FIELDS = [
   { key: 'name', label: 'Jméno a příjmení', widthPercent: 60, value: '' },

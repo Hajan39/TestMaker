@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import type { Question } from './question.js'
-import type { Template } from './template.js'
+import type { Question } from './question'
+import type { Template } from './template'
 
 /** Položka testu — struktura testu není omezená na pouhý seznam otázek. */
 export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break'] as const
@@ -48,7 +48,8 @@ export interface Test {
 
 /** Test připravený k vykreslení: položky mají navázané otázky. */
 export interface ResolvedTestItem extends TestItem {
-  question: Question | null
+  /** Vyplněno u `kind === 'question'`. */
+  question?: Question | null
 }
 
 export interface RenderableTest {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { QUESTION_TYPES } from './question.js'
+import { QUESTION_TYPES } from './question'
 
 /**
  * Šablona je data, ne komponenta. PDF renderer je jeden generický a řídí se tímto JSON.
@@ -28,12 +28,14 @@ export const pageStyleSchema = z.object({
 
 export const headerStyleSchema = z.object({
   show: z.boolean().default(true),
-  title: z.object({
-    show: z.boolean().default(true),
-    fontSize: z.number().min(9).max(28).default(16),
-    align: z.enum(['left', 'center']).default('center'),
-    uppercase: z.boolean().default(false),
-  }),
+  title: z
+    .object({
+      show: z.boolean().default(true),
+      fontSize: z.number().min(9).max(28).default(16),
+      align: z.enum(['left', 'center']).default('center'),
+      uppercase: z.boolean().default(false),
+    })
+    .prefault({}),
   fields: z.array(headerFieldSchema).default([]),
   /** Políčko na body a známku — vykreslí se jen u testu na známky. */
   scoreBox: z.boolean().default(true),
@@ -53,8 +55,8 @@ export const questionStyleSchema = z.object({
 })
 
 export const templateConfigSchema = z.object({
-  page: pageStyleSchema.default({}),
-  header: headerStyleSchema.default({}),
+  page: pageStyleSchema.prefault({}),
+  header: headerStyleSchema.prefault({}),
   /** Styl číslování otázek. */
   numbering: z.enum(['decimal', 'decimal-dot', 'paren', 'none']).default('decimal-dot'),
   /** Zobrazovat u otázky počet bodů (jen test na známky). */
@@ -66,9 +68,9 @@ export const templateConfigSchema = z.object({
     uppercase: z.boolean().default(false),
     rule: z.boolean().default(true),
     spacingBefore: z.number().min(0).max(60).default(16),
-  }).default({}),
+  }).prefault({}),
   /** Výchozí styl otázky + přepisy pro konkrétní typy. */
-  questionDefaults: questionStyleSchema.default({}),
+  questionDefaults: questionStyleSchema.prefault({}),
   questionStyles: z.partialRecord(z.enum(QUESTION_TYPES), questionStyleSchema.partial()).default({}),
 })
 

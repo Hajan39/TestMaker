@@ -1,13 +1,13 @@
-import type { ExtractedMaterial } from '../schema/material.js'
-import { extractDocx } from './docx.js'
-import { extractHtml } from './html.js'
-import { extractOdf } from './odf.js'
-import { extractPdf } from './pdf.js'
-import { fileExtension, parsePath, skipReason } from './paths.js'
-import { normalizeText, UnsupportedFileError, type ExtractionResult } from './types.js'
+import type { ExtractedMaterial } from '../schema/material'
+import { extractDocx } from './docx'
+import { extractHtml } from './html'
+import { extractOdf } from './odf'
+import { extractPdf } from './pdf'
+import { fileExtension, parsePath, skipReason } from './paths'
+import { normalizeText, UnsupportedFileError, type ExtractionResult } from './types'
 
-export * from './paths.js'
-export * from './types.js'
+export * from './paths'
+export * from './types'
 export { extractDocx, extractHtml, extractOdf, extractPdf }
 
 const MIME_BY_EXT: Record<string, string> = {

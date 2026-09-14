@@ -1,0 +1,25 @@
+/* Design tokeny sdílené celou aplikací. Importuje se z globals.css webu. */
+@theme {
+  --color-ink-50: oklch(0.985 0.002 250);
+  --color-ink-100: oklch(0.96 0.003 250);
+  --color-ink-200: oklch(0.91 0.005 250);
+  --color-ink-300: oklch(0.83 0.007 250);
+  --color-ink-400: oklch(0.66 0.01 250);
+  --color-ink-500: oklch(0.52 0.012 250);
+  --color-ink-600: oklch(0.42 0.014 250);
+  --color-ink-700: oklch(0.34 0.014 250);
+  --color-ink-800: oklch(0.25 0.012 250);
+  --color-ink-900: oklch(0.18 0.01 250);
+
+  --color-brand-50: oklch(0.97 0.02 165);
+  --color-brand-100: oklch(0.93 0.05 165);
+  --color-brand-300: oklch(0.8 0.11 165);
+  --color-brand-500: oklch(0.62 0.13 165);
+  --color-brand-600: oklch(0.54 0.13 165);
+  --color-brand-700: oklch(0.45 0.11 165);
+
+  --color-warn-100: oklch(0.95 0.05 80);
+  --color-warn-600: oklch(0.63 0.14 60);
+  --color-danger-100: oklch(0.94 0.04 25);
+  --color-danger-600: oklch(0.58 0.19 25);
+}

@@ -1,11 +1,11 @@
 import { createElement } from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { describe, expect, it } from 'vitest'
-import { TestDocument } from '../src/pdf/TestDocument.js'
-import { registerServerFonts } from '../src/pdf/node.js'
-import { buildVariant } from '../src/pdf/shuffle.js'
-import { formatAnswer } from '../src/pdf/answerKey.js'
-import { makeItems, makeTemplate, makeTest, sampleQuestions } from './fixtures.js'
+import { TestDocument } from '../src/pdf/TestDocument'
+import { registerServerFonts } from '../src/pdf/node'
+import { buildVariant } from '../src/pdf/shuffle'
+import { formatAnswer } from '../src/pdf/answerKey'
+import { makeItems, makeTemplate, makeTest, sampleQuestions } from './fixtures'
 
 registerServerFonts()
 
