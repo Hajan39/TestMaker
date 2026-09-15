@@ -25,7 +25,8 @@ export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
         .join(', ')
 
     case 'fill_blank':
-      return question.payload.blanks.map((b, i) => `${i + 1}. ${b}`).join(', ')
+      // Závorkované číslo je i v zadání u příslušné mezery (viz QuestionBody).
+      return question.payload.blanks.map((b, i) => `(${i + 1}) ${b}`).join(', ')
 
     case 'matching':
       return question.payload.pairs
@@ -41,7 +42,8 @@ export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
     }
 
     case 'table_fill':
-      return question.payload.answers.map((a, i) => `${i + 1}. ${a}`).join(', ')
+      // Číslo odpovídá značce v prázdné buňce tabulky v zadání.
+      return question.payload.answers.map((a, i) => `(${i + 1}) ${a}`).join(', ')
 
     case 'label_image':
       return question.payload.labels.map((l, i) => `${i + 1}. ${l}`).join(', ')

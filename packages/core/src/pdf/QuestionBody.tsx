@@ -149,7 +149,10 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
               }}
             >
               <View style={{ flex: 1, padding: 4 }}>
-                <Text>{sanitizeText(statement.text)}</Text>
+                {/* Číslo tvrzení je i v klíči — bez něj by učitelka při opravování počítala řádky. */}
+                <Text>
+                  {i + 1}. {sanitizeText(statement.text)}
+                </Text>
               </View>
               <View style={{ width: 44, borderLeft: LIGHT }} />
               <View style={{ width: 44, borderLeft: LIGHT }} />
@@ -158,12 +161,23 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
         </View>
       )
 
-    case 'fill_blank':
+    case 'fill_blank': {
+      // Každá mezera dostane pořadové číslo v závorce — týmiž značkami se na ni
+      // odkazuje klíč, takže se odpovědi nemusí dopočítávat podle pořadí v textu.
+      let blankNumber = 0
+      const text = sanitizeText(question.payload.text)
+        .replace(/___/g, () => {
+          blankNumber += 1
+          return ` (${blankNumber}) ______________ `
+        })
+        // Mezery kolem značky drží čitelnost i tam, kde je „___“ přilepené ke
+        // slovu; tady se jen uklidí, co tím vzniklo navíc.
+        .replace(/ {2,}/g, ' ')
+        .replace(/ ([,.;:!?])/g, '$1')
+        .trim()
       return (
         <View style={{ marginTop: 6 }}>
-          <Text style={{ lineHeight: 1.9 }}>
-            {sanitizeText(question.payload.text).replace(/___/g, ' ______________ ')}
-          </Text>
+          <Text style={{ lineHeight: 1.9 }}>{text}</Text>
           {question.payload.wordBank.length > 0 ? (
             <View style={{ marginTop: 6, padding: 5, border: LIGHT }}>
               <Text style={{ fontSize: 9 }}>
@@ -173,6 +187,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
           ) : null}
         </View>
       )
+    }
 
     case 'matching':
       return (
@@ -215,7 +230,13 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       )
     }
 
-    case 'table_fill':
+    case 'table_fill': {
+      // Prázdné buňky se očíslují v pořadí, v jakém k nim patří odpovědi
+      // v klíči — jinak by se musely dopočítávat podle pozice v tabulce.
+      let blankNumber = 0
+      const blankNumbers = question.payload.rows.map((row) =>
+        row.map((cell) => (cell ? null : (blankNumber += 1))),
+      )
       return (
         <View style={{ marginTop: 6, border: LIGHT }}>
           <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderBottom: LIGHT }}>
@@ -238,13 +259,16 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
                   key={c}
                   style={{ flex: 1, padding: 4, minHeight: 18, borderRight: c < row.length - 1 ? LIGHT : undefined }}
                 >
-                  <Text>{cell ? sanitizeText(cell) : ''}</Text>
+                  <Text style={{ color: cell ? undefined : '#777' }}>
+                    {cell ? sanitizeText(cell) : `(${blankNumbers[r]?.[c]})`}
+                  </Text>
                 </View>
               ))}
             </View>
           ))}
         </View>
       )
+    }
 
     case 'label_image': {
       const src = assets[question.payload.assetId]

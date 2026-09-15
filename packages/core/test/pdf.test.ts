@@ -3,11 +3,12 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { describe, expect, it } from 'vitest'
 import { TestDocument } from '../src/pdf/TestDocument'
 import { registerServerFonts } from '../src/pdf/node'
-import { buildVariant, shuffleQuestion } from '../src/pdf/shuffle'
+import { buildVariant, displayOrder, shuffleQuestion } from '../src/pdf/shuffle'
 import { formatAnswer } from '../src/pdf/answerKey'
 import { sanitizeText } from '../src/pdf/text'
 import { extractPdf } from '../src/extract/pdf'
 import { makeItems, makeQuestion, makeTemplate, makeTest, sampleQuestions, TALL_IMAGE_DATA_URL } from './fixtures'
+import { resolveTestItemQuestion, serializeQuestionSnapshot } from '../src/schema/test'
 import type { ResolvedTestItem } from '../src/schema/test'
 
 registerServerFonts()
@@ -357,3 +358,112 @@ describe('obrázky u otázky', () => {
   })
 })
 
+
+describe('číslování odpovědí na papíře a v klíči', () => {
+  async function renderWithKey(question: (typeof sampleQuestions)[number]) {
+    return renderText({
+      test: makeTest(),
+      template: makeTemplate(),
+      items: makeItems([question]),
+      variant: 'A',
+      withKey: true,
+      assets: {},
+    })
+  }
+
+  it('tvrzení u pravda/nepravda jsou očíslovaná stejně jako v klíči', async () => {
+    const question = sampleQuestions.find((q) => q.type === 'true_false')!
+    const text = await renderWithKey(question)
+    expect(text).toContain('1. Hrtan je tvořen chrupavkami.')
+    expect(text).toContain('2. Plíce jsou sval.')
+    expect(formatAnswer(question, 'A')).toBe('1. ANO, 2. NE')
+    expect(text).toContain('1. ANO, 2. NE')
+  })
+
+  it('mezery u doplňování jsou očíslované stejně jako v klíči', async () => {
+    const question = sampleQuestions.find((q) => q.type === 'fill_blank')!
+    const text = await renderWithKey(question)
+    expect(text).toContain('(1) ______________')
+    expect(text).toContain('(2) ______________')
+    expect(formatAnswer(question, 'A')).toBe('(1) dutinou nosní, (2) hrtanu')
+    expect(text).toContain('(1) dutinou nosní, (2) hrtanu')
+  })
+
+  it('prázdné buňky doplňovací tabulky jsou očíslované stejně jako v klíči', async () => {
+    const question = sampleQuestions.find((q) => q.type === 'table_fill')!
+    const text = await renderWithKey(question)
+    expect(text).toContain('(1)')
+    expect(text).toContain('(2)')
+    expect(formatAnswer(question, 'A')).toBe('(1) tvorba hlasu, (2) plicní sklípky')
+    expect(text).toContain('(1) tvorba hlasu, (2) plicní sklípky')
+  })
+
+  it('očíslované značky jsou v zadání ve všech vestavěných šablonách', async () => {
+    // Každý typ zvlášť, aby značka „(1)“ nemohla pocházet z jiné otázky.
+    const expected: Record<string, string> = {
+      true_false: '1. Hrtan je tvořen chrupavkami.',
+      fill_blank: '(1) ______________',
+      table_fill: '(1)',
+    }
+    for (const slug of ['klasicka', 'kompaktni', 'pracovni-list']) {
+      for (const [type, marker] of Object.entries(expected)) {
+        const question = sampleQuestions.find((q) => q.type === type)!
+        const text = await renderText({
+          test: makeTest(),
+          template: makeTemplate(slug),
+          items: makeItems([question]),
+          variant: 'A',
+          withKey: false,
+          assets: {},
+        })
+        expect(text, `${slug}/${type}`).toContain(marker)
+      }
+    }
+  })
+})
+
+describe('řazení nezávisí na tom, jestli otázka zůstala v bance', () => {
+  const ordering = sampleQuestions.find((q) => q.type === 'ordering')!
+  const snapshot = serializeQuestionSnapshot(ordering)
+
+  it('pořadí je stejné s živou otázkou i bez ní', () => {
+    const withLive = resolveTestItemQuestion(snapshot, ordering, 'item-42')
+    const withoutLive = resolveTestItemQuestion(snapshot, null, 'item-42')
+    // Předpoklad chyby: bez živé otázky se do id dosadí id položky testu.
+    expect(withoutLive.question!.id).not.toBe(withLive.question!.id)
+    expect(withoutLive.questionMissing).toBe(true)
+    for (const variant of ['A', 'B'] as const) {
+      expect(displayOrder(withoutLive.question!, variant)).toEqual(
+        displayOrder(withLive.question!, variant),
+      )
+    }
+  })
+
+  it('pořadí v zadání sedí s klíčem i po smazání otázky z banky', async () => {
+    const detached = resolveTestItemQuestion(snapshot, null, 'item-42').question!
+    if (ordering.type !== 'ordering') throw new Error('typ')
+    const text = await renderText({
+      test: makeTest(),
+      template: makeTemplate(),
+      items: makeItems([detached]),
+      variant: 'A',
+      withKey: true,
+      assets: {},
+    })
+
+    // Pořadí položek na papíře, jak je vykreslila komponenta zadání.
+    const printed = ordering.payload.items.filter((item) => text.includes(item))
+    expect(printed.length).toBe(ordering.payload.items.length)
+    const onPaper = [...ordering.payload.items].sort(
+      (a, b) => text.indexOf(a) - text.indexOf(b),
+    )
+
+    // Klíč říká „n. řádek -> m“: n-tý vytištěný řádek je m-tá položka zadání.
+    const key = sanitizeText(formatAnswer(detached, 'A'))
+    expect(text).toContain(key)
+    key.split(', ').forEach((part, i) => {
+      const source = Number(part.split('->')[1]!.trim())
+      expect(onPaper[i]).toBe(ordering.payload.items[source - 1])
+    })
+  })
+})

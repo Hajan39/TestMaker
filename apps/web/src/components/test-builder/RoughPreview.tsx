@@ -46,7 +46,7 @@ export function RoughPreview({
         {pages.map((page, pageIndex) => (
           <div
             key={pageIndex}
-            className="mx-auto aspect-[210/297] w-full max-w-64 rounded-sm border border-line bg-white p-3 text-[7px] leading-tight text-fg shadow-sm"
+            className="mx-auto aspect-[210/297] w-full max-w-64 rounded-sm border border-paper-line bg-paper p-3 text-[7px] leading-tight text-paper-fg shadow-sm"
           >
             {pageIndex === 0 ? (
               <p className="mb-2 text-center text-[9px] font-semibold">{title || 'Nový test'}</p>
