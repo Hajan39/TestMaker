@@ -121,7 +121,7 @@ migrace pustit najednou. Migraci nad Turso proto vždy provede až workflow
 
 | Workflow | Kdy | Co dělá |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | každý push a pull request | `pnpm install`, `pnpm typecheck`, `pnpm test`, migrace do dočasného souboru a `pnpm build` — ověří, že jde aplikace sestavit |
+| `.github/workflows/ci.yml` | každý push a pull request | `pnpm install`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, migrace do dočasného souboru a `pnpm build` — ověří, že jde aplikace sestavit |
 | `.github/workflows/migrate.yml` | push do `main` (a ručně přes „Run workflow“) | spustí `pnpm db:migrate` nad produkční Turso databází |
 
 Aby migrace na `main` fungovala, je potřeba v repozitáři nastavit (Settings →
