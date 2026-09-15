@@ -3,6 +3,7 @@ import { Badge, Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { LibrarySidebar } from '@/components/LibrarySidebar'
 import { TopicList } from '@/components/TopicList'
+import { TopicTile } from '@/components/TopicTile'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree, type GradeNode, type SubjectNode } from '@/lib/library'
 
@@ -121,16 +122,7 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {grade.topics.map((topic) => (
           <li key={topic.id}>
-            <Link href={`/topics/${topic.id}`}>
-              <Card className="flex items-center gap-2 p-3 hover:border-brand">
-                <span className="min-w-0 flex-1 truncate text-sm text-fg-soft">{topic.name}</span>
-                {topic.questionCount > 0 ? (
-                  <Badge>{topic.questionCount} ot.</Badge>
-                ) : (
-                  <Badge variant="secondary">bez otázek</Badge>
-                )}
-              </Card>
-            </Link>
+            <TopicTile id={topic.id} name={topic.name} questionCount={topic.questionCount} />
           </li>
         ))}
       </ul>

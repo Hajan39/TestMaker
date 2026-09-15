@@ -41,7 +41,9 @@ export function NavList({
                 className="size-1.5 shrink-0 rounded-full bg-draft-fg"
               />
             ) : null}
-            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            <span className="min-w-0 flex-1 truncate" title={item.label}>
+              {item.label}
+            </span>
             {typeof item.count === 'number' ? (
               <span className={cn('ui-numeric text-xs', active ? 'text-brand/70' : 'text-fg-muted')}>
                 {item.count}

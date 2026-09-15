@@ -26,21 +26,31 @@ async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 }
 
-/** Prvky, které přesahují šířku okna — vrací popis, ať jde vada dohledat. */
+/**
+ * Prvky, jejichž obsah přetéká vlastní rámec. Měřit jen proti oknu nestačí —
+ * text může vylézt z karty uvnitř sloupce, aniž by se rozbila celá stránka.
+ */
 async function overflowingElements(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const limit = document.documentElement.clientWidth
     const offenders: string[] = []
     for (const element of Array.from(document.querySelectorAll('body *'))) {
       const box = element.getBoundingClientRect()
       if (box.width === 0 || box.height === 0) continue
-      if (box.right > limit + 1) {
+
+      // Obsah je širší než prvek a přetéká ven. Ořezaný text (`overflow: hidden`,
+      // tři tečky) ani rolovatelná plocha chyba nejsou — přetéká jen `visible`.
+      const style = getComputedStyle(element)
+      if (style.overflowX !== 'visible') continue
+      if (element.scrollWidth > element.clientWidth + 1 && element.clientWidth > 0) {
         const tag = element.tagName.toLowerCase()
-        const cls = (element.getAttribute('class') ?? '').slice(0, 60)
-        offenders.push(`${tag}.${cls} (pravý okraj ${Math.round(box.right)} > ${limit})`)
+        const cls = (element.getAttribute('class') ?? '').slice(0, 70)
+        const text = (element.textContent ?? '').trim().slice(0, 40)
+        offenders.push(
+          `${tag}.${cls} — obsah ${element.scrollWidth} px v rámci ${element.clientWidth} px — „${text}“`,
+        )
       }
     }
-    return offenders.slice(0, 5)
+    return offenders.slice(0, 8)
   })
 }
 
@@ -54,11 +64,11 @@ for (const size of WIDTHS) {
         await page.waitForLoadState('networkidle')
 
         const overflow = await horizontalOverflow(page)
-        if (overflow > 0) {
-          console.log(`${target.name} @ ${size.width}: přetéká o ${overflow} px`)
-          console.log((await overflowingElements(page)).join('\n'))
-        }
-        expect(overflow, `${target.name} přetéká vodorovně`).toBeLessThanOrEqual(0)
+        expect(overflow, `${target.name} přetéká vodorovně přes celé okno`).toBeLessThanOrEqual(0)
+
+        const offenders = await overflowingElements(page)
+        if (offenders.length > 0) console.log(`${target.name} @ ${size.width}:\n${offenders.join('\n')}`)
+        expect(offenders, `${target.name}: obsah přetéká ze svého rámce`).toEqual([])
       })
     }
   })
@@ -100,5 +110,37 @@ test.describe('rolování', () => {
 
     expect(scrolled.found, 'obsah se nikde neroluje, i když je delší než okno').toBe(true)
     expect(scrolled.moved, 'plochu nejde posunout').toBeGreaterThan(0)
+  })
+})
+
+test.describe('dlaždice témat', () => {
+  test('dlouhé názvy bez mezer se vejdou do dlaždice', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/')
+    await page.getByRole('link', { name: '6. ročník' }).first().click()
+    await page.waitForLoadState('networkidle')
+
+    // V knihovně jsou názvy jako `prirodopis-6_pl-bezobratli-vztahy._test_2018`.
+    const offenders = await page.evaluate(() => {
+      const bad: string[] = []
+      const grid = Array.from(document.querySelectorAll('ul.grid')).find(
+        (candidate) => candidate.getBoundingClientRect().width > 300,
+      )
+      if (!grid) return ['mřížka dlaždic nenalezena']
+
+      for (const tile of Array.from(grid.querySelectorAll('a[href^="/topics/"]'))) {
+        const limit = tile.getBoundingClientRect().right
+        for (const child of Array.from(tile.querySelectorAll('*'))) {
+          // Ořezaný text tři tečky mít smí; chyba je až text čouhající ven z dlaždice.
+          if (getComputedStyle(child).overflowX !== 'visible') continue
+          if (child.getBoundingClientRect().right > limit + 1) {
+            bad.push(`${(child.textContent ?? '').slice(0, 45)} vyčnívá z dlaždice`)
+          }
+        }
+      }
+      return bad.slice(0, 5)
+    })
+
+    expect(offenders, 'název tématu přetéká z dlaždice').toEqual([])
   })
 })
