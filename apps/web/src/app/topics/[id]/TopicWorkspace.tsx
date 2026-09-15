@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import type { Question } from '@testmaker/core/schema'
 import { Button, Card } from '@testmaker/ui'
 import {
-  AiUnavailable,
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
   ProgressLine,
@@ -70,34 +69,28 @@ export function TopicWorkspace({
 
   return (
     <div className="space-y-5">
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
-        {ai.configured ? (
-          <>
-            <p className="mt-1 text-sm text-fg-muted">
-              Zdrojem je celá skupina „{topicName}“: {materials.length}{' '}
-              {materials.length === 1 ? 'materiál' : 'materiálů'},{' '}
-              {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
-              otázky neopakovaly. Vzniknou jako koncepty ke schválení.
-            </p>
-            <div className="mt-3">
-              <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button disabled={generating || materials.length === 0} onClick={() => void generate()}>
-                Vygenerovat ze skupiny
-              </Button>
-              {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
-              {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}
-            </div>
-            {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
-          </>
-        ) : (
+      {ai.configured ? (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            Zdrojem je celá skupina „{topicName}“: {materials.length}{' '}
+            {materials.length === 1 ? 'materiál' : 'materiálů'},{' '}
+            {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
+            otázky neopakovaly. Vzniknou jako koncepty ke schválení.
+          </p>
           <div className="mt-3">
-            <AiUnavailable provider={ai.provider} />
+            <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
           </div>
-        )}
-      </Card>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button disabled={generating || materials.length === 0} onClick={() => void generate()}>
+              Vygenerovat ze skupiny
+            </Button>
+            {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
+            {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}
+          </div>
+          {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+        </Card>
+      ) : null}
 
       {group}
 

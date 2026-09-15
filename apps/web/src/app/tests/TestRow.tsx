@@ -19,6 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  printPdf,
 } from '@testmaker/ui'
 
 export interface TestRowData {
@@ -77,11 +78,26 @@ export function TestRow({ row }: { row: TestRowData }) {
             <DropdownMenuItem asChild>
               <Link href={`/tests/${row.id}`}>Upravit</Link>
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                printPdf(`/api/tests/${row.id}/pdf?variant=A`)
+              }}
+            >
+              Vytisknout
+            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a href={`/api/tests/${row.id}/pdf?variant=A`} target="_blank" rel="noreferrer">
                 Stáhnout PDF
               </a>
             </DropdownMenuItem>
+            {row.variants === 2 ? (
+              <DropdownMenuItem asChild>
+                <a href={`/api/tests/${row.id}/pdf?variant=B`} target="_blank" rel="noreferrer">
+                  Stáhnout PDF, varianta B
+                </a>
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               variant="destructive"
               onSelect={(event) => {

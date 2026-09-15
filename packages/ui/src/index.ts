@@ -34,6 +34,8 @@ export {
 export { QuestionPreview } from './QuestionPreview'
 export { ReviewQueue } from './ReviewQueue'
 export { EmptyState } from './EmptyState'
+export { PrintButton } from './PrintButton'
+export { printPdf } from './print'
 export { AppShell } from './AppShell'
 export type { NavItem } from './AppShell'
 export { ThreePane } from './ThreePane'

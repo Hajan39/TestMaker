@@ -13,7 +13,6 @@ import {
   SheetTrigger,
 } from '@testmaker/ui'
 import {
-  AiUnavailable,
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
   type GenerateSettings,
@@ -86,6 +85,9 @@ export function BulkGenerate({
     }
   }
 
+  // Bez nakonfigurované AI se hromadné generování vůbec nenabízí.
+  if (!ai.configured) return null
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -99,11 +101,7 @@ export function BulkGenerate({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-4">
-          {!ai.configured ? (
-            <AiUnavailable provider={ai.provider} />
-          ) : (
-            <>
-              <p className="text-sm text-fg-muted">
+          <p className="text-sm text-fg-muted">
                 Projde všechny skupiny materiálů ve zvoleném rozsahu. Běží po jedné skupině, průběh
                 se průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
               </p>
@@ -142,9 +140,7 @@ export function BulkGenerate({
                     <li key={index}>{error}</li>
                   ))}
                 </ul>
-              ) : null}
-            </>
-          )}
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>

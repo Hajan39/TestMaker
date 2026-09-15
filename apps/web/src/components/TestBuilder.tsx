@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@testmaker/ui'
+import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger } from '@testmaker/ui'
 import type { PickerTopic } from '@/lib/questionPicker'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestOutline } from '@/components/test-builder/TestOutline'
@@ -157,6 +157,7 @@ export function TestBuilder({
           </span>
           {savedId ? (
             <>
+              <PrintButton href={pdfHref('A')}>Vytisknout</PrintButton>
               <a href={pdfHref('A')} target="_blank" rel="noreferrer">
                 <Button size="sm" variant="outline">PDF varianta A</Button>
               </a>

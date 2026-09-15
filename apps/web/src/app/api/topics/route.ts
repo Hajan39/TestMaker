@@ -1,20 +1,52 @@
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, materials, questions, topics } from '@/db'
+import { db, grades, materials, questions, topics } from '@/db'
+import { newId } from '@/lib/ids'
 
 export const runtime = 'nodejs'
 
-const renameSchema = z.object({ id: z.string().min(1), name: z.string().min(1).max(200) })
+const patchSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1).max(200).optional(),
+    /** Název ročníku; prázdný řetězec znamená „bez ročníku“. Ročník vznikne, pokud ještě není. */
+    gradeName: z.string().max(60).optional(),
+  })
+  .refine((value) => value.name !== undefined || value.gradeName !== undefined, {
+    message: 'Není co měnit',
+  })
+
 const mergeSchema = z.object({ sourceId: z.string().min(1), targetId: z.string().min(1) })
 const moveSchema = z.object({ materialId: z.string().min(1), topicId: z.string().min(1) })
 
-/** Témata téhož ročníku — nabídka pro sloučení a přesun materiálu. */
+/**
+ * Nabídky pro správu skupiny.
+ * `siblingsOf` vrátí ostatní témata téhož ročníku (pro sloučení a přesun materiálu),
+ * `gradesOf` vrátí ročníky téhož předmětu (pro přeřazení tématu).
+ */
 export async function GET(request: Request) {
-  const topicId = new URL(request.url).searchParams.get('siblingsOf')
-  if (!topicId) return Response.json({ topics: [] })
+  const params = new URL(request.url).searchParams
+  const siblingsOf = params.get('siblingsOf')
+  const gradesOf = params.get('gradesOf')
+  const topicId = siblingsOf ?? gradesOf
+  if (!topicId) return Response.json({ topics: [], grades: [] })
 
-  const [current] = await db.select({ gradeId: topics.gradeId }).from(topics).where(eq(topics.id, topicId)).limit(1)
-  if (!current) return Response.json({ topics: [] })
+  const [current] = await db
+    .select({ gradeId: topics.gradeId, subjectId: grades.subjectId, gradeName: grades.name })
+    .from(topics)
+    .innerJoin(grades, eq(grades.id, topics.gradeId))
+    .where(eq(topics.id, topicId))
+    .limit(1)
+  if (!current) return Response.json({ topics: [], grades: [] })
+
+  if (gradesOf) {
+    const rows = await db
+      .select({ id: grades.id, name: grades.name })
+      .from(grades)
+      .where(eq(grades.subjectId, current.subjectId))
+      .orderBy(asc(grades.position), asc(grades.name))
+    return Response.json({ grades: rows, currentGrade: current.gradeName })
+  }
 
   const rows = await db
     .select({ id: topics.id, name: topics.name })
@@ -25,10 +57,27 @@ export async function GET(request: Request) {
   return Response.json({ topics: rows })
 }
 
+/** Přejmenuje skupinu, přeřadí ji do jiného ročníku, nebo obojí. */
 export async function PATCH(request: Request) {
-  const parsed = renameSchema.safeParse(await request.json())
+  const parsed = patchSchema.safeParse(await request.json())
   if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
-  await db.update(topics).set({ name: parsed.data.name.trim() }).where(eq(topics.id, parsed.data.id))
+  const { id, name, gradeName } = parsed.data
+
+  const update: { name?: string; gradeId?: string } = {}
+  if (name !== undefined) update.name = name.trim()
+
+  if (gradeName !== undefined) {
+    const [current] = await db
+      .select({ subjectId: grades.subjectId })
+      .from(topics)
+      .innerJoin(grades, eq(grades.id, topics.gradeId))
+      .where(eq(topics.id, id))
+      .limit(1)
+    if (!current) return Response.json({ error: 'Téma nenalezeno' }, { status: 404 })
+    update.gradeId = await ensureGrade(current.subjectId, gradeName.trim())
+  }
+
+  await db.update(topics).set(update).where(eq(topics.id, id))
   return Response.json({ ok: true })
 }
 
@@ -55,4 +104,29 @@ export async function POST(request: Request) {
   await db.delete(topics).where(eq(topics.id, sourceId))
 
   return Response.json({ ok: true })
+}
+
+/** Najde ročník daného jména v předmětu, nebo ho založí. */
+async function ensureGrade(subjectId: string, name: string): Promise<string> {
+  const [existing] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(and(eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .limit(1)
+  if (existing) return existing.id
+
+  const id = newId()
+  await db.insert(grades).values({ id, subjectId, name, position: gradePosition(name) }).onConflictDoNothing()
+  const [created] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(and(eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .limit(1)
+  return created?.id ?? id
+}
+
+/** Ročník řadíme číselně, „bez ročníku“ jde první. */
+function gradePosition(name: string): number {
+  const match = /^(\d+)/.exec(name)
+  return match ? Number(match[1]) : 0
 }

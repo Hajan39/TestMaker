@@ -41,6 +41,10 @@ export function TopicGroup({
   const router = useRouter()
   const [name, setName] = useState(topicName)
   const [siblings, setSiblings] = useState<{ id: string; name: string }[]>([])
+  const [gradeOptions, setGradeOptions] = useState<{ id: string; name: string }[]>([])
+  const [currentGrade, setCurrentGrade] = useState('')
+  const [newGrade, setNewGrade] = useState('')
+  const [addingGrade, setAddingGrade] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
@@ -50,6 +54,12 @@ export function TopicGroup({
     void fetch(`/api/topics?siblingsOf=${encodeURIComponent(topicId)}`)
       .then((response) => response.json())
       .then((data: { topics: { id: string; name: string }[] }) => setSiblings(data.topics))
+    void fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
+      .then((response) => response.json())
+      .then((data: { grades: { id: string; name: string }[]; currentGrade: string }) => {
+        setGradeOptions(data.grades)
+        setCurrentGrade(data.currentGrade)
+      })
   }, [manage, topicId])
 
   async function call(method: string, body: unknown) {
@@ -140,6 +150,63 @@ export function TopicGroup({
                 Uložit
               </Button>
             </div>
+          </div>
+          <div>
+            <Label htmlFor="topic-group-grade">Ročník</Label>
+            <Select
+              value={addingGrade ? 'novy' : currentGrade === '' ? 'bez-rocniku' : currentGrade}
+              onValueChange={(value) => {
+                if (value === 'novy') {
+                  setAddingGrade(true)
+                  setNewGrade('')
+                  return
+                }
+                setAddingGrade(false)
+                void call('PATCH', { id: topicId, gradeName: value === 'bez-rocniku' ? '' : value })
+              }}
+            >
+              <SelectTrigger id="topic-group-grade" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bez-rocniku">Bez ročníku</SelectItem>
+                {gradeOptions
+                  .filter((grade) => grade.name !== '')
+                  .map((grade) => (
+                    <SelectItem key={grade.id} value={grade.name}>
+                      {grade.name}
+                    </SelectItem>
+                  ))}
+                <SelectItem value="novy">Jiný ročník…</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {addingGrade ? (
+              <div className="mt-2 flex gap-2">
+                <Input
+                  aria-label="Název nového ročníku"
+                  placeholder="Např. 8. ročník"
+                  value={newGrade}
+                  onChange={(event) => setNewGrade(event.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !newGrade.trim()}
+                  onClick={() => {
+                    setAddingGrade(false)
+                    void call('PATCH', { id: topicId, gradeName: newGrade })
+                  }}
+                >
+                  Přeřadit
+                </Button>
+              </div>
+            ) : null}
+
+            <p className="mt-1 text-xs text-fg-muted">
+              Přeřadí celou skupinu i s materiály a otázkami do zvoleného ročníku téhož předmětu.
+              Ročník, který ještě neexistuje, se založí.
+            </p>
           </div>
           <div>
             <Label htmlFor="topic-group-merge-target">Sloučit do jiné skupiny</Label>
