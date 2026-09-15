@@ -1,27 +1,21 @@
 import Link from 'next/link'
-import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
-import { BulkGenerate, type BulkScope } from '@/components/BulkGenerate'
+import { Badge, Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
+import { BulkGenerate } from '@/components/BulkGenerate'
+import { LibrarySidebar } from '@/components/LibrarySidebar'
+import { TopicList } from '@/components/TopicList'
 import { aiStatus } from '@/lib/ai'
-import { loadLibraryTree } from '@/lib/library'
+import { loadLibraryTree, type GradeNode, type SubjectNode } from '@/lib/library'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardPage() {
+export default async function LibraryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ grade?: string }>
+}) {
+  const { grade: gradeId } = await searchParams
   const tree = await loadLibraryTree()
-  const totals = tree.reduce(
-    (acc, subject) => {
-      for (const grade of subject.grades) {
-        for (const topic of grade.topics) {
-          acc.topics += 1
-          acc.materials += topic.materialCount
-          acc.questions += topic.questionCount
-          acc.approved += topic.approvedCount
-        }
-      }
-      return acc
-    },
-    { topics: 0, materials: 0, questions: 0, approved: 0 },
-  )
+  const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   if (tree.length === 0) {
     return (
@@ -36,6 +30,33 @@ export default async function DashboardPage() {
       />
     )
   }
+
+  return (
+    <ThreePane
+      first={<LibrarySidebar tree={tree} activeGradeId={gradeId} />}
+      second={<TopicList grade={grade} />}
+    >
+      {grade ? <GradeOverview grade={grade} /> : <LibraryOverview tree={tree} />}
+    </ThreePane>
+  )
+}
+
+/** Souhrn celé knihovny a rozcestník na jednotlivé ročníky. */
+function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
+  const totals = tree.reduce(
+    (acc, subject) => {
+      for (const grade of subject.grades) {
+        for (const topic of grade.topics) {
+          acc.topics += 1
+          acc.materials += topic.materialCount
+          acc.questions += topic.questionCount
+          acc.approved += topic.approvedCount
+        }
+      }
+      return acc
+    },
+    { topics: 0, materials: 0, questions: 0, approved: 0 },
+  )
 
   return (
     <div className="space-y-5">
@@ -54,65 +75,65 @@ export default async function DashboardPage() {
             </Button>
           </Link>
           <Link href="/tests/new">
-            <Button size="sm">
-              Nový test
-            </Button>
+            <Button size="sm">Nový test</Button>
           </Link>
         </div>
       </div>
 
       <BulkGenerate
         ai={aiStatus()}
-        scopes={[
-          ...tree.map((subject): BulkScope => ({ label: `Celý ${subject.name}`, subjectId: subject.id })),
-          ...tree.flatMap((subject) =>
-            subject.grades
-              .filter((grade) => grade.name)
-              .map((grade): BulkScope => ({
-                label: `${subject.name} · ${grade.name}`,
-                gradeId: grade.id,
-              })),
-          ),
-        ]}
+        scopes={tree.map((subject) => ({ label: `Celý ${subject.name}`, subjectId: subject.id }))}
       />
 
-      <div className="space-y-5">
-        {tree.map((subject) => (
-          <section key={subject.id}>
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-fg-muted">
-              {subject.name}
-            </h2>
-            <div className="space-y-3">
-              {subject.grades.map((grade) => (
-                <Card key={grade.id} className="p-4">
-                  <h3 className="mb-2 text-sm font-medium text-fg-soft">
-                    {grade.name || 'Bez ročníku'}
-                  </h3>
-                  <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {grade.topics.map((topic) => (
-                      <li key={topic.id}>
-                        <Link
-                          href={`/topics/${topic.id}`}
-                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-surface-muted"
-                        >
-                          <span className="truncate text-fg-soft">{topic.name}</span>
-                          <span className="ml-auto flex shrink-0 gap-1">
-                            {topic.questionCount > 0 ? (
-                              <Badge>{topic.questionCount} ot.</Badge>
-                            ) : (
-                              <Badge variant="secondary">bez otázek</Badge>
-                            )}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ))}
-            </div>
-          </section>
-        ))}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {tree.flatMap((subject) =>
+          subject.grades.map((gradeNode) => (
+            <Link key={gradeNode.id} href={`/?grade=${gradeNode.id}`}>
+              <Card className="p-4 hover:border-brand">
+                <p className="ui-label">{subject.name}</p>
+                <h2 className="mt-1 text-sm font-medium text-fg">
+                  {gradeNode.name || 'Bez ročníku'}
+                </h2>
+                <p className="mt-1 text-sm text-fg-muted">{gradeNode.topics.length} témat</p>
+              </Card>
+            </Link>
+          )),
+        )}
       </div>
+    </div>
+  )
+}
+
+/** Dlaždice témat zvoleného ročníku s počty a hromadným generováním. */
+function GradeOverview({ grade }: { grade: GradeNode }) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold text-fg">{grade.name || 'Bez ročníku'}</h1>
+        <p className="mt-1 text-sm text-fg-soft">{grade.topics.length} témat</p>
+      </div>
+
+      <BulkGenerate
+        ai={aiStatus()}
+        scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
+      />
+
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {grade.topics.map((topic) => (
+          <li key={topic.id}>
+            <Link href={`/topics/${topic.id}`}>
+              <Card className="flex items-center gap-2 p-3 hover:border-brand">
+                <span className="min-w-0 flex-1 truncate text-sm text-fg-soft">{topic.name}</span>
+                {topic.questionCount > 0 ? (
+                  <Badge>{topic.questionCount} ot.</Badge>
+                ) : (
+                  <Badge variant="secondary">bez otázek</Badge>
+                )}
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

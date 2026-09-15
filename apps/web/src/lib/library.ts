@@ -10,6 +10,7 @@ export interface TopicNode {
   materialCount: number
   questionCount: number
   approvedCount: number
+  draftCount: number
 }
 
 export interface GradeNode {
@@ -39,6 +40,7 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
         topicId: questions.topicId,
         total: count(),
         approved: sql<number>`sum(case when ${questions.status} = 'approved' then 1 else 0 end)`,
+        draft: sql<number>`sum(case when ${questions.status} = 'draft' then 1 else 0 end)`,
       })
       .from(questions)
       .groupBy(questions.topicId),
@@ -57,6 +59,7 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
       materialCount: materialsByTopic.get(topic.id) ?? 0,
       questionCount: stats?.total ?? 0,
       approvedCount: Number(stats?.approved ?? 0),
+      draftCount: Number(stats?.draft ?? 0),
     })
     topicsByGrade.set(topic.gradeId, list)
   }
