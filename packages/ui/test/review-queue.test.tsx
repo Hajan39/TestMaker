@@ -67,4 +67,49 @@ describe('ReviewQueue', () => {
     expect(screen.getByText(/Pravá plíce má tři laloky/)).toBeInTheDocument()
     expect(screen.getByText(/Dýchací soustava.odp/)).toBeInTheDocument()
   })
+
+  it('při zkrácení seznamu zvenku neposkočí ani nezavře frontu předčasně', async () => {
+    const three = [q('q1', 'První otázka?'), q('q2', 'Druhá otázka?'), q('q3', 'Třetí otázka?')]
+    const onApprove = vi.fn()
+    const onClose = vi.fn()
+    const { rerender } = render(
+      <ReviewQueue questions={three} onApprove={onApprove} onReject={vi.fn()} onEdit={vi.fn()} onClose={onClose} />,
+    )
+    await userEvent.keyboard('a')
+    expect(onApprove).toHaveBeenCalledWith('q1')
+    expect(screen.getByText('Druhá otázka?')).toBeInTheDocument()
+
+    // Seznam se zvenku zkrátí (schválená otázka zmizela, přišel nový, kratší
+    // profiltrovaný seznam) — fronta by měla zůstat na druhé otázce, ne
+    // přeskočit na třetí ani se zavřít.
+    rerender(
+      <ReviewQueue
+        questions={[three[1]!, three[2]!]}
+        onApprove={onApprove}
+        onReject={vi.fn()}
+        onEdit={vi.fn()}
+        onClose={onClose}
+      />,
+    )
+    expect(screen.getByText('Druhá otázka?')).toBeInTheDocument()
+    expect(screen.getByText('1 z 2')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('Escape zavře frontu i s ohniskem v textovém poli', async () => {
+    const onClose = vi.fn()
+    const onApprove = vi.fn()
+    render(
+      <div>
+        <input aria-label="poznámka" />
+        <ReviewQueue questions={questions} onApprove={onApprove} onReject={vi.fn()} onEdit={vi.fn()} onClose={onClose} />
+      </div>,
+    )
+    const input = screen.getByLabelText('poznámka')
+    await userEvent.click(input)
+    await userEvent.keyboard('a')
+    expect(onApprove).not.toHaveBeenCalled()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledOnce()
+  })
 })
