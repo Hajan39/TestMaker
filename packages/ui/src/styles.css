@@ -1,25 +1,76 @@
 /* Design tokeny sdílené celou aplikací. Importuje se z globals.css webu. */
 @theme {
-  --color-ink-50: oklch(0.985 0.002 250);
-  --color-ink-100: oklch(0.96 0.003 250);
-  --color-ink-200: oklch(0.91 0.005 250);
-  --color-ink-300: oklch(0.83 0.007 250);
-  --color-ink-400: oklch(0.66 0.01 250);
-  --color-ink-500: oklch(0.52 0.012 250);
-  --color-ink-600: oklch(0.42 0.014 250);
-  --color-ink-700: oklch(0.34 0.014 250);
-  --color-ink-800: oklch(0.25 0.012 250);
-  --color-ink-900: oklch(0.18 0.01 250);
+  /* Plochy */
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafafa;
 
-  --color-brand-50: oklch(0.97 0.02 165);
-  --color-brand-100: oklch(0.93 0.05 165);
-  --color-brand-300: oklch(0.8 0.11 165);
-  --color-brand-500: oklch(0.62 0.13 165);
-  --color-brand-600: oklch(0.54 0.13 165);
-  --color-brand-700: oklch(0.45 0.11 165);
+  /* Text */
+  --color-fg: #0c0e12;
+  --color-fg-soft: #3a4150;
+  --color-fg-muted: #8a919f;
 
-  --color-warn-100: oklch(0.95 0.05 80);
-  --color-warn-600: oklch(0.63 0.14 60);
-  --color-danger-100: oklch(0.94 0.04 25);
-  --color-danger-600: oklch(0.58 0.19 25);
+  /* Linky */
+  --color-line: #e0e2e7;
+  --color-line-soft: #eceef1;
+
+  /* Značková barva — jediná barva pro akce, výběr a správné odpovědi.
+     Nejmenuje se accent, protože tak si shadcn říká o tiché podbarvení. */
+  --color-brand: #0d7355;
+  --color-brand-bg: #e4f2ed;
+  --color-brand-fg: #ffffff;
+
+  /* Stav koncept */
+  --color-draft-bg: #fdefd6;
+  --color-draft-fg: #8a5a06;
+
+  /* Destruktivní akce */
+  --color-danger: #b03a35;
+  --color-danger-bg: #fbeceb;
+
+  /* Tvary */
+  --radius-inner: 5px;
+  --radius-outer: 8px;
+  --radius-tag: 3px;
+}
+
+:root {
+  /* Výchozí důraz odpovídá obsahu. */
+  --label-weight: 600;
+  --label-track: 0.06em;
+  --text-strong: var(--color-fg);
+  --text-body: var(--color-fg-soft);
+}
+
+/*
+ * Dva důrazy. Navigační plochy čtou ostřejší hodnoty, obsahové mírnější.
+ * Komponenty samy o důrazu nevědí a sahají vždy po týchž proměnných.
+ */
+.surface-chrome {
+  --label-weight: 700;
+  --label-track: 0.08em;
+  --text-strong: var(--color-fg);
+  --text-body: var(--color-fg-soft);
+  --radius-inner: 5px;
+}
+
+.surface-content {
+  --label-weight: 600;
+  --label-track: 0.06em;
+  --text-strong: var(--color-fg);
+  --text-body: var(--color-fg-soft);
+  --radius-inner: 6px;
+}
+
+/* Popisek sekce — jediná definice pro celou aplikaci. */
+.ui-label {
+  font-size: 0.594rem;
+  text-transform: uppercase;
+  letter-spacing: var(--label-track);
+  font-weight: var(--label-weight);
+  color: var(--color-fg-muted);
+}
+
+/* Čísla v přehledech nesmějí poskakovat. */
+.ui-numeric {
+  font-variant-numeric: tabular-nums;
 }
