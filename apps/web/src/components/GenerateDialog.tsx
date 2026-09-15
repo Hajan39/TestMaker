@@ -90,7 +90,9 @@ export function AiUnavailable({ provider }: { provider: string }) {
   return (
     <Card className="border-warn-100 bg-warn-100/40 p-4 text-sm text-ink-700">
       Generování je vypnuté: pro poskytovatele <strong>{provider}</strong> chybí přístupový klíč.
-      Doplň <code>ANTHROPIC_API_KEY</code> do <code>.env.local</code> a restartuj aplikaci.
+      Doplň do <code>.env.local</code> buď <code>ANTHROPIC_API_KEY</code>, nebo{' '}
+      <code>ANTHROPIC_AUTH_TOKEN</code> z přihlášení přes <code>ant auth login</code>,
+      a restartuj aplikaci.
     </Card>
   )
 }
