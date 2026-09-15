@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { chunkText, distributeTypes, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt } from '../src/ai/prompt'
 import { readAiConfig, isAiConfigured } from '../src/ai/provider'
+import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
   normalizeEvidence,
@@ -442,5 +443,33 @@ describe('přiřazování nesmí použít stejnou položku napravo dvakrát', ()
       },
     })
     expect(validateQuestionContent(parsed)).toEqual([])
+  })
+})
+
+describe('vysvětlení chyb od modelu', () => {
+  it('vyčerpaný limit vysvětlí česky a doporučí, co dělat', () => {
+    const failure = describeAiError(
+      new Error('You exceeded your current quota, please check your plan and billing details.'),
+    )
+    expect(failure.message).toContain('limit')
+    expect(failure.message).toContain('AI_MODEL')
+    expect(failure.retryable).toBe(true)
+  })
+
+  it('přetížený model pozná podle hlášky poskytovatele', () => {
+    const failure = describeAiError(new Error('This model is currently experiencing high demand.'))
+    expect(failure.message).toContain('přetížený')
+    expect(failure.retryable).toBe(true)
+  })
+
+  it('chybějící klíč není na opakování', () => {
+    const failure = describeAiError(new Error('Anthropic API key is missing.'))
+    expect(failure.retryable).toBe(false)
+    expect(failure.message).toContain('.env.local')
+  })
+
+  it('neznámou chybu nechá být, jen ji zkrátí', () => {
+    const failure = describeAiError(new Error('x'.repeat(500)))
+    expect(failure.message.length).toBe(300)
   })
 })

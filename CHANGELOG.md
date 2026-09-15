@@ -74,6 +74,10 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Opraveno
 
+- **Chyby od modelu jsou česky a říkají, co dělat.** Místo „You exceeded your
+  current quota" stojí u generování věta o vyčerpaném denním limitu
+  bezplatného tarifu a o tom, že jde přepnout model.
+
 - **Klíč odkazoval na značky, které na papíře nebyly.** Tvrzení u pravda/nepravda,
   mezery u doplňování i buňky doplňovací tabulky jsou teď očíslované i v zadání,
   takže se při opravování nemusí počítat řádky.

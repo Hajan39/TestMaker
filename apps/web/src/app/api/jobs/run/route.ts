@@ -1,5 +1,5 @@
 import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
-import { isAiConfigured } from '@testmaker/core/ai'
+import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { generateForTopic } from '@/lib/generation'
 
@@ -76,18 +76,16 @@ export async function POST() {
       remaining: await remaining(),
     })
   } catch (error) {
+    // Do fronty se ukládá česká hláška — učitelka ji uvidí u zastavené úlohy.
+    const { message } = describeAiError(error)
     await db
       .update(generationJobs)
-      .set({
-        status: 'error',
-        error: error instanceof Error ? error.message : String(error),
-        finishedAt: new Date().toISOString(),
-      })
+      .set({ status: 'error', error: message, finishedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, job.id))
     return Response.json({
       processed: true,
       jobId: job.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
       remaining: await remaining(),
     })
   }

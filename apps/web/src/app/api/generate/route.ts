@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
-import { isAiConfigured } from '@testmaker/core/ai'
+import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
 
 export const runtime = 'nodejs'
@@ -57,7 +57,8 @@ export async function POST(request: Request) {
         await releaseTopic(jobId, { created: outcome.created })
         send({ type: 'done', ...outcome })
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
+        const { message } = describeAiError(error)
         await releaseTopic(jobId, { error: message })
         send({ type: 'error', message })
       } finally {
