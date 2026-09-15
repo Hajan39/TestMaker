@@ -57,6 +57,7 @@ export function TestOutline({
       questionId: item.questionId,
       text: item.text,
       pointsOverride: item.pointsOverride,
+      linesOverride: item.linesOverride,
       question: item.question,
     }))
     return paginate(resolved, template.config).length
@@ -194,14 +195,37 @@ function OutlineRow({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           {item.kind === 'question' && graded ? (
-            <Input
-              className="w-20"
-              type="number"
-              min={0}
-              step={0.5}
-              value={item.pointsOverride ?? item.question?.points ?? 0}
-              onChange={(event) => onPatch(item.key, { pointsOverride: Number(event.target.value) || 0 })}
-            />
+            <label className="flex items-center gap-1 text-xs text-fg-muted">
+              b.
+              <Input
+                className="w-16"
+                type="number"
+                min={0}
+                step={0.5}
+                aria-label="Body za otázku"
+                value={item.pointsOverride ?? item.question?.points ?? 0}
+                onChange={(event) => onPatch(item.key, { pointsOverride: Number(event.target.value) || 0 })}
+              />
+            </label>
+          ) : null}
+          {/* Kolik místa žák potřebuje, záleží na písemce, ne na otázce —
+              proto se počet linek nastavuje tady, ne u otázky v bance. */}
+          {item.kind === 'question' && item.question?.type === 'open' ? (
+            <label className="flex items-center gap-1 text-xs text-fg-muted">
+              řádků
+              <Input
+                className="w-16"
+                type="number"
+                min={1}
+                max={30}
+                step={1}
+                aria-label="Řádků na odpověď"
+                value={item.linesOverride ?? (item.question.payload as { lines?: number }).lines ?? 4}
+                onChange={(event) =>
+                  onPatch(item.key, { linesOverride: Math.max(1, Number(event.target.value) || 1) })
+                }
+              />
+            </label>
           ) : null}
           <Button size="sm" variant="ghost" onClick={() => onRemove(item.key)}>
             Odebrat

@@ -6,6 +6,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Počet řádků na odpověď se nastavuje v testu.** U volné odpovědi si učitelka
+  zvolí, kolik místa žák dostane, aniž by měnila otázku v bance — v opakování
+  na závěr roku se hodí víc místa než v desetiminutovce.
+- **CI/CD přes GitHub Actions.** Každý push a pull request projde
+  typecheckem, testy a buildem (`ci.yml`); po mergi do `main` se navíc
+  spustí migrace produkční Turso databáze (`migrate.yml`), a to i ručně
+  přes „Run workflow“. Bez nastavených tajemství `TURSO_DATABASE_URL` a
+  `TURSO_AUTH_TOKEN` se migrace sama přeskočí a napíše to do logu, místo
+  aby spadla.
 - **Tmavý režim.** Přepínač v liště nabízí světlý, tmavý a „podle systému“;
   volba se pamatuje v prohlížeči a nastaví se ještě před vykreslením, takže
   nic neproblikne. Barvy jsou jen tokeny, komponenty o režimu nevědí.

@@ -1,5 +1,5 @@
 import type { Block } from '../schema/blocks'
-import type { ResolvedTestItem } from '../schema/test'
+import { answerLines, type ResolvedTestItem } from '../schema/test'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import { mm } from './styles'
 
@@ -108,7 +108,7 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
   let body: number
   switch (question.type) {
     case 'open':
-      body = question.payload.lines * style.answerLineHeight
+      body = answerLines(question, item.linesOverride) * style.answerLineHeight
       break
     case 'short_answer':
       body = 20

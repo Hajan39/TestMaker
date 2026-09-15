@@ -11,6 +11,8 @@ const itemSchema = z.object({
   questionId: z.string().nullable().default(null),
   text: z.string().nullable().default(null),
   pointsOverride: z.number().nullable().default(null),
+  /** Počet linek na odpověď jen pro tenhle test; prázdné = podle otázky. */
+  linesOverride: z.number().int().min(1).max(30).nullable().default(null),
 })
 
 const testSchema = z.object({
@@ -93,6 +95,7 @@ async function writeItems(testId: string, items: z.infer<typeof itemSchema>[]): 
       questionId: item.kind === 'question' ? item.questionId : null,
       text: item.kind === 'question' ? null : item.text,
       pointsOverride: item.pointsOverride,
+      linesOverride: item.kind === 'question' ? item.linesOverride : null,
     })),
   )
 }

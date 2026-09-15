@@ -2,6 +2,7 @@ import { Image, Text, View } from '@react-pdf/renderer'
 import type { Block } from '../schema/blocks'
 import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
+import { answerLines } from '../schema/test'
 import { displayOrder } from './shuffle'
 import { LETTERS } from './styles'
 import { sanitizeText } from './text'
@@ -12,6 +13,8 @@ interface Props {
   config: TemplateConfig
   variant: 'A' | 'B'
   assets: Record<string, string>
+  /** Přepis počtu linek na odpověď z položky testu; prázdné = podle otázky. */
+  linesOverride?: number | null
 }
 
 const BORDER = '1pt solid #444'
@@ -25,13 +28,20 @@ const LIGHT = '0.6pt solid #999'
 const IMAGE_MAX_HEIGHT = 260
 
 /** Tělo otázky — vše pod zadáním: možnosti, linky, tabulky, obrázky. */
-export function QuestionBody({ question, style, config, variant, assets }: Props) {
+export function QuestionBody({ question, style, config, variant, assets, linesOverride }: Props) {
   return (
     <View>
       {question.blocks.map((block, i) => (
         <BlockView key={i} block={block} assets={assets} />
       ))}
-      <AnswerArea question={question} style={style} config={config} variant={variant} assets={assets} />
+      <AnswerArea
+        question={question}
+        style={style}
+        config={config}
+        variant={variant}
+        assets={assets}
+        linesOverride={linesOverride}
+      />
     </View>
   )
 }
@@ -93,10 +103,12 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
   )
 }
 
-function AnswerArea({ question, style, config, variant, assets }: Props) {
+function AnswerArea({ question, style, config, variant, assets, linesOverride }: Props) {
   switch (question.type) {
     case 'open':
-      return <Lines count={question.payload.lines} height={style.answerLineHeight} />
+      return (
+        <Lines count={answerLines(question, linesOverride ?? null)} height={style.answerLineHeight} />
+      )
 
     case 'short_answer':
       return (

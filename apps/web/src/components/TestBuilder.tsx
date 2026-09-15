@@ -47,6 +47,7 @@ export function TestBuilder({
       questionId: item.questionId,
       text: item.text,
       pointsOverride: item.pointsOverride,
+      linesOverride: item.linesOverride ?? null,
       question: item.question ?? null,
     })),
   )
@@ -77,7 +78,10 @@ export function TestBuilder({
     setDraft((current) =>
       usedIds.has(question.id)
         ? current.filter((item) => item.questionId !== question.id)
-        : [...current, { key: nextDraftKey(), kind: 'question', questionId: question.id, text: null, pointsOverride: null, question }],
+        : [
+            ...current,
+            { key: nextDraftKey(), kind: 'question', questionId: question.id, text: null, pointsOverride: null, linesOverride: null, question },
+          ],
     )
   }
 
@@ -101,6 +105,7 @@ export function TestBuilder({
           questionId: question.id,
           text: null,
           pointsOverride: null,
+          linesOverride: null,
           question,
         }))
       return [...current, ...added]
@@ -110,7 +115,15 @@ export function TestBuilder({
   function addStructural(kind: 'heading' | 'instruction' | 'page_break') {
     setDraft((current) => [
       ...current,
-      { key: nextDraftKey(), kind, questionId: null, text: STRUCTURAL_TEXT[kind], pointsOverride: null, question: null },
+      {
+        key: nextDraftKey(),
+        kind,
+        questionId: null,
+        text: STRUCTURAL_TEXT[kind],
+        pointsOverride: null,
+        linesOverride: null,
+        question: null,
+      },
     ])
   }
 
@@ -141,6 +154,7 @@ export function TestBuilder({
           questionId: item.questionId,
           text: item.text,
           pointsOverride: item.pointsOverride,
+          linesOverride: item.linesOverride,
         })),
       }),
     [settings, draft],
@@ -176,6 +190,7 @@ export function TestBuilder({
         questionId: item.questionId,
         text: item.text,
         pointsOverride: item.pointsOverride,
+        linesOverride: item.linesOverride,
       })),
     }
 

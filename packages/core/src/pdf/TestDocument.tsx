@@ -237,6 +237,7 @@ function QuestionView({
         ) : null}
       </View>
       <QuestionBody
+        linesOverride={item.linesOverride}
         question={question}
         style={style}
         config={config}

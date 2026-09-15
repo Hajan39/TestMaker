@@ -1,0 +1,1 @@
+ALTER TABLE `test_items` ADD `lines_override` integer;

@@ -111,5 +111,34 @@ Projekt cílí na Vercel. Databáze je Turso: nastav `DATABASE_URL`
 (`libsql://…`) a `DATABASE_AUTH_TOKEN`. Generování otázek zatím běží lokálně,
 proto `ANTHROPIC_API_KEY` v nasazení nastavený být nemusí.
 
+Vercel migraci před buildem nespouští sám — build produkčního i preview
+nasazení běží souběžně nad toutéž Turso databází (např. při dvou rychle
+po sobě jdoucích pushnutích), a spuštění `db:migrate` z buildu by mohlo dvě
+migrace pustit najednou. Migraci nad Turso proto vždy provede až workflow
+`migrate.yml` po mergi do `main`, odděleně od buildu.
+
+### Co běží automaticky (GitHub Actions)
+
+| Workflow | Kdy | Co dělá |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | každý push a pull request | `pnpm install`, `pnpm typecheck`, `pnpm test`, migrace do dočasného souboru a `pnpm build` — ověří, že jde aplikace sestavit |
+| `.github/workflows/migrate.yml` | push do `main` (a ručně přes „Run workflow“) | spustí `pnpm db:migrate` nad produkční Turso databází |
+
+Aby migrace na `main` fungovala, je potřeba v repozitáři nastavit (Settings →
+Secrets and variables → Actions → Repository secrets):
+
+- `TURSO_DATABASE_URL` — `libsql://…` adresa produkční databáze,
+- `TURSO_AUTH_TOKEN` — autentizační token k ní.
+
+Dokud tajemství nejsou nastavená, `migrate.yml` se sám přeskočí a napíše proč
+do logu běhu — nespadne.
+
+Playwright testy (`apps/web/e2e`) v CI neběží — potřebují rozjetou aplikaci
+i naplněnou databázi, takže v prostředí CI by jen padaly. Spouští se lokálně:
+
+```bash
+pnpm --filter @testmaker/web e2e
+```
+
 Co je v plánu dál, popisuje [ROADMAP.md](ROADMAP.md). Historie změn je
 v [CHANGELOG.md](CHANGELOG.md).

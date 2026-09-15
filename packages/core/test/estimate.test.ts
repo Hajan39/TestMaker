@@ -20,6 +20,30 @@ describe('estimateHeight', () => {
     expect(estimateHeight(brk, template.config)).toBe(0)
   })
 
+  it('přepis počtu linek v testu má přednost před otázkou', () => {
+    const question = makeQuestion({
+      type: 'open' as const,
+      points: 1,
+      payload: { prompt: 'Popiš dýchání.', lines: 2, answer: 'x' },
+    })
+    const short: ResolvedTestItem = {
+      id: 'i1',
+      testId: 't',
+      order: 0,
+      kind: 'question',
+      questionId: 'q1',
+      text: null,
+      pointsOverride: null,
+      linesOverride: null,
+      question,
+    }
+    const long: ResolvedTestItem = { ...short, id: 'i2', linesOverride: 10 }
+
+    expect(estimateHeight(long, template.config)).toBeGreaterThan(
+      estimateHeight(short, template.config),
+    )
+  })
+
   it('otázka s obrázkovou přílohou zabere víc než tatáž otázka bez ní', () => {
     const base = { type: 'open' as const, points: 1, payload: { prompt: 'Popiš obrázek.', lines: 2, answer: 'x' } }
     const withoutImage: ResolvedTestItem = {

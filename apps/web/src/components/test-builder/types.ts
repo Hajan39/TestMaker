@@ -7,6 +7,8 @@ export interface DraftItem {
   questionId: string | null
   text: string | null
   pointsOverride: number | null
+  /** Přepis počtu linek na odpověď; prázdné = podle otázky. */
+  linesOverride: number | null
   question: Question | null
 }
 

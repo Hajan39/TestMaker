@@ -61,6 +61,7 @@ export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]>
     questionId: row.questionId,
     text: row.text,
     pointsOverride: row.pointsOverride,
+    linesOverride: row.linesOverride,
     question: row.questionId ? (byId.get(row.questionId) ?? null) : null,
   }))
 }

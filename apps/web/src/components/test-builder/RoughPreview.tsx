@@ -30,6 +30,7 @@ export function RoughPreview({
       questionId: item.questionId,
       text: item.text,
       pointsOverride: item.pointsOverride,
+      linesOverride: item.linesOverride,
       question: item.question,
     }))
     return paginate(resolved, template.config)

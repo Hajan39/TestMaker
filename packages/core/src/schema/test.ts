@@ -29,6 +29,25 @@ export interface TestItem {
   text: string | null
   /** Přepis bodů pro tuto otázku v tomto testu. */
   pointsOverride: number | null
+  /**
+   * Přepis počtu linek na odpověď pro tuto otázku v tomto testu.
+   * Prázdné (nebo chybějící u starších dat) = platí, co má otázka sama.
+   */
+  linesOverride?: number | null
+}
+
+/**
+ * Kolik linek na odpověď se má vytisknout. Přepis v testu má přednost před
+ * tím, co si u otázky uložil model — místo na odpověď patří k písemce, ne
+ * k otázce.
+ */
+export function answerLines(
+  question: { type: string; payload: unknown },
+  linesOverride: number | null | undefined,
+): number {
+  if (linesOverride && linesOverride > 0) return linesOverride
+  const payload = question.payload as { lines?: number }
+  return typeof payload.lines === 'number' ? payload.lines : 1
 }
 
 export interface Test {

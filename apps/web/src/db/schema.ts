@@ -203,6 +203,13 @@ export const testItems = sqliteTable(
     questionId: text('question_id').references(() => questions.id, { onDelete: 'cascade' }),
     text: text('text'),
     pointsOverride: real('points_override'),
+    /**
+     * Přepis počtu linek na odpověď pro tuhle otázku v tomhle testu. Kolik
+     * místa žák potřebuje, záleží na písemce, ne na otázce — v opakování na
+     * závěr roku se u téže otázky hodí víc místa než v krátkém desetiminutovém
+     * testu. Prázdné = platí, co má otázka sama.
+     */
+    linesOverride: integer('lines_override'),
   },
   (table) => [index('test_items_test_idx').on(table.testId, table.position)],
 )
