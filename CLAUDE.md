@@ -86,6 +86,11 @@ pnpm typecheck
 pnpm build
 ```
 
+Testy v prohlížeči (`cd apps/web && pnpm exec playwright test`) běží proti
+vlastní databázi `apps/web/e2e.db` a vlastnímu serveru na portu 3100, nikdy
+proti ostré `local.db`; databázi staví `apps/web/scripts/seed-e2e.ts`
+(`pnpm --filter @testmaker/web e2e:db`, sama se postaví, když soubor chybí).
+
 Testy extraktorů a rozpoznávání duplicit používají skutečné soubory ve složce
 `sources/`. Ta není v gitu; bez ní se tyto testy přeskočí.
 

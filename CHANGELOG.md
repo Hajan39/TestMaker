@@ -6,9 +6,18 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Hotová písemka se nemění pod rukama.** Při zařazení otázky do testu se
+  uloží snímek jejího obsahu; pozdější úprava ani smazání otázky v bance už
+  vytištěný test nezmění. V osnově je vidět, že se banka mezitím rozešla.
+- **Nadpis, pokyn a zalomení strany jde vložit kamkoli** do osnovy, ne jen na
+  konec, a táž otázka smí být v testu víckrát (rozcvička a pak znovu v jiné
+  části).
 - **Počet řádků na odpověď se nastavuje v testu.** U volné odpovědi si učitelka
   zvolí, kolik místa žák dostane, aniž by měnila otázku v bance — v opakování
   na závěr roku se hodí víc místa než v desetiminutovce.
+- **Testy webové vrstvy.** Ukládání testů, mazání v knihovně, rozpoznávání
+  duplicit i chování bez klíče k modelu mají vlastní testy nad dočasnou
+  databází; dřív nebyl otestovaný ani jeden API endpoint.
 - **CI/CD přes GitHub Actions.** Každý push a pull request projde
   typecheckem, testy a buildem (`ci.yml`); po mergi do `main` se navíc
   spustí migrace produkční Turso databáze (`migrate.yml`), a to i ručně
@@ -62,6 +71,26 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   variantami A/B. Test může být i bez známek.
 - **Tři vestavěné šablony** (Klasická, Kompaktní, Pracovní list) uložené jako
   nastavení, ne jako kód. Náhled šablony je skutečná stránka PDF.
+
+### Opraveno
+
+- **Klíč odkazoval na značky, které na papíře nebyly.** Tvrzení u pravda/nepravda,
+  mezery u doplňování i buňky doplňovací tabulky jsou teď očíslované i v zadání,
+  takže se při opravování nemusí počítat řádky.
+- **Řazení se po smazání otázky z banky rozešlo s klíčem.** Pořadí se míchá
+  z obsahu otázky, ne z jejího identifikátoru, takže zmrazený test tiskne
+  totéž zadání i klíč.
+- **Náhled stránky byl v tmavém režimu nečitelný** (bílý papír s bílým písmem).
+  Papír má vlastní tokeny a zůstává světlý i v tmavém rozhraní.
+- **Dvě generování nad jedním tématem naráz** o sobě nevěděla a vyráběla
+  duplicity. Druhé teď dostane srozumitelné odmítnutí.
+- **Stejný soubor smí být ve dvou tématech.** Unikátnost obsahu platí v rámci
+  tématu, ne napříč knihovnou — pracovní list používaný v 7. i 8. ročníku
+  zůstane v obou.
+- **Přesun a sloučení témat** přepočítají stav tématu a neponechají odkaz na
+  duplicitu mimo téma, kvůli kterému se materiál navždy vynechával z generování.
+- **Ovládání klávesnicí a telefon.** Prvky ukazují, kde je zaměření, a horní
+  lišta se na úzké obrazovce zalomí, takže jsou všechny části dosažitelné.
 
 ### Změněno
 

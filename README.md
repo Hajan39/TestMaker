@@ -140,5 +140,11 @@ i naplněnou databázi, takže v prostředí CI by jen padaly. Spouští se lok�
 pnpm --filter @testmaker/web e2e
 ```
 
+Testy v prohlížeči běží proti vlastní databázi `apps/web/e2e.db` (a vlastnímu
+serveru na portu 3100), nikdy proti ostré `local.db` — data si zakládají
+i mažou. Databázi si Playwright postaví sám, když ještě není; postavit ji
+znovu od nuly jde příkazem `pnpm --filter @testmaker/web e2e:db` (stačí
+předtím smazat `apps/web/e2e.db`).
+
 Co je v plánu dál, popisuje [ROADMAP.md](ROADMAP.md). Historie změn je
 v [CHANGELOG.md](CHANGELOG.md).

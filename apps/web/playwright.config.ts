@@ -5,16 +5,26 @@ import { defineConfig, devices } from '@playwright/test'
  * skutečným vykreslením: rozvržení na různých šířkách, přetékání, rolování,
  * chování dialogů a rozbalovacích nabídek.
  *
- * Běží proti vývojovému serveru s naplněnou databází. Server si spustí sám,
- * pokud už neběží.
+ * Běží proti vlastní databázi `apps/web/e2e.db`, nikdy proti ostré `local.db` —
+ * testy zakládají i mažou data a jeden dřívější běh z ostré knihovny smazal
+ * skutečné předměty. Server si Playwright spouští sám na vlastním portu 3100,
+ * aby se omylem nenapojil na `pnpm dev` běžící nad ostrou databází.
+ *
+ * Databáze se postaví sama před spuštěním serveru (migrace, šablony a
+ * vymyšlená data); ručně ji jde kdykoli postavit znovu:
+ *
+ *   pnpm --filter @testmaker/web e2e:db
  */
+
+const PORT = Number(process.env.E2E_PORT ?? 3100)
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -24,9 +34,18 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    // Databáze se dopřipraví, jen pokud ještě není — opakovaný běh testů tak
+    // nezdržuje a data z předchozího běhu zůstávají.
+    command: `pnpm exec tsx scripts/seed-e2e.ts --if-missing && pnpm exec next dev --port ${PORT}`,
+    url: `http://localhost:${PORT}`,
+    env: {
+      DATABASE_URL: 'file:./e2e.db',
+      DATABASE_AUTH_TOKEN: '',
+      // Vlastní složka sestavení: jinak se server nerozběhne vedle `pnpm dev`.
+      NEXT_DIST_DIR: '.next-e2e',
+    },
+    // Nikdy se nenapojovat na cizí server: ten by mohl běžet nad ostrou databází.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })

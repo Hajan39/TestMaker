@@ -1,11 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type APIRequestContext } from '@playwright/test'
 
 /**
  * Mazání v knihovně je kaskádové, takže se musí vždy ptát a vždy ukázat dopad.
  * Test si zakládá vlastní data, aby nesahal na skutečnou knihovnu.
  */
 
-async function createDisposableTopic(request: typeof test.step extends never ? never : any) {
+async function createDisposableTopic(request: APIRequestContext) {
   const response = await request.post('/api/materials', {
     data: {
       materials: [
@@ -33,11 +33,15 @@ test.describe('mazání v knihovně', () => {
     await createDisposableTopic(page.request)
     await page.goto('/')
 
-    // Předmět se objeví v přehledu knihovny.
-    const heading = page.locator('h2', { hasText: 'ZKOUŠKA' })
+    // Předmět se objeví v přehledu knihovny. Hledá se přesně podle jména a
+    // maže se tlačítko z jeho vlastní části stránky — „poslední na stránce"
+    // by se trefilo do cizího předmětu, jakmile je v knihovně něco dalšího.
+    const heading = page.getByRole('heading', { name: 'ZKOUŠKA', exact: true })
     await expect(heading).toBeVisible()
+    // `.last()` je ta nejvnitřnější sekce — panely rozvržení jsou taky `section`.
+    const section = page.locator('section', { has: heading }).last()
 
-    await page.getByRole('button', { name: 'Smazat předmět' }).last().click()
+    await section.getByRole('button', { name: 'Smazat předmět' }).click()
 
     const dialog = page.getByRole('alertdialog')
     await expect(dialog).toBeVisible()
@@ -48,11 +52,11 @@ test.describe('mazání v knihovně', () => {
 
     // Zrušení nic nesmaže.
     await dialog.getByRole('button', { name: 'Zrušit' }).click()
-    await expect(page.locator('h2', { hasText: 'ZKOUŠKA' })).toBeVisible()
+    await expect(heading).toBeVisible()
 
-    await page.getByRole('button', { name: 'Smazat předmět' }).last().click()
+    await section.getByRole('button', { name: 'Smazat předmět' }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
 
-    await expect(page.locator('h2', { hasText: 'ZKOUŠKA' })).toHaveCount(0)
+    await expect(heading).toHaveCount(0)
   })
 })

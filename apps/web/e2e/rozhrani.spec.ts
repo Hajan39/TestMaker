@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { testTopicPath } from './fixtures'
 
 /**
  * Tři doplňky rozhraní ze specifikace redesignu, které v prvním plánu chyběly:
@@ -6,8 +7,8 @@ import { expect, test } from '@playwright/test'
  * obtížnosti v kontrole konceptů.
  */
 
-/** Téma s materiály a schválenými otázkami, na kterém se dá pracovat. */
-const TOPIC = '/topics/mszAgwOgLDa4'
+// Téma s materiály i otázkami si test najde sám — natvrdo zadané id
+// z autorova disku by na cizí databázi neexistovalo.
 
 test.describe('hledání přes celou knihovnu', () => {
   test('najde téma napříč ročníky a odkáže na něj', async ({ page }) => {
@@ -81,7 +82,7 @@ test.describe('odhad stran pod osnovou testu', () => {
 
 test.describe('filtr obtížnosti v kontrole konceptů', () => {
   test('rozbalovací nabídka se otevře a vybere hodnotu', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
 
     const difficultyFilter = page.getByLabel('Obtížnost')
     await difficultyFilter.click()
@@ -90,7 +91,7 @@ test.describe('filtr obtížnosti v kontrole konceptů', () => {
   })
 
   test('fronta Projít po jedné respektuje zvolenou obtížnost', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
 
     const difficultyFilter = page.getByLabel('Obtížnost')
     await difficultyFilter.click()

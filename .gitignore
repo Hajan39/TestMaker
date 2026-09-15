@@ -16,6 +16,10 @@ build/
 *.db-journal
 *.sqlite
 local.db*
+# Databáze pro Playwright testy (staví ji scripts/seed-e2e.ts)
+apps/web/e2e.db
+apps/web/e2e.db-wal
+apps/web/e2e.db-shm
 
 # Výukové materiály (velké, soukromé)
 sources/
@@ -24,6 +28,7 @@ sources/
 .DS_Store
 packages/core/test/tmp/
 apps/web/.next/
+apps/web/.next-e2e/
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 .superpowers/

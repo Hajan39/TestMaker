@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: Typecheck, testy a build
+    name: Typecheck, lint, testy a build
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: file:./ci.db
@@ -34,6 +34,9 @@ jobs:
 
       - name: Kontrola typů
         run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Testy
         run: pnpm test

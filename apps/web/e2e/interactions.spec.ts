@@ -1,16 +1,17 @@
 import { expect, test } from '@playwright/test'
+import { testTopicPath } from './fixtures'
 
 /**
  * Chování, které se dá ověřit jedině skutečným ovládáním: dialogy, rozbalovací
  * nabídky, klávesnice a tisk. Přesně tohle dřív nikdo neověřil.
  */
 
-/** Téma s materiály, na kterém se dá pracovat. */
-const TOPIC = '/topics/mszAgwOgLDa4'
+// Téma, na kterém se dá pracovat, si každý test najde sám přes `testTopicPath`
+// — natvrdo zadané id z autorova disku by na cizí databázi neexistovalo.
 
 test.describe('editor otázky', () => {
   test('otevře se, zavře Escapem a vrátí ohnisko', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
     await page.getByRole('button', { name: 'Vlastní otázka' }).click()
 
     const dialog = page.getByRole('dialog')
@@ -22,7 +23,7 @@ test.describe('editor otázky', () => {
   })
 
   test('nabídka typu otázky jde ovládat a mění pole formuláře', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
     await page.getByRole('button', { name: 'Vlastní otázka' }).click()
 
     const dialog = page.getByRole('dialog')
@@ -36,7 +37,7 @@ test.describe('editor otázky', () => {
 
 test.describe('filtry otázek', () => {
   test('rozbalovací nabídka se otevře a vybere hodnotu', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
 
     const typeFilter = page.getByLabel('Typ')
     await typeFilter.click()
@@ -47,7 +48,7 @@ test.describe('filtry otázek', () => {
 
 test.describe('správa skupiny materiálů', () => {
   test('nabídne přeřazení do jiného ročníku', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
     await page.getByRole('button', { name: 'Upravit skupinu' }).click()
 
     // Přesně „Ročník" — postranní panely mají v názvu „ročníky" a „ročníku".
@@ -70,7 +71,7 @@ test.describe('nabídka generování', () => {
     const topicButton = page.getByRole('button', { name: 'Vygenerovat ze skupiny' })
     const bulkButton = page.getByRole('button', { name: 'Hromadné generování' })
 
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
     if (configured) await expect(topicButton).toBeVisible()
     else {
       await expect(topicButton).toHaveCount(0)

@@ -1,16 +1,17 @@
 import { expect, test } from '@playwright/test'
+import { testTopicPath } from './fixtures'
 
 /**
  * Tři doplňky vyžádané majitelem: hromadný výběr všude, kde se zaškrtává,
  * dvouřádková dlaždice tématu a přepínač světlého a tmavého motivu.
  */
 
-/** Téma s materiály i otázkami. */
-const TOPIC = '/topics/csxxOerbvKhz'
+// Téma s materiály i otázkami si test najde sám — natvrdo zadané id
+// z autorova disku by na cizí databázi neexistovalo.
 
 test.describe('hromadný výběr', () => {
   test('v otázkách tématu vybere vše, co je vidět', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
 
     const selectAll = page.getByRole('checkbox', { name: 'Vybrat vše' })
     await expect(selectAll).toBeVisible()
@@ -38,7 +39,7 @@ test.describe('hromadný výběr', () => {
   })
 
   test('u typů otázek doplní všechny zpět jedním tlačítkem', async ({ page }) => {
-    await page.goto(TOPIC)
+    await page.goto(await testTopicPath(page.request))
     const settings = page.getByRole('button', { name: 'Nastavení generování' })
     test.skip((await settings.count()) === 0, 'Generování není nakonfigurované.')
 
