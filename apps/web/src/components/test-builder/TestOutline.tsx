@@ -19,8 +19,19 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { paginate } from '@testmaker/core/pdf/estimate'
 import type { ResolvedTestItem, Template } from '@testmaker/core/schema'
-import { useMemo } from 'react'
-import { Badge, Button, Card, EmptyState, Input, QuestionPreview } from '@testmaker/ui'
+import { Fragment, useMemo } from 'react'
+import {
+  Badge,
+  Button,
+  Card,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  EmptyState,
+  Input,
+  QuestionPreview,
+} from '@testmaker/ui'
 import { formatPoints, type DraftItem } from './types'
 
 /** Osnova testu — pořadí položek se mění přetažením nebo klávesnicí. */
@@ -40,7 +51,8 @@ export function TestOutline({
   onReorder: (from: number, to: number) => void
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
-  onAdd: (kind: 'heading' | 'instruction' | 'page_break') => void
+  /** `index` je místo, kam položka přijde (0 = úplně nahoru); bez něj na konec. */
+  onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
 }) {
   const questionCount = items.filter((item) => item.kind === 'question').length
   const totalPoints = items.reduce(
@@ -62,6 +74,25 @@ export function TestOutline({
     }))
     return paginate(resolved, template.config).length
   }, [items, template])
+  /**
+   * Táž otázka smí být v testu víckrát. Aby se v osnově poznalo, který výskyt
+   * je který, dostanou opakované otázky pořadí použití.
+   */
+  const repeats = useMemo(() => {
+    const total = new Map<string, number>()
+    for (const item of items) {
+      if (item.questionId) total.set(item.questionId, (total.get(item.questionId) ?? 0) + 1)
+    }
+    const seen = new Map<string, number>()
+    const labels = new Map<string, string>()
+    for (const item of items) {
+      if (!item.questionId || (total.get(item.questionId) ?? 0) < 2) continue
+      const order = (seen.get(item.questionId) ?? 0) + 1
+      seen.set(item.questionId, order)
+      labels.set(item.key, `${order}. použití`)
+    }
+    return labels
+  }, [items])
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -106,15 +137,19 @@ export function TestOutline({
         >
           <SortableContext items={items.map((item) => item.key)} strategy={verticalListSortingStrategy}>
             <ol className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {items.map((item) => (
-                <OutlineRow
-                  key={item.key}
-                  item={item}
-                  graded={graded}
-                  onRemove={onRemove}
-                  onPatch={onPatch}
-                />
+              {items.map((item, index) => (
+                <Fragment key={item.key}>
+                  <InsertSlot index={index} total={items.length} onAdd={onAdd} />
+                  <OutlineRow
+                    item={item}
+                    graded={graded}
+                    repeatLabel={repeats.get(item.key) ?? null}
+                    onRemove={onRemove}
+                    onPatch={onPatch}
+                  />
+                </Fragment>
               ))}
+              <InsertSlot index={items.length} total={items.length} onAdd={onAdd} />
             </ol>
           </SortableContext>
         </DndContext>
@@ -144,14 +179,58 @@ export function TestOutline({
   )
 }
 
+/**
+ * Místo mezi položkami, kam jde vložit nadpis, pokyn nebo zalomení strany.
+ * Je to obyčejné tlačítko s nabídkou, takže na něj dosáhne i klávesnice —
+ * přetahování myší (dnd-kit) tím zůstává nedotčené.
+ */
+function InsertSlot({
+  index,
+  total,
+  onAdd,
+}: {
+  index: number
+  total: number
+  onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
+}) {
+  const label = index === total ? 'Vložit na konec' : `Vložit před ${index + 1}. položku`
+  return (
+    <li className="group flex list-none items-center gap-2 py-0.5">
+      <span aria-hidden="true" className="h-px flex-1 bg-line-soft" />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-5 px-2 text-xs text-fg-muted opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
+            aria-label={label}
+            title={`${label}: nadpis části, pokyn, nebo zalomení strany`}
+          >
+            +
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center">
+          <DropdownMenuItem onSelect={() => onAdd('heading', index)}>Nadpis části</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAdd('instruction', index)}>Pokyn</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAdd('page_break', index)}>Zalomení strany</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <span aria-hidden="true" className="h-px flex-1 bg-line-soft" />
+    </li>
+  )
+}
+
 function OutlineRow({
   item,
   graded,
+  repeatLabel,
   onRemove,
   onPatch,
 }: {
   item: DraftItem
   graded: boolean
+  /** „2. použití" u otázky, která je v testu víckrát; jinak `null`. */
+  repeatLabel: string | null
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
 }) {
@@ -179,7 +258,20 @@ function OutlineRow({
         </button>
         <div className="min-w-0 flex-1">
           {item.kind === 'question' && item.question ? (
-            <QuestionPreview question={item.question} />
+            <>
+              <div className="mb-1 flex flex-wrap items-center gap-1">
+                {repeatLabel ? <Badge variant="secondary">{repeatLabel}</Badge> : null}
+                {/* Test drží obsah otázky zmrazený k okamžiku zařazení, aby se
+                    vytištěná písemka nemohla pozdější úpravou otázky změnit.
+                    Když se banka mezitím rozešla, je to vidět tady. */}
+                {item.questionMissing ? (
+                  <Badge className="bg-draft-bg text-draft-fg">otázka už v bance není</Badge>
+                ) : item.questionEdited ? (
+                  <Badge className="bg-draft-bg text-draft-fg">otázka byla od zařazení upravena</Badge>
+                ) : null}
+              </div>
+              <QuestionPreview question={item.question} />
+            </>
           ) : item.kind === 'page_break' ? (
             <p className="py-2 text-sm text-fg-muted">— zalomení strany —</p>
           ) : (

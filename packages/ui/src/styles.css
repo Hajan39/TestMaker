@@ -34,6 +34,14 @@
   --color-brand-bg: #e4f2ed;
   --color-brand-fg: #ffffff;
 
+  /* Papír: náhled tištěné stránky zůstává světlý i v tmavém režimu, protože
+     ukazuje, jak bude písemka vypadat vytištěná. Vlastní token proto má i
+     barvu textu — se sdíleným `--color-fg` by v tmavém režimu vznikl bílý
+     list s bílým písmem. */
+  --color-paper: #ffffff;
+  --color-paper-fg: #14161a;
+  --color-paper-line: #d8dade;
+
   /* Stav koncept */
   --color-draft-bg: #fdefd6;
   --color-draft-fg: #8a5a06;
@@ -126,6 +134,19 @@
   font-weight: 700;
   letter-spacing: -0.025em;
   color: var(--color-fg);
+}
+
+/*
+ * Obrys při ovládání klávesnicí — jediná definice pro celou aplikaci.
+ * Odkazy, tlačítka a další interaktivní prvky mimo shadcn (přepínač motivu,
+ * položky postranního panelu, výsledky hledání, dlaždice témat…) žádný
+ * vlastní obrys nemají, takže bez tohohle pravidla je při procházení
+ * tabulátorem vidět jen myš. Komponenty ze shadcn si obrys řeší samy přes
+ * `--color-ring` s vyšší specificitou třídy, takže se tady nepřebíjejí.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 /* Most k pojmenování, které používají komponenty ze shadcn. */

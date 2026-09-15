@@ -25,12 +25,12 @@ export function AppShell({
 }) {
   return (
     <div className="flex h-dvh flex-col bg-surface">
-      <header className="surface-chrome flex shrink-0 items-center gap-6 border-b border-line bg-surface-muted px-4 py-2.5">
+      <header className="surface-chrome flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 border-b border-line bg-surface-muted px-4 py-2.5">
         <span className="flex items-center gap-2 text-sm font-bold tracking-tight text-fg">
           <Mark />
           TestMaker
         </span>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex flex-wrap items-center gap-1 text-sm">
           {nav.map((item) => {
             const active = item.href === activeHref
             return (
@@ -48,7 +48,7 @@ export function AppShell({
         </nav>
         <ThemeToggle className="ml-auto" />
       </header>
-      <main className="surface-content min-h-0 flex-1 overflow-hidden">{children}</main>
+      <main className="surface-content min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
     </div>
   )
 }

@@ -3,6 +3,8 @@
 import type { Question } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import {
+  Badge,
+  Button,
   Card,
   Checkbox,
   EmptyState,
@@ -19,23 +21,33 @@ import { useMemo } from 'react'
 import type { PickerTopic } from '@/lib/questionPicker'
 import type { BankFilters } from './types'
 
-/** Banka otázek — filtrování napříč předměty a ročníky, zaškrtnutím se otázka přidá do osnovy. */
+/**
+ * Banka otázek — filtrování napříč předměty a ročníky, zaškrtnutím se otázka
+ * přidá do osnovy. U otázky, která v testu už je, přibude počet použití
+ * a tlačítko, kterým jde zařadit ještě jednou (rozcvička a pak znovu v jiné části).
+ */
 export function BankPanel({
   topics,
   filters,
   onFiltersChange,
-  usedIds,
+  usedCounts,
   onToggle,
+  onAddAgain,
   onToggleMany,
 }: {
   topics: PickerTopic[]
   filters: BankFilters
   onFiltersChange: (next: BankFilters) => void
-  usedIds: Set<string>
+  /** Kolikrát je která otázka v osnově; chybějící klíč = ani jednou. */
+  usedCounts: Map<string, number>
+  /** Zaškrtávátko: otázku přidá, nebo vyhodí všechny její výskyty. */
   onToggle: (question: Question) => void
+  /** Přidá další výskyt otázky, aniž by se ty stávající dotkl. */
+  onAddAgain: (question: Question) => void
   /** Přidá nebo odebere celou skupinu otázek naráz (zaškrtnutí u tématu). */
   onToggleMany: (questions: Question[], add: boolean) => void
 }) {
+  const isUsed = (id: string) => (usedCounts.get(id) ?? 0) > 0
   const subjects = useMemo(() => [...new Set(topics.map((topic) => topic.subject))].sort(), [topics])
   const grades = useMemo(() => [...new Set(topics.map((topic) => topic.grade))].sort(), [topics])
 
@@ -64,8 +76,8 @@ export function BankPanel({
     [visibleTopics],
   )
   const allVisibleUsed =
-    visibleQuestions.length > 0 && visibleQuestions.every((question) => usedIds.has(question.id))
-  const someVisibleUsed = visibleQuestions.some((question) => usedIds.has(question.id))
+    visibleQuestions.length > 0 && visibleQuestions.every((question) => isUsed(question.id))
+  const someVisibleUsed = visibleQuestions.some((question) => isUsed(question.id))
 
   return (
     <Card className="flex h-full flex-col p-4">
@@ -172,7 +184,7 @@ export function BankPanel({
             <details
               key={topic.id}
               className="rounded border border-line-soft"
-              open={topic.questions.some((question) => usedIds.has(question.id))}
+              open={topic.questions.some((question) => isUsed(question.id))}
             >
               <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-fg-soft">
                 {/* Zaškrtnutí u tématu bere všechny jeho otázky, které projdou
@@ -186,16 +198,16 @@ export function BankPanel({
                 >
                   <Checkbox
                     checked={
-                      topic.questions.every((question) => usedIds.has(question.id))
+                      topic.questions.every((question) => isUsed(question.id))
                         ? true
-                        : topic.questions.some((question) => usedIds.has(question.id))
+                        : topic.questions.some((question) => isUsed(question.id))
                           ? 'indeterminate'
                           : false
                     }
                     onCheckedChange={() =>
                       onToggleMany(
                         topic.questions,
-                        !topic.questions.every((question) => usedIds.has(question.id)),
+                        !topic.questions.every((question) => isUsed(question.id)),
                       )
                     }
                     aria-label={`Vybrat všechny otázky tématu ${topic.label}`}
@@ -206,20 +218,43 @@ export function BankPanel({
                 </span>
               </summary>
               <ul className="divide-y divide-line-soft px-3 pb-2">
-                {topic.questions.map((question) => (
-                  <li key={question.id} className="flex gap-2 py-2">
-                    <label className="flex min-w-0 flex-1 items-start gap-2">
-                      <Checkbox
-                        className="mt-0.5"
-                        checked={usedIds.has(question.id)}
-                        onCheckedChange={() => onToggle(question)}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <QuestionPreview question={question} showAnswers={false} />
-                      </div>
-                    </label>
-                  </li>
-                ))}
+                {topic.questions.map((question) => {
+                  const count = usedCounts.get(question.id) ?? 0
+                  return (
+                    <li key={question.id} className="flex items-start gap-2 py-2">
+                      <label className="flex min-w-0 flex-1 items-start gap-2">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={count > 0}
+                          onCheckedChange={() => onToggle(question)}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <QuestionPreview question={question} showAnswers={false} />
+                        </div>
+                      </label>
+                      {/* Počet použití a přidání dalšího výskytu. Tlačítko je
+                          schválně mimo <label>, jinak by klik zároveň přehodil
+                          zaškrtávátko a otázku místo přidání odebral. */}
+                      {count > 0 ? (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Badge variant="secondary" title={`V testu ${count}\u00d7`}>
+                            {count}&times;
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2"
+                            aria-label="Zařadit do testu ještě jednou"
+                            title="Zařadit do testu ještě jednou"
+                            onClick={() => onAddAgain(question)}
+                          >
+                            +
+                          </Button>
+                        </div>
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             </details>
           ))

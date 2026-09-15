@@ -19,22 +19,25 @@ export function LibrarySearch() {
   const [loading, setLoading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Krátký dotaz se nehledá; výsledky se neukládají prázdné, jen se nezobrazí.
+  // (Nastavovat stav rovnou v efektu vede na řetězení překreslení.)
+  const needle = query.trim()
+  const searching = needle.length >= 2
+
   useEffect(() => {
-    const needle = query.trim()
-    if (needle.length < 2) {
-      setResults([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
+    if (needle.length < 2) return
+    // `setLoading` až uvnitř časovače: stav se nemá měnit synchronně v efektu
+    // (React to hlásí jako řetězení překreslení) a u rychlého psaní se tak
+    // hláška „Hledám…" ani neukáže zbytečně.
     const timeout = setTimeout(() => {
+      setLoading(true)
       fetch(`/api/library/search?q=${encodeURIComponent(needle)}`)
         .then((response) => response.json())
         .then((data: { results: LibrarySearchResult[] }) => setResults(data.results))
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(timeout)
-  }, [query])
+  }, [needle])
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {
@@ -67,12 +70,12 @@ export function LibrarySearch() {
         />
       </div>
 
-      {open && query.trim().length >= 2 ? (
+      {open && searching ? (
         <div className="absolute inset-x-2 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-[var(--radius-outer)] border border-line bg-surface p-1 shadow-lg">
           {loading ? (
             <p className="px-2 py-2 text-sm text-fg-muted">Hledám…</p>
           ) : results.length === 0 ? (
-            <p className="px-2 py-2 text-sm text-fg-muted">Nic neodpovídá hledání „{query.trim()}".</p>
+            <p className="px-2 py-2 text-sm text-fg-muted">Nic neodpovídá hledání „{needle}&ldquo;.</p>
           ) : (
             <ul className="space-y-0.5">
               {results.map((result) => (
