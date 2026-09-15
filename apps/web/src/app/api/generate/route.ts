@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { isAiConfigured } from '@testmaker/core/ai'
-import { DEFAULT_GENERATE_PARAMS, generateForTopic } from '@/lib/generation'
+import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -24,6 +24,16 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
 
+  // Rezervace tématu: dvě generování naráz nad týmž tématem by o sobě nevěděla
+  // a vyrobila by tytéž otázky dvakrát.
+  const jobId = await claimTopic(parsed.data.topicId)
+  if (!jobId) {
+    return Response.json(
+      { error: 'Pro tohle téma už generování běží. Počkej, než doběhne.' },
+      { status: 409 },
+    )
+  }
+
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -44,9 +54,12 @@ export async function POST(request: Request) {
             onProgress: (done, total) => send({ type: 'progress', done, total }),
           },
         )
+        await releaseTopic(jobId, { created: outcome.created })
         send({ type: 'done', ...outcome })
       } catch (error) {
-        send({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+        const message = error instanceof Error ? error.message : String(error)
+        await releaseTopic(jobId, { error: message })
+        send({ type: 'error', message })
       } finally {
         controller.close()
       }

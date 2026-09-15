@@ -1,8 +1,9 @@
 import 'server-only'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm'
 import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type QuestionType } from '@testmaker/core/schema'
-import { db, grades, materials, questions, subjects, topics } from '@/db'
+import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
+import { newId } from '@/lib/ids'
 import { insertQuestions, questionPrompt, toQuestion } from './questions'
 
 export interface GenerateParams {
@@ -25,6 +26,67 @@ export interface GenerateOutcome {
   topicId: string
   /** Z kolika materiálů se generovalo. */
   sources: number
+}
+
+/**
+ * Zabere téma pro generování. Dvě generování nad týmž tématem naráz o sobě
+ * nevědí — seznam „těmhle otázkám se vyhni" si každé načte na začátku, takže
+ * by spolehlivě vyrobila duplicity. Rezervace se vede v téže tabulce jako
+ * fronta, aby se hromadné generování a ruční spuštění viděly navzájem.
+ *
+ * Vrací id rezervace, nebo `null`, když už téma někdo zpracovává.
+ */
+export async function claimTopic(topicId: string): Promise<string | null> {
+  const running = await db
+    .select({ id: generationJobs.id })
+    .from(generationJobs)
+    .where(and(eq(generationJobs.topicId, topicId), inArray(generationJobs.status, ['queued', 'running'])))
+    .limit(1)
+  if (running.length > 0) return null
+
+  const id = newId()
+  await db.insert(generationJobs).values({
+    id,
+    topicId,
+    params: DEFAULT_GENERATE_PARAMS,
+    status: 'running',
+    startedAt: new Date().toISOString(),
+  })
+
+  // Pojistka proti souběhu: kdyby rezervaci stihl založit i někdo další,
+  // zůstane ta starší a tahle se uklidí.
+  const others = await db
+    .select({ id: generationJobs.id, createdAt: generationJobs.createdAt })
+    .from(generationJobs)
+    .where(
+      and(
+        eq(generationJobs.topicId, topicId),
+        inArray(generationJobs.status, ['queued', 'running']),
+        ne(generationJobs.id, id),
+      ),
+    )
+  if (others.length > 0) {
+    await db.delete(generationJobs).where(eq(generationJobs.id, id))
+    return null
+  }
+
+  return id
+}
+
+/** Uvolní rezervaci tématu a zapíše, jak generování dopadlo. */
+export async function releaseTopic(
+  jobId: string,
+  outcome: { created?: number; error?: string } = {},
+): Promise<void> {
+  await db
+    .update(generationJobs)
+    .set({
+      status: outcome.error ? 'error' : 'done',
+      error: outcome.error ?? null,
+      producedCount: outcome.created ?? 0,
+      finishedAt: new Date().toISOString(),
+    })
+    .where(eq(generationJobs.id, jobId))
 }
 
 /** Text celé skupiny materiálů jednoho tématu, s hlavičkami podle souborů. */

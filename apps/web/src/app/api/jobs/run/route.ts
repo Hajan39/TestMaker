@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
 import { isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { generateForTopic } from '@/lib/generation'

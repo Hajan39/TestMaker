@@ -36,8 +36,18 @@ export async function generateQuestionsStream(
   })
 
   if (!response.ok || !response.body) {
+    // Server posílá vysvětlení česky (chybějící klíč, už běžící generování);
+    // holé číslo stavu učitelce nic neřekne.
     const detail = await response.text()
-    throw new Error(`Generování selhalo (${response.status}): ${detail.slice(0, 200)}`)
+    const message = (() => {
+      try {
+        const parsed = JSON.parse(detail) as { error?: string }
+        return parsed.error ?? detail
+      } catch {
+        return detail
+      }
+    })()
+    throw new Error(message.slice(0, 300) || `Generování selhalo (${response.status})`)
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
