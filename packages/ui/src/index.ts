@@ -34,6 +34,7 @@ export {
 export { QuestionPreview } from './QuestionPreview'
 export { ReviewQueue } from './ReviewQueue'
 export { EmptyState } from './EmptyState'
+export { Mark } from './Mark'
 export { PrintButton } from './PrintButton'
 export { printPdf } from './print'
 export { AppShell } from './AppShell'

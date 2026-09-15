@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
+import { Mark } from './Mark'
 
 export interface NavItem {
   href: string
@@ -24,7 +25,10 @@ export function AppShell({
   return (
     <div className="flex h-dvh flex-col bg-surface">
       <header className="surface-chrome flex shrink-0 items-center gap-6 border-b border-line bg-surface-muted px-4 py-2.5">
-        <span className="text-sm font-bold tracking-tight text-fg">TestMaker</span>
+        <span className="flex items-center gap-2 text-sm font-bold tracking-tight text-fg">
+          <Mark />
+          TestMaker
+        </span>
         <nav className="flex items-center gap-1 text-sm">
           {nav.map((item) => {
             const active = item.href === activeHref

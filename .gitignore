@@ -27,3 +27,8 @@ apps/web/.next/
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 .superpowers/
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/screenshots/

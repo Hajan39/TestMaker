@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TestMaker">
+  <title>TestMaker</title>
+  <!-- Značková zelená dlaždice -->
+  <rect width="512" height="512" rx="112" fill="#0d7355"/>
+  <!-- List papíru: z něj písemka vzniká i na něm končí -->
+  <rect x="128" y="92" width="256" height="328" rx="28" fill="#ffffff"/>
+  <!-- Dva řádky zadání -->
+  <rect x="170" y="150" width="172" height="22" rx="11" fill="#cfe6de"/>
+  <rect x="170" y="198" width="120" height="22" rx="11" fill="#cfe6de"/>
+  <!-- Fajfka místo třetího řádku: opravená písemka -->
+  <path d="M176 288 L 218 330 L 310 232" fill="none" stroke="#0d7355" stroke-width="36"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

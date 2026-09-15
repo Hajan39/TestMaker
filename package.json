@@ -15,5 +15,8 @@
     "db:migrate": "pnpm --filter @testmaker/web db:migrate",
     "db:seed": "pnpm --filter @testmaker/web db:seed",
     "db:studio": "pnpm --filter @testmaker/web db:studio"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }
