@@ -11,8 +11,8 @@ export default async function TemplatesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-ink-900">Šablony testů</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-600">
+        <h1 className="text-xl font-semibold text-fg">Šablony testů</h1>
+        <p className="mt-1 max-w-3xl text-sm text-fg-soft">
           Každý náhled je skutečná stránka PDF vykreslená stejným způsobem jako hotový test.
           Šablona je uložená jako nastavení, ne jako kód, takže editor vlastních šablon přibude
           bez zásahu do vykreslování.
@@ -25,14 +25,14 @@ export default async function TemplatesPage() {
             <TemplatePreview
               templateId={template.id}
               graded={template.config.showPoints}
-              className="rounded-none border-0 border-b border-ink-200"
+              className="rounded-none border-0 border-b border-line"
             />
             <div className="p-4">
               <div className="flex items-center gap-2">
-                <h2 className="font-medium text-ink-900">{template.name}</h2>
-                {template.builtIn ? <Badge>vestavěná</Badge> : null}
+                <h2 className="font-medium text-fg">{template.name}</h2>
+                {template.builtIn ? <Badge variant="secondary">vestavěná</Badge> : null}
               </div>
-              <p className="mt-1 text-sm text-ink-600">{template.description}</p>
+              <p className="mt-1 text-sm text-fg-soft">{template.description}</p>
             </div>
           </Card>
         ))}

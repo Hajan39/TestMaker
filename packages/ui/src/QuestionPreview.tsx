@@ -1,6 +1,6 @@
 import type { Question, QuestionContent } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
-import { Badge } from './Surface'
+import { Badge } from './ui/badge'
 import { cn } from './cn'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -21,18 +21,18 @@ export function QuestionPreview({
   return (
     <div className={cn('text-sm', className)}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge>{QUESTION_TYPE_LABELS[question.type]}</Badge>
-        <Badge tone="neutral">{question.points} b.</Badge>
-        <Badge tone="neutral">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
+        <Badge variant="secondary">{QUESTION_TYPE_LABELS[question.type]}</Badge>
+        <Badge variant="secondary">{question.points} b.</Badge>
+        <Badge variant="secondary">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
         {'status' in question && question.status === 'approved' ? (
-          <Badge tone="brand">schváleno</Badge>
+          <Badge>schváleno</Badge>
         ) : null}
-        {'source' in question && question.source === 'manual' ? <Badge>vlastní</Badge> : null}
+        {'source' in question && question.source === 'manual' ? <Badge variant="secondary">vlastní</Badge> : null}
       </div>
-      <p className="mt-2 font-medium text-ink-900">{payload.prompt ?? payload.text ?? ''}</p>
+      <p className="mt-2 font-medium text-fg">{payload.prompt ?? payload.text ?? ''}</p>
       <Body question={question} showAnswers={showAnswers} />
       {showAnswers && question.explanation ? (
-        <p className="mt-2 text-xs text-ink-500">Pozn. do klíče: {question.explanation}</p>
+        <p className="mt-2 text-xs text-fg-muted">Pozn. do klíče: {question.explanation}</p>
       ) : null}
     </div>
   )
@@ -61,8 +61,8 @@ function Body({
             <li
               key={i}
               className={cn(
-                'text-ink-700',
-                showAnswers && i === question.payload.correctIndex && 'font-medium text-brand-700',
+                'text-fg-soft',
+                showAnswers && i === question.payload.correctIndex && 'font-medium text-brand',
               )}
             >
               {LETTERS[i]}) {option}
@@ -78,8 +78,8 @@ function Body({
             <li
               key={i}
               className={cn(
-                'text-ink-700',
-                showAnswers && question.payload.correctIndices.includes(i) && 'font-medium text-brand-700',
+                'text-fg-soft',
+                showAnswers && question.payload.correctIndices.includes(i) && 'font-medium text-brand',
               )}
             >
               ☐ {option}
@@ -92,10 +92,10 @@ function Body({
       return (
         <ul className="mt-1.5 space-y-0.5">
           {question.payload.statements.map((statement, i) => (
-            <li key={i} className="text-ink-700">
+            <li key={i} className="text-fg-soft">
               {statement.text}
               {showAnswers ? (
-                <span className="ml-2 font-medium text-brand-700">
+                <span className="ml-2 font-medium text-brand">
                   {statement.isTrue ? 'ANO' : 'NE'}
                 </span>
               ) : null}
@@ -106,7 +106,7 @@ function Body({
 
     case 'fill_blank':
       return (
-        <div className="mt-1.5 text-ink-700">
+        <div className="mt-1.5 text-fg-soft">
           <p>{question.payload.text}</p>
           {showAnswers ? (
             <Answer label="Doplnit">{question.payload.blanks.join(' · ')}</Answer>
@@ -119,14 +119,14 @@ function Body({
         <div className="mt-1.5 grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
           <ul className="space-y-0.5">
             {question.payload.left.map((item, i) => (
-              <li key={i} className="text-ink-700">
+              <li key={i} className="text-fg-soft">
                 {i + 1}. {item}
               </li>
             ))}
           </ul>
           <ul className="space-y-0.5">
             {question.payload.right.map((item, i) => (
-              <li key={i} className="text-ink-700">
+              <li key={i} className="text-fg-soft">
                 {LETTERS[i]}) {item}
               </li>
             ))}
@@ -141,7 +141,7 @@ function Body({
 
     case 'ordering':
       return (
-        <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-ink-700">
+        <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-fg-soft">
           {question.payload.items.map((item, i) => (
             <li key={i}>{item}</li>
           ))}
@@ -151,11 +151,11 @@ function Body({
     case 'table_fill':
       return (
         <div className="mt-1.5 overflow-x-auto">
-          <table className="min-w-full border border-ink-200 text-left text-xs">
-            <thead className="bg-ink-50">
+          <table className="min-w-full border border-line text-left text-xs">
+            <thead className="bg-surface-muted">
               <tr>
                 {question.payload.headers.map((header, i) => (
-                  <th key={i} className="border border-ink-200 px-2 py-1 font-medium">
+                  <th key={i} className="border border-line px-2 py-1 font-medium">
                     {header}
                   </th>
                 ))}
@@ -165,8 +165,8 @@ function Body({
               {question.payload.rows.map((row, r) => (
                 <tr key={r}>
                   {row.map((cell, c) => (
-                    <td key={c} className="border border-ink-200 px-2 py-1 text-ink-700">
-                      {cell ?? <span className="text-ink-300">………</span>}
+                    <td key={c} className="border border-line px-2 py-1 text-fg-soft">
+                      {cell ?? <span className="text-fg-muted">………</span>}
                     </td>
                   ))}
                 </tr>
@@ -195,8 +195,8 @@ function Answer({
   className?: string
 }) {
   return (
-    <p className={cn('mt-1.5 text-xs text-ink-600', className)}>
-      <span className="font-medium text-ink-500">{label}: </span>
+    <p className={cn('mt-1.5 text-xs text-fg-soft', className)}>
+      <span className="font-medium text-fg-muted">{label}: </span>
       {children}
     </p>
   )

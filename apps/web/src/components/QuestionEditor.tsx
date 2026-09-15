@@ -11,7 +11,18 @@ import {
   type QuestionContent,
   type QuestionType,
 } from '@testmaker/core/schema'
-import { Button, Card, Input, Label, Select, Textarea } from '@testmaker/ui'
+import {
+  Button,
+  Card,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from '@testmaker/ui'
 import { emptyPayload } from '@/lib/questionDefaults'
 import { PayloadFields } from './PayloadFields'
 
@@ -91,10 +102,10 @@ export function QuestionEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-fg/40 p-4">
       <Card className="w-full max-w-3xl p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-ink-900">
+          <h2 className="text-base font-semibold text-fg">
             {question ? 'Upravit otázku' : 'Nová otázka'}
           </h2>
           <Button size="sm" variant="ghost" onClick={onClose}>
@@ -104,18 +115,24 @@ export function QuestionEditor({
 
         <div className="mt-4 flex flex-wrap gap-3">
           <div className="w-56">
-            <Label>Typ</Label>
-            <Select value={type} onChange={(event) => changeType(event.target.value as QuestionType)}>
-              {QUESTION_TYPES.filter((t) => t !== 'label_image').map((value) => (
-                <option key={value} value={value}>
-                  {QUESTION_TYPE_LABELS[value]}
-                </option>
-              ))}
+            <Label htmlFor="question-editor-type">Typ</Label>
+            <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
+              <SelectTrigger id="question-editor-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUESTION_TYPES.filter((t) => t !== 'label_image').map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {QUESTION_TYPE_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div className="w-24">
-            <Label>Body</Label>
+            <Label htmlFor="question-editor-points">Body</Label>
             <Input
+              id="question-editor-points"
               type="number"
               min={0}
               step={0.5}
@@ -124,14 +141,19 @@ export function QuestionEditor({
             />
           </div>
           <div className="w-36">
-            <Label>Obtížnost</Label>
+            <Label htmlFor="question-editor-difficulty">Obtížnost</Label>
             <Select
               value={String(difficulty)}
-              onChange={(event) => setDifficulty(Number(event.target.value) as 1 | 2 | 3)}
+              onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
             >
-              <option value="1">Lehká</option>
-              <option value="2">Střední</option>
-              <option value="3">Těžká</option>
+              <SelectTrigger id="question-editor-difficulty" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Lehká</SelectItem>
+                <SelectItem value="2">Střední</SelectItem>
+                <SelectItem value="3">Těžká</SelectItem>
+              </SelectContent>
             </Select>
           </div>
         </div>
@@ -141,19 +163,22 @@ export function QuestionEditor({
         </div>
 
         <div className="mt-4">
-          <Label>Poznámka do klíče (nepovinné)</Label>
+          <Label htmlFor="question-editor-explanation">Poznámka do klíče (nepovinné)</Label>
           <Textarea
+            id="question-editor-explanation"
             value={explanation}
             placeholder="Proč je odpověď správně — vytiskne se jen do klíče pro učitele."
             onChange={(event) => setExplanation(event.target.value)}
           />
         </div>
 
-        {error ? <p className="mt-3 text-sm text-danger-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={onClose}>Zrušit</Button>
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+          <Button variant="outline" onClick={onClose}>
+            Zrušit
+          </Button>
+          <Button disabled={saving} onClick={() => void save()}>
             {saving ? 'Ukládám…' : 'Uložit'}
           </Button>
         </div>

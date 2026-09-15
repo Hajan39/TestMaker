@@ -2,7 +2,18 @@
 
 import { useState } from 'react'
 import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from '@testmaker/core/schema'
-import { Button, Card, Checkbox, Input, Label, Select, Spinner } from '@testmaker/ui'
+import { Loader2 } from 'lucide-react'
+import {
+  Card,
+  Checkbox,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@testmaker/ui'
 
 export interface GenerateSettings {
   count: number
@@ -37,8 +48,9 @@ export function GenerateSettingsForm({
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3">
         <div className="w-28">
-          <Label>Počet otázek</Label>
+          <Label htmlFor="generate-count">Počet otázek</Label>
           <Input
+            id="generate-count"
             type="number"
             min={1}
             max={60}
@@ -48,21 +60,26 @@ export function GenerateSettingsForm({
           />
         </div>
         <div className="w-40">
-          <Label>Obtížnost</Label>
+          <Label htmlFor="generate-difficulty">Obtížnost</Label>
           <Select
             value={String(value.difficulty)}
             disabled={disabled}
-            onChange={(event) =>
+            onValueChange={(next) =>
               onChange({
                 ...value,
-                difficulty: event.target.value === 'mix' ? 'mix' : (Number(event.target.value) as 1 | 2 | 3),
+                difficulty: next === 'mix' ? 'mix' : (Number(next) as 1 | 2 | 3),
               })
             }
           >
-            <option value="mix">Promíchat</option>
-            <option value="1">Lehká</option>
-            <option value="2">Střední</option>
-            <option value="3">Těžká</option>
+            <SelectTrigger id="generate-difficulty" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mix">Promíchat</SelectItem>
+              <SelectItem value="1">Lehká</SelectItem>
+              <SelectItem value="2">Střední</SelectItem>
+              <SelectItem value="3">Těžká</SelectItem>
+            </SelectContent>
           </Select>
         </div>
       </div>
@@ -71,11 +88,11 @@ export function GenerateSettingsForm({
         <Label>Typy otázek</Label>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
           {AI_QUESTION_TYPES.map((type) => (
-            <label key={type} className="flex items-center gap-1.5 text-sm text-ink-700">
+            <label key={type} className="flex items-center gap-1.5 text-sm text-fg-soft">
               <Checkbox
                 checked={value.types.includes(type)}
                 disabled={disabled}
-                onChange={() => toggleType(type)}
+                onCheckedChange={() => toggleType(type)}
               />
               {QUESTION_TYPE_LABELS[type]}
             </label>
@@ -88,7 +105,7 @@ export function GenerateSettingsForm({
 
 export function AiUnavailable({ provider }: { provider: string }) {
   return (
-    <Card className="border-warn-100 bg-warn-100/40 p-4 text-sm text-ink-700">
+    <Card className="border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
       Generování je vypnuté: pro poskytovatele <strong>{provider}</strong> chybí přístupový klíč.
       Doplň <code>ANTHROPIC_API_KEY</code> do <code>.env.local</code> a restartuj aplikaci.
     </Card>
@@ -97,8 +114,8 @@ export function AiUnavailable({ provider }: { provider: string }) {
 
 export function ProgressLine({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-2 text-sm text-ink-600">
-      <Spinner />
+    <div className="flex items-center gap-2 text-sm text-fg-soft">
+      <Loader2 className="size-4 animate-spin" />
       {label}
     </div>
   )

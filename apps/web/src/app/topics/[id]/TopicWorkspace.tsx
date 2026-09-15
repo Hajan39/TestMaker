@@ -4,7 +4,21 @@ import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
-import { Badge, Button, Card, Checkbox, EmptyState, Input, Label, QuestionPreview, Select } from '@testmaker/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  EmptyState,
+  Input,
+  Label,
+  QuestionPreview,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@testmaker/ui'
 import {
   AiUnavailable,
   DEFAULT_SETTINGS,
@@ -114,10 +128,10 @@ export function TopicWorkspace({
   return (
     <div className="space-y-5">
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink-900">Generovat otázky</h2>
+        <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
         {ai.configured ? (
           <>
-            <p className="mt-1 text-sm text-ink-500">
+            <p className="mt-1 text-sm text-fg-muted">
               Zdrojem je celá skupina „{topicName}“: {materials.length}{' '}
               {materials.length === 1 ? 'materiál' : 'materiálů'},{' '}
               {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
@@ -127,13 +141,13 @@ export function TopicWorkspace({
               <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button variant="primary" disabled={generating || materials.length === 0} onClick={() => void generate()}>
+              <Button disabled={generating || materials.length === 0} onClick={() => void generate()}>
                 Vygenerovat ze skupiny
               </Button>
               {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
-              {!generating && status ? <span className="text-sm text-brand-700">{status}</span> : null}
+              {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}
             </div>
-            {error ? <p className="mt-3 text-sm text-danger-600">{error}</p> : null}
+            {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
           </>
         ) : (
           <div className="mt-3">
@@ -144,58 +158,73 @@ export function TopicWorkspace({
 
       <Card className="p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 className="text-sm font-semibold text-ink-900">Otázky ({questions.length})</h2>
+          <h2 className="text-sm font-semibold text-fg">Otázky ({questions.length})</h2>
           <div className="flex flex-wrap items-end gap-2">
             <div className="w-44">
-              <Label>Typ</Label>
+              <Label htmlFor="question-type-filter">Typ</Label>
               <Select
-                value={filters.type}
-                onChange={(event) => setFilters({ ...filters, type: event.target.value as QuestionType | '' })}
+                value={filters.type || 'vse'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, type: value === 'vse' ? '' : (value as QuestionType) })
+                }
               >
-                <option value="">Všechny</option>
-                {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
-                  <option key={type} value={type}>
-                    {label}
-                  </option>
-                ))}
+                <SelectTrigger id="question-type-filter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vse">Všechny</SelectItem>
+                  {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
+                    <SelectItem key={type} value={type}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div className="w-36">
-              <Label>Stav</Label>
+              <Label htmlFor="question-status-filter">Stav</Label>
               <Select
-                value={filters.status}
-                onChange={(event) => setFilters({ ...filters, status: event.target.value as QuestionStatus | '' })}
+                value={filters.status || 'vse'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, status: value === 'vse' ? '' : (value as QuestionStatus) })
+                }
               >
-                <option value="">Všechny</option>
-                <option value="draft">Koncept</option>
-                <option value="approved">Schválené</option>
-                <option value="rejected">Zamítnuté</option>
+                <SelectTrigger id="question-status-filter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vse">Všechny</SelectItem>
+                  <SelectItem value="draft">Koncept</SelectItem>
+                  <SelectItem value="approved">Schválené</SelectItem>
+                  <SelectItem value="rejected">Zamítnuté</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="w-48">
-              <Label>Hledat</Label>
+              <Label htmlFor="question-search-filter">Hledat</Label>
               <Input
+                id="question-search-filter"
                 value={filters.search}
                 placeholder="text otázky"
                 onChange={(event) => setFilters({ ...filters, search: event.target.value })}
               />
             </div>
-            <Button size="sm" onClick={() => setEditing('new')}>
+            <Button size="sm" variant="outline" onClick={() => setEditing('new')}>
               Vlastní otázka
             </Button>
           </div>
         </div>
 
         {selected.size > 0 ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded bg-ink-50 px-3 py-2">
-            <span className="text-sm text-ink-600">Vybráno {selected.size}</span>
-            <Button size="sm" variant="primary" onClick={() => void bulkStatus('approved')}>
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded bg-surface-muted px-3 py-2">
+            <span className="text-sm text-fg-soft">Vybráno {selected.size}</span>
+            <Button size="sm" onClick={() => void bulkStatus('approved')}>
               Schválit
             </Button>
-            <Button size="sm" onClick={() => void bulkStatus('rejected')}>
+            <Button size="sm" variant="outline" onClick={() => void bulkStatus('rejected')}>
               Zamítnout
             </Button>
-            <Button size="sm" variant="danger" onClick={() => void removeSelected()}>
+            <Button size="sm" variant="destructive" onClick={() => void removeSelected()}>
               Smazat
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -212,16 +241,22 @@ export function TopicWorkspace({
             />
           </div>
         ) : (
-          <ul className="mt-3 divide-y divide-ink-100">
+          <ul className="mt-3 divide-y divide-line-soft">
             {visible.map((question) => (
               <li key={question.id} className="flex gap-3 py-3">
-                <Checkbox className="mt-1" checked={selected.has(question.id)} onChange={() => toggle(question.id)} />
+                <Checkbox
+                  className="mt-1"
+                  checked={selected.has(question.id)}
+                  onCheckedChange={() => toggle(question.id)}
+                />
                 <div className="min-w-0 flex-1">
                   <QuestionPreview question={question} />
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
-                  {question.status === 'draft' ? <Badge tone="warn">koncept</Badge> : null}
-                  {question.status === 'rejected' ? <Badge tone="danger">zamítnuto</Badge> : null}
+                  {question.status === 'draft' ? (
+                    <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
+                  ) : null}
+                  {question.status === 'rejected' ? <Badge variant="destructive">zamítnuto</Badge> : null}
                   <Button size="sm" variant="ghost" onClick={() => setEditing(question)}>
                     Upravit
                   </Button>

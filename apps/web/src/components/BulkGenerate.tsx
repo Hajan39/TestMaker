@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Card, Checkbox, Spinner } from '@testmaker/ui'
+import { Loader2 } from 'lucide-react'
+import { Button, Card, Checkbox } from '@testmaker/ui'
 import {
   AiUnavailable,
   DEFAULT_SETTINGS,
@@ -80,8 +81,8 @@ export function BulkGenerate({
 
   return (
     <Card className="p-4">
-      <h2 className="text-sm font-semibold text-ink-900">Hromadné generování</h2>
-      <p className="mt-1 text-sm text-ink-500">
+      <h2 className="text-sm font-semibold text-fg">Hromadné generování</h2>
+      <p className="mt-1 text-sm text-fg-muted">
         Projde všechny skupiny materiálů ve zvoleném rozsahu. Běží po jedné skupině, průběh se
         průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
       </p>
@@ -90,40 +91,34 @@ export function BulkGenerate({
         <GenerateSettingsForm value={settings} onChange={setSettings} disabled={running} />
       </div>
 
-      <label className="mt-3 flex items-center gap-2 text-sm text-ink-700">
+      <label className="mt-3 flex items-center gap-2 text-sm text-fg-soft">
         <Checkbox
           checked={skipWithQuestions}
           disabled={running}
-          onChange={() => setSkipWithQuestions(!skipWithQuestions)}
+          onCheckedChange={() => setSkipWithQuestions(!skipWithQuestions)}
         />
         Přeskočit skupiny, které už otázky mají
       </label>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {scopes.map((scope) => (
-          <Button
-            key={scope.label}
-            size="sm"
-            variant="primary"
-            disabled={running}
-            onClick={() => void start(scope)}
-          >
+          <Button key={scope.label} size="sm" disabled={running} onClick={() => void start(scope)}>
             {scope.label}
           </Button>
         ))}
         {running ? (
           <>
-            <Spinner />
-            <Button size="sm" variant="danger" onClick={() => (stopRef.current = true)}>
+            <Loader2 className="size-4 animate-spin" />
+            <Button size="sm" variant="destructive" onClick={() => (stopRef.current = true)}>
               Zastavit
             </Button>
           </>
         ) : null}
       </div>
 
-      {status ? <p className="mt-3 text-sm text-ink-700">{status}</p> : null}
+      {status ? <p className="mt-3 text-sm text-fg-soft">{status}</p> : null}
       {errors.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-sm text-danger-600">
+        <ul className="mt-2 space-y-0.5 text-sm text-danger">
           {errors.slice(0, 5).map((error, index) => (
             <li key={index}>{error}</li>
           ))}

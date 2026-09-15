@@ -46,6 +46,9 @@ importers:
       jszip:
         specifier: ^3.10.1
         version: 3.10.2
+      lucide-react:
+        specifier: ^1.46.0
+        version: 1.46.0(react@19.2.8)
       nanoid:
         specifier: ^5.1.7
         version: 5.1.16
@@ -8057,6 +8060,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lucide-react@1.46.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   lucide-react@1.46.0(react@19.3.0):
     dependencies:

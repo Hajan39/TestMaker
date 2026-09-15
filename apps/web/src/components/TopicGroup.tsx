@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Badge, Button, Card, Input, Label, Select } from '@testmaker/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@testmaker/ui'
 
 export interface GroupMaterial {
   id: string
@@ -60,7 +71,7 @@ export function TopicGroup({
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-ink-900">
+        <h2 className="text-sm font-semibold text-fg">
           Skupina materiálů ({active.length}
           {materials.length !== active.length ? ` + ${materials.length - active.length} duplicit` : ''})
         </h2>
@@ -74,36 +85,39 @@ export function TopicGroup({
           const original = materials.find((row) => row.id === material.duplicateOfId)
           return (
             <li key={material.id} className="flex flex-wrap items-center gap-2">
-              <span className={material.duplicateOfId ? 'text-ink-400' : 'text-ink-800'}>
+              <span className={material.duplicateOfId ? 'text-fg-muted' : 'text-fg-soft'}>
                 {material.fileName}
               </span>
-              <span className="text-ink-400">
+              <span className="text-fg-muted">
                 {material.charCount.toLocaleString('cs')} znaků
                 {material.pageCount ? `, ${material.pageCount} str.` : ''}
               </span>
-              {material.needsOcr ? <Badge tone="warn">skoro bez textu</Badge> : null}
+              {material.needsOcr ? <Badge className="bg-draft-bg text-draft-fg">skoro bez textu</Badge> : null}
               {material.duplicateOfId ? (
-                <span className="text-xs text-ink-500">
+                <span className="text-xs text-fg-muted">
                   stejný obsah jako {original?.fileName ?? 'jiný materiál'}
                   {material.duplicateScore ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)` : ''}
                 </span>
               ) : null}
               {manage && siblings.length > 0 ? (
                 <Select
-                  className="ml-auto w-56"
-                  value=""
+                  value="presun"
                   disabled={busy}
-                  onChange={(event) =>
-                    event.target.value &&
-                    void call('PUT', { materialId: material.id, topicId: event.target.value })
+                  onValueChange={(value) =>
+                    value !== 'presun' && void call('PUT', { materialId: material.id, topicId: value })
                   }
                 >
-                  <option value="">Přesunout do…</option>
-                  {siblings.map((sibling) => (
-                    <option key={sibling.id} value={sibling.id}>
-                      {sibling.name}
-                    </option>
-                  ))}
+                  <SelectTrigger className="ml-auto w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="presun">Přesunout do…</SelectItem>
+                    {siblings.map((sibling) => (
+                      <SelectItem key={sibling.id} value={sibling.id}>
+                        {sibling.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               ) : null}
             </li>
@@ -112,13 +126,14 @@ export function TopicGroup({
       </ul>
 
       {manage ? (
-        <div className="mt-4 grid gap-3 border-t border-ink-100 pt-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <div>
-            <Label>Název skupiny</Label>
+            <Label htmlFor="topic-group-name">Název skupiny</Label>
             <div className="flex gap-2">
-              <Input value={name} onChange={(event) => setName(event.target.value)} />
+              <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
               <Button
                 size="sm"
+                variant="outline"
                 disabled={busy || !name.trim() || name === topicName}
                 onClick={() => void call('PATCH', { id: topicId, name })}
               >
@@ -127,25 +142,31 @@ export function TopicGroup({
             </div>
           </div>
           <div>
-            <Label>Sloučit do jiné skupiny</Label>
+            <Label htmlFor="topic-group-merge-target">Sloučit do jiné skupiny</Label>
             <div className="flex gap-2">
-              <Select value={mergeTarget} onChange={(event) => setMergeTarget(event.target.value)}>
-                <option value="">Vyber skupinu…</option>
-                {siblings.map((sibling) => (
-                  <option key={sibling.id} value={sibling.id}>
-                    {sibling.name}
-                  </option>
-                ))}
+              <Select value={mergeTarget || 'zadna'} onValueChange={(value) => setMergeTarget(value === 'zadna' ? '' : value)}>
+                <SelectTrigger id="topic-group-merge-target" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zadna">Vyber skupinu…</SelectItem>
+                  {siblings.map((sibling) => (
+                    <SelectItem key={sibling.id} value={sibling.id}>
+                      {sibling.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
               <Button
                 size="sm"
+                variant="outline"
                 disabled={busy || !mergeTarget}
                 onClick={() => void call('POST', { sourceId: topicId, targetId: mergeTarget })}
               >
                 Sloučit
               </Button>
             </div>
-            <p className="mt-1 text-xs text-ink-500">
+            <p className="mt-1 text-xs text-fg-muted">
               Materiály i otázky se přesunou do vybrané skupiny, tato zanikne.
             </p>
           </div>

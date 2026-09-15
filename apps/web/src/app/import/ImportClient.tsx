@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { Badge, Button, Card, Spinner } from '@testmaker/ui'
+import { Loader2 } from 'lucide-react'
+import { Badge, Button, Card } from '@testmaker/ui'
 import { extractAll, triageFiles, uploadMaterials, type FileEntry } from '@/lib/importClient'
 
 type Phase = 'idle' | 'extracting' | 'ready' | 'uploading' | 'done'
@@ -111,40 +112,40 @@ export function ImportClient() {
           onChange={(event) => void handleFiles(event.target.files)}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" disabled={busy} onClick={() => inputRef.current?.click()}>
+          <Button disabled={busy} onClick={() => inputRef.current?.click()}>
             Vybrat složku
           </Button>
-          <span className="text-sm text-ink-500">
+          <span className="text-sm text-fg-muted">
             Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí.
           </span>
         </div>
 
         {busy ? (
           <div className="mt-4 flex items-center gap-3">
-            <Spinner />
-            <span className="text-sm text-ink-600">
+            <Loader2 className="size-4 animate-spin" />
+            <span className="text-sm text-fg-soft">
               {phase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
             </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded bg-ink-100">
+            <div className="h-1.5 flex-1 overflow-hidden rounded bg-surface-muted">
               <div
-                className="h-full bg-brand-500 transition-all"
+                className="h-full bg-brand transition-all"
                 style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
               />
             </div>
           </div>
         ) : null}
 
-        {error ? <p className="mt-3 text-sm text-danger-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       </Card>
 
       {summary ? (
-        <Card className="border-brand-300 bg-brand-50 p-5">
-          <p className="text-sm text-ink-800">
+        <Card className="border-brand bg-brand-bg p-5">
+          <p className="text-sm text-fg-soft">
             Naimportováno {summary.imported} materiálů
             {summary.duplicates > 0 ? `, ${summary.duplicates} už v knihovně bylo` : ''}.
           </p>
           <div className="mt-3 flex gap-2">
-            <Button variant="primary" size="sm" onClick={() => router.push('/')}>
+            <Button size="sm" onClick={() => router.push('/')}>
               Přejít na přehled
             </Button>
           </div>
@@ -155,25 +156,25 @@ export function ImportClient() {
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-ink-900">
+              <h2 className="text-sm font-semibold text-fg">
                 Připraveno k importu: {materials.length}
               </h2>
-              <p className="mt-1 text-sm text-ink-500">
+              <p className="mt-1 text-sm text-fg-muted">
                 {grouped.map(([key, value]) => `${key} (${value})`).join(', ')}
               </p>
             </div>
-            <Button variant="primary" disabled={busy} onClick={() => void handleUpload()}>
+            <Button disabled={busy} onClick={() => void handleUpload()}>
               Naimportovat
             </Button>
           </div>
 
-          <ul className="mt-4 max-h-72 divide-y divide-ink-100 overflow-y-auto text-sm">
+          <ul className="mt-4 max-h-72 divide-y divide-line-soft overflow-y-auto text-sm">
             {materials.map((material) => (
               <li key={material.contentHash} className="flex flex-wrap items-center gap-2 py-1.5">
-                <span className="font-medium text-ink-800">{material.topic}</span>
-                <span className="text-ink-400">{material.relativePath}</span>
-                <span className="ml-auto text-ink-500">{material.text.length.toLocaleString('cs')} znaků</span>
-                {material.needsOcr ? <Badge tone="warn">skoro bez textu</Badge> : null}
+                <span className="font-medium text-fg-soft">{material.topic}</span>
+                <span className="text-fg-muted">{material.relativePath}</span>
+                <span className="ml-auto text-fg-muted">{material.text.length.toLocaleString('cs')} znaků</span>
+                {material.needsOcr ? <Badge className="bg-draft-bg text-draft-fg">skoro bez textu</Badge> : null}
               </li>
             ))}
           </ul>
@@ -181,10 +182,10 @@ export function ImportClient() {
       ) : null}
 
       {failed.length > 0 ? (
-        <IssueList title={`Nepodařilo se přečíst (${failed.length})`} items={failed} tone="danger" />
+        <IssueList title={`Nepodařilo se přečíst (${failed.length})`} items={failed} kind="danger" />
       ) : null}
       {skipped.length > 0 ? (
-        <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} tone="neutral" />
+        <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} kind="neutral" />
       ) : null}
     </div>
   )
@@ -193,21 +194,21 @@ export function ImportClient() {
 function IssueList({
   title,
   items,
-  tone,
+  kind,
 }: {
   title: string
   items: Failure[]
-  tone: 'danger' | 'neutral'
+  kind: 'danger' | 'neutral'
 }) {
   return (
     <Card className="p-5">
       <details>
-        <summary className="cursor-pointer text-sm font-semibold text-ink-800">{title}</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-fg-soft">{title}</summary>
         <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
           {items.map((item) => (
             <li key={item.relativePath} className="flex flex-wrap gap-2">
-              <span className="text-ink-600">{item.relativePath}</span>
-              <span className={tone === 'danger' ? 'text-danger-600' : 'text-ink-400'}>{item.reason}</span>
+              <span className="text-fg-soft">{item.relativePath}</span>
+              <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'}>{item.reason}</span>
             </li>
           ))}
         </ul>

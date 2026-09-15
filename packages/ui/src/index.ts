@@ -32,3 +32,4 @@ export {
 
 // Doménové komponenty přibudou v dalších úkolech.
 export { QuestionPreview } from './QuestionPreview'
+export { EmptyState } from './EmptyState'

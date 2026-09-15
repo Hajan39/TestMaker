@@ -7,6 +7,6 @@ body {
 }
 
 body {
-  background-color: var(--color-ink-50);
-  color: var(--color-ink-900);
+  background-color: var(--color-surface);
+  color: var(--color-fg);
 }

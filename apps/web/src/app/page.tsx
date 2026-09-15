@@ -30,7 +30,7 @@ export default async function DashboardPage() {
         hint="Naimportuj složku s materiály. Z každého souboru se vytáhne text a vznikne téma."
         action={
           <Link href="/import">
-            <Button variant="primary">Importovat materiály</Button>
+            <Button>Importovat materiály</Button>
           </Link>
         }
       />
@@ -41,18 +41,20 @@ export default async function DashboardPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink-900">Přehled knihovny</h1>
-          <p className="mt-1 text-sm text-ink-600">
+          <h1 className="text-xl font-semibold text-fg">Přehled knihovny</h1>
+          <p className="mt-1 text-sm text-fg-soft">
             {totals.topics} témat · {totals.materials} materiálů · {totals.questions} otázek (
             {totals.approved} schválených)
           </p>
         </div>
         <div className="flex gap-2">
           <Link href="/import">
-            <Button size="sm">Přidat materiály</Button>
+            <Button size="sm" variant="outline">
+              Přidat materiály
+            </Button>
           </Link>
           <Link href="/tests/new">
-            <Button size="sm" variant="primary">
+            <Button size="sm">
               Nový test
             </Button>
           </Link>
@@ -77,13 +79,13 @@ export default async function DashboardPage() {
       <div className="space-y-5">
         {tree.map((subject) => (
           <section key={subject.id}>
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-fg-muted">
               {subject.name}
             </h2>
             <div className="space-y-3">
               {subject.grades.map((grade) => (
                 <Card key={grade.id} className="p-4">
-                  <h3 className="mb-2 text-sm font-medium text-ink-700">
+                  <h3 className="mb-2 text-sm font-medium text-fg-soft">
                     {grade.name || 'Bez ročníku'}
                   </h3>
                   <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,14 +93,14 @@ export default async function DashboardPage() {
                       <li key={topic.id}>
                         <Link
                           href={`/topics/${topic.id}`}
-                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-ink-50"
+                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-surface-muted"
                         >
-                          <span className="truncate text-ink-800">{topic.name}</span>
+                          <span className="truncate text-fg-soft">{topic.name}</span>
                           <span className="ml-auto flex shrink-0 gap-1">
                             {topic.questionCount > 0 ? (
-                              <Badge tone="brand">{topic.questionCount} ot.</Badge>
+                              <Badge>{topic.questionCount} ot.</Badge>
                             ) : (
-                              <Badge>bez otázek</Badge>
+                              <Badge variant="secondary">bez otázek</Badge>
                             )}
                           </span>
                         </Link>

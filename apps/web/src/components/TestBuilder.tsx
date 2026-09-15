@@ -4,7 +4,21 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test, TestItemKind } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS, type QuestionType } from '@testmaker/core/schema'
-import { Badge, Button, Card, Checkbox, EmptyState, Input, Label, QuestionPreview, Select, Textarea } from '@testmaker/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  EmptyState,
+  Input,
+  Label,
+  QuestionPreview,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@testmaker/ui'
 import { TemplatePreview } from '@/components/TemplatePreview'
 import type { PickerTopic } from '@/lib/questionPicker'
 
@@ -180,74 +194,91 @@ export function TestBuilder({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-ink-900">{test ? 'Úprava testu' : 'Nový test'}</h1>
+        <h1 className="text-xl font-semibold text-fg">{test ? 'Úprava testu' : 'Nový test'}</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-ink-500">
+          <span className="text-sm text-fg-muted">
             {questionCount} otázek{graded ? ` · ${formatPoints(totalPoints)} b.` : ''}
           </span>
           {savedId ? (
             <>
               <a href={`/api/tests/${savedId}/pdf?variant=A${showKey ? '&key=1' : ''}`} target="_blank" rel="noreferrer">
-                <Button size="sm">PDF varianta A</Button>
+                <Button size="sm" variant="outline">
+                  PDF varianta A
+                </Button>
               </a>
               {variants === 2 ? (
                 <a href={`/api/tests/${savedId}/pdf?variant=B${showKey ? '&key=1' : ''}`} target="_blank" rel="noreferrer">
-                  <Button size="sm">PDF varianta B</Button>
+                  <Button size="sm" variant="outline">
+                    PDF varianta B
+                  </Button>
                 </a>
               ) : null}
             </>
           ) : null}
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+          <Button disabled={saving} onClick={() => void save()}>
             {saving ? 'Ukládám…' : 'Uložit'}
           </Button>
         </div>
       </div>
 
-      {error ? <p className="text-sm text-danger-600">{error}</p> : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
 
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
-            <Label>Název testu</Label>
+            <Label htmlFor="test-title">Název testu</Label>
             <Input
+              id="test-title"
               value={title}
               placeholder="Např. Čtvrtletní písemka – přírodopis"
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
           <div>
-            <Label>Varianty</Label>
-            <Select
-              value={String(variants)}
-              onChange={(event) => setVariants(event.target.value === '2' ? 2 : 1)}
-            >
-              <option value="1">Jen A</option>
-              <option value="2">A i B (přeházené pořadí)</option>
+            <Label htmlFor="test-variants">Varianty</Label>
+            <Select value={String(variants)} onValueChange={(value) => setVariants(value === '2' ? 2 : 1)}>
+              <SelectTrigger id="test-variants" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Jen A</SelectItem>
+                <SelectItem value="2">A i B (přeházené pořadí)</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
-            <Label>Podtitul / úvodní věta (nepovinné)</Label>
-            <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+            <Label htmlFor="test-description">Podtitul / úvodní věta (nepovinné)</Label>
+            <Input id="test-description" value={description} onChange={(event) => setDescription(event.target.value)} />
           </div>
           <div>
-            <Label>Škola</Label>
-            <Input value={header.school} onChange={(event) => setHeader({ ...header, school: event.target.value })} />
-          </div>
-          <div>
-            <Label>Předmět</Label>
-            <Input value={header.subject} onChange={(event) => setHeader({ ...header, subject: event.target.value })} />
-          </div>
-          <div>
-            <Label>Třída</Label>
+            <Label htmlFor="test-header-school">Škola</Label>
             <Input
+              id="test-header-school"
+              value={header.school}
+              onChange={(event) => setHeader({ ...header, school: event.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="test-header-subject">Předmět</Label>
+            <Input
+              id="test-header-subject"
+              value={header.subject}
+              onChange={(event) => setHeader({ ...header, subject: event.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="test-header-class">Třída</Label>
+            <Input
+              id="test-header-class"
               value={header.className}
               placeholder="prázdné = linka k doplnění"
               onChange={(event) => setHeader({ ...header, className: event.target.value })}
             />
           </div>
           <div>
-            <Label>Datum</Label>
+            <Label htmlFor="test-header-date">Datum</Label>
             <Input
+              id="test-header-date"
               value={header.date}
               placeholder="prázdné = linka k doplnění"
               onChange={(event) => setHeader({ ...header, date: event.target.value })}
@@ -266,25 +297,25 @@ export function TestBuilder({
                 className={
                   'rounded-lg border p-1.5 text-left transition-colors ' +
                   (template.id === templateId
-                    ? 'border-brand-600 bg-brand-50'
-                    : 'border-ink-200 hover:border-ink-300')
+                    ? 'border-brand bg-brand-bg'
+                    : 'border-line hover:border-fg-muted')
                 }
               >
                 <TemplatePreview templateId={template.id} graded={graded} />
-                <span className="mt-1.5 block px-1 text-sm font-medium text-ink-800">{template.name}</span>
-                <span className="block px-1 pb-1 text-xs text-ink-500">{template.description}</span>
+                <span className="mt-1.5 block px-1 text-sm font-medium text-fg-soft">{template.name}</span>
+                <span className="block px-1 pb-1 text-xs text-fg-muted">{template.description}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-5">
-          <label className="flex items-center gap-2 text-sm text-ink-700">
-            <Checkbox checked={graded} onChange={() => setGraded(!graded)} />
+          <label className="flex items-center gap-2 text-sm text-fg-soft">
+            <Checkbox checked={graded} onCheckedChange={() => setGraded(!graded)} />
             Test na známky (tiskne body a políčko na známku)
           </label>
-          <label className="flex items-center gap-2 text-sm text-ink-700">
-            <Checkbox checked={showKey} onChange={() => setShowKey(!showKey)} />
+          <label className="flex items-center gap-2 text-sm text-fg-soft">
+            <Checkbox checked={showKey} onCheckedChange={() => setShowKey(!showKey)} />
             Přiložit klíč správných odpovědí
           </label>
         </div>
@@ -292,48 +323,64 @@ export function TestBuilder({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
-          <h2 className="text-sm font-semibold text-ink-900">Banka otázek</h2>
-          <p className="mt-1 text-sm text-ink-500">
+          <h2 className="text-sm font-semibold text-fg">Banka otázek</h2>
+          <p className="mt-1 text-sm text-fg-muted">
             Vybírej napříč předměty i ročníky — hodí se pro čtvrtletky a opakování z loňska.
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <div className="w-40">
-              <Label>Předmět</Label>
+              <Label htmlFor="bank-subject-filter">Předmět</Label>
               <Select
-                value={filters.subject}
-                onChange={(event) => setFilters({ ...filters, subject: event.target.value })}
+                value={filters.subject || 'vse'}
+                onValueChange={(value) => setFilters({ ...filters, subject: value === 'vse' ? '' : value })}
               >
-                <option value="">Všechny</option>
-                {subjects.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
+                <SelectTrigger id="bank-subject-filter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vse">Všechny</SelectItem>
+                  {subjects.map((subject) => (
+                    <SelectItem key={subject} value={subject}>
+                      {subject}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div className="w-44">
-              <Label>Typ</Label>
+              <Label htmlFor="bank-type-filter">Typ</Label>
               <Select
-                value={filters.type}
-                onChange={(event) => setFilters({ ...filters, type: event.target.value as QuestionType | '' })}
+                value={filters.type || 'vse'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, type: value === 'vse' ? '' : (value as QuestionType) })
+                }
               >
-                <option value="">Všechny</option>
-                {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
-                  <option key={type} value={type}>
-                    {label}
-                  </option>
-                ))}
+                <SelectTrigger id="bank-type-filter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vse">Všechny</SelectItem>
+                  {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
+                    <SelectItem key={type} value={type}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div className="w-44">
-              <Label>Hledat</Label>
-              <Input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+              <Label htmlFor="bank-search-filter">Hledat</Label>
+              <Input
+                id="bank-search-filter"
+                value={filters.search}
+                onChange={(event) => setFilters({ ...filters, search: event.target.value })}
+              />
             </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink-700">
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-fg-soft">
               <Checkbox
                 checked={filters.onlyApproved}
-                onChange={() => setFilters({ ...filters, onlyApproved: !filters.onlyApproved })}
+                onCheckedChange={() => setFilters({ ...filters, onlyApproved: !filters.onlyApproved })}
               />
               jen schválené
             </label>
@@ -344,12 +391,12 @@ export function TestBuilder({
               <EmptyState title="Žádné otázky neodpovídají filtru" />
             ) : (
               visibleTopics.map((topic) => (
-                <details key={topic.id} className="rounded border border-ink-100">
-                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-ink-800">
+                <details key={topic.id} className="rounded border border-line-soft">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-fg-soft">
                     {topic.label}{' '}
-                    <span className="font-normal text-ink-400">({topic.questions.length})</span>
+                    <span className="font-normal text-fg-muted">({topic.questions.length})</span>
                   </summary>
-                  <ul className="divide-y divide-ink-100 px-3 pb-2">
+                  <ul className="divide-y divide-line-soft px-3 pb-2">
                     {topic.questions.map((question) => (
                       <li key={question.id} className="flex gap-2 py-2">
                         <div className="min-w-0 flex-1">
@@ -357,7 +404,7 @@ export function TestBuilder({
                         </div>
                         <Button
                           size="sm"
-                          variant={usedIds.has(question.id) ? 'ghost' : 'secondary'}
+                          variant={usedIds.has(question.id) ? 'ghost' : 'outline'}
                           disabled={usedIds.has(question.id)}
                           onClick={() => addQuestion(question)}
                         >
@@ -374,15 +421,15 @@ export function TestBuilder({
 
         <Card className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink-900">Obsah testu</h2>
+            <h2 className="text-sm font-semibold text-fg">Obsah testu</h2>
             <div className="flex flex-wrap gap-1">
-              <Button size="sm" onClick={() => addStructural('heading')}>
+              <Button size="sm" variant="outline" onClick={() => addStructural('heading')}>
                 + Nadpis části
               </Button>
-              <Button size="sm" onClick={() => addStructural('instruction')}>
+              <Button size="sm" variant="outline" onClick={() => addStructural('instruction')}>
                 + Pokyn
               </Button>
-              <Button size="sm" onClick={() => addStructural('page_break')}>
+              <Button size="sm" variant="outline" onClick={() => addStructural('page_break')}>
                 + Nová strana
               </Button>
             </div>
@@ -395,7 +442,7 @@ export function TestBuilder({
           ) : (
             <ol className="mt-3 max-h-[32rem] space-y-2 overflow-y-auto pr-1">
               {draft.map((item, index) => (
-                <li key={item.key} className="rounded border border-ink-100 p-2">
+                <li key={item.key} className="rounded border border-line-soft p-2">
                   <div className="flex items-start gap-2">
                     <div className="flex flex-col gap-0.5">
                       <Button size="sm" variant="ghost" onClick={() => move(index, -1)} aria-label="Nahoru">
@@ -409,10 +456,10 @@ export function TestBuilder({
                       {item.kind === 'question' && item.question ? (
                         <QuestionPreview question={item.question} />
                       ) : item.kind === 'page_break' ? (
-                        <p className="py-2 text-sm text-ink-500">— zalomení strany —</p>
+                        <p className="py-2 text-sm text-fg-muted">— zalomení strany —</p>
                       ) : (
                         <div>
-                          <Badge>{item.kind === 'heading' ? 'nadpis části' : 'pokyn'}</Badge>
+                          <Badge variant="secondary">{item.kind === 'heading' ? 'nadpis části' : 'pokyn'}</Badge>
                           <Input
                             className="mt-1"
                             value={item.text ?? ''}

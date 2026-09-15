@@ -1,7 +1,18 @@
 'use client'
 
 import type { QuestionType } from '@testmaker/core/schema'
-import { Button, Checkbox, Input, Label, Select, Textarea } from '@testmaker/ui'
+import {
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from '@testmaker/ui'
 
 type Payload = Record<string, unknown>
 
@@ -21,8 +32,8 @@ export function PayloadFields({
 
   const prompt = (
     <div>
-      <Label>Zadání</Label>
-      <Textarea value={str('prompt')} onChange={(event) => set('prompt', event.target.value)} />
+      <Label htmlFor="payload-prompt">Zadání</Label>
+      <Textarea id="payload-prompt" value={str('prompt')} onChange={(event) => set('prompt', event.target.value)} />
     </div>
   )
 
@@ -33,8 +44,9 @@ export function PayloadFields({
           {prompt}
           <div className="flex gap-3">
             <div className="w-32">
-              <Label>Počet linek</Label>
+              <Label htmlFor="payload-lines">Počet linek</Label>
               <Input
+                id="payload-lines"
                 type="number"
                 min={1}
                 max={20}
@@ -44,8 +56,12 @@ export function PayloadFields({
             </div>
           </div>
           <div>
-            <Label>Vzorová odpověď (do klíče)</Label>
-            <Textarea value={str('answer')} onChange={(event) => set('answer', event.target.value)} />
+            <Label htmlFor="payload-open-answer">Vzorová odpověď (do klíče)</Label>
+            <Textarea
+              id="payload-open-answer"
+              value={str('answer')}
+              onChange={(event) => set('answer', event.target.value)}
+            />
           </div>
         </div>
       )
@@ -55,12 +71,17 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label>Správná odpověď</Label>
-            <Input value={str('answer')} onChange={(event) => set('answer', event.target.value)} />
+            <Label htmlFor="payload-short-answer">Správná odpověď</Label>
+            <Input
+              id="payload-short-answer"
+              value={str('answer')}
+              onChange={(event) => set('answer', event.target.value)}
+            />
           </div>
           <div>
-            <Label>Další uznávané odpovědi (oddělené středníkem)</Label>
+            <Label htmlFor="payload-accepted-answers">Další uznávané odpovědi (oddělené středníkem)</Label>
             <Input
+              id="payload-accepted-answers"
               value={list('acceptedAnswers').join('; ')}
               onChange={(event) =>
                 set(
@@ -103,7 +124,7 @@ export function PayloadFields({
             <div className="space-y-2">
               {options.map((option, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <Checkbox checked={correctIndices.includes(index)} onChange={() => toggleCorrect(index)} />
+                  <Checkbox checked={correctIndices.includes(index)} onCheckedChange={() => toggleCorrect(index)} />
                   <Input
                     value={option}
                     onChange={(event) => set('options', replaceAt(options, index, event.target.value))}
@@ -118,7 +139,7 @@ export function PayloadFields({
                 </div>
               ))}
             </div>
-            <Button size="sm" className="mt-2" onClick={() => set('options', [...options, ''])}>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => set('options', [...options, ''])}>
               Přidat možnost
             </Button>
           </div>
@@ -138,7 +159,7 @@ export function PayloadFields({
                 <div key={index} className="flex items-center gap-2">
                   <Checkbox
                     checked={statement.isTrue}
-                    onChange={() =>
+                    onCheckedChange={() =>
                       set(
                         'statements',
                         replaceAt(statements, index, { ...statement, isTrue: !statement.isTrue }),
@@ -163,6 +184,7 @@ export function PayloadFields({
             </div>
             <Button
               size="sm"
+              variant="outline"
               className="mt-2"
               onClick={() => set('statements', [...statements, { text: '', isTrue: true }])}
             >
@@ -181,15 +203,16 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label>Text s vynechávkami — místo k doplnění zapiš jako ___</Label>
-            <Textarea value={text} onChange={(event) => set('text', event.target.value)} />
-            <p className="mt-1 text-xs text-ink-500">
+            <Label htmlFor="payload-fillblank-text">Text s vynechávkami — místo k doplnění zapiš jako ___</Label>
+            <Textarea id="payload-fillblank-text" value={text} onChange={(event) => set('text', event.target.value)} />
+            <p className="mt-1 text-xs text-fg-muted">
               Vynechávek v textu: {placeholders}, doplňovaných výrazů: {blanks.length}
             </p>
           </div>
           <div>
-            <Label>Správné výrazy v pořadí (oddělené středníkem)</Label>
+            <Label htmlFor="payload-blanks">Správné výrazy v pořadí (oddělené středníkem)</Label>
             <Input
+              id="payload-blanks"
               value={blanks.join('; ')}
               onChange={(event) =>
                 set('blanks', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
@@ -197,8 +220,9 @@ export function PayloadFields({
             />
           </div>
           <div>
-            <Label>Nabídka slov navíc (nepovinné, oddělené středníkem)</Label>
+            <Label htmlFor="payload-wordbank">Nabídka slov navíc (nepovinné, oddělené středníkem)</Label>
             <Input
+              id="payload-wordbank"
               value={list('wordBank').join('; ')}
               onChange={(event) =>
                 set('wordBank', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
@@ -227,26 +251,32 @@ export function PayloadFields({
                 const pair = pairs.find(([l]) => l === index)
                 return (
                   <div key={index} className="flex items-center gap-2 text-sm">
-                    <span className="w-1/2 truncate text-ink-700">
+                    <span className="w-1/2 truncate text-fg-soft">
                       {index + 1}. {item || '(prázdné)'}
                     </span>
                     <Select
-                      value={String(pair?.[1] ?? '')}
-                      onChange={(event) => {
-                        const value = Number(event.target.value)
+                      value={pair ? String(pair[1]) : 'zadne'}
+                      onValueChange={(next) => {
                         const without = pairs.filter(([l]) => l !== index)
                         set(
                           'pairs',
-                          Number.isNaN(value) ? without : [...without, [index, value]].sort((a, b) => a[0] - b[0]),
+                          next === 'zadne'
+                            ? without
+                            : [...without, [index, Number(next)]].sort((a, b) => a[0] - b[0]),
                         )
                       }}
                     >
-                      <option value="">—</option>
-                      {right.map((option, i) => (
-                        <option key={i} value={i}>
-                          {String.fromCharCode(65 + i)}) {option || '(prázdné)'}
-                        </option>
-                      ))}
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="zadne">—</SelectItem>
+                        {right.map((option, i) => (
+                          <SelectItem key={i} value={String(i)}>
+                            {String.fromCharCode(65 + i)}) {option || '(prázdné)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
                 )
@@ -278,8 +308,9 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label>Hlavička (oddělená středníkem)</Label>
+            <Label htmlFor="payload-headers">Hlavička (oddělená středníkem)</Label>
             <Input
+              id="payload-headers"
               value={headers.join('; ')}
               onChange={(event) => {
                 const next = event.target.value.split(';').map((value) => value.trim())
@@ -312,19 +343,22 @@ export function PayloadFields({
                 </div>
               ))}
             </div>
-            <Button size="sm" className="mt-2" onClick={() => set('rows', [...rows, headers.map(() => null)])}>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => set('rows', [...rows, headers.map(() => null)])}>
               Přidat řádek
             </Button>
           </div>
           <div>
-            <Label>Správné hodnoty pro prázdné buňky po řádcích (oddělené středníkem)</Label>
+            <Label htmlFor="payload-table-answers">
+              Správné hodnoty pro prázdné buňky po řádcích (oddělené středníkem)
+            </Label>
             <Input
+              id="payload-table-answers"
               value={answers.join('; ')}
               onChange={(event) =>
                 set('answers', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
               }
             />
-            <p className="mt-1 text-xs text-ink-500">
+            <p className="mt-1 text-xs text-fg-muted">
               Prázdných buněk: {blankCount}, zadaných hodnot: {answers.length}
             </p>
           </div>
@@ -359,7 +393,7 @@ function ColumnEditor({
           </div>
         ))}
       </div>
-      <Button size="sm" className="mt-2" onClick={() => onChange([...items, ''])}>
+      <Button size="sm" variant="outline" className="mt-2" onClick={() => onChange([...items, ''])}>
         Přidat
       </Button>
     </div>

@@ -26,6 +26,7 @@
     "@react-pdf/renderer": "^4.9.0",
     "pdfjs-dist": "^6.3.289",
     "jszip": "^3.10.1",
+    "lucide-react": "^1.46.0",
     "ai": "^7.0.99",
     "@ai-sdk/anthropic": "^4.0.53",
     "@dnd-kit/core": "^6.3.1",

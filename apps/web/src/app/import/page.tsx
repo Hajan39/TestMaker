@@ -6,8 +6,8 @@ export default function ImportPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-ink-900">Import materiálů</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-600">
+        <h1 className="text-xl font-semibold text-fg">Import materiálů</h1>
+        <p className="mt-1 max-w-3xl text-sm text-fg-soft">
           Vyber složku s výukovými materiály. Text se vytáhne přímo v prohlížeči, na server se
           posílá jen text, ne soubory. Struktura složek se použije jako Předmět → Ročník → Téma.
         </p>

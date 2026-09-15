@@ -47,13 +47,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-sm text-ink-500">
-          <Link href="/" className="hover:text-brand-700">
+        <p className="text-sm text-fg-muted">
+          <Link href="/" className="hover:text-brand">
             {topic.subjectName}
           </Link>
           {topic.gradeName ? ` · ${topic.gradeName}` : ''}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-ink-900">{topic.name}</h1>
+        <h1 className="mt-1 text-xl font-semibold text-fg">{topic.name}</h1>
       </div>
 
       <TopicGroup topicId={topic.id} topicName={topic.name} materials={materialRows} />

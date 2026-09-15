@@ -1,0 +1,20 @@
+import type { ReactNode } from 'react'
+
+/** Prázdný stav: co tu chybí a co s tím. */
+export function EmptyState({
+  title,
+  hint,
+  action,
+}: {
+  title: string
+  hint?: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="rounded-[var(--radius-outer)] border border-dashed border-line px-6 py-10 text-center">
+      <p className="text-sm font-medium text-fg">{title}</p>
+      {hint ? <p className="mx-auto mt-1 max-w-md text-sm text-fg-muted">{hint}</p> : null}
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+    </div>
+  )
+}

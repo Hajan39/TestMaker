@@ -16,7 +16,7 @@ export default async function QuestionsPage() {
         hint="Otevři téma a vygeneruj otázky z materiálu, nebo si napiš vlastní."
         action={
           <Link href="/">
-            <Button variant="primary">Přejít na přehled</Button>
+            <Button>Přejít na přehled</Button>
           </Link>
         }
       />
@@ -26,9 +26,9 @@ export default async function QuestionsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold text-ink-900">Banka otázek ({total})</h1>
+        <h1 className="text-xl font-semibold text-fg">Banka otázek ({total})</h1>
         <Link href="/tests/new">
-          <Button variant="primary">Poskládat test</Button>
+          <Button>Poskládat test</Button>
         </Link>
       </div>
 
@@ -36,12 +36,12 @@ export default async function QuestionsPage() {
         {topics.map((topic) => (
           <Card key={topic.id} className="p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-ink-900">{topic.label}</h2>
-              <Link href={`/topics/${topic.id}`} className="text-sm text-brand-700 hover:underline">
+              <h2 className="text-sm font-semibold text-fg">{topic.label}</h2>
+              <Link href={`/topics/${topic.id}`} className="text-sm text-brand hover:underline">
                 Otevřít téma
               </Link>
             </div>
-            <ul className="mt-2 divide-y divide-ink-100">
+            <ul className="mt-2 divide-y divide-line-soft">
               {topic.questions.slice(0, 5).map((question) => (
                 <li key={question.id} className="py-2">
                   <QuestionPreview question={question} showAnswers={false} />
@@ -49,7 +49,7 @@ export default async function QuestionsPage() {
               ))}
             </ul>
             {topic.questions.length > 5 ? (
-              <p className="mt-2 text-sm text-ink-500">a dalších {topic.questions.length - 5}…</p>
+              <p className="mt-2 text-sm text-fg-muted">a dalších {topic.questions.length - 5}…</p>
             ) : null}
           </Card>
         ))}
