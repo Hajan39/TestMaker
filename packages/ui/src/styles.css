@@ -74,3 +74,27 @@
 .ui-numeric {
   font-variant-numeric: tabular-nums;
 }
+
+/* Most k pojmenování, které používají komponenty ze shadcn. */
+@theme {
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-fg);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-fg);
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: var(--color-brand-fg);
+  --color-secondary: var(--color-surface-muted);
+  --color-secondary-foreground: var(--color-fg);
+  --color-muted: var(--color-surface-muted);
+  --color-muted-foreground: var(--color-fg-muted);
+  /* U shadcn je accent tiché podbarvení při najetí, ne značková barva. */
+  --color-accent: var(--color-surface-muted);
+  --color-accent-foreground: var(--color-fg);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-brand);
+  --radius: var(--radius-inner);
+}

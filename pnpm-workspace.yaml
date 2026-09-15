@@ -13,3 +13,4 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - zod@4.6.5
+  - lucide-react@1.46.0
