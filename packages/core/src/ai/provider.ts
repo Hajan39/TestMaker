@@ -19,10 +19,14 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
   return { provider: name, model: env.AI_MODEL || DEFAULT_MODELS[name] }
 }
 
-/** Je generování k dispozici? Anthropic potřebuje klíč, Ollama jen běžící server. */
+/**
+ * Je generování k dispozici? Anthropic potřebuje klíč nebo OAuth token
+ * (`ant auth login` → `ant auth print-credentials --access-token`),
+ * Ollama jen běžící server.
+ */
 export function isAiConfigured(env: Record<string, string | undefined> = process.env): boolean {
   const { provider } = readAiConfig(env)
-  return provider === 'ollama' ? true : Boolean(env.ANTHROPIC_API_KEY)
+  return provider === 'ollama' ? true : Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN)
 }
 
 export async function getModel(config: AiConfig = readAiConfig()): Promise<LanguageModel> {
@@ -32,6 +36,11 @@ export async function getModel(config: AiConfig = readAiConfig()): Promise<Langu
     return ollama(config.model)
   }
   const { createAnthropic } = await import('@ai-sdk/anthropic')
-  const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  // Buď klíč (x-api-key), nebo OAuth token (Authorization: Bearer). Obojí naráz
+  // provider odmítne, takže token má přednost.
+  const authToken = process.env.ANTHROPIC_AUTH_TOKEN
+  const anthropic = authToken
+    ? createAnthropic({ authToken, headers: { 'anthropic-beta': 'oauth-2025-04-20' } })
+    : createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   return anthropic(config.model)
 }

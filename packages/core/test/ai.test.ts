@@ -146,6 +146,10 @@ describe('konfigurace providera', () => {
     expect(isAiConfigured({ ANTHROPIC_API_KEY: 'sk-test' })).toBe(true)
   })
 
+  it('OAuth token z `ant auth login` nahrazuje klíč', () => {
+    expect(isAiConfigured({ ANTHROPIC_AUTH_TOKEN: 'oauth-token' })).toBe(true)
+  })
+
   it('Ollama nepotřebuje klíč', () => {
     expect(readAiConfig({ AI_PROVIDER: 'ollama' }).model).toBe('qwen3:14b')
     expect(isAiConfigured({ AI_PROVIDER: 'ollama' })).toBe(true)

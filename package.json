@@ -5,6 +5,7 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "pnpm --filter @testmaker/web dev",
+    "dev:ant": "ANTHROPIC_AUTH_TOKEN=$(ant auth print-credentials --access-token) pnpm dev",
     "build": "pnpm --filter @testmaker/web build",
     "start": "pnpm --filter @testmaker/web start",
     "lint": "pnpm -r lint",
