@@ -96,6 +96,10 @@ pnpm --filter @testmaker/web generate:bulk -- --all --target 10 --model gemini-f
 počet (zamítnuté se do něj nepočítají). Témata s málo textem se přeskakují.
 Totéž nastavení je i v aplikaci, u tématu i u hromadného generování.
 
+Má-li aplikace běžet vystavená (ne jen lokálně), doplň do `.env.local` vedle
+`ANTHROPIC_API_KEY` i `APP_PASSWORD` a `AUTH_SECRET` — zapnou přihlášení
+jedním sdíleným heslem. Prázdné `APP_PASSWORD` znamená běh bez přihlášení.
+
 ## Uspořádání
 
 | Balíček | Obsah |
