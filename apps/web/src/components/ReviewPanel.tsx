@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DeleteButton,
   DialogTitle,
   EmptyState,
   Input,
@@ -152,9 +153,15 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
           <Button size="sm" variant="outline" onClick={() => void bulkStatus('rejected')}>
             Zamítnout
           </Button>
-          <Button size="sm" variant="destructive" onClick={() => void removeSelected()}>
-            Smazat
-          </Button>
+          <DeleteButton
+            label={`Smazat (${selected.size})`}
+            variant="destructive"
+            title="Smazat vybrané otázky?"
+            description={`Smaže se ${selected.size} ${
+              selected.size === 1 ? 'otázka' : selected.size < 5 ? 'otázky' : 'otázek'
+            }. Pokud jsou použité v uloženém testu, zmizí i odtamtud.`}
+            onConfirm={removeSelected}
+          />
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
             Zrušit výběr
           </Button>

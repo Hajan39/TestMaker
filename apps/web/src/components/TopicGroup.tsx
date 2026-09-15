@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import {
   Badge,
   Button,
+  DeleteButton,
   cn,
   Card,
   Input,
@@ -140,6 +142,17 @@ export function TopicGroup({
                   </SelectContent>
                 </Select>
               ) : null}
+              {manage ? (
+                <DeleteButton
+                  label="Smazat"
+                  title="Smazat materiál?"
+                  description={`Materiál „${material.fileName}" zmizí ze skupiny. Otázky, které z něj vznikly, zůstanou.`}
+                  onConfirm={async () => {
+                    await fetch(`/api/materials?id=${encodeURIComponent(material.id)}`, { method: 'DELETE' })
+                    router.refresh()
+                  }}
+                />
+              ) : null}
             </li>
           )
         })}
@@ -246,6 +259,12 @@ export function TopicGroup({
             <p className="mt-1 text-xs text-fg-muted">
               Materiály i otázky se přesunou do vybrané skupiny, tato zanikne.
             </p>
+          </div>
+          <div className="sm:col-span-2 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
+            <p className="text-xs text-fg-muted">
+              Smazání skupiny odstraní i její materiály a otázky. Soubory na disku zůstanou.
+            </p>
+            <DeleteFromLibrary kind="topic" id={topicId} label="Smazat skupinu" redirectTo="/" />
           </div>
         </div>
       ) : null}

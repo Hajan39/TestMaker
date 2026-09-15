@@ -11,7 +11,7 @@ const TOPIC = '/topics/mszAgwOgLDa4'
 test.describe('editor otázky', () => {
   test('otevře se, zavře Escapem a vrátí ohnisko', async ({ page }) => {
     await page.goto(TOPIC)
-    await page.getByRole('button', { name: 'Vlastní otázka' }).first().click()
+    await page.getByRole('button', { name: 'Vlastní otázka' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -23,7 +23,7 @@ test.describe('editor otázky', () => {
 
   test('nabídka typu otázky jde ovládat a mění pole formuláře', async ({ page }) => {
     await page.goto(TOPIC)
-    await page.getByRole('button', { name: 'Vlastní otázka' }).first().click()
+    await page.getByRole('button', { name: 'Vlastní otázka' }).click()
 
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('combobox').first().click()
@@ -38,8 +38,7 @@ test.describe('filtry otázek', () => {
   test('rozbalovací nabídka se otevře a vybere hodnotu', async ({ page }) => {
     await page.goto(TOPIC)
 
-    // Rozvržení vykresluje obsah dvakrát (záložky + sloupce), proto bereme viditelnou kopii.
-    const typeFilter = page.locator('#question-type-filter:visible')
+    const typeFilter = page.getByLabel('Typ')
     await typeFilter.click()
     await page.getByRole('option', { name: 'Pravda / nepravda' }).click()
     await expect(typeFilter).toContainText('Pravda / nepravda')
@@ -49,9 +48,9 @@ test.describe('filtry otázek', () => {
 test.describe('správa skupiny materiálů', () => {
   test('nabídne přeřazení do jiného ročníku', async ({ page }) => {
     await page.goto(TOPIC)
-    await page.getByRole('button', { name: 'Upravit skupinu' }).first().click()
+    await page.getByRole('button', { name: 'Upravit skupinu' }).click()
 
-    const gradeSelect = page.locator('#topic-group-grade:visible')
+    const gradeSelect = page.getByLabel('Ročník')
     await expect(gradeSelect).toBeVisible()
     await gradeSelect.click()
     await expect(page.getByRole('option', { name: 'Bez ročníku' })).toBeVisible()

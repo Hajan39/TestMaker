@@ -33,6 +33,7 @@ export {
 // Doménové komponenty přibudou v dalších úkolech.
 export { QuestionPreview } from './QuestionPreview'
 export { ReviewQueue } from './ReviewQueue'
+export { DeleteButton } from './DeleteButton'
 export { EmptyState } from './EmptyState'
 export { Mark } from './Mark'
 export { PrintButton } from './PrintButton'

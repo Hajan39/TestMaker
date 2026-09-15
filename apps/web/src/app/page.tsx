@@ -3,6 +3,7 @@ import { Badge, Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { LibrarySidebar } from '@/components/LibrarySidebar'
 import { TopicList } from '@/components/TopicList'
+import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { TopicTile } from '@/components/TopicTile'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree, type GradeNode, type SubjectNode } from '@/lib/library'
@@ -85,21 +86,24 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tree.flatMap((subject) =>
-          subject.grades.map((gradeNode) => (
-            <Link key={gradeNode.id} href={`/?grade=${gradeNode.id}`}>
-              <Card className="p-4 hover:border-brand">
-                <p className="ui-label">{subject.name}</p>
-                <h2 className="mt-1 text-sm font-medium text-fg">
-                  {gradeNode.name || 'Bez ročníku'}
-                </h2>
-                <p className="mt-1 text-sm text-fg-muted">{gradeNode.topics.length} témat</p>
-              </Card>
-            </Link>
-          )),
-        )}
-      </div>
+      {tree.map((subject) => (
+        <section key={subject.id}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="ui-label">{subject.name}</h2>
+            <DeleteFromLibrary kind="subject" id={subject.id} label="Smazat předmět" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {subject.grades.map((gradeNode) => (
+              <Link key={gradeNode.id} href={`/?grade=${gradeNode.id}`}>
+                <Card className="p-4 hover:border-brand">
+                  <h3 className="text-sm font-medium text-fg">{gradeNode.name || 'Bez ročníku'}</h3>
+                  <p className="mt-1 text-sm text-fg-muted">{gradeNode.topics.length} témat</p>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
@@ -113,10 +117,13 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
           <h1 className="ui-page-title">{grade.name || 'Bez ročníku'}</h1>
           <p className="mt-1 text-sm text-fg-soft">{grade.topics.length} témat</p>
         </div>
-        <BulkGenerate
-          ai={aiStatus()}
-          scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
-        />
+        <div className="flex items-center gap-2">
+          <BulkGenerate
+            ai={aiStatus()}
+            scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
+          />
+          <DeleteFromLibrary kind="grade" id={grade.id} label="Smazat ročník" redirectTo="/" />
+        </div>
       </div>
 
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
