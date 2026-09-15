@@ -69,6 +69,10 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
           </p>
         </div>
         <div className="flex gap-2">
+          <BulkGenerate
+            ai={aiStatus()}
+            scopes={tree.map((subject) => ({ label: `Celý ${subject.name}`, subjectId: subject.id }))}
+          />
           <Link href="/import">
             <Button size="sm" variant="outline">
               Přidat materiály
@@ -79,11 +83,6 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
           </Link>
         </div>
       </div>
-
-      <BulkGenerate
-        ai={aiStatus()}
-        scopes={tree.map((subject) => ({ label: `Celý ${subject.name}`, subjectId: subject.id }))}
-      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {tree.flatMap((subject) =>
@@ -108,15 +107,16 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
 function GradeOverview({ grade }: { grade: GradeNode }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">{grade.name || 'Bez ročníku'}</h1>
-        <p className="mt-1 text-sm text-fg-soft">{grade.topics.length} témat</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-fg">{grade.name || 'Bez ročníku'}</h1>
+          <p className="mt-1 text-sm text-fg-soft">{grade.topics.length} témat</p>
+        </div>
+        <BulkGenerate
+          ai={aiStatus()}
+          scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
+        />
       </div>
-
-      <BulkGenerate
-        ai={aiStatus()}
-        scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
-      />
 
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {grade.topics.map((topic) => (

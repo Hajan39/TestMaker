@@ -9,14 +9,17 @@ export default async function TemplatesPage() {
   const templates = await loadTemplates()
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">Šablony testů</h1>
-        <p className="mt-1 max-w-3xl text-sm text-fg-soft">
-          Každý náhled je skutečná stránka PDF vykreslená stejným způsobem jako hotový test.
-          Šablona je uložená jako nastavení, ne jako kód, takže editor vlastních šablon přibude
-          bez zásahu do vykreslování.
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-fg">Šablony testů</h1>
+          <p className="mt-1 max-w-3xl text-sm text-fg-soft">
+            Každý náhled je skutečná stránka PDF vykreslená stejným způsobem jako hotový test.
+            Šablona je uložená jako nastavení, ne jako kód, takže editor vlastních šablon přibude
+            bez zásahu do vykreslování.
+          </p>
+        </div>
+        <p className="text-sm text-fg-muted">{templates.length} šablon</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

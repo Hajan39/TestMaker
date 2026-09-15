@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { Button, Card, EmptyState, QuestionPreview } from '@testmaker/ui'
+import { Button, EmptyState } from '@testmaker/ui'
 import { loadPickerTopics } from '@/lib/questionPicker'
+import { QuestionsTable } from './QuestionsTable'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Banka otázek – TestMaker' }
@@ -32,28 +33,7 @@ export default async function QuestionsPage() {
         </Link>
       </div>
 
-      <div className="space-y-3">
-        {topics.map((topic) => (
-          <Card key={topic.id} className="p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-fg">{topic.label}</h2>
-              <Link href={`/topics/${topic.id}`} className="text-sm text-brand hover:underline">
-                Otevřít téma
-              </Link>
-            </div>
-            <ul className="mt-2 divide-y divide-line-soft">
-              {topic.questions.slice(0, 5).map((question) => (
-                <li key={question.id} className="py-2">
-                  <QuestionPreview question={question} showAnswers={false} />
-                </li>
-              ))}
-            </ul>
-            {topic.questions.length > 5 ? (
-              <p className="mt-2 text-sm text-fg-muted">a dalších {topic.questions.length - 5}…</p>
-            ) : null}
-          </Card>
-        ))}
-      </div>
+      <QuestionsTable topics={topics} />
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { desc, eq, sql } from 'drizzle-orm'
 import Link from 'next/link'
-import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
-import { db, templates, testItems, tests } from '@/db'
+import { Button, Card, EmptyState } from '@testmaker/ui'
+import { db, questions, templates, testItems, tests } from '@/db'
+import { TestRow } from './TestRow'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,12 @@ export default async function TestsPage() {
       templateName: templates.name,
       questionCount: sql<number>`(
         select count(*) from ${testItems}
+        where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'
+      )`,
+      points: sql<number>`(
+        select coalesce(sum(coalesce(${testItems.pointsOverride}, ${questions.points})), 0)
+        from ${testItems}
+        left join ${questions} on ${questions.id} = ${testItems.questionId}
         where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'
       )`,
     })
@@ -43,34 +50,27 @@ export default async function TestsPage() {
           }
         />
       ) : (
-        <ul className="space-y-2">
-          {rows.map((row) => (
-            <li key={row.id}>
-              <Card className="flex flex-wrap items-center gap-3 p-4">
-                <Link href={`/tests/${row.id}`} className="font-medium text-fg hover:text-brand">
-                  {row.title}
-                </Link>
-                <span className="text-sm text-fg-muted">
-                  {row.questionCount} otázek · {row.templateName}
-                </span>
-                {row.graded ? <Badge>na známky</Badge> : <Badge variant="secondary">bez známek</Badge>}
-                {row.variants === 2 ? <Badge variant="secondary">varianty A/B</Badge> : null}
-                <div className="ml-auto flex gap-2">
-                  <a href={`/api/tests/${row.id}/pdf?variant=A`} target="_blank" rel="noreferrer">
-                    <Button size="sm" variant="outline">
-                      PDF
-                    </Button>
-                  </a>
-                  <Link href={`/tests/${row.id}`}>
-                    <Button size="sm" variant="outline">
-                      Upravit
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
+        <Card className="overflow-hidden p-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line-soft text-fg-muted">
+                  <th className="py-2 pr-4 font-medium">Název</th>
+                  <th className="py-2 pr-4 font-medium">Otázky</th>
+                  <th className="py-2 pr-4 font-medium">Body</th>
+                  <th className="py-2 pr-4 font-medium">Šablona</th>
+                  <th className="py-2 pr-4 font-medium">Změněno</th>
+                  <th className="py-2 pr-0 font-medium text-right">Akce</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line-soft">
+                {rows.map((row) => (
+                  <TestRow key={row.id} row={row} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   )

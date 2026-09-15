@@ -3,8 +3,17 @@
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { Loader2 } from 'lucide-react'
-import { Badge, Button, Card } from '@testmaker/ui'
+import { ChevronDown, FolderUp, Loader2 } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Card,
+  cn,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Progress,
+} from '@testmaker/ui'
 import { extractAll, triageFiles, uploadMaterials, type FileEntry } from '@/lib/importClient'
 
 type Phase = 'idle' | 'extracting' | 'ready' | 'uploading' | 'done'
@@ -101,7 +110,7 @@ export function ImportClient() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-5">
+      <Card className="items-center p-8 text-center">
         <input
           ref={inputRef}
           type="file"
@@ -111,31 +120,25 @@ export function ImportClient() {
           webkitdirectory=""
           onChange={(event) => void handleFiles(event.target.files)}
         />
-        <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={busy} onClick={() => inputRef.current?.click()}>
-            Vybrat složku
-          </Button>
-          <span className="text-sm text-fg-muted">
-            Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí.
-          </span>
-        </div>
+        <FolderUp className="size-8 text-fg-muted" aria-hidden />
+        <Button size="lg" disabled={busy} onClick={() => inputRef.current?.click()}>
+          Vybrat složku
+        </Button>
+        <p className="max-w-md text-sm text-fg-muted">
+          Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí.
+        </p>
 
         {busy ? (
-          <div className="mt-4 flex items-center gap-3">
-            <Loader2 className="size-4 animate-spin" />
-            <span className="text-sm text-fg-soft">
+          <div className="w-full max-w-md space-y-2">
+            <p className="text-sm text-fg-soft">
+              <Loader2 className="mr-2 inline size-4 animate-spin" />
               {phase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
-            </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded bg-surface-muted">
-              <div
-                className="h-full bg-brand transition-all"
-                style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
-              />
-            </div>
+            </p>
+            <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
           </div>
         ) : null}
 
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
       </Card>
 
       {summary ? (
@@ -200,19 +203,25 @@ function IssueList({
   items: Failure[]
   kind: 'danger' | 'neutral'
 }) {
+  const [open, setOpen] = useState(false)
   return (
     <Card className="p-5">
-      <details>
-        <summary className="cursor-pointer text-sm font-semibold text-fg-soft">{title}</summary>
-        <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
-          {items.map((item) => (
-            <li key={item.relativePath} className="flex flex-wrap gap-2">
-              <span className="text-fg-soft">{item.relativePath}</span>
-              <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'}>{item.reason}</span>
-            </li>
-          ))}
-        </ul>
-      </details>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-semibold text-fg-soft">
+          {title}
+          <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
+            {items.map((item) => (
+              <li key={item.relativePath} className="flex flex-wrap gap-2">
+                <span className="text-fg-soft">{item.relativePath}</span>
+                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'}>{item.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   )
 }

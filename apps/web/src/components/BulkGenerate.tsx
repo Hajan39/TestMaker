@@ -3,7 +3,15 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { Button, Card, Checkbox } from '@testmaker/ui'
+import {
+  Button,
+  Checkbox,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@testmaker/ui'
 import {
   AiUnavailable,
   DEFAULT_SETTINGS,
@@ -30,14 +38,13 @@ export function BulkGenerate({
   ai: { configured: boolean; provider: string; model: string }
 }) {
   const router = useRouter()
+  const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
   const [skipWithQuestions, setSkipWithQuestions] = useState(true)
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const stopRef = useRef(false)
-
-  if (!ai.configured) return <AiUnavailable provider={ai.provider} />
 
   async function start(scope: BulkScope) {
     setErrors([])
@@ -80,50 +87,66 @@ export function BulkGenerate({
   }
 
   return (
-    <Card className="p-4">
-      <h2 className="text-sm font-semibold text-fg">Hromadné generování</h2>
-      <p className="mt-1 text-sm text-fg-muted">
-        Projde všechny skupiny materiálů ve zvoleném rozsahu. Běží po jedné skupině, průběh se
-        průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
-      </p>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button size="sm" variant="outline" disabled={running}>
+          Hromadné generování
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Hromadné generování</SheetTitle>
+        </SheetHeader>
 
-      <div className="mt-3">
-        <GenerateSettingsForm value={settings} onChange={setSettings} disabled={running} />
-      </div>
+        <div className="space-y-4 px-4 pb-4">
+          {!ai.configured ? (
+            <AiUnavailable provider={ai.provider} />
+          ) : (
+            <>
+              <p className="text-sm text-fg-muted">
+                Projde všechny skupiny materiálů ve zvoleném rozsahu. Běží po jedné skupině, průběh
+                se průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
+              </p>
 
-      <label className="mt-3 flex items-center gap-2 text-sm text-fg-soft">
-        <Checkbox
-          checked={skipWithQuestions}
-          disabled={running}
-          onCheckedChange={() => setSkipWithQuestions(!skipWithQuestions)}
-        />
-        Přeskočit skupiny, které už otázky mají
-      </label>
+              <GenerateSettingsForm value={settings} onChange={setSettings} disabled={running} />
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {scopes.map((scope) => (
-          <Button key={scope.label} size="sm" disabled={running} onClick={() => void start(scope)}>
-            {scope.label}
-          </Button>
-        ))}
-        {running ? (
-          <>
-            <Loader2 className="size-4 animate-spin" />
-            <Button size="sm" variant="destructive" onClick={() => (stopRef.current = true)}>
-              Zastavit
-            </Button>
-          </>
-        ) : null}
-      </div>
+              <label className="flex items-center gap-2 text-sm text-fg-soft">
+                <Checkbox
+                  checked={skipWithQuestions}
+                  disabled={running}
+                  onCheckedChange={() => setSkipWithQuestions(!skipWithQuestions)}
+                />
+                Přeskočit skupiny, které už otázky mají
+              </label>
 
-      {status ? <p className="mt-3 text-sm text-fg-soft">{status}</p> : null}
-      {errors.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-sm text-danger">
-          {errors.slice(0, 5).map((error, index) => (
-            <li key={index}>{error}</li>
-          ))}
-        </ul>
-      ) : null}
-    </Card>
+              <div className="flex flex-wrap items-center gap-2">
+                {scopes.map((scope) => (
+                  <Button key={scope.label} size="sm" disabled={running} onClick={() => void start(scope)}>
+                    {scope.label}
+                  </Button>
+                ))}
+                {running ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    <Button size="sm" variant="destructive" onClick={() => (stopRef.current = true)}>
+                      Zastavit
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+
+              {status ? <p className="text-sm text-fg-soft">{status}</p> : null}
+              {errors.length > 0 ? (
+                <ul className="space-y-0.5 text-sm text-danger">
+                  {errors.slice(0, 5).map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
