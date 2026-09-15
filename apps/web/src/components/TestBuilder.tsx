@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
 import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger } from '@testmaker/ui'
@@ -49,7 +49,14 @@ export function TestBuilder({
       question: item.question ?? null,
     })),
   )
-  const [filters, setFilters] = useState<BankFilters>({ search: '', subject: '', grade: '', type: '', onlyApproved: false })
+  // Ve výchozím stavu jen schválené — do ostré písemky nemá proklouznout koncept.
+  const [filters, setFilters] = useState<BankFilters>({
+    search: '',
+    subject: '',
+    grade: '',
+    type: '',
+    onlyApproved: true,
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
@@ -97,6 +104,31 @@ export function TestBuilder({
     setDraft((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
+  /** Otisk toho, co je opravdu uložené — porovnáním se pozná neuložená změna. */
+  const fingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        settings,
+        items: draft.map((item) => ({
+          kind: item.kind,
+          questionId: item.questionId,
+          text: item.text,
+          pointsOverride: item.pointsOverride,
+        })),
+      }),
+    [settings, draft],
+  )
+  const savedFingerprint = useRef<string | null>(test ? fingerprint : null)
+  const dirty = savedFingerprint.current !== fingerprint
+
+  // Zavření okna s rozpracovanou osnovou znamenalo ztrátu celé práce bez varování.
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   async function save() {
     setError(null)
     if (!settings.title.trim()) return setError('Vyplň název testu.')
@@ -131,6 +163,7 @@ export function TestBuilder({
         throw new Error(detail.error ?? `Uložení selhalo (${response.status})`)
       }
       const result = (await response.json()) as { id: string }
+      savedFingerprint.current = fingerprint
       setSavedId(result.id)
       if (!test) router.replace(`/tests/${result.id}`)
       else router.refresh()

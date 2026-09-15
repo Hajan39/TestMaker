@@ -24,8 +24,14 @@ export function QuestionPreview({
         <Badge variant="secondary">{QUESTION_TYPE_LABELS[question.type]}</Badge>
         <Badge variant="secondary">{question.points} b.</Badge>
         <Badge variant="secondary">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
-        {'status' in question && question.status === 'approved' ? (
-          <Badge>schváleno</Badge>
+        {/* Stav se ukazuje vždy. Chybějící odznak si nikdo nevšimne, a do písemky
+            pak může proklouznout nezkontrolovaný nebo zamítnutý koncept. */}
+        {'status' in question && question.status === 'approved' ? <Badge>schváleno</Badge> : null}
+        {'status' in question && question.status === 'draft' ? (
+          <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
+        ) : null}
+        {'status' in question && question.status === 'rejected' ? (
+          <Badge variant="destructive">zamítnuto</Badge>
         ) : null}
         {'source' in question && question.source === 'manual' ? <Badge variant="secondary">vlastní</Badge> : null}
       </div>

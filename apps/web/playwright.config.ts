@@ -18,7 +18,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Majitel používá Safari a už na něm narazil na chybu, kterou Chrome neukázal.
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
   webServer: {
     command: 'pnpm dev',
     url: 'http://localhost:3000',
