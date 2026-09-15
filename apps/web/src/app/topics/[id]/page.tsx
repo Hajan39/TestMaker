@@ -19,6 +19,8 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
       name: topics.name,
       gradeName: grades.name,
       subjectName: subjects.name,
+      usableCharCount: topics.usableCharCount,
+      lowContent: topics.lowContent,
     })
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
@@ -72,6 +74,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         topicName={topic.name}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
+        lowContent={topic.lowContent}
         ai={aiStatus()}
         // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný
         // klientské komponentě jako prop se přenáší jako položka seznamu.

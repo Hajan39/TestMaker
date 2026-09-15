@@ -51,6 +51,7 @@ export function TopicGroup({
   const [mergeTarget, setMergeTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!manage) return
@@ -67,13 +68,23 @@ export function TopicGroup({
 
   async function call(method: string, body: unknown) {
     setBusy(true)
+    setError(null)
     try {
-      await fetch('/api/topics', {
+      const response = await fetch('/api/topics', {
         method,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
+      // Server odmítne třeba přesun souboru tam, kde tentýž obsah už je.
+      // Bez téhle hlášky to vypadalo, že se prostě nic nestalo.
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(detail.error ?? `Nepovedlo se to (${response.status}).`)
+        return
+      }
       router.refresh()
+    } catch (networkError) {
+      setError(networkError instanceof Error ? networkError.message : String(networkError))
     } finally {
       setBusy(false)
     }
@@ -92,6 +103,8 @@ export function TopicGroup({
           {manage ? 'Hotovo' : 'Upravit skupinu'}
         </Button>
       </div>
+
+      {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
       <ul className="mt-2 space-y-1 text-sm">
         {materials.map((material) => {

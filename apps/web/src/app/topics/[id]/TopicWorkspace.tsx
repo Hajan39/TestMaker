@@ -17,6 +17,8 @@ interface MaterialSummary {
   id: string
   fileName: string
   charCount: number
+  /** Vyplněné u materiálu odloženého jako duplicitní obsah — do modelu nejde. */
+  duplicateOfId?: string | null
 }
 
 export function TopicWorkspace({
@@ -24,6 +26,7 @@ export function TopicWorkspace({
   topicName,
   materials,
   questions,
+  lowContent,
   ai,
   group,
 }: {
@@ -31,6 +34,8 @@ export function TopicWorkspace({
   topicName: string
   materials: MaterialSummary[]
   questions: Question[]
+  /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
+  lowContent: boolean
   ai: { configured: boolean; provider: string; model: string }
   /** Skupina materiálů — vykreslí se mezi hlavní akcí a seznamem otázek. */
   group: React.ReactNode
@@ -42,7 +47,11 @@ export function TopicWorkspace({
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const totalChars = materials.reduce((sum, material) => sum + material.charCount, 0)
+  // Ukazujeme jen to, co skutečně půjde do modelu: generování duplicitní
+  // obsah vynechává, takže se nesmí počítat ani tady — jinak na obrazovce
+  // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
+  const usable = materials.filter((material) => !material.duplicateOfId)
+  const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
 
   async function generate() {
     setError(null)
@@ -74,16 +83,28 @@ export function TopicWorkspace({
         <Card className="p-4">
           <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Zdrojem je celá skupina „{topicName}“: {materials.length}{' '}
-            {materials.length === 1 ? 'materiál' : 'materiálů'},{' '}
+            Zdrojem je celá skupina „{topicName}“: {usable.length}{' '}
+            {usable.length === 1 ? 'materiál' : 'materiálů'},{' '}
             {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
             otázky neopakovaly. Vzniknou jako koncepty ke schválení.
           </p>
+          {lowContent ? (
+            <p className="mt-2 text-sm text-fg-muted">
+              Materiálů je v téhle skupině málo — model z nich zvládne vytvořit jen pár otázek a
+              některé se budou opakovat. Spolehlivější je nejdřív přidat další materiál nebo téma
+              sloučit s příbuzným. Generovat i tak jde, jen počítej s tím, že výsledek bude potřeba
+              víc kontrolovat.
+            </p>
+          ) : null}
           <div className="mt-3">
             <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button disabled={generating || materials.length === 0} onClick={() => void generate()}>
+            <Button
+              variant={lowContent ? 'outline' : 'default'}
+              disabled={generating || usable.length === 0}
+              onClick={() => void generate()}
+            >
               Vygenerovat ze skupiny
             </Button>
             {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}

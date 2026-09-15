@@ -18,12 +18,15 @@ export function TopicTile({
   materialCount,
   questionCount,
   approvedCount,
+  lowContent,
 }: {
   id: string
   name: string
   materialCount: number
   questionCount: number
   approvedCount: number
+  /** Použitelného textu je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
+  lowContent?: boolean
 }) {
   const pendingCount = questionCount - approvedCount
 
@@ -51,6 +54,7 @@ export function TopicTile({
                   ? ` · ${approvedCount} schváleno, ${pendingCount} ke kontrole`
                   : ` · vše schváleno`
                 : ''}
+              {lowContent ? ' · málo textu na otázky' : ''}
             </p>
           </Card>
         </Link>

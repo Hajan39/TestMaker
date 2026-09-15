@@ -11,6 +11,8 @@ export interface TopicNode {
   questionCount: number
   approvedCount: number
   draftCount: number
+  /** Použitelného textu (bez duplicit) je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
+  lowContent: boolean
 }
 
 export interface GradeNode {
@@ -60,6 +62,7 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
       questionCount: stats?.total ?? 0,
       approvedCount: Number(stats?.approved ?? 0),
       draftCount: Number(stats?.draft ?? 0),
+      lowContent: topic.lowContent,
     })
     topicsByGrade.set(topic.gradeId, list)
   }

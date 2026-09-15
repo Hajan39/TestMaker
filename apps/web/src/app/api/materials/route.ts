@@ -19,11 +19,14 @@ export async function POST(request: Request) {
   const hashes = parsed.data.materials.map((m) => m.contentHash)
   const relativePaths = parsed.data.materials.map((m) => m.relativePath)
 
+  // Tentýž obsah smí být v knihovně vícekrát, jen ne dvakrát v jednom tématu —
+  // pracovní list ze sedmého i osmého ročníku patří do obou témat. Proto se
+  // už známé materiály evidují po dvojici (téma, obsah), ne jen podle obsahu.
   const existing = await db
-    .select({ hash: materials.contentHash })
+    .select({ hash: materials.contentHash, topicId: materials.topicId })
     .from(materials)
     .where(inArray(materials.contentHash, hashes))
-  const known = new Set(existing.map((row) => row.hash))
+  const known = new Set(existing.map((row) => knownKey(row.topicId, row.hash)))
 
   // Podle relativní cesty poznáme opakovaný import téhož souboru. Když se
   // od minula změnil obsah (jiný hash), stará verze se nahradí novou, ať v
@@ -50,26 +53,33 @@ export async function POST(request: Request) {
       duplicates += 1
       continue
     }
-    if (prior) {
-      // Soubor na této cestě byl už dřív importovaný, ale s jiným obsahem —
-      // nahrazujeme starou verzi, aby v tématu nezůstaly obě.
-      await db.delete(materials).where(eq(materials.id, prior.id))
-      known.delete(prior.contentHash)
-      priorByPath.delete(material.relativePath)
-      touchedTopics.add(prior.topicId)
-      replaced += 1
-    } else if (known.has(material.contentHash)) {
-      duplicates += 1
-      continue
-    }
 
-    const id = newId()
+    // Téma známe ještě před rozhodnutím o duplicitě: tentýž obsah v jiném
+    // tématu je legitimní nový materiál, ne duplicita.
     const topicId = await ensureTopic({
       subject: material.subject,
       grade: material.grade,
       topic: material.topic,
       group: groupMaterials,
     })
+
+    if (prior) {
+      // Soubor na této cestě byl už dřív importovaný, ale s jiným obsahem —
+      // nahrazujeme starou verzi, aby v tématu nezůstaly obě.
+      await db.delete(materials).where(eq(materials.id, prior.id))
+      known.delete(knownKey(prior.topicId, prior.contentHash))
+      priorByPath.delete(material.relativePath)
+      touchedTopics.add(prior.topicId)
+      replaced += 1
+    }
+
+    if (known.has(knownKey(topicId, material.contentHash))) {
+      // Tentýž obsah už v tomhle tématu je (třeba pod jiným názvem souboru).
+      duplicates += 1
+      continue
+    }
+
+    const id = newId()
     await db.insert(materials).values({
       id,
       topicId,
@@ -83,7 +93,7 @@ export async function POST(request: Request) {
       needsOcr: material.needsOcr,
       contentHash: material.contentHash,
     })
-    known.add(material.contentHash)
+    known.add(knownKey(topicId, material.contentHash))
     touchedTopics.add(topicId)
     imported += 1
 
@@ -108,4 +118,9 @@ export async function DELETE(request: Request) {
   // (`set null`) sám — tady jen přepočítáme použitelný objem textu tématu.
   if (row) await recomputeTopicContent(row.topicId)
   return NextResponse.json({ ok: true })
+}
+
+/** Klíč pro evidenci už známých materiálů: tentýž obsah v témže tématu. */
+function knownKey(topicId: string, contentHash: string): string {
+  return `${topicId}\n${contentHash}`
 }

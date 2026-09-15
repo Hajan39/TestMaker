@@ -1,6 +1,7 @@
-import { and, asc, eq, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, topics } from '@/db'
+import { recomputeTopicContent } from '@/lib/duplicates'
 import { newId } from '@/lib/ids'
 
 export const runtime = 'nodejs'
@@ -85,10 +86,45 @@ export async function PATCH(request: Request) {
 export async function PUT(request: Request) {
   const parsed = moveSchema.safeParse(await request.json())
   if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  const { materialId, topicId } = parsed.data
+
+  const [current] = await db
+    .select({ topicId: materials.topicId, contentHash: materials.contentHash })
+    .from(materials)
+    .where(eq(materials.id, materialId))
+    .limit(1)
+  if (!current) return Response.json({ error: 'Materiál nenalezen' }, { status: 404 })
+
+  // Tentýž obsah smí být v tématu jen jednou — jinak by přesun spadl na
+  // unikátním indexu a učitelka by viděla jen chybu serveru.
+  const [uzTam] = await db
+    .select({ id: materials.id })
+    .from(materials)
+    .where(
+      and(eq(materials.topicId, topicId), eq(materials.contentHash, current.contentHash), ne(materials.id, materialId)),
+    )
+    .limit(1)
+  if (uzTam) {
+    return Response.json(
+      { error: 'Tentýž soubor už v cílové skupině je, přesouvat ho tam nemá smysl.' },
+      { status: 409 },
+    )
+  }
+
   await db
     .update(materials)
-    .set({ topicId: parsed.data.topicId, duplicateOfId: null, duplicateScore: null })
-    .where(eq(materials.id, parsed.data.materialId))
+    .set({ topicId, duplicateOfId: null, duplicateScore: null })
+    .where(eq(materials.id, materialId))
+
+  // Materiály, které přesouvaný označovaly za svůj originál, by po přesunu
+  // ukazovaly mimo své téma — generování by je kvůli tomu navždy vynechávalo.
+  // Odkaz proto rušíme; případnou novou duplicitu pozná až další import.
+  await db
+    .update(materials)
+    .set({ duplicateOfId: null, duplicateScore: null })
+    .where(eq(materials.duplicateOfId, materialId))
+
+  for (const affected of new Set([current.topicId, topicId])) await recomputeTopicContent(affected)
   return Response.json({ ok: true })
 }
 
@@ -99,9 +135,22 @@ export async function POST(request: Request) {
   const { sourceId, targetId } = parsed.data
   if (sourceId === targetId) return Response.json({ error: 'Stejné téma' }, { status: 400 })
 
+  // Obsah, který cílové téma už má, se do něj podruhé nevejde (tentýž obsah
+  // smí být v tématu jen jednou) — z rušeného tématu ho proto zahodíme.
+  const targetHashes = (
+    await db.select({ hash: materials.contentHash }).from(materials).where(eq(materials.topicId, targetId))
+  ).map((row) => row.hash)
+  if (targetHashes.length > 0) {
+    await db
+      .delete(materials)
+      .where(and(eq(materials.topicId, sourceId), inArray(materials.contentHash, targetHashes)))
+  }
+
   await db.update(materials).set({ topicId: targetId }).where(eq(materials.topicId, sourceId))
   await db.update(questions).set({ topicId: targetId }).where(eq(questions.topicId, sourceId))
   await db.delete(topics).where(eq(topics.id, sourceId))
+
+  await recomputeTopicContent(targetId)
 
   return Response.json({ ok: true })
 }

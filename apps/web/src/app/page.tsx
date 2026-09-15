@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Badge, Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
+import { Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { LibrarySidebar } from '@/components/LibrarySidebar'
 import { TopicList } from '@/components/TopicList'
@@ -135,6 +135,7 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
               materialCount={topic.materialCount}
               questionCount={topic.questionCount}
               approvedCount={topic.approvedCount}
+              lowContent={topic.lowContent}
             />
           </li>
         ))}
