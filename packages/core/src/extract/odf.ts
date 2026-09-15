@@ -32,6 +32,9 @@ export async function extractOdf(data: ArrayBuffer | Uint8Array): Promise<Extrac
   return { text, pageCount: null, needsOcr: text.length < 40 }
 }
 
+/** Buňky, mezi kterými se při čtení tabulky vkládá oddělovač. */
+const TABLE_CELL_TAGS = new Set(['table:table-cell', 'table:covered-table-cell'])
+
 /** Posbírá textové uzly a vloží zalomení na hranicích odstavců, s vynecháním daných tagů. */
 function collectText(root: Element, skipTag?: string): string {
   const out: string[] = []
@@ -54,6 +57,16 @@ function collectText(root: Element, skipTag?: string): string {
           out.push('\n')
           continue
         }
+        // Bez oddělovače by obsah více buněk na řádku splynul do jedné věty
+        // (druhá a další buňka nemá vlastní zalomení, jen text:p uvnitř).
+        if (TABLE_CELL_TAGS.has(el.tagName) && previousCellSibling(el)) {
+          out.push(' | ')
+        }
+        // Nadpis se od běžného textu jinak neliší — bez označení model
+        // nepozná strukturu materiálu (kde končí kapitola, kde je téma).
+        if (el.tagName === 'text:h') {
+          out.push('## ')
+        }
         walk(el)
         if (el.tagName === 'text:p' || el.tagName === 'text:h' || el.tagName === 'table:table-row') {
           out.push('\n')
@@ -63,4 +76,14 @@ function collectText(root: Element, skipTag?: string): string {
   }
   walk(root)
   return out.join('')
+}
+
+/** Je před danou buňkou ve stejném řádku další buňka (i sloučená)? */
+function previousCellSibling(el: Element): boolean {
+  let sibling = el.previousElementSibling
+  while (sibling) {
+    if (TABLE_CELL_TAGS.has(sibling.tagName)) return true
+    sibling = sibling.previousElementSibling
+  }
+  return false
 }

@@ -1,12 +1,12 @@
 import 'server-only'
-import { and, eq, isNull, ne } from 'drizzle-orm'
+import { and, eq, isNull, ne, sum } from 'drizzle-orm'
 import {
   containmentSimilarity,
   DUPLICATE_THRESHOLD,
   fileExtension,
   preferredMaterial,
 } from '@testmaker/core/extract'
-import { db, materials } from '@/db'
+import { db, materials, MIN_USABLE_TOPIC_CHARS, topics } from '@/db'
 
 interface Candidate {
   id: string
@@ -62,6 +62,24 @@ export async function linkDuplicates(materialId: string): Promise<{
     .where(eq(materials.duplicateOfId, drop.id))
 
   return drop.id === materialId ? { duplicateOfId: keep.id, score: best.score } : { duplicateOfId: null, score: null }
+}
+
+/**
+ * Přepočítá použitelný objem textu tématu (bez duplicit) a označí témata,
+ * na která na písemku nevystačí. Volá se po každé změně materiálů tématu —
+ * importu, smazání i po označení duplicity, protože ta se do součtu nepočítá.
+ */
+export async function recomputeTopicContent(topicId: string): Promise<void> {
+  const [row] = await db
+    .select({ usableCharCount: sum(materials.charCount) })
+    .from(materials)
+    .where(and(eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+
+  const usableCharCount = Number(row?.usableCharCount ?? 0)
+  await db
+    .update(topics)
+    .set({ usableCharCount, lowContent: usableCharCount < MIN_USABLE_TOPIC_CHARS })
+    .where(eq(topics.id, topicId))
 }
 
 function toCandidate(row: typeof materials.$inferSelect): Candidate {

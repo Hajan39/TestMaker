@@ -43,6 +43,25 @@ describe.skipIf(!hasSources)('extraktory na reálných materiálech', () => {
     expect(result.text.length).toBeGreaterThan(100)
   })
 
+  it('ODT s tabulkou: buňky na řádku jsou oddělené', async () => {
+    const result = await extractOdf(await file('PŘÍRODOPIS/6.ročník/test - ostnokožci.odt'))
+    expect(result.text).toContain('lilijice')
+    // Původní extrakce nevkládala mezi buňky žádný oddělovač — bez něj
+    // nejde poznat, kde končí jedna buňka a začíná další.
+    expect(result.text).toContain('| lilijice')
+  })
+
+  it('ODT: nadpisy jsou označené, model tak pozná strukturu', async () => {
+    const result = await extractOdf(await file('PŘÍRODOPIS/8. ročník/Buňky a tkáně.odt'))
+    expect(result.text).toContain('## Stavba buňky')
+  })
+
+  it('DOCX s tabulkou: buňky na řádku jsou oddělené', async () => {
+    const result = await extractDocx(await file('PŘÍRODOPIS/6.ročník/projevy_zivota_pl (1).docx'))
+    expect(result.text).toContain('dráždivost')
+    expect(result.text).toMatch(/dráždivost \| /)
+  })
+
   it('HTML stránka', async () => {
     const html = await readFile(
       resolve(SOURCES, 'PŘÍRODOPIS/9. ročník/Krystalová stavba minerálů I. - Učebna.html'),

@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { blob, index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  type AnySQLiteColumn,
+  blob,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 import type { Block, QuestionContent, TemplateConfig, TestHeaderConfig } from '@testmaker/core/schema'
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
@@ -29,6 +38,9 @@ export const grades = sqliteTable(
   (table) => [uniqueIndex('grades_subject_name_idx').on(table.subjectId, table.name)],
 )
 
+/** Pod tímto počtem znaků použitelného textu na písemku spolehlivě nevystačí. */
+export const MIN_USABLE_TOPIC_CHARS = 1000
+
 export const topics = sqliteTable(
   'topics',
   {
@@ -38,6 +50,14 @@ export const topics = sqliteTable(
       .references(() => grades.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     position: integer('position').notNull().default(0),
+    /**
+     * Součet `charCount` materiálů tématu bez duplicit — udržuje se při
+     * každé změně materiálů (import, smazání, označení duplicity), aby na
+     * něj šlo v seznamu témat rovnou spoléhat bez dalších dotazů.
+     */
+    usableCharCount: integer('usable_char_count').notNull().default(0),
+    /** `usableCharCount` pod `MIN_USABLE_TOPIC_CHARS` — na písemku nevystačí. */
+    lowContent: integer('low_content', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [uniqueIndex('topics_grade_name_idx').on(table.gradeId, table.name)],
@@ -62,8 +82,14 @@ export const materials = sqliteTable(
     /**
      * Vyplněno, když jde o jiný export téhož obsahu (typicky PDF vytištěné
      * z prezentace). Takový materiál se při generování přeskakuje.
+     *
+     * Cizí klíč se `set null` — smazáním originálu se odkaz na něj zruší,
+     * místo aby zůstal viset do prázdna a materiál se navždy tiše
+     * přeskakoval, aniž by o tom kdokoli věděl.
      */
-    duplicateOfId: text('duplicate_of_id'),
+    duplicateOfId: text('duplicate_of_id').references((): AnySQLiteColumn => materials.id, {
+      onDelete: 'set null',
+    }),
     /** Míra shody s materiálem v `duplicateOfId` (0–1). */
     duplicateScore: real('duplicate_score'),
     createdAt: text('created_at').notNull().default(now),
