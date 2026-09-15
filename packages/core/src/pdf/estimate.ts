@@ -1,9 +1,24 @@
+import type { Block } from '../schema/blocks'
 import type { ResolvedTestItem } from '../schema/test'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import { mm } from './styles'
 
 /** Výška A4 v bodech (PDF pt); 1 pt = 1/72". */
 const PAGE_HEIGHT_PT = 842
+
+/**
+ * Paušál za obrázkový blok — `QuestionBody.tsx` ho vykresluje v šířce dané
+ * procenty sloupce, skutečná výška závisí na poměru stran obrázku, který
+ * odhad nezná. 130 pt odpovídá běžnému ilustračnímu obrázku ve středním
+ * měřítku (marginTop 6 + marginBottom 4 z `BlockView` plus samotný obrázek).
+ */
+const IMAGE_BLOCK_HEIGHT = 130
+
+/** Výška jednoho řádku tabulkového bloku — stejný odhad jako `table_fill`. */
+const TABLE_BLOCK_ROW_HEIGHT = 20
+
+/** Okraje tabulkového bloku (marginTop/marginBottom kolem `View` v `BlockView`). */
+const TABLE_BLOCK_MARGIN = 10
 
 /** Výška jednoho řádku textu v bodech, odvozená z velikosti písma šablony. */
 function lineHeight(config: TemplateConfig): number {
@@ -13,6 +28,40 @@ function lineHeight(config: TemplateConfig): number {
 /** Hrubý odhad počtu řádků, které zabere zadání dané délky. */
 function promptLines(prompt: string): number {
   return Math.max(1, Math.ceil(prompt.length / 70))
+}
+
+/**
+ * Paušální přirážka za přílohový blok otázky (obrázek nebo tabulka) — bez
+ * ní by test s přílohami vycházel o celou stranu kratší, než ve skutečnosti
+ * je. Přesnost se nečeká, jen řádová blízkost skutečnému PDF.
+ */
+function blockHeight(block: Block): number {
+  if (block.kind === 'image') return IMAGE_BLOCK_HEIGHT
+  return block.rows.length * TABLE_BLOCK_ROW_HEIGHT + TABLE_BLOCK_MARGIN
+}
+
+/**
+ * Odhad výšky hlavičky testu (nadpis, podtitul, řádky s poli) — tiskne se
+ * jen jednou, na první straně, proto ji `paginate` přičítá jen tam. Vychází
+ * z toho, co vykresluje `Header` v `TestDocument.tsx`; hodnota polí testu
+ * (název, popis) do configu nepatří, takže se počítá jen se strukturou.
+ */
+function estimateHeaderHeight(config: TemplateConfig): number {
+  if (!config.header.show) return 0
+  const line = lineHeight(config)
+  // marginBottom celé hlavičky (`View` v `Header`).
+  let height = 12
+  if (config.header.title.show) {
+    // Řádek nadpisu + marginBottom pod ním.
+    height += config.header.title.fontSize + 8
+  }
+  if (config.header.fields.length > 0) {
+    const totalWidthPercent = config.header.fields.reduce((sum, field) => sum + field.widthPercent, 0)
+    const rows = Math.max(1, Math.ceil(totalWidthPercent / 100))
+    // Řádek pole (linka nebo text) + marginBottom 6 z `Header`.
+    height += rows * (line + 6)
+  }
+  return height
 }
 
 /**
@@ -77,7 +126,9 @@ export function estimateHeight(item: ResolvedTestItem, config: TemplateConfig): 
       body = 20
   }
 
-  return base + body
+  const blocksHeight = question.blocks.reduce((sum, block) => sum + blockHeight(block), 0)
+
+  return base + blocksHeight + body
 }
 
 /**
@@ -89,7 +140,8 @@ export function paginate(items: ResolvedTestItem[], config: TemplateConfig): Res
 
   const pages: ResolvedTestItem[][] = []
   let current: ResolvedTestItem[] = []
-  let used = 0
+  // Hlavička se tiskne jen jednou na první straně, proto zabírá místo jen tam.
+  let used = estimateHeaderHeight(config)
 
   for (const item of items) {
     if (item.kind === 'page_break') {

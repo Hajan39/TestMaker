@@ -143,7 +143,15 @@ export function BankPanel({
           <EmptyState title="Žádné otázky neodpovídají filtru" />
         ) : (
           visibleTopics.map((topic) => (
-            <details key={topic.id} className="rounded border border-line-soft" open>
+            // Sbalené ve výchozím stavu — u desítek témat by rozbalená banka byla
+            // neprůchozí stěna. Téma se samo otevře, jen když z něj je otázka v osnově,
+            // ať učitelka hned vidí, odkud si co vzala. Ruční rozbalení jinak zůstává
+            // po uživateli (React na `open` sáhne jen když se spočtená hodnota změní).
+            <details
+              key={topic.id}
+              className="rounded border border-line-soft"
+              open={topic.questions.some((question) => usedIds.has(question.id))}
+            >
               <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-fg-soft">
                 {topic.label} <span className="font-normal text-fg-muted">({topic.questions.length})</span>
               </summary>
