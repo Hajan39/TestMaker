@@ -119,6 +119,13 @@ const baseFields = {
   /** Poznámka do klíče (proč je odpověď správně). */
   explanation: z.string().max(1000).optional(),
   blocks: z.array(blockSchema).max(5).default([]),
+  /** Doklad původu: soubor a pasáž, o kterou se otázka opírá. */
+  evidence: z
+    .object({
+      fileName: z.string().min(1),
+      quote: z.string().min(10).max(400),
+    })
+    .optional(),
 }
 
 export const questionContentSchema = z.discriminatedUnion('type', [

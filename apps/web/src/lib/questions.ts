@@ -24,6 +24,7 @@ export function toQuestion(row: QuestionRow): Question {
     points: row.points,
     difficulty: (row.difficulty as 1 | 2 | 3) ?? 2,
     explanation: row.explanation ?? undefined,
+    evidence: row.sourceFile ? { fileName: row.sourceFile, quote: row.sourceQuote ?? '' } : undefined,
   } as Question
 }
 
@@ -85,6 +86,8 @@ export async function insertQuestions(
     explanation: item.explanation ?? null,
     source: context.source ?? 'ai',
     status: context.status ?? 'draft',
+    sourceFile: item.evidence?.fileName ?? null,
+    sourceQuote: item.evidence?.quote ?? null,
   }))
   await db.insert(questions).values(rows)
   return rows.map((row) => row.id)

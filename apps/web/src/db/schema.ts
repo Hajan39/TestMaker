@@ -98,6 +98,10 @@ export const questions = sqliteTable(
     source: text('source').notNull().default('ai').$type<'ai' | 'manual'>(),
     status: text('status').notNull().default('draft').$type<'draft' | 'approved' | 'rejected'>(),
     createdAt: text('created_at').notNull().default(now),
+    /** Soubor, ze kterého otázka vznikla. */
+    sourceFile: text('source_file'),
+    /** Pasáž z materiálu, o kterou se správná odpověď opírá. */
+    sourceQuote: text('source_quote'),
   },
   (table) => [
     index('questions_topic_idx').on(table.topicId),

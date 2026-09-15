@@ -71,6 +71,30 @@ describe('dělení dlouhých materiálů', () => {
   })
 })
 
+describe('doklad původu otázky', () => {
+  it('schéma přijme název souboru a citaci', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'short_answer',
+      payload: { prompt: 'Kolik laloků má pravá plíce?', answer: 'tři' },
+      evidence: { fileName: 'Dýchací soustava.odp', quote: 'Pravá plíce má tři laloky.' },
+    })
+    expect(parsed.evidence?.quote).toContain('tři laloky')
+  })
+
+  it('doklad je nepovinný', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'short_answer',
+      payload: { prompt: 'Otázka?', answer: 'odpověď' },
+    })
+    expect(parsed.evidence).toBeUndefined()
+  })
+
+  it('prompt si o doklad řekne', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('evidence')
+  })
+})
+
 describe('konfigurace providera', () => {
   it('výchozí je Anthropic a bez klíče je generování vypnuté', () => {
     expect(readAiConfig({}).provider).toBe('anthropic')
