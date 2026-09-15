@@ -7,6 +7,13 @@
  */
 @source "./**/*.{ts,tsx}";
 
+/*
+ * Tmavý režim se řídí třídou na kořenovém elementu, ne jen nastavením systému —
+ * jinak by přepínač v liště neměl jak přebít volbu systému. Komponenty ze
+ * shadcn používají variantu `dark:`, proto se musí předefinovat i ta.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Plochy */
   --color-surface: #ffffff;
@@ -39,6 +46,36 @@
   --radius-inner: 5px;
   --radius-outer: 8px;
   --radius-tag: 3px;
+}
+
+/*
+ * Tmavý režim. Tokeny se jen přepisují — komponenty o režimu nevědí, protože
+ * všechny barvy čtou přes proměnné. Platí obojí: třída `dark` na kořenovém
+ * elementu (volba učitelky) a nastavení systému, dokud si nevybere sama.
+ */
+@layer base {
+  :root.dark {
+    --color-surface: #14161a;
+    --color-surface-muted: #1b1e24;
+
+    --color-fg: #f2f4f7;
+    --color-fg-soft: #c2c8d2;
+    --color-fg-muted: #8b93a1;
+
+    --color-line: #2b2f37;
+    --color-line-soft: #23272e;
+
+    /* Sytější zelená — tmavá plocha ji jinak spolkne. */
+    --color-brand: #2f9e79;
+    --color-brand-bg: #16302a;
+    --color-brand-fg: #08130f;
+
+    --color-draft-bg: #3a2c11;
+    --color-draft-fg: #f0c579;
+
+    --color-danger: #e0706a;
+    --color-danger-bg: #3a1f1e;
+  }
 }
 
 :root {

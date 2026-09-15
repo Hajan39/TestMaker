@@ -78,6 +78,70 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
   }))
 }
 
+export interface LibrarySearchResult {
+  topicId: string
+  topicName: string
+  subjectName: string
+  gradeName: string
+  /** Vyplněno, když shoda padla na název materiálu, ne na název tématu. */
+  matchedFileName: string | null
+}
+
+/** Odstraní diakritiku a sjednotí velikost písmen, aby „potravni“ našlo „potravní“. */
+function foldForSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLocaleLowerCase('cs')
+}
+
+/**
+ * Hledání přes celou knihovnu, ne jen ve zvoleném ročníku — při 124 tématech
+ * je proklikávání ročníků pomalejší než napsat pár písmen. Hledá jak v názvu
+ * tématu, tak v názvech materiálů: u témat typu „PL - potravní řetězce“ bývá
+ * název souboru výmluvnější než název tématu.
+ */
+export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {
+  const needle = foldForSearch(query.trim())
+  if (needle.length < 2) return []
+
+  const [topicRows, materialRows] = await Promise.all([
+    db
+      .select({
+        topicId: topics.id,
+        topicName: topics.name,
+        gradeName: grades.name,
+        subjectName: subjects.name,
+      })
+      .from(topics)
+      .innerJoin(grades, eq(grades.id, topics.gradeId))
+      .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+      .orderBy(asc(subjects.position), asc(grades.position), asc(topics.position)),
+    db.select({ topicId: materials.topicId, fileName: materials.fileName }).from(materials),
+  ])
+
+  const fileNamesByTopic = new Map<string, string[]>()
+  for (const material of materialRows) {
+    const list = fileNamesByTopic.get(material.topicId) ?? []
+    list.push(material.fileName)
+    fileNamesByTopic.set(material.topicId, list)
+  }
+
+  const results: LibrarySearchResult[] = []
+  for (const topic of topicRows) {
+    if (foldForSearch(topic.topicName).includes(needle)) {
+      results.push({ ...topic, matchedFileName: null })
+      continue
+    }
+    const fileMatch = (fileNamesByTopic.get(topic.topicId) ?? []).find((fileName) =>
+      foldForSearch(fileName).includes(needle),
+    )
+    if (fileMatch) results.push({ ...topic, matchedFileName: fileMatch })
+  }
+
+  return results.slice(0, 30)
+}
+
 /**
  * Najde nebo založí téma podle názvů předmětu, ročníku a tématu.
  *

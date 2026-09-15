@@ -1,21 +1,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useSyncExternalStore } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
-
-/** Sleduje šířku okna. Vrací `false` na serveru, kde se vykresluje široká podoba. */
-function useMatchesMedia(query: string): boolean {
-  return useSyncExternalStore(
-    (notify) => {
-      const list = window.matchMedia(query)
-      list.addEventListener('change', notify)
-      return () => list.removeEventListener('change', notify)
-    },
-    () => window.matchMedia(query).matches,
-    () => false,
-  )
-}
+import { useMatchesMedia } from './useMatchesMedia'
 
 /**
  * Tři sloupce podle specifikace. Pod 1280 px odpadá druhý sloupec,
@@ -67,13 +54,21 @@ export function ThreePane({
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="surface-chrome w-60 shrink-0 overflow-y-auto border-r border-line bg-surface-muted p-3">
+      <aside
+        aria-label={firstLabel}
+        className="surface-chrome w-60 shrink-0 overflow-y-auto border-r border-line bg-surface-muted p-3"
+      >
         {first}
       </aside>
-      <aside className="surface-chrome hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block">
+      <aside
+        aria-label={secondLabel}
+        className="surface-chrome hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block"
+      >
         {second}
       </aside>
-      <section className="surface-content min-w-0 flex-1 overflow-y-auto p-5">{children}</section>
+      <section aria-label={contentLabel} className="surface-content min-w-0 flex-1 overflow-y-auto p-5">
+        {children}
+      </section>
     </div>
   )
 }

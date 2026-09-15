@@ -33,9 +33,15 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Question | 'new' | null>(null)
   const [reviewing, setReviewing] = useState(false)
-  const [filters, setFilters] = useState<{ type: QuestionType | ''; status: QuestionStatus | ''; search: string }>({
+  const [filters, setFilters] = useState<{
+    type: QuestionType | ''
+    status: QuestionStatus | ''
+    difficulty: 1 | 2 | 3 | ''
+    search: string
+  }>({
     type: '',
     status: '',
+    difficulty: '',
     search: '',
   })
 
@@ -44,6 +50,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
     return questions.filter((question) => {
       if (filters.type && question.type !== filters.type) return false
       if (filters.status && question.status !== filters.status) return false
+      if (filters.difficulty && question.difficulty !== filters.difficulty) return false
       if (needle && !JSON.stringify(question.payload).toLocaleLowerCase('cs').includes(needle)) return false
       return true
     })
@@ -70,6 +77,25 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
     await fetch(`/api/questions?${query}`, { method: 'DELETE' })
     setSelected(new Set())
     router.refresh()
+  }
+
+  /**
+   * Hromadný výběr se vztahuje na to, co je právě vidět. Filtr („koncepty
+   * střední obtížnosti") tak slouží zároveň jako výběr — učitelka si nastaví,
+   * co chce schválit, a zaškrtne to jedním kliknutím.
+   */
+  const allVisibleSelected = visible.length > 0 && visible.every((question) => selected.has(question.id))
+  const someVisibleSelected = visible.some((question) => selected.has(question.id))
+
+  function toggleAllVisible() {
+    setSelected((current) => {
+      const next = new Set(current)
+      for (const question of visible) {
+        if (allVisibleSelected) next.delete(question.id)
+        else next.add(question.id)
+      }
+      return next
+    })
   }
 
   function toggle(id: string) {
@@ -126,6 +152,25 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
               </SelectContent>
             </Select>
           </div>
+          <div className="w-36">
+            <Label htmlFor="question-difficulty-filter">Obtížnost</Label>
+            <Select
+              value={filters.difficulty ? String(filters.difficulty) : 'vse'}
+              onValueChange={(value) =>
+                setFilters({ ...filters, difficulty: value === 'vse' ? '' : (Number(value) as 1 | 2 | 3) })
+              }
+            >
+              <SelectTrigger id="question-difficulty-filter" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vse">Všechny</SelectItem>
+                <SelectItem value="1">Lehká</SelectItem>
+                <SelectItem value="2">Střední</SelectItem>
+                <SelectItem value="3">Těžká</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="w-48">
             <Label htmlFor="question-search-filter">Hledat</Label>
             <Input
@@ -176,7 +221,16 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
           />
         </div>
       ) : (
-        <ul className="mt-3 divide-y divide-line-soft">
+        <>
+        <label className="mt-3 flex w-fit items-center gap-2 text-sm text-fg-soft">
+          <Checkbox
+            checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+            onCheckedChange={toggleAllVisible}
+            aria-label="Vybrat vše"
+          />
+          Vybrat vše ({visible.length})
+        </label>
+        <ul className="mt-2 divide-y divide-line-soft">
           {visible.map((question) => (
             <li key={question.id} className="flex gap-3 py-3">
               <Checkbox
@@ -199,6 +253,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
             </li>
           ))}
         </ul>
+        </>
       )}
 
       {editing ? (

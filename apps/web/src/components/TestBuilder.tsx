@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
-import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger } from '@testmaker/ui'
+import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
 import type { PickerTopic } from '@/lib/questionPicker'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestOutline } from '@/components/test-builder/TestOutline'
@@ -30,6 +30,7 @@ export function TestBuilder({
   items: ResolvedTestItem[]
 }) {
   const router = useRouter()
+  const narrow = useMatchesMedia('(max-width: 1023.98px)')
   const [settings, setSettings] = useState<TestSettingsValue>(() => ({
     title: test?.title ?? '',
     description: test?.description ?? '',
@@ -78,6 +79,32 @@ export function TestBuilder({
         ? current.filter((item) => item.questionId !== question.id)
         : [...current, { key: nextDraftKey(), kind: 'question', questionId: question.id, text: null, pointsOverride: null, question }],
     )
+  }
+
+  /**
+   * Zaškrtnutí celé skupiny. Přidávají se jen otázky, které v osnově ještě
+   * nejsou, aby se hromadným výběrem nezdvojily už vybrané; odebírání naopak
+   * vyhodí celou skupinu naráz.
+   */
+  function toggleMany(list: Question[], add: boolean) {
+    setDraft((current) => {
+      if (!add) {
+        const removed = new Set(list.map((question) => question.id))
+        return current.filter((item) => !item.questionId || !removed.has(item.questionId))
+      }
+      const present = new Set(current.map((item) => item.questionId).filter(Boolean) as string[])
+      const added = list
+        .filter((question) => !present.has(question.id))
+        .map((question) => ({
+          key: nextDraftKey(),
+          kind: 'question' as const,
+          questionId: question.id,
+          text: null,
+          pointsOverride: null,
+          question,
+        }))
+      return [...current, ...added]
+    })
   }
 
   function addStructural(kind: 'heading' | 'instruction' | 'page_break') {
@@ -174,9 +201,17 @@ export function TestBuilder({
     }
   }
 
-  const bank = <BankPanel topics={topics} filters={filters} onFiltersChange={setFilters} usedIds={usedIds} onToggle={toggleQuestion} />
+  const bank = <BankPanel topics={topics} filters={filters} onFiltersChange={setFilters} usedIds={usedIds} onToggle={toggleQuestion} onToggleMany={toggleMany} />
   const outline = (
-    <TestOutline items={draft} graded={settings.graded} onReorder={reorder} onRemove={removeItem} onPatch={patchItem} onAdd={addStructural} />
+    <TestOutline
+      items={draft}
+      graded={settings.graded}
+      template={template}
+      onReorder={reorder}
+      onRemove={removeItem}
+      onPatch={patchItem}
+      onAdd={addStructural}
+    />
   )
   const pdfHref = (variant: 'A' | 'B') => `/api/tests/${savedId}/pdf?variant=${variant}${settings.showKey ? '&key=1' : ''}`
 
@@ -208,8 +243,10 @@ export function TestBuilder({
 
       {error ? <p className="text-sm text-danger">{error}</p> : null}
 
-      {/* Pod 1024 px: jeden sloupec se záložkami. */}
-      <div className="lg:hidden">
+      {/* Vykresluje se jen jedna podoba. Obě naráz (jedna schovaná) znamenaly
+          zdvojená `id` filtrů a zdvojené zaškrtávátko „Vybrat vše". */}
+      {narrow ? (
+        // Pod 1024 px: jeden sloupec se záložkami.
         <Tabs defaultValue="banka">
           <TabsList>
             <TabsTrigger value="banka">Banka</TabsTrigger>
@@ -218,16 +255,16 @@ export function TestBuilder({
           <TabsContent value="banka"><div className="h-[70vh]">{bank}</div></TabsContent>
           <TabsContent value="osnova"><div className="h-[70vh]">{outline}</div></TabsContent>
         </Tabs>
-      </div>
-
-      {/* 1024–1280 px: banka a osnova. Od 1280 px přibude náhled uprostřed. */}
-      <div className="hidden gap-4 lg:grid lg:h-[70vh] lg:grid-cols-2 xl:grid-cols-3">
-        <div className="min-h-0">{bank}</div>
-        <div className="hidden min-h-0 xl:block">
-          {template ? <RoughPreview items={draft} template={template} graded={settings.graded} title={settings.title} /> : null}
+      ) : (
+        // 1024–1280 px: banka a osnova. Od 1280 px přibude náhled uprostřed.
+        <div className="grid h-[70vh] gap-4 grid-cols-2 xl:grid-cols-3">
+          <div className="min-h-0">{bank}</div>
+          <div className="hidden min-h-0 xl:block">
+            {template ? <RoughPreview items={draft} template={template} graded={settings.graded} title={settings.title} /> : null}
+          </div>
+          <div className="min-h-0">{outline}</div>
         </div>
-        <div className="min-h-0">{outline}</div>
-      </div>
+      )}
     </div>
   )
 }

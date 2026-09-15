@@ -129,7 +129,13 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {grade.topics.map((topic) => (
           <li key={topic.id}>
-            <TopicTile id={topic.id} name={topic.name} questionCount={topic.questionCount} />
+            <TopicTile
+              id={topic.id}
+              name={topic.name}
+              materialCount={topic.materialCount}
+              questionCount={topic.questionCount}
+              approvedCount={topic.approvedCount}
+            />
           </li>
         ))}
       </ul>

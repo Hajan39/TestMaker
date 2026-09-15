@@ -6,6 +6,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Tmavý režim.** Přepínač v liště nabízí světlý, tmavý a „podle systému“;
+  volba se pamatuje v prohlížeči a nastaví se ještě před vykreslením, takže
+  nic neproblikne. Barvy jsou jen tokeny, komponenty o režimu nevědí.
+- **Hromadný výběr všude, kde se zaškrtává.** V otázkách tématu „Vybrat vše“
+  vezme vše, co projde filtrem, v bance otázek jde zaškrtnout celé téma i celý
+  filtr naráz a u typů otázek se všechny vrátí jedním tlačítkem.
+- **Dlaždice tématu na dvou řádcích:** název nahoře, pod ním počet materiálů
+  a kolik otázek čeká na kontrolu. Z přehledu ročníku je tak vidět, kde je
+  práce, bez otvírání tématu.
 - **Fronta ke kontrole vygenerovaných konceptů.** Otázky se procházejí jedna po
   druhé místo dlouhého seznamu, u každé je vidět úryvek materiálu, ze kterého
   vznikla, a schválit, zamítnout, upravit nebo přeskočit jde jen klávesnicí —
@@ -25,8 +34,12 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   přejmenovat, sloučit s jinou a přesouvat mezi nimi jednotlivé soubory.
 - **Rozpoznání téhož obsahu ve dvou formátech** (PDF vytištěné z prezentace).
   Slabší kopie se označí a do generování nevstupuje.
+- **Google Gemini jako druhý poskytovatel generování.** Rozhodne přítomný klíč:
+  když je vyplněný jen klíč ke Gemini, použije se on. Výchozí model je
+  `gemini-flash-latest`, protože modely řady „pro“ mají na bezplatném tarifu
+  nulový limit.
 - **Generování otázek** přes Vercel AI SDK s vyměnitelným poskytovatelem
-  (Claude, Ollama). Průběh se streamuje, už existující zadání dostane model
+  (Claude, Gemini, Ollama). Průběh se streamuje, už existující zadání dostane model
   jako seznam, kterému se má vyhnout.
 - **Hromadné generování** pro celý předmět nebo ročník přes frontu v databázi,
   zpracovávanou po jedné skupině.
@@ -43,6 +56,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Změněno
 
+- **Skládání testu se vykresluje jen jednou.** Dřív byla v stránce zároveň
+  úzká i široká podoba a jedna se schovávala, čímž vznikala zdvojená `id`
+  filtrů a zdvojené ovládací prvky.
+
+- **Body u vygenerované otázky se drží školního rozsahu.** Model občas nabídl
+  i 25 bodů za jednu otázku; hodnoty nad deset se nahradí výchozím bodováním
+  podle typu. Ručně zadané body zůstávají bez omezení.
+- **Dvojice u přiřazovacích otázek** se ve schématu popisují polem o dvou
+  prvcích místo `z.tuple`. Z tuple vzniká JSON schéma, které Gemini odmítne.
 - **Redesign rozhraní.** Knihovna se teď prochází ve třech sloupcích vedle
   sebe — předměty a ročníky, témata vybraného ročníku a obsah tématu —, takže
   učitelka vidí souvislosti a nemusí se proklikávat zpátky. Skládání testu se

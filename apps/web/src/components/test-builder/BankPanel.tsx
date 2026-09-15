@@ -26,12 +26,15 @@ export function BankPanel({
   onFiltersChange,
   usedIds,
   onToggle,
+  onToggleMany,
 }: {
   topics: PickerTopic[]
   filters: BankFilters
   onFiltersChange: (next: BankFilters) => void
   usedIds: Set<string>
   onToggle: (question: Question) => void
+  /** Přidá nebo odebere celou skupinu otázek naráz (zaškrtnutí u tématu). */
+  onToggleMany: (questions: Question[], add: boolean) => void
 }) {
   const subjects = useMemo(() => [...new Set(topics.map((topic) => topic.subject))].sort(), [topics])
   const grades = useMemo(() => [...new Set(topics.map((topic) => topic.grade))].sort(), [topics])
@@ -55,6 +58,14 @@ export function BankPanel({
       }))
       .filter((topic) => topic.questions.length > 0)
   }, [topics, filters])
+
+  const visibleQuestions = useMemo(
+    () => visibleTopics.flatMap((topic) => topic.questions),
+    [visibleTopics],
+  )
+  const allVisibleUsed =
+    visibleQuestions.length > 0 && visibleQuestions.every((question) => usedIds.has(question.id))
+  const someVisibleUsed = visibleQuestions.some((question) => usedIds.has(question.id))
 
   return (
     <Card className="flex h-full flex-col p-4">
@@ -138,6 +149,17 @@ export function BankPanel({
         </label>
       </div>
 
+      {visibleQuestions.length > 0 ? (
+        <label className="mt-3 flex w-fit items-center gap-2 text-sm text-fg-soft">
+          <Checkbox
+            checked={allVisibleUsed ? true : someVisibleUsed ? 'indeterminate' : false}
+            onCheckedChange={() => onToggleMany(visibleQuestions, !allVisibleUsed)}
+            aria-label="Vybrat vše"
+          />
+          Vybrat vše ({visibleQuestions.length})
+        </label>
+      ) : null}
+
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {visibleTopics.length === 0 ? (
           <EmptyState title="Žádné otázky neodpovídají filtru" />
@@ -152,8 +174,36 @@ export function BankPanel({
               className="rounded border border-line-soft"
               open={topic.questions.some((question) => usedIds.has(question.id))}
             >
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-fg-soft">
-                {topic.label} <span className="font-normal text-fg-muted">({topic.questions.length})</span>
+              <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-fg-soft">
+                {/* Zaškrtnutí u tématu bere všechny jeho otázky, které projdou
+                    filtrem — u opakování z celého ročníku by jinak byla práce
+                    v klikání po jedné. `stopPropagation` brání tomu, aby se
+                    tématem zároveň rozbalovalo. */}
+                <span
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  className="flex items-center"
+                >
+                  <Checkbox
+                    checked={
+                      topic.questions.every((question) => usedIds.has(question.id))
+                        ? true
+                        : topic.questions.some((question) => usedIds.has(question.id))
+                          ? 'indeterminate'
+                          : false
+                    }
+                    onCheckedChange={() =>
+                      onToggleMany(
+                        topic.questions,
+                        !topic.questions.every((question) => usedIds.has(question.id)),
+                      )
+                    }
+                    aria-label={`Vybrat všechny otázky tématu ${topic.label}`}
+                  />
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {topic.label} <span className="font-normal text-fg-muted">({topic.questions.length})</span>
+                </span>
               </summary>
               <ul className="divide-y divide-line-soft px-3 pb-2">
                 {topic.questions.map((question) => (

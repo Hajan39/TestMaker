@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { NavList } from '@testmaker/ui'
 import type { SubjectNode } from '@/lib/library'
+import { LibrarySearch } from '@/components/LibrarySearch'
 
-/** První sloupec: předměty jako popisky, ročníky jako položky. */
+/** První sloupec: hledání přes celou knihovnu, pak předměty jako popisky, ročníky jako položky. */
 export function LibrarySidebar({
   tree,
   activeGradeId,
@@ -12,6 +13,7 @@ export function LibrarySidebar({
 }) {
   return (
     <nav className="space-y-3">
+      <LibrarySearch />
       {tree.map((subject) => (
         <div key={subject.id}>
           <p className="ui-label mb-1 px-2">{subject.name}</p>

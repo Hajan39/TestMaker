@@ -1,0 +1,85 @@
+import { expect, test } from '@playwright/test'
+
+/**
+ * Tři doplňky vyžádané majitelem: hromadný výběr všude, kde se zaškrtává,
+ * dvouřádková dlaždice tématu a přepínač světlého a tmavého motivu.
+ */
+
+/** Téma s materiály i otázkami. */
+const TOPIC = '/topics/csxxOerbvKhz'
+
+test.describe('hromadný výběr', () => {
+  test('v otázkách tématu vybere vše, co je vidět', async ({ page }) => {
+    await page.goto(TOPIC)
+
+    const selectAll = page.getByRole('checkbox', { name: 'Vybrat vše' })
+    await expect(selectAll).toBeVisible()
+    await selectAll.click()
+
+    // Po výběru se objeví lišta hromadných akcí s počtem.
+    await expect(page.getByText(/^Vybráno \d+$/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Schválit' })).toBeVisible()
+
+    // Druhé kliknutí výběr zase zruší.
+    await selectAll.click()
+    await expect(page.getByText(/^Vybráno \d+$/)).toHaveCount(0)
+  })
+
+  test('v bance otázek přidá celé téma do osnovy', async ({ page }) => {
+    await page.goto('/tests/new')
+    await page.getByText('jen schválené').click()
+
+    const selectAll = page.getByRole('checkbox', { name: 'Vybrat vše', exact: true })
+    await selectAll.waitFor({ state: 'visible' })
+    await selectAll.click()
+
+    // Osnova hlásí počet otázek v hlavičce stránky.
+    await expect(page.getByText(/[1-9]\d* otázek/).first()).toBeVisible()
+  })
+
+  test('u typů otázek doplní všechny zpět jedním tlačítkem', async ({ page }) => {
+    await page.goto(TOPIC)
+    const settings = page.getByRole('button', { name: 'Nastavení generování' })
+    test.skip((await settings.count()) === 0, 'Generování není nakonfigurované.')
+
+    await settings.click()
+    // Nastavení generování je vlastní oblast; „Volná odpověď" se jinak trefí
+    // i do odznaků u otázek pod ním.
+    const types = page.locator('label').filter({ hasText: 'Volná odpověď' }).first()
+    const selectAllTypes = page.getByRole('button', { name: 'Vybrat vše' })
+    // Ve výchozím stavu jsou vybrané všechny typy, takže tlačítko nic nedělá.
+    await expect(selectAllTypes).toBeDisabled()
+
+    await types.click()
+    await expect(selectAllTypes).toBeEnabled()
+    await selectAllTypes.click()
+    await expect(selectAllTypes).toBeDisabled()
+  })
+})
+
+test.describe('dlaždice tématu', () => {
+  test('má název na prvním řádku a stav na druhém', async ({ page }) => {
+    await page.goto('/')
+    // Otevřeme první ročník, ať se dlaždice témat ukážou ve třetím sloupci.
+    await page.locator('a[href^="/?grade="]').first().click()
+
+    const tile = page.getByRole('region', { name: 'Obsah tématu' }).locator('a[href^="/topics/"]').first()
+    await expect(tile).toBeVisible()
+    await expect(tile).toContainText(/materiál|bez materiálů/)
+  })
+})
+
+test.describe('motiv', () => {
+  test('přepne do tmavého a volba přežije načtení stránky', async ({ page }) => {
+    await page.goto('/')
+
+    await page.getByRole('button', { name: 'Tmavý motiv' }).click()
+    await expect(page.locator('html')).toHaveClass(/dark/)
+
+    await page.reload()
+    await expect(page.locator('html')).toHaveClass(/dark/)
+
+    await page.getByRole('button', { name: 'Světlý motiv' }).click()
+    await expect(page.locator('html')).not.toHaveClass(/dark/)
+  })
+})

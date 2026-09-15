@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
 import { Mark } from './Mark'
+import { ThemeToggle } from './ThemeToggle'
 
 export interface NavItem {
   href: string
@@ -45,6 +46,7 @@ export function AppShell({
             )
           })}
         </nav>
+        <ThemeToggle className="ml-auto" />
       </header>
       <main className="surface-content min-h-0 flex-1 overflow-hidden">{children}</main>
     </div>

@@ -73,7 +73,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
         ai={aiStatus()}
-        group={<TopicGroup topicId={topic.id} topicName={topic.name} materials={materialRows} />}
+        // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný
+        // klientské komponentě jako prop se přenáší jako položka seznamu.
+        group={<TopicGroup key="skupina" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
       />
     </div>
   )

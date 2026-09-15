@@ -17,13 +17,17 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { paginate } from '@testmaker/core/pdf/estimate'
+import type { ResolvedTestItem, Template } from '@testmaker/core/schema'
+import { useMemo } from 'react'
 import { Badge, Button, Card, EmptyState, Input, QuestionPreview } from '@testmaker/ui'
-import type { DraftItem } from './types'
+import { formatPoints, type DraftItem } from './types'
 
 /** Osnova testu — pořadí položek se mění přetažením nebo klávesnicí. */
 export function TestOutline({
   items,
   graded,
+  template,
   onReorder,
   onRemove,
   onPatch,
@@ -31,11 +35,32 @@ export function TestOutline({
 }: {
   items: DraftItem[]
   graded: boolean
+  /** Slouží jen k odhadu počtu stran pod osnovou — bez šablony se odhad vynechá. */
+  template: Template | null
   onReorder: (from: number, to: number) => void
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
   onAdd: (kind: 'heading' | 'instruction' | 'page_break') => void
 }) {
+  const questionCount = items.filter((item) => item.kind === 'question').length
+  const totalPoints = items.reduce(
+    (sum, item) => (item.kind === 'question' ? sum + (item.pointsOverride ?? item.question?.points ?? 0) : sum),
+    0,
+  )
+  const pageCount = useMemo(() => {
+    if (!template) return null
+    const resolved: ResolvedTestItem[] = items.map((item, index) => ({
+      id: item.key,
+      testId: 'draft',
+      order: index,
+      kind: item.kind,
+      questionId: item.questionId,
+      text: item.text,
+      pointsOverride: item.pointsOverride,
+      question: item.question,
+    }))
+    return paginate(resolved, template.config).length
+  }, [items, template])
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -93,6 +118,27 @@ export function TestOutline({
           </SortableContext>
         </DndContext>
       )}
+
+      {items.length > 0 ? (
+        <dl className="mt-3 flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-line-soft pt-2 text-sm text-fg-muted">
+          <div>
+            <dt className="inline text-fg-soft">Otázek: </dt>
+            <dd className="ui-numeric inline">{questionCount}</dd>
+          </div>
+          {graded ? (
+            <div>
+              <dt className="inline text-fg-soft">Body: </dt>
+              <dd className="ui-numeric inline">{formatPoints(totalPoints)}</dd>
+            </div>
+          ) : null}
+          {pageCount !== null ? (
+            <div>
+              <dt className="inline text-fg-soft">Odhad stran: </dt>
+              <dd className="ui-numeric inline">{pageCount}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
     </Card>
   )
 }

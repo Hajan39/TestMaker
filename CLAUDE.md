@@ -30,6 +30,12 @@ stojí doménové komponenty (`AppShell`, `ThreePane`, `NavList`, `StatRow`,
 `ReviewQueue`, `EmptyState`, `QuestionPreview`), které skládají vzhled aplikace
 z těchto základních dílů.
 
+Tmavý režim je jen druhá sada hodnot týchž tokenů (`:root.dark` ve stejném
+souboru). Komponenty o něm nevědí a nikdy nesmějí mít barvu natvrdo — kdo
+napíše `bg-white`, rozsvítí v tmavém režimu bílou díru. Variantu `dark:`
+řídí třída na kořenovém elementu, ne nastavení systému, aby ji přepínač
+v liště mohl přebít.
+
 Rozhraní rozlišuje dva důrazy podle toho, jestli plocha patří k navigaci/lištám,
 nebo k obsahu samotnému: třída `surface-chrome` na navigačních plochách a
 `surface-content` na obsahových. Nad svou oblastí přepisují sílu popisků a

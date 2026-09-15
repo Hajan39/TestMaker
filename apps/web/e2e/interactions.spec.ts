@@ -50,7 +50,8 @@ test.describe('správa skupiny materiálů', () => {
     await page.goto(TOPIC)
     await page.getByRole('button', { name: 'Upravit skupinu' }).click()
 
-    const gradeSelect = page.getByLabel('Ročník')
+    // Přesně „Ročník" — postranní panely mají v názvu „ročníky" a „ročníku".
+    const gradeSelect = page.getByLabel('Ročník', { exact: true })
     await expect(gradeSelect).toBeVisible()
     await gradeSelect.click()
     await expect(page.getByRole('option', { name: 'Bez ročníku' })).toBeVisible()
@@ -58,14 +59,29 @@ test.describe('správa skupiny materiálů', () => {
   })
 })
 
-test.describe('generování bez klíče', () => {
-  test('se vůbec nenabízí', async ({ page }) => {
+test.describe('nabídka generování', () => {
+  test('se řídí tím, jestli je klíč k modelu', async ({ page, request }) => {
+    // Vývojář může mít klíč vyplněný, nebo ne — test proto nejdřív zjistí stav
+    // od aplikace. Bez klíče route odpoví 503, s klíčem se zastaví až na
+    // neplatných datech (400).
+    const probe = await request.post('/api/generate', { data: {}, failOnStatusCode: false })
+    const configured = probe.status() !== 503
+
+    const topicButton = page.getByRole('button', { name: 'Vygenerovat ze skupiny' })
+    const bulkButton = page.getByRole('button', { name: 'Hromadné generování' })
+
     await page.goto(TOPIC)
-    await expect(page.getByRole('button', { name: 'Vygenerovat ze skupiny' })).toHaveCount(0)
-    await expect(page.getByText('chybí přístupový klíč')).toHaveCount(0)
+    if (configured) await expect(topicButton).toBeVisible()
+    else {
+      await expect(topicButton).toHaveCount(0)
+      // Bez klíče se nenabízí ani vysvětlující hláška u tématu — generování
+      // prostě není vidět.
+      await expect(page.getByText('chybí přístupový klíč')).toHaveCount(0)
+    }
 
     await page.goto('/')
-    await expect(page.getByRole('button', { name: 'Hromadné generování' })).toHaveCount(0)
+    if (configured) await expect(bulkButton).toBeVisible()
+    else await expect(bulkButton).toHaveCount(0)
   })
 })
 
