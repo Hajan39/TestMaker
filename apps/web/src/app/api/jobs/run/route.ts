@@ -1,10 +1,33 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt, or, sql } from 'drizzle-orm'
 import { isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { generateForTopic } from '@/lib/generation'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
+
+/**
+ * Jak dlouho smí úloha běžet, než ji považujeme za opuštěnou. Generování jednoho
+ * tématu trvá desítky vteřin; když se zavře okno, které frontu pohání, zůstane
+ * úloha viset a bez tohohle limitu by téma zablokovala natrvalo.
+ */
+const ABANDONED_AFTER_MS = 15 * 60 * 1000
+
+/** Vrátí opuštěné běžící úlohy zpět mezi čekající. */
+async function reviveAbandoned(): Promise<number> {
+  const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString()
+  const revived = await db
+    .update(generationJobs)
+    .set({ status: 'queued', startedAt: null })
+    .where(
+      and(
+        eq(generationJobs.status, 'running'),
+        or(lt(generationJobs.startedAt, cutoff), sql`${generationJobs.startedAt} is null`),
+      ),
+    )
+    .returning({ id: generationJobs.id })
+  return revived.length
+}
 
 /**
  * Zpracuje jednu úlohu z fronty. UI volá endpoint ve smyčce, dokud vrací
@@ -15,6 +38,9 @@ export async function POST() {
     return Response.json({ error: 'AI není nakonfigurovaná' }, { status: 503 })
   }
 
+  // Nejdřív posbíráme, co po sobě nechal přerušený běh.
+  const revived = await reviveAbandoned()
+
   const [job] = await db
     .select()
     .from(generationJobs)
@@ -22,7 +48,7 @@ export async function POST() {
     .orderBy(asc(generationJobs.createdAt))
     .limit(1)
 
-  if (!job) return Response.json({ processed: false, remaining: 0 })
+  if (!job) return Response.json({ processed: false, remaining: 0, revived })
 
   // Označíme jako běžící; pokud to nevyjde, úlohu si vzal jiný běh.
   const claimed = await db

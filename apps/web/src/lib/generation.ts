@@ -20,6 +20,8 @@ export const DEFAULT_GENERATE_PARAMS: GenerateParams = {
 export interface GenerateOutcome {
   created: number
   rejected: number
+  /** Volání, ze kterých nešlo použít nic. */
+  failedCalls: number
   topicId: string
   /** Z kolika materiálů se generovalo. */
   sources: number
@@ -75,6 +77,8 @@ export async function generateForTopic(
 
   const existing = await db.select().from(questions).where(eq(questions.topicId, topicId)).limit(80)
 
+  // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
+  let created = 0
   const result = await generateQuestions(
     {
       text: source.text,
@@ -86,14 +90,20 @@ export async function generateForTopic(
       difficulty: params.difficulty,
       avoid: existing.map((item) => questionPrompt(toQuestion(item))),
     },
-    { signal: options.signal, onChunk: options.onProgress },
+    {
+      signal: options.signal,
+      onChunk: options.onProgress,
+      onBatch: async (batch) => {
+        await insertQuestions(batch, { topicId, source: 'ai', status: 'draft' })
+        created += batch.length
+      },
+    },
   )
 
-  await insertQuestions(result.questions, { topicId, source: 'ai', status: 'draft' })
-
   return {
-    created: result.questions.length,
+    created,
     rejected: result.rejected.length,
+    failedCalls: result.failedCalls.length,
     topicId,
     sources: source.sources,
   }

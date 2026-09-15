@@ -12,7 +12,14 @@ export interface GenerateOptions {
 export type GenerateEvent =
   | { type: 'start' }
   | { type: 'progress'; done: number; total: number }
-  | { type: 'done'; created: number; rejected: number; topicId: string; sources: number }
+  | {
+      type: 'done'
+      created: number
+      rejected: number
+      failedCalls: number
+      topicId: string
+      sources: number
+    }
   | { type: 'error'; message: string }
 
 /** Volá generování a předává jednotlivé události ze streamu. */

@@ -55,7 +55,8 @@ export function TopicWorkspace({
         else if (event.type === 'done') {
           setStatus(
             `Vytvořeno ${event.created} otázek z ${event.sources} materiálů` +
-              (event.rejected > 0 ? `, ${event.rejected} zahozeno` : ''),
+              (event.rejected > 0 ? `, ${event.rejected} zahozeno` : '') +
+              (event.failedCalls > 0 ? `, ${event.failedCalls}× model neodpověděl použitelně` : ''),
           )
           router.refresh()
         } else if (event.type === 'error') setError(event.message)

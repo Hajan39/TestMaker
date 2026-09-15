@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
-import { chunkText } from '../src/ai/generate'
+import { chunkText, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt } from '../src/ai/prompt'
 import { readAiConfig, isAiConfigured } from '../src/ai/provider'
 import { AI_QUESTION_TYPES, normalizeEvidence, questionContentSchema } from '../src/schema/question'
@@ -153,5 +153,46 @@ describe('konfigurace providera', () => {
   it('Ollama nepotřebuje klíč', () => {
     expect(readAiConfig({ AI_PROVIDER: 'ollama' }).model).toBe('qwen3:14b')
     expect(isAiConfigured({ AI_PROVIDER: 'ollama' })).toBe(true)
+  })
+})
+
+describe('dělení na dávky', () => {
+  it('rozdělí požadovaný počet na volání po pěti', () => {
+    expect(splitIntoBatches(12)).toEqual([5, 5, 2])
+    expect(splitIntoBatches(5)).toEqual([5])
+    expect(splitIntoBatches(1)).toEqual([1])
+  })
+
+  it('součet dávek se rovná zadanému počtu', () => {
+    for (const count of [1, 3, 7, 12, 40]) {
+      expect(splitIntoBatches(count).reduce((a, b) => a + b, 0)).toBe(count)
+    }
+  })
+})
+
+describe('záchrana nepovedené odpovědi', () => {
+  const dobra = {
+    type: 'short_answer',
+    payload: { prompt: 'Kolik laloků má pravá plíce?', answer: 'tři' },
+  }
+  const spatna = {
+    type: 'matching',
+    payload: { prompt: 'Přiřaď.', left: ['a'], right: ['b'], pairs: 'tohle mělo být pole' },
+  }
+
+  it('z dávky s jednou vadnou otázkou zachrání ostatní', () => {
+    const zachraneno = salvageQuestions({ questions: [dobra, spatna, dobra] })
+    expect(zachraneno).toHaveLength(2)
+    expect(zachraneno[0]?.type).toBe('short_answer')
+  })
+
+  it('zvládne i holé pole místo objektu', () => {
+    expect(salvageQuestions([dobra])).toHaveLength(1)
+  })
+
+  it('z odpovědi bez použitelné otázky nevrátí nic', () => {
+    expect(salvageQuestions({ questions: [spatna] })).toEqual([])
+    expect(salvageQuestions({ neco: 'jineho' })).toEqual([])
+    expect(salvageQuestions(null)).toEqual([])
   })
 })

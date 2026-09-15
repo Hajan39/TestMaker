@@ -87,10 +87,16 @@ export async function POST(request: Request) {
   return Response.json({ enqueued: toEnqueue.length, skipped: topicIds.length - toEnqueue.length })
 }
 
-/** Vyprázdní frontu (čekající úlohy). */
+/**
+ * Vyprázdní frontu. Maže i běžící úlohy — po přerušeném běhu zůstávají viset
+ * a bez toho by jejich témata šlo odblokovat jedině zásahem do databáze.
+ */
 export async function DELETE() {
-  await db.delete(generationJobs).where(inArray(generationJobs.status, ['queued', 'error']))
-  return Response.json({ ok: true })
+  const removed = await db
+    .delete(generationJobs)
+    .where(inArray(generationJobs.status, ['queued', 'error', 'running']))
+    .returning({ id: generationJobs.id })
+  return Response.json({ ok: true, removed: removed.length })
 }
 
 async function resolveTopicIds(input: z.infer<typeof enqueueSchema>): Promise<string[]> {
