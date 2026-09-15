@@ -47,7 +47,7 @@ Postup je vždy stejný: naimportuj složku s materiály → nech si vygenerovat
 
 ```bash
 pnpm install
-cp apps/web/.env.example apps/web/.env.local   # doplň ANTHROPIC_API_KEY
+cp apps/web/.env.example apps/web/.env.local   # doplň klíč k AI (viz níž)
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
@@ -60,7 +60,21 @@ Aplikace běží na http://localhost:3000. Materiály naimportuj na stránce
 pnpm --filter @testmaker/web import:local ../../sources
 ```
 
-Bez `ANTHROPIC_API_KEY` aplikace funguje dál, jen se skryje generování otázek.
+### Klíč k AI
+
+Otázky umí generovat Claude i Google Gemini. Stačí vyplnit jeden z klíčů,
+poskytovatel se podle něj pozná sám:
+
+| Poskytovatel | Proměnná | Výchozí model |
+| --- | --- | --- |
+| Anthropic | `ANTHROPIC_API_KEY` (nebo `pnpm dev:ant` po `ant auth login`) | `claude-opus-5` |
+| Google | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-flash-latest` |
+
+Modely Gemini řady „pro“ mají na bezplatném tarifu nulový limit, proto je
+výchozí „flash“. Jiný model si vynutíš proměnnou `AI_MODEL`, jiného
+poskytovatele proměnnou `AI_PROVIDER`.
+
+Bez klíče aplikace funguje dál, jen se skryje generování otázek.
 
 ## Uspořádání
 

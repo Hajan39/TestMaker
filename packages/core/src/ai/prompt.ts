@@ -25,7 +25,8 @@ const TYPE_HINTS: Record<QuestionType, string> = {
   true_false: '4–6 tvrzení, přibližně půl na půl pravdivých a nepravdivých.',
   fill_blank: 'Souvislý text s ___ na místě vynechaných výrazů. Počet ___ musí přesně odpovídat poli `blanks`.',
   matching: 'Dva sloupce stejné délky (4–6 položek). `pairs` obsahuje dvojice indexů.',
-  ordering: 'Položky uveď ve správném pořadí (posloupnost, vývoj, cesta látky). Aplikace je při tisku zamíchá.',
+  ordering:
+    'Posloupnost, vývoj, cesta látky. `items` vypiš v libovolném pořadí a do `correctOrder` dej indexy do `items` udávající skutečně správné pořadí — odděl si tak "co vypsat" od "v jakém pořadí to patří za sebe". Aplikace položky pro tisk stejně zamíchá.',
   table_fill: 'Tabulka s hlavičkou; buňky k doplnění zapiš jako null a jejich správné hodnoty dej do `answers` po řádcích.',
   label_image: 'Nepoužívej — obrázky se ve fázi 1 negenerují.',
 }
@@ -55,8 +56,14 @@ export function buildUserPrompt(request: GenerationRequest): string {
       ? 'Obtížnost: promíchej lehké, střední i těžké otázky (zhruba 1/3 každé).'
       : `Obtížnost: ${request.difficulty} (1 = lehká, 2 = střední, 3 = těžká) u všech otázek.`
 
-  const typeLines = request.types.map(
-    (t) => `- ${t} (${QUESTION_TYPE_LABELS[t]}): ${TYPE_HINTS[t]}`,
+  // `request.types` může obsahovat opakování — každý výskyt typu je jedna
+  // požadovaná otázka toho typu v této dávce (viz rozdělení typů mezi dávky
+  // v generate.ts). Sečtením dostaneme přesný počet na typ místo obecného
+  // "rozděl rovnoměrně", které při pár otázkách na devět typů nedávalo smysl.
+  const typeCounts = new Map<QuestionType, number>()
+  for (const t of request.types) typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1)
+  const typeLines = [...typeCounts.entries()].map(
+    ([t, n]) => `- ${t} (${QUESTION_TYPE_LABELS[t]}) × ${n}: ${TYPE_HINTS[t]}`,
   )
 
   const sections = [
@@ -64,17 +71,28 @@ export function buildUserPrompt(request: GenerationRequest): string {
     gradeLine,
     `Téma: ${request.topicName}`,
     '',
-    `Vytvoř přesně ${request.count} otázek. Rovnoměrně je rozděl mezi tyto typy:`,
+    `Vytvoř přesně ${request.count} otázek, v tomto počtu podle typu:`,
     ...typeLines,
     '',
     difficultyLine,
   ]
 
   if (request.avoid?.length) {
+    // Seznam se ořezává, aby prompt nenafukoval do nekonečna u témat s dlouhou
+    // historií generování — 40 položek stačilo, dokud šly první ty starší
+    // z databáze. Volající teď dává napřed nově vzniklé otázky z běžícího
+    // generování (viz generate.ts), takže při tématu s desítkami existujících
+    // otázek se do 40 nevešly ani ty čerstvé z právě běžící dávky. Řešíme to
+    // z obou stran: strop zvedáme (víc prostoru pro čerstvé i starší otázky)
+    // a každou položku zkracujeme (delší zadání by prompt prodražila
+    // neúměrně k přínosu — pro odlišení duplicity stačí začátek).
+    const AVOID_LIMIT = 80
+    const AVOID_ITEM_MAX_LEN = 100
+    const truncate = (s: string) => (s.length > AVOID_ITEM_MAX_LEN ? `${s.slice(0, AVOID_ITEM_MAX_LEN)}…` : s)
     sections.push(
       '',
       'Tyto otázky už existují, vytvoř jiné (ani parafráze):',
-      ...request.avoid.slice(0, 40).map((q) => `- ${q}`),
+      ...request.avoid.slice(0, AVOID_LIMIT).map((q) => `- ${truncate(q)}`),
     )
   }
 

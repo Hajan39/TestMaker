@@ -2,9 +2,11 @@ import { generateObject, NoObjectGeneratedError } from 'ai'
 import { z } from 'zod'
 import {
   DEFAULT_POINTS,
+  normalizeOrderingPayload,
   questionContentSchema,
   validateQuestionContent,
   type QuestionContent,
+  type QuestionType,
 } from '../schema/question'
 import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt'
 import { getModel, readAiConfig, type AiConfig } from './provider'
@@ -61,6 +63,21 @@ export function splitIntoBatches(count: number, perCall = MAX_PER_CALL): number[
 }
 
 /**
+ * Rozdělí `count` otázek mezi zadané typy po kolečku (round-robin), takže
+ * výsledek je co nejrovnoměrnější bez ohledu na to, jestli je `count`
+ * dělitelný počtem typů. Používá se pro celé generování, ne pro jednu dávku —
+ * "rovnoměrně mezi devět typů" nedává smysl v dávce po pěti otázkách, ale dává
+ * smysl napříč celým požadovaným počtem. Konkrétní dávka pak dostane jen svůj
+ * úsek tohoto rozvrhu (viz volání v `generateQuestions`).
+ */
+export function distributeTypes(types: QuestionType[], count: number): QuestionType[] {
+  if (types.length === 0 || count <= 0) return []
+  const result: QuestionType[] = []
+  for (let i = 0; i < count; i++) result.push(types[i % types.length] as QuestionType)
+  return result
+}
+
+/**
  * Zachrání použitelné otázky z odpovědi, kterou schéma odmítlo jako celek.
  * Model občas u jedné otázky netrefí tvar; bez tohohle by s ní padly i ostatní.
  */
@@ -104,6 +121,9 @@ export async function generateQuestions(
   const model = await getModel(config)
   const chunks = chunkText(request.text)
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
+  // Rozvrh typů pro celé generování (viz distributeTypes) — každá dávka si
+  // z něj vezme jen svůj úsek podle toho, kolik otázek už je hotových.
+  const typeSchedule = distributeTypes(request.types, request.count)
 
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []
@@ -116,6 +136,11 @@ export async function generateQuestions(
     for (const batchSize of splitIntoBatches(Math.min(perChunk, remaining))) {
       if (accepted.length >= request.count) break
 
+      // Úsek celkového rozvrhu typů odpovídající téhle dávce. Pád na
+      // request.types by nastal jen kdyby byl rozvrh kratší než count
+      // (nemělo by se stát, ale ať dávka i tak dostane platné typy).
+      const batchTypes = typeSchedule.slice(accepted.length, accepted.length + batchSize)
+
       let produced: QuestionContent[] = []
       try {
         const { object } = await generateObject({
@@ -126,6 +151,7 @@ export async function generateQuestions(
             ...request,
             text: chunk,
             count: batchSize,
+            types: batchTypes.length > 0 ? batchTypes : request.types,
             // Nově vzniklé otázky jdou první, ať se ořezem seznamu neztratí.
             avoid: [...accepted.map(promptOf), ...(request.avoid ?? [])],
           }),
@@ -155,7 +181,7 @@ export async function generateQuestions(
           rejected.push({ index: accepted.length + i, errors })
           continue
         }
-        batch.push(withDefaultPoints(question))
+        batch.push(withDefaultPoints(normalizeOrderingPayload(question)))
       }
 
       accepted.push(...batch)
@@ -168,16 +194,39 @@ export async function generateQuestions(
   return { questions: accepted.slice(0, request.count), rejected, chunks: chunks.length, failedCalls }
 }
 
-/** Body doplní podle typu, pokud model vrátil výchozí 1. */
+/**
+ * Body doplní podle typu, pokud model vrátil výchozí 1 nebo nesmyslně vysokou
+ * hodnotu. Gemini u přiřazovacích otázek nabízelo i 25 bodů — na písemce pro
+ * druhý stupeň to jednu otázku postaví nad zbytek testu. Učitelka si body může
+ * kdykoli přepsat ručně, schéma proto širší rozsah dál připouští.
+ */
+const MAX_AI_POINTS = 10
+
 function withDefaultPoints(question: QuestionContent): QuestionContent {
-  if (question.points > 1) return question
+  if (question.points > 1 && question.points <= MAX_AI_POINTS) return question
   return { ...question, points: DEFAULT_POINTS[question.type] }
 }
 
-/** Zadání otázky pro deduplikaci napříč částmi. */
+/**
+ * Zadání otázky pro deduplikaci napříč částmi. U `true_false`, `fill_blank`
+ * a `matching` bývá `prompt` obecná fráze ("Rozhodni, zda...") stejná pro
+ * spoustu různých otázek — otisk proto musí vzít skutečný obsah (tvrzení,
+ * doplňovaná slova, dvojice), jinak by se stejný obsah v jiném obalu
+ * nerozpoznal jako duplicita.
+ */
 export function promptOf(question: QuestionContent): string {
-  const payload = question.payload as Record<string, unknown>
-  if (typeof payload.prompt === 'string' && payload.prompt) return payload.prompt
-  if (typeof payload.text === 'string') return payload.text.slice(0, 120)
-  return question.type
+  switch (question.type) {
+    case 'true_false':
+      return question.payload.statements.map((s) => s.text).join(' / ')
+    case 'fill_blank':
+      return `${question.payload.text.slice(0, 120)} [${question.payload.blanks.join(', ')}]`
+    case 'matching':
+      return `${question.payload.left.join(', ')} — ${question.payload.right.join(', ')}`
+    default: {
+      const payload = question.payload as Record<string, unknown>
+      if (typeof payload.prompt === 'string' && payload.prompt) return payload.prompt
+      if (typeof payload.text === 'string') return payload.text.slice(0, 120)
+      return question.type
+    }
+  }
 }

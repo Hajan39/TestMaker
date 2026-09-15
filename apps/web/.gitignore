@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Vzor konfigurace patří do repozitáře, na rozdíl od skutečných klíčů.
+!.env.example

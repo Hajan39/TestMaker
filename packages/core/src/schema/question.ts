@@ -83,14 +83,37 @@ export const matchingPayloadSchema = z.object({
   prompt: z.string().default('Přiřaď k sobě odpovídající dvojice.'),
   left: z.array(z.string().min(1)).min(2).max(12),
   right: z.array(z.string().min(1)).min(2).max(12),
-  /** Dvojice [indexVlevo, indexVpravo]. */
-  pairs: z.array(z.tuple([z.number().int().min(0), z.number().int().min(0)])).min(2),
+  /**
+   * Dvojice [indexVlevo, indexVpravo]. Záměrně pole o dvou prvcích, ne
+   * `z.tuple` — z tuple vzniká JSON schéma s `items` jako polem schémat
+   * a Google Gemini takové schéma odmítne ("items must be a boolean or an
+   * object"). Délku hlídá `.length(2)`.
+   */
+  pairs: z
+    .array(
+      z
+        .array(z.number().int().min(0))
+        .length(2)
+        .transform((pair) => pair as [number, number]),
+    )
+    .min(2),
 })
 
 export const orderingPayloadSchema = z.object({
   prompt: z.string().min(3),
-  /** Položky ve správném pořadí; při vykreslení se zamíchají. */
+  /**
+   * Položky. U starších dat (bez `correctOrder`) i pro vykreslení (PDF, klíč
+   * odpovědí) platí, že jsou už ve správném pořadí — zamíchá je až tisk.
+   */
   items: z.array(z.string().min(1)).min(3).max(12),
+  /**
+   * Nepovinné: indexy do `items` udávající skutečně správné pořadí. Model si
+   * často splete "vypsat položky" a "vypsat je ve správném pořadí" a bez
+   * odděleného pole to nejde odhalit ani opravit. Když je vyplněné,
+   * `normalizeOrderingPayload` podle něj `items` přeuspořádá a pole samo se
+   * před uložením zahodí — na tvar uložených dat i PDF se tím nic nemění.
+   */
+  correctOrder: z.array(z.number().int().min(0)).min(3).max(12).optional(),
 })
 
 export const tableFillPayloadSchema = z.object({
@@ -147,6 +170,21 @@ export type QuestionContent = z.infer<typeof questionContentSchema>
 
 /** Nejdelší citace, kterou ukládáme jako doklad původu — delší se ořízne. */
 export const MAX_EVIDENCE_QUOTE_LENGTH = 400
+
+/**
+ * Přeuspořádá `items` řazené otázky podle `correctOrder`, pokud ho model
+ * vyplnil, a `correctOrder` z výsledku odstraní. Volá se před uložením, takže
+ * PDF i klíč odpovědí (které pořadí berou přímo z `items`) o novém poli
+ * vůbec nemusí vědět a nemusí se kvůli němu měnit.
+ */
+export function normalizeOrderingPayload(q: QuestionContent): QuestionContent {
+  if (q.type !== 'ordering') return q
+  const { correctOrder, ...rest } = q.payload
+  if (!correctOrder) return q
+  // Platnost correctOrder jako permutace indexů items ověřuje validateQuestionContent
+  // dřív, než se sem vůbec dostane — tady už jde jen o přeuspořádání.
+  return { ...q, payload: { ...rest, items: correctOrder.map((i) => rest.items[i] as string) } }
+}
 
 /**
  * Doklad původu z odpovědi modelu na uložitelnou podobu. Schéma délku citace
@@ -216,6 +254,9 @@ export function validateQuestionContent(q: QuestionContent): string[] {
         errors.push('correctIndices obsahuje duplicity')
       }
       if (q.payload.correctIndices.length === n) errors.push('všechny možnosti nemohou být správné')
+      if (q.payload.correctIndices.length < 2) {
+        errors.push('multi_choice musí mít aspoň dvě správné možnosti (jinak jde o single_choice)')
+      }
       break
     }
     case 'fill_blank': {
@@ -233,13 +274,25 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       if (new Set(pairs.map(([l]) => l)).size !== pairs.length) {
         errors.push('levý sloupec se v pairs opakuje')
       }
-      break
-    }
-    case 'ordering':
-      if (new Set(q.payload.items).size !== q.payload.items.length) {
-        errors.push('items obsahují duplicity')
+      if (new Set(pairs.map(([, r]) => r)).size !== pairs.length) {
+        errors.push('pravý sloupec se v pairs opakuje')
       }
       break
+    }
+    case 'ordering': {
+      const { items, correctOrder } = q.payload
+      if (new Set(items).size !== items.length) {
+        errors.push('items obsahují duplicity')
+      }
+      if (correctOrder) {
+        const inRange = correctOrder.every((i) => i >= 0 && i < items.length)
+        const isPermutation = correctOrder.length === items.length && new Set(correctOrder).size === items.length
+        if (!inRange || !isPermutation) {
+          errors.push('correctOrder není platná permutace indexů items')
+        }
+      }
+      break
+    }
     case 'table_fill': {
       const cols = q.payload.headers.length
       if (q.payload.rows.some((r) => r.length !== cols)) {

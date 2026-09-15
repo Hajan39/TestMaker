@@ -16,7 +16,7 @@ const bodySchema = z.object({
 /** Streamuje průběh generování jako text, aby UI vidělo postup u dlouhých materiálů. */
 export async function POST(request: Request) {
   if (!isAiConfigured()) {
-    return Response.json({ error: 'AI není nakonfigurovaná (chybí ANTHROPIC_API_KEY nebo ANTHROPIC_AUTH_TOKEN)' }, { status: 503 })
+    return Response.json({ error: 'AI není nakonfigurovaná — doplň ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN nebo GOOGLE_GENERATIVE_AI_API_KEY' }, { status: 503 })
   }
 
   const parsed = bodySchema.safeParse(await request.json())

@@ -96,7 +96,22 @@ export function GenerateSettingsForm({
         </div>
 
         <div>
-          <Label>Typy otázek</Label>
+          <div className="flex items-center gap-3">
+            <Label>Typy otázek</Label>
+            {/* Typů je devět; naklikat je zpátky po jednom je zbytečná práce.
+                Opačné tlačítko tu není schválně — generování bez jediného
+                typu nedává smysl. */}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={disabled || value.types.length === AI_QUESTION_TYPES.length}
+              className="h-6 px-1.5 text-xs"
+              onClick={() => onChange({ ...value, types: [...AI_QUESTION_TYPES] })}
+            >
+              Vybrat vše
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             {AI_QUESTION_TYPES.map((type) => (
               <label key={type} className="flex items-center gap-1.5 text-sm text-fg-soft">
@@ -119,9 +134,9 @@ export function AiUnavailable({ provider }: { provider: string }) {
   return (
     <Card className="border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
       Generování je vypnuté: pro poskytovatele <strong>{provider}</strong> chybí přístupový klíč.
-      Doplň do <code>.env.local</code> buď <code>ANTHROPIC_API_KEY</code>, nebo{' '}
-      <code>ANTHROPIC_AUTH_TOKEN</code> z přihlášení přes <code>ant auth login</code>,
-      a restartuj aplikaci.
+      Doplň do <code>.env.local</code> podle poskytovatele buď <code>ANTHROPIC_API_KEY</code>
+      (případně <code>ANTHROPIC_AUTH_TOKEN</code> z přihlášení přes <code>ant auth login</code>),
+      nebo <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, a restartuj aplikaci.
     </Card>
   )
 }
