@@ -2,12 +2,13 @@ import 'server-only'
 import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm'
 import {
   normalizeEvidence,
+  parseQuestionSnapshot,
   type Question,
   type QuestionContent,
   type QuestionStatus,
   type QuestionType,
 } from '@testmaker/core/schema'
-import { db, questions, type QuestionRow } from '@/db'
+import { assets, db, questions, testItems, type QuestionRow } from '@/db'
 import { newId } from './ids'
 
 /** Řádek z databáze na doménovou otázku. */
@@ -95,4 +96,67 @@ export async function insertQuestions(
   })
   await db.insert(questions).values(rows)
   return rows.map((row) => row.id)
+}
+
+/** Přílohy (`assets`), na které se odkazuje zadání otázky nebo její přílohové bloky. */
+function referencedAssetIds(row: {
+  type: QuestionRow['type']
+  payload: QuestionRow['payload']
+  blocks: QuestionRow['blocks']
+}): string[] {
+  const ids: string[] = []
+  for (const block of row.blocks ?? []) {
+    if (block.kind === 'image') ids.push(block.assetId)
+  }
+  if (row.type === 'label_image') {
+    const payload = row.payload as { assetId?: string }
+    if (payload.assetId) ids.push(payload.assetId)
+  }
+  return ids
+}
+
+/**
+ * Smaže otázky a uvolněné přílohy (`assets`), na které se odkazovaly jejich
+ * bloky nebo payload typu `label_image` — jinak by obrázek zůstal v databázi
+ * navždy i po smazání jediné otázky, která ho používala.
+ *
+ * `test_items.question_id` na smazanou otázku odkazuje s `onDelete: 'set null'`
+ * — položka v hotovém testu se tím neztratí, protože co je na papíře, drží
+ * `question_snapshot`. Proto se do kontroly použití počítají i přílohy
+ * odkazované ze zmrazených snímků, ne jen z živých otázek — jinak by smazání
+ * otázky z banky vzalo obrázek i testu, který si ji zamrazil.
+ */
+export async function deleteQuestionsWithAssets(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+
+  const targets = await db
+    .select({ id: questions.id, type: questions.type, payload: questions.payload, blocks: questions.blocks })
+    .from(questions)
+    .where(inArray(questions.id, ids))
+
+  const candidateAssetIds = new Set<string>()
+  for (const row of targets) {
+    for (const assetId of referencedAssetIds(row)) candidateAssetIds.add(assetId)
+  }
+
+  await db.delete(questions).where(inArray(questions.id, ids))
+
+  if (candidateAssetIds.size === 0) return
+
+  const remaining = await db
+    .select({ type: questions.type, payload: questions.payload, blocks: questions.blocks })
+    .from(questions)
+  for (const row of remaining) {
+    for (const assetId of referencedAssetIds(row)) candidateAssetIds.delete(assetId)
+  }
+
+  const snapshotRows = await db.select({ questionSnapshot: testItems.questionSnapshot }).from(testItems)
+  for (const row of snapshotRows) {
+    const snapshot = parseQuestionSnapshot(row.questionSnapshot)
+    if (!snapshot) continue
+    for (const assetId of referencedAssetIds(snapshot)) candidateAssetIds.delete(assetId)
+  }
+
+  if (candidateAssetIds.size === 0) return
+  await db.delete(assets).where(inArray(assets.id, [...candidateAssetIds]))
 }

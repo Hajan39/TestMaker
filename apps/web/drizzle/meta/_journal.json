@@ -29,6 +29,20 @@
       "when": 1789504941976,
       "tag": "0003_test-item-lines",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789505779067,
+      "tag": "0004_test-item-question-snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789506652576,
+      "tag": "0005_materials-hash-per-topic",
+      "breakpoints": true
     }
   ]
 }

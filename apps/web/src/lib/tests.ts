@@ -1,6 +1,8 @@
 import 'server-only'
 import { asc, eq, inArray } from 'drizzle-orm'
 import {
+  resolveTestItemQuestion,
+  serializeQuestionSnapshot,
   templateConfigSchema,
   type RenderableTest,
   type ResolvedTestItem,
@@ -38,7 +40,36 @@ export async function loadTest(testId: string): Promise<Test | null> {
   }
 }
 
-/** Položky testu i s navázanými otázkami, seřazené podle pořadí. */
+/**
+ * Snímky otázek pro ukládaný test. Vznikají vždy na serveru z aktuálního
+ * stavu banky — kdyby je posílal prohlížeč, dal by se obsah písemky
+ * podvrhnout.
+ */
+export async function buildQuestionSnapshots(
+  questionIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(questionIds)]
+  if (ids.length === 0) return new Map()
+
+  const rows = await db.select().from(questions).where(inArray(questions.id, ids))
+  const snapshots = new Map<string, string>()
+  for (const row of rows) {
+    try {
+      snapshots.set(row.id, serializeQuestionSnapshot(toQuestion(row)))
+    } catch {
+      // Otázka, která neprojde schématem (typicky starší data), se prostě
+      // nezmrazí — test se kvůli tomu uložit nesmí odmítnout a při
+      // vykreslení se sáhne po živé otázce.
+    }
+  }
+  return snapshots
+}
+
+/**
+ * Položky testu i s navázanými otázkami, seřazené podle pořadí. Otázka se
+ * bere ze snímku pořízeného při uložení testu; živá otázka z banky se použije
+ * jen tam, kde snímek chybí (starší testy) nebo je poškozený.
+ */
 export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]> {
   const rows = await db
     .select()
@@ -53,17 +84,21 @@ export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]>
       : []
   const byId = new Map(questionRows.map((row) => [row.id, toQuestion(row)]))
 
-  return rows.map((row) => ({
-    id: row.id,
-    testId: row.testId,
-    order: row.position,
-    kind: row.kind,
-    questionId: row.questionId,
-    text: row.text,
-    pointsOverride: row.pointsOverride,
-    linesOverride: row.linesOverride,
-    question: row.questionId ? (byId.get(row.questionId) ?? null) : null,
-  }))
+  return rows.map((row) => {
+    const live = row.questionId ? (byId.get(row.questionId) ?? null) : null
+    return {
+      id: row.id,
+      testId: row.testId,
+      order: row.position,
+      kind: row.kind,
+      questionId: row.questionId,
+      text: row.text,
+      pointsOverride: row.pointsOverride,
+      linesOverride: row.linesOverride,
+      questionSnapshot: row.questionSnapshot,
+      ...resolveTestItemQuestion(row.questionSnapshot, live, row.id),
+    }
+  })
 }
 
 /** Obrázky použité v testu jako data URL — react-pdf je vkládá přímo. */

@@ -95,7 +95,13 @@ export const materials = sqliteTable(
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [
-    uniqueIndex('materials_hash_idx').on(table.contentHash),
+    /**
+     * Tentýž soubor smí být v knihovně vícekrát — pracovní list se používá
+     * v sedmém i osmém ročníku a v obou tématech musí být vidět. Unikátní je
+     * proto až dvojice tématu a obsahu: podruhé se nenaimportuje jen do téhož
+     * tématu.
+     */
+    uniqueIndex('materials_topic_hash_idx').on(table.topicId, table.contentHash),
     index('materials_topic_idx').on(table.topicId),
     index('materials_duplicate_idx').on(table.duplicateOfId),
   ],
@@ -200,7 +206,12 @@ export const testItems = sqliteTable(
       .references(() => tests.id, { onDelete: 'cascade' }),
     position: integer('position').notNull(),
     kind: text('kind').notNull().$type<'question' | 'heading' | 'instruction' | 'page_break'>(),
-    questionId: text('question_id').references(() => questions.id, { onDelete: 'cascade' }),
+    /**
+     * Odkaz do banky otázek. Cizí klíč se `set null`: smazáním otázky se
+     * položka z hotového testu nesmí ztratit — co je na papíře, drží
+     * `questionSnapshot`, odkaz slouží už jen k porovnání s bankou.
+     */
+    questionId: text('question_id').references(() => questions.id, { onDelete: 'set null' }),
     text: text('text'),
     pointsOverride: real('points_override'),
     /**
@@ -210,6 +221,14 @@ export const testItems = sqliteTable(
      * testu. Prázdné = platí, co má otázka sama.
      */
     linesOverride: integer('lines_override'),
+    /**
+     * Zmrazený obsah otázky (JSON podle `questionSnapshotSchema`) v podobě,
+     * v jaké se otázka do testu zařadila. Vykreslení, náhled i klíč čtou
+     * odtud — jinak by pozdější úprava otázky tiše přepsala už vytištěnou
+     * písemku a klíč by neodpovídal zadání. Prázdné u testů založených
+     * dřív, než se snímky zavedly.
+     */
+    questionSnapshot: text('question_snapshot'),
   },
   (table) => [index('test_items_test_idx').on(table.testId, table.position)],
 )

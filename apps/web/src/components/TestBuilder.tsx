@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
 import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
@@ -43,12 +43,15 @@ export function TestBuilder({
   const [draft, setDraft] = useState<DraftItem[]>(() =>
     items.map((item) => ({
       key: nextDraftKey(),
+      id: item.id,
       kind: item.kind,
       questionId: item.questionId,
       text: item.text,
       pointsOverride: item.pointsOverride,
       linesOverride: item.linesOverride ?? null,
       question: item.question ?? null,
+      questionEdited: item.questionEdited,
+      questionMissing: item.questionMissing,
     })),
   )
   // Ve výchozím stavu jen schválené — do ostré písemky nemá proklouznout koncept.
@@ -63,10 +66,19 @@ export function TestBuilder({
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
 
-  const usedIds = useMemo(
-    () => new Set(draft.filter((item) => item.questionId).map((item) => item.questionId as string)),
-    [draft],
-  )
+  /**
+   * Kolikrát je která otázka v osnově. Táž otázka smí být v testu víckrát
+   * (jednou jako rozcvička, podruhé v jiné části), proto se počítá, ne jen
+   * eviduje přítomnost.
+   */
+  const usedCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of draft) {
+      if (!item.questionId) continue
+      counts.set(item.questionId, (counts.get(item.questionId) ?? 0) + 1)
+    }
+    return counts
+  }, [draft])
   const totalPoints = draft.reduce(
     (sum, item) => (item.kind === 'question' ? sum + (item.pointsOverride ?? item.question?.points ?? 0) : sum),
     0,
@@ -74,14 +86,30 @@ export function TestBuilder({
   const questionCount = draft.filter((item) => item.kind === 'question').length
   const template = templates.find((t) => t.id === settings.templateId) ?? templates[0] ?? null
 
+  function questionItem(question: Question): DraftItem {
+    return {
+      key: nextDraftKey(),
+      id: null,
+      kind: 'question',
+      questionId: question.id,
+      text: null,
+      pointsOverride: null,
+      linesOverride: null,
+      question,
+    }
+  }
+
+  /** Další výskyt téže otázky na konci osnovy — ostatní výskyty zůstávají. */
+  function addQuestion(question: Question) {
+    setDraft((current) => [...current, questionItem(question)])
+  }
+
+  /** Zaškrtávátko v bance: buď otázku přidá, nebo vyhodí všechny její výskyty. */
   function toggleQuestion(question: Question) {
     setDraft((current) =>
-      usedIds.has(question.id)
+      usedCounts.has(question.id)
         ? current.filter((item) => item.questionId !== question.id)
-        : [
-            ...current,
-            { key: nextDraftKey(), kind: 'question', questionId: question.id, text: null, pointsOverride: null, linesOverride: null, question },
-          ],
+        : [...current, questionItem(question)],
     )
   }
 
@@ -97,34 +125,32 @@ export function TestBuilder({
         return current.filter((item) => !item.questionId || !removed.has(item.questionId))
       }
       const present = new Set(current.map((item) => item.questionId).filter(Boolean) as string[])
-      const added = list
-        .filter((question) => !present.has(question.id))
-        .map((question) => ({
-          key: nextDraftKey(),
-          kind: 'question' as const,
-          questionId: question.id,
-          text: null,
-          pointsOverride: null,
-          linesOverride: null,
-          question,
-        }))
+      const added = list.filter((question) => !present.has(question.id)).map(questionItem)
       return [...current, ...added]
     })
   }
 
-  function addStructural(kind: 'heading' | 'instruction' | 'page_break') {
-    setDraft((current) => [
-      ...current,
-      {
+  /**
+   * Nadpis, pokyn i zalomení strany jde vložit kamkoli: `index` je místo, kam
+   * položka přijde (0 = úplně nahoru). Bez něj se připojí na konec.
+   */
+  function addStructural(kind: 'heading' | 'instruction' | 'page_break', index?: number) {
+    setDraft((current) => {
+      const item: DraftItem = {
         key: nextDraftKey(),
+        id: null,
         kind,
         questionId: null,
         text: STRUCTURAL_TEXT[kind],
         pointsOverride: null,
         linesOverride: null,
         question: null,
-      },
-    ])
+      }
+      const at = Math.min(Math.max(index ?? current.length, 0), current.length)
+      const next = [...current]
+      next.splice(at, 0, item)
+      return next
+    })
   }
 
   function reorder(from: number, to: number) {
@@ -159,8 +185,10 @@ export function TestBuilder({
       }),
     [settings, draft],
   )
-  const savedFingerprint = useRef<string | null>(test ? fingerprint : null)
-  const dirty = savedFingerprint.current !== fingerprint
+  // Otisk naposledy uloženého stavu. Ve stavu, ne v ref — ref se během
+  // vykreslování nemá číst a React na to upozorňuje.
+  const [savedFingerprint, setSavedFingerprint] = useState<string | null>(test ? fingerprint : null)
+  const dirty = savedFingerprint !== fingerprint
 
   // Zavření okna s rozpracovanou osnovou znamenalo ztrátu celé práce bez varování.
   useEffect(() => {
@@ -186,6 +214,7 @@ export function TestBuilder({
       variants: settings.variants,
       showKey: settings.showKey,
       items: draft.map((item) => ({
+        id: item.id,
         kind: item.kind,
         questionId: item.questionId,
         text: item.text,
@@ -205,7 +234,7 @@ export function TestBuilder({
         throw new Error(detail.error ?? `Uložení selhalo (${response.status})`)
       }
       const result = (await response.json()) as { id: string }
-      savedFingerprint.current = fingerprint
+      setSavedFingerprint(fingerprint)
       setSavedId(result.id)
       if (!test) router.replace(`/tests/${result.id}`)
       else router.refresh()
@@ -216,7 +245,17 @@ export function TestBuilder({
     }
   }
 
-  const bank = <BankPanel topics={topics} filters={filters} onFiltersChange={setFilters} usedIds={usedIds} onToggle={toggleQuestion} onToggleMany={toggleMany} />
+  const bank = (
+    <BankPanel
+      topics={topics}
+      filters={filters}
+      onFiltersChange={setFilters}
+      usedCounts={usedCounts}
+      onToggle={toggleQuestion}
+      onAddAgain={addQuestion}
+      onToggleMany={toggleMany}
+    />
+  )
   const outline = (
     <TestOutline
       items={draft}

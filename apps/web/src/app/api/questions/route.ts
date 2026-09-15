@@ -2,7 +2,7 @@ import { inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { questionContentSchema, validateQuestionContent } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
-import { insertQuestions } from '@/lib/questions'
+import { deleteQuestionsWithAssets, insertQuestions } from '@/lib/questions'
 
 export const runtime = 'nodejs'
 
@@ -76,6 +76,6 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const ids = new URL(request.url).searchParams.getAll('id')
   if (ids.length === 0) return Response.json({ error: 'Chybí id' }, { status: 400 })
-  await db.delete(questions).where(inArray(questions.id, ids))
+  await deleteQuestionsWithAssets(ids)
   return Response.json({ deleted: ids.length })
 }

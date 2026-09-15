@@ -3,6 +3,8 @@ import type { Question, ResolvedTestItem, TestHeaderConfig } from '@testmaker/co
 /** Položka rozpracovaného testu; `key` je stabilní jen v paměti prohlížeče. */
 export interface DraftItem {
   key: string
+  /** Id už uložené položky; u nově přidaných `null`. */
+  id: string | null
   kind: ResolvedTestItem['kind']
   questionId: string | null
   text: string | null
@@ -10,6 +12,10 @@ export interface DraftItem {
   /** Přepis počtu linek na odpověď; prázdné = podle otázky. */
   linesOverride: number | null
   question: Question | null
+  /** Živá otázka se od zmrazené v testu liší. */
+  questionEdited?: boolean
+  /** Otázka už v bance není; test drží jen její snímek. */
+  questionMissing?: boolean
 }
 
 export interface BankFilters {

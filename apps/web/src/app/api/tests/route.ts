@@ -3,10 +3,17 @@ import { z } from 'zod'
 import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
+import { buildQuestionSnapshots } from '@/lib/tests'
 
 export const runtime = 'nodejs'
 
 const itemSchema = z.object({
+  /**
+   * Id už uložené položky, pokud jde o úpravu. Slouží k tomu, aby se při
+   * přeuložení nezahodil zmrazený obsah otázky, která mezitím z banky zmizela
+   * — tam už není z čeho snímek pořídit znovu.
+   */
+  id: z.string().nullable().default(null),
   kind: z.enum(['question', 'heading', 'instruction', 'page_break']),
   questionId: z.string().nullable().default(null),
   text: z.string().nullable().default(null),
@@ -71,8 +78,18 @@ export async function PUT(request: Request) {
     .update(tests)
     .set({ ...test, updatedAt: new Date().toISOString() })
     .where(eq(tests.id, id))
+  // Snímky zmizelých otázek se musí načíst dřív, než se staré položky smažou.
+  const keptSnapshots = new Map(
+    (await db
+      .select({ id: testItems.id, questionSnapshot: testItems.questionSnapshot })
+      .from(testItems)
+      .where(eq(testItems.testId, id)))
+      .filter((row) => row.questionSnapshot)
+      .map((row) => [row.id, row.questionSnapshot as string]),
+  )
+
   await db.delete(testItems).where(eq(testItems.testId, id))
-  await writeItems(id, items)
+  await writeItems(id, items, keptSnapshots)
 
   return Response.json({ id })
 }
@@ -84,18 +101,42 @@ export async function DELETE(request: Request) {
   return Response.json({ ok: true })
 }
 
-async function writeItems(testId: string, items: z.infer<typeof itemSchema>[]): Promise<void> {
+async function writeItems(
+  testId: string,
+  items: z.infer<typeof itemSchema>[],
+  keptSnapshots: Map<string, string> = new Map(),
+): Promise<void> {
   if (items.length === 0) return
+
+  // Snímek se pořizuje tady na serveru z aktuálního obsahu banky. Klient ho
+  // neposílá — jinak by šlo do hotové písemky podstrčit cokoli.
+  const snapshots = await buildQuestionSnapshots(
+    items
+      .filter((item) => item.kind === 'question')
+      .map((item) => item.questionId)
+      .filter((id): id is string => Boolean(id)),
+  )
+
   await db.insert(testItems).values(
-    items.map((item, index) => ({
-      id: newId(),
-      testId,
-      position: index,
-      kind: item.kind,
-      questionId: item.kind === 'question' ? item.questionId : null,
-      text: item.kind === 'question' ? null : item.text,
-      pointsOverride: item.pointsOverride,
-      linesOverride: item.kind === 'question' ? item.linesOverride : null,
-    })),
+    items.map((item, index) => {
+      const questionId = item.kind === 'question' ? item.questionId : null
+      return {
+        id: newId(),
+        testId,
+        position: index,
+        kind: item.kind,
+        questionId,
+        text: item.kind === 'question' ? null : item.text,
+        pointsOverride: item.pointsOverride,
+        linesOverride: item.kind === 'question' ? item.linesOverride : null,
+        // Snímek se pořizuje jednou, při zařazení otázky do testu. U položky,
+        // která v testu už byla, se drží ten původní — jinak by přeuložení
+        // testu (třeba kvůli opravě názvu) přepsalo obsah už vytištěné
+        // písemky aktuálním zněním otázky, čemuž má zmrazení bránit.
+        questionSnapshot:
+          (item.id ? keptSnapshots.get(item.id) : null) ??
+          (questionId ? (snapshots.get(questionId) ?? null) : null),
+      }
+    }),
   )
 }
