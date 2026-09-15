@@ -11,7 +11,15 @@ const nav = [
 describe('AppShell', () => {
   it('vykreslí značku, navigaci a obsah', () => {
     render(
-      <AppShell nav={nav} activeHref="/" renderLink={(item) => <a href={item.href}>{item.label}</a>}>
+      <AppShell
+        nav={nav}
+        activeHref="/"
+        renderLink={(item, active) => (
+          <a href={item.href} aria-current={active ? 'page' : undefined}>
+            {item.label}
+          </a>
+        )}
+      >
         <p>Obsah</p>
       </AppShell>,
     )
@@ -22,17 +30,32 @@ describe('AppShell', () => {
 
   it('označí aktivní položku pro čtečky obrazovky', () => {
     render(
-      <AppShell nav={nav} activeHref="/tests" renderLink={(item) => <a href={item.href}>{item.label}</a>}>
+      <AppShell
+        nav={nav}
+        activeHref="/tests"
+        renderLink={(item, active) => (
+          <a href={item.href} aria-current={active ? 'page' : undefined}>
+            {item.label}
+          </a>
+        )}
+      >
         <p>Obsah</p>
       </AppShell>,
     )
-    const active = screen.getByRole('link', { name: 'Testy' }).closest('[aria-current]')
-    expect(active).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Testy' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('lišta nese ostřejší důraz, plocha mírnější', () => {
     const { container } = render(
-      <AppShell nav={nav} activeHref="/" renderLink={(item) => <a href={item.href}>{item.label}</a>}>
+      <AppShell
+        nav={nav}
+        activeHref="/"
+        renderLink={(item, active) => (
+          <a href={item.href} aria-current={active ? 'page' : undefined}>
+            {item.label}
+          </a>
+        )}
+      >
         <p>Obsah</p>
       </AppShell>,
     )

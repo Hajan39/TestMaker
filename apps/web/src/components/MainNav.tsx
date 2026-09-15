@@ -12,17 +12,36 @@ const NAV: NavItem[] = [
   { href: '/templates', label: 'Šablony' },
 ]
 
+/**
+ * Určí href položky navigace, pod kterou patří daná cesta. Kořenová cesta „/“
+ * musí být přesná shoda, jinak by Knihovna svítila na každé stránce. Ostatní
+ * položky pokrývají i své podtrasy (např. /tests/new i /tests/<id> patří pod Testy).
+ */
+function findActiveHref(pathname: string): string {
+  const match = NAV.find((item) => {
+    if (item.href === '/') return pathname === '/'
+    return pathname === item.href || pathname.startsWith(`${item.href}/`)
+  })
+  if (match) return match.href
+  // Detail tématu (/topics/...) patří pod Knihovnu.
+  if (pathname.startsWith('/topics')) return '/'
+  return pathname
+}
+
 /** Klientská skořápka aplikace: určí aktivní položku navigace podle aktuální cesty. */
 export function MainNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  // Detail tématu (/topics/...) patří pod Knihovnu.
-  const activeHref = pathname.startsWith('/topics') ? '/' : pathname
+  const activeHref = findActiveHref(pathname)
 
   return (
     <AppShell
       nav={NAV}
       activeHref={activeHref}
-      renderLink={(item) => <Link href={item.href}>{item.label}</Link>}
+      renderLink={(item, active) => (
+        <Link href={item.href} aria-current={active ? 'page' : undefined}>
+          {item.label}
+        </Link>
+      )}
     >
       {children}
     </AppShell>

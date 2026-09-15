@@ -18,7 +18,7 @@ export function AppShell({
 }: {
   nav: NavItem[]
   activeHref: string
-  renderLink: (item: NavItem) => ReactNode
+  renderLink: (item: NavItem, active: boolean) => ReactNode
   children: ReactNode
 }) {
   return (
@@ -31,13 +31,12 @@ export function AppShell({
             return (
               <span
                 key={item.href}
-                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'rounded-[var(--radius-inner)] px-2.5 py-1',
                   active ? 'bg-brand-bg font-semibold text-brand' : 'text-fg-muted hover:text-fg',
                 )}
               >
-                {renderLink(item)}
+                {renderLink(item, active)}
               </span>
             )
           })}
