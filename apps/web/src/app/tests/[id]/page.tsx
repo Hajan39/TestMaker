@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { PageShell } from '@testmaker/ui'
 import { loadPickerTopics } from '@/lib/questionPicker'
 import { loadTemplates, loadTest, loadTestItems } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
@@ -16,5 +17,9 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     loadTestItems(id),
   ])
 
-  return <TestBuilder topics={topics} templates={templates} test={test} items={items} />
+  return (
+    <PageShell>
+      <TestBuilder topics={topics} templates={templates} test={test} items={items} />
+    </PageShell>
+  )
 }

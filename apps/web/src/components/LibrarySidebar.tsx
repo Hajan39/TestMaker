@@ -23,9 +23,9 @@ export function LibrarySidebar({
               count: grade.topics.length,
               flag: grade.topics.some((topic) => topic.draftCount > 0),
             }))}
-            renderItem={(item) => (
-              <Link href={`/?grade=${item.id}`} className="block">
-                {item.label}
+            renderItem={(item, content, active) => (
+              <Link href={`/?grade=${item.id}`} className="block" aria-current={active ? 'page' : undefined}>
+                {content}
               </Link>
             )}
           />

@@ -123,7 +123,9 @@ const baseFields = {
   evidence: z
     .object({
       fileName: z.string().min(1),
-      quote: z.string().min(10).max(400),
+      /* Délka se neomezuje — validace celého objektu by kvůli jediné otázce
+       * shodila celou dávku. Ořez i případ prázdné citace řeší až uložení. */
+      quote: z.string(),
     })
     .optional(),
 }
@@ -142,6 +144,30 @@ export const questionContentSchema = z.discriminatedUnion('type', [
 ])
 
 export type QuestionContent = z.infer<typeof questionContentSchema>
+
+/** Nejdelší citace, kterou ukládáme jako doklad původu — delší se ořízne. */
+export const MAX_EVIDENCE_QUOTE_LENGTH = 400
+
+/**
+ * Doklad původu z odpovědi modelu na uložitelnou podobu. Schéma délku citace
+ * nekontroluje (jedna moc dlouhá nebo krátká citace by jinak shodila celou
+ * dávku generování) — ošetří se až tady, při ukládání: prázdná nebo jen
+ * z bílých znaků citace znamená chybějící doklad, moc dlouhá se ořízne.
+ */
+export function normalizeEvidence(
+  evidence: QuestionContent['evidence'],
+): { fileName: string; quote: string } | null {
+  if (!evidence) return null
+  const quote = evidence.quote.trim()
+  if (!quote) return null
+  return {
+    fileName: evidence.fileName,
+    quote:
+      quote.length > MAX_EVIDENCE_QUOTE_LENGTH
+        ? `${quote.slice(0, MAX_EVIDENCE_QUOTE_LENGTH).trim()}…`
+        : quote,
+  }
+}
 
 export const QUESTION_STATUSES = ['draft', 'approved', 'rejected'] as const
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number]

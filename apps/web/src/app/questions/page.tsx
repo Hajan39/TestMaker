@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Button, EmptyState } from '@testmaker/ui'
+import { Button, EmptyState, PageShell } from '@testmaker/ui'
 import { loadPickerTopics } from '@/lib/questionPicker'
 import { QuestionsTable } from './QuestionsTable'
 
@@ -25,15 +25,17 @@ export default async function QuestionsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold text-fg">Banka otázek ({total})</h1>
-        <Link href="/tests/new">
-          <Button>Poskládat test</Button>
-        </Link>
-      </div>
+    <PageShell>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="ui-page-title">Banka otázek ({total})</h1>
+          <Link href="/tests/new">
+            <Button>Poskládat test</Button>
+          </Link>
+        </div>
 
-      <QuestionsTable topics={topics} />
-    </div>
+        <QuestionsTable topics={topics} />
+      </div>
+    </PageShell>
   )
 }

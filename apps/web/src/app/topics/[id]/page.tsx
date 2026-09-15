@@ -56,7 +56,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           </Link>
           {topic.gradeName ? ` · ${topic.gradeName}` : ''}
         </p>
-        <h1 className="mt-1 text-[19px] font-bold tracking-[-0.025em] text-fg">{topic.name}</h1>
+        <h1 className="ui-page-title mt-1">{topic.name}</h1>
       </div>
 
       <StatRow

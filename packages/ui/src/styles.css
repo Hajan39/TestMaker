@@ -1,4 +1,12 @@
 /* Design tokeny sdílené celou aplikací. Importuje se z globals.css webu. */
+
+/*
+ * Automatická detekce zdrojů v Tailwindu 4 prochází jen strom apps/web —
+ * do node_modules (kam se balíček vtahuje symlinkem) nenahlíží. Cesta je
+ * relativní k tomuto souboru, takže funguje i po přesunu balíčku.
+ */
+@source "./**/*.{ts,tsx}";
+
 @theme {
   /* Plochy */
   --color-surface: #ffffff;
@@ -73,6 +81,14 @@
 /* Čísla v přehledech nesmějí poskakovat. */
 .ui-numeric {
   font-variant-numeric: tabular-nums;
+}
+
+/* Nadpis obrazovky — jediná definice pro celou aplikaci. */
+.ui-page-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--color-fg);
 }
 
 /* Most k pojmenování, které používají komponenty ze shadcn. */

@@ -9,7 +9,12 @@ export interface NavListItem {
   flag?: boolean
 }
 
-/** Seznam v postranním panelu: položka, počet a tečka u nedodělků. */
+/**
+ * Seznam v postranním panelu: položka, počet a tečka u nedodělků.
+ * `renderItem` vykresluje obal celého řádku (typicky odkaz), aby byl
+ * klikatelný celý řádek, ne jen text — počet a tečka pak nejsou mrtvá zóna.
+ * Aktivní řádek nese `aria-current="page"` na tomto odkazu.
+ */
 export function NavList({
   items,
   activeId,
@@ -17,18 +22,16 @@ export function NavList({
 }: {
   items: NavListItem[]
   activeId?: string
-  renderItem: (item: NavListItem) => ReactNode
+  renderItem: (item: NavListItem, content: ReactNode, active: boolean) => ReactNode
 }) {
   return (
     <ul className="space-y-0.5">
       {items.map((item) => {
         const active = item.id === activeId
-        return (
-          <li
-            key={item.id}
-            aria-current={active ? 'true' : undefined}
+        const content = (
+          <span
             className={cn(
-              'flex items-center gap-1.5 rounded-[var(--radius-inner)] px-2 py-1 text-sm',
+              'flex w-full items-center gap-1.5 rounded-[var(--radius-inner)] px-2 py-1 text-sm',
               active ? 'bg-brand-bg font-semibold text-brand' : 'text-fg-soft hover:bg-surface-muted',
             )}
           >
@@ -38,14 +41,15 @@ export function NavList({
                 className="size-1.5 shrink-0 rounded-full bg-draft-fg"
               />
             ) : null}
-            <span className="min-w-0 flex-1 truncate">{renderItem(item)}</span>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
             {typeof item.count === 'number' ? (
               <span className={cn('ui-numeric text-xs', active ? 'text-brand/70' : 'text-fg-muted')}>
                 {item.count}
               </span>
             ) : null}
-          </li>
+          </span>
         )
+        return <li key={item.id}>{renderItem(item, content, active)}</li>
       })}
     </ul>
   )

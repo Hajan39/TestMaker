@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { chunkText } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt } from '../src/ai/prompt'
 import { readAiConfig, isAiConfigured } from '../src/ai/provider'
-import { AI_QUESTION_TYPES, questionContentSchema } from '../src/schema/question'
+import { AI_QUESTION_TYPES, normalizeEvidence, questionContentSchema } from '../src/schema/question'
 
 describe('schéma pro model', () => {
   it('jde převést na JSON Schema (structured output)', () => {
@@ -89,9 +89,52 @@ describe('doklad původu otázky', () => {
     expect(parsed.evidence).toBeUndefined()
   })
 
+  it('schéma nekontroluje délku citace — moc krátká ani moc dlouhá dávku nesestřelí', () => {
+    const shortQuote = questionContentSchema.parse({
+      type: 'short_answer',
+      payload: { prompt: 'Otázka?', answer: 'odpověď' },
+      evidence: { fileName: 'a.pdf', quote: 'ok' },
+    })
+    expect(shortQuote.evidence?.quote).toBe('ok')
+
+    const longQuote = 'x'.repeat(2000)
+    const longQuoteParsed = questionContentSchema.parse({
+      type: 'short_answer',
+      payload: { prompt: 'Otázka?', answer: 'odpověď' },
+      evidence: { fileName: 'a.pdf', quote: longQuote },
+    })
+    expect(longQuoteParsed.evidence?.quote).toHaveLength(2000)
+  })
+
   it('prompt si o doklad řekne', () => {
     const prompt = buildSystemPrompt()
     expect(prompt).toContain('evidence')
+  })
+})
+
+describe('normalizace dokladu při ukládání', () => {
+  it('chybějící doklad zůstane chybějící', () => {
+    expect(normalizeEvidence(undefined)).toBeNull()
+  })
+
+  it('prázdnou nebo jen z bílých znaků citaci bere jako chybějící doklad', () => {
+    expect(normalizeEvidence({ fileName: 'a.pdf', quote: '' })).toBeNull()
+    expect(normalizeEvidence({ fileName: 'a.pdf', quote: '   ' })).toBeNull()
+  })
+
+  it('krátkou citaci uloží beze změny', () => {
+    expect(normalizeEvidence({ fileName: 'a.pdf', quote: '  ok  ' })).toEqual({
+      fileName: 'a.pdf',
+      quote: 'ok',
+    })
+  })
+
+  it('moc dlouhou citaci ořízne', () => {
+    const quote = 'a'.repeat(500)
+    const result = normalizeEvidence({ fileName: 'a.pdf', quote })
+    expect(result?.quote.length).toBeLessThanOrEqual(401)
+    expect(result?.quote.endsWith('…')).toBe(true)
+    expect(result?.quote.startsWith('a'.repeat(400))).toBe(true)
   })
 })
 

@@ -13,7 +13,10 @@ import {
 } from '@testmaker/core/schema'
 import {
   Button,
-  Card,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
   Select,
@@ -102,18 +105,13 @@ export function QuestionEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-fg/40 p-4">
-      <Card className="w-full max-w-3xl p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-fg">
-            {question ? 'Upravit otázku' : 'Nová otázka'}
-          </h2>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Zavřít
-          </Button>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{question ? 'Upravit otázku' : 'Nová otázka'}</DialogTitle>
+        </DialogHeader>
 
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3">
           <div className="w-56">
             <Label htmlFor="question-editor-type">Typ</Label>
             <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
@@ -182,7 +180,7 @@ export function QuestionEditor({
             {saving ? 'Ukládám…' : 'Uložit'}
           </Button>
         </div>
-      </Card>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

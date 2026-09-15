@@ -62,7 +62,7 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-fg">Přehled knihovny</h1>
+          <h1 className="ui-page-title">Přehled knihovny</h1>
           <p className="mt-1 text-sm text-fg-soft">
             {totals.topics} témat · {totals.materials} materiálů · {totals.questions} otázek (
             {totals.approved} schválených)
@@ -109,7 +109,7 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-fg">{grade.name || 'Bez ročníku'}</h1>
+          <h1 className="ui-page-title">{grade.name || 'Bez ročníku'}</h1>
           <p className="mt-1 text-sm text-fg-soft">{grade.topics.length} témat</p>
         </div>
         <BulkGenerate

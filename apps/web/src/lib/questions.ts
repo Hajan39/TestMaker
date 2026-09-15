@@ -1,6 +1,7 @@
 import 'server-only'
 import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm'
 import {
+  normalizeEvidence,
   type Question,
   type QuestionContent,
   type QuestionStatus,
@@ -74,21 +75,24 @@ export async function insertQuestions(
   context: { topicId: string; materialId?: string | null; source?: 'ai' | 'manual'; status?: QuestionStatus },
 ): Promise<string[]> {
   if (items.length === 0) return []
-  const rows = items.map((item) => ({
-    id: newId(),
-    topicId: context.topicId,
-    materialId: context.materialId ?? null,
-    type: item.type,
-    payload: item.payload,
-    blocks: item.blocks ?? [],
-    points: item.points,
-    difficulty: item.difficulty,
-    explanation: item.explanation ?? null,
-    source: context.source ?? 'ai',
-    status: context.status ?? 'draft',
-    sourceFile: item.evidence?.fileName ?? null,
-    sourceQuote: item.evidence?.quote ?? null,
-  }))
+  const rows = items.map((item) => {
+    const evidence = normalizeEvidence(item.evidence)
+    return {
+      id: newId(),
+      topicId: context.topicId,
+      materialId: context.materialId ?? null,
+      type: item.type,
+      payload: item.payload,
+      blocks: item.blocks ?? [],
+      points: item.points,
+      difficulty: item.difficulty,
+      explanation: item.explanation ?? null,
+      source: context.source ?? 'ai',
+      status: context.status ?? 'draft',
+      sourceFile: evidence?.fileName ?? null,
+      sourceQuote: evidence?.quote ?? null,
+    }
+  })
   await db.insert(questions).values(rows)
   return rows.map((row) => row.id)
 }
