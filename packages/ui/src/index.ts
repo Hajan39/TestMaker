@@ -33,3 +33,5 @@ export {
 // Doménové komponenty přibudou v dalších úkolech.
 export { QuestionPreview } from './QuestionPreview'
 export { EmptyState } from './EmptyState'
+export { AppShell } from './AppShell'
+export type { NavItem } from './AppShell'
