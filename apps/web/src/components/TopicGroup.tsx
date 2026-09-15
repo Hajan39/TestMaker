@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Badge,
   Button,
+  cn,
   Card,
   Input,
   Label,
@@ -94,17 +95,26 @@ export function TopicGroup({
         {materials.map((material) => {
           const original = materials.find((row) => row.id === material.duplicateOfId)
           return (
-            <li key={material.id} className="flex flex-wrap items-center gap-2">
-              <span className={material.duplicateOfId ? 'text-fg-muted' : 'text-fg-soft'}>
+            <li key={material.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              {/* Názvy souborů bývají dlouhé a bez mezer, proto se musí zalomit i uprostřed slova. */}
+              <span
+                className={cn(
+                  'min-w-0 break-all',
+                  material.duplicateOfId ? 'text-fg-muted' : 'text-fg-soft',
+                )}
+                title={material.fileName}
+              >
                 {material.fileName}
               </span>
-              <span className="text-fg-muted">
+              <span className="shrink-0 text-fg-muted">
                 {material.charCount.toLocaleString('cs')} znaků
                 {material.pageCount ? `, ${material.pageCount} str.` : ''}
               </span>
-              {material.needsOcr ? <Badge className="bg-draft-bg text-draft-fg">skoro bez textu</Badge> : null}
+              {material.needsOcr ? (
+                <Badge className="shrink-0 bg-draft-bg text-draft-fg">skoro bez textu</Badge>
+              ) : null}
               {material.duplicateOfId ? (
-                <span className="text-xs text-fg-muted">
+                <span className="min-w-0 break-all text-xs text-fg-muted">
                   stejný obsah jako {original?.fileName ?? 'jiný materiál'}
                   {material.duplicateScore ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)` : ''}
                 </span>
@@ -117,7 +127,7 @@ export function TopicGroup({
                     value !== 'presun' && void call('PUT', { materialId: material.id, topicId: value })
                   }
                 >
-                  <SelectTrigger className="ml-auto w-56">
+                  <SelectTrigger className="ml-auto w-full shrink-0 sm:w-56">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
