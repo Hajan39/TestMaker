@@ -65,13 +65,30 @@ function estimateHeaderHeight(config: TemplateConfig): number {
 }
 
 /**
+ * Bezpečnostní rezerva pro odhad výšky položky. Porovnání s doopravdy
+ * vykresleným PDF (viz `render-samples.test.ts`) ukázalo, že hrubý odhad
+ * bez rezervy systematicky podhodnocuje skutečnou výšku — u devíti ukázkových
+ * otázek v kompaktní šabloně předpověděl jednu stranu, skutečné PDF
+ * potřebovalo dvě. Otázka se navíc na stránce nedělí (kromě typu `open`),
+ * takže i malé podhodnocení u otázek před ní může celou další otázku
+ * vytlačit na novou stranu a odhad selže. Učitelka se podle odhadu rozhoduje,
+ * kolik kopií poslat do tiskárny — raději o stranu navíc v náhledu, než aby
+ * jí vytiskárna nečekaně vytiskla neúplnou písemku.
+ */
+const SAFETY_MARGIN = 1.15
+
+/**
  * Odhad výšky vykreslené položky v bodech (PDF pt). Slouží hrubému náhledu v
  * prohlížeči a stránkování — nejde o přesný layout, jen o to, aby se test
- * rozdělil na stránky přibližně stejně jako skutečné PDF.
+ * rozdělil na stránky přibližně stejně jako skutečné PDF (raději s rezervou,
+ * viz `SAFETY_MARGIN`).
  */
 export function estimateHeight(item: ResolvedTestItem, config: TemplateConfig): number {
   if (item.kind === 'page_break') return 0
+  return rawEstimateHeight(item, config) * SAFETY_MARGIN
+}
 
+function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): number {
   const line = lineHeight(config)
 
   if (item.kind === 'heading') {

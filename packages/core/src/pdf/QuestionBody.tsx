@@ -4,6 +4,7 @@ import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
 import { displayOrder } from './shuffle'
 import { LETTERS } from './styles'
+import { sanitizeText } from './text'
 
 interface Props {
   question: Question
@@ -15,6 +16,13 @@ interface Props {
 
 const BORDER = '1pt solid #444'
 const LIGHT = '0.6pt solid #999'
+
+/**
+ * Strop výšky obrázku v bodech (PDF pt). Bez něj by vysoký obrázek (např.
+ * naskenovaná fotka na výšku) mohl zabrat celou stránku a vytlačit zbytek
+ * otázky na další stranu, aniž by to bylo z dat vidět dopředu.
+ */
+const IMAGE_MAX_HEIGHT = 260
 
 /** Tělo otázky — vše pod zadáním: možnosti, linky, tabulky, obrázky. */
 export function QuestionBody({ question, style, config, variant, assets }: Props) {
@@ -31,19 +39,34 @@ export function QuestionBody({ question, style, config, variant, assets }: Props
 function BlockView({ block, assets }: { block: Block; assets: Record<string, string> }) {
   if (block.kind === 'image') {
     const src = assets[block.assetId]
-    if (!src) return null
     return (
       <View style={{ marginTop: 6, marginBottom: 4, width: `${block.widthPercent}%` }}>
-        <Image src={src} />
+        {src ? (
+          <Image src={src} style={{ maxHeight: IMAGE_MAX_HEIGHT, objectFit: 'contain' }} />
+        ) : (
+          // Chybějící příloha se dřív tiše přeskočila — na vytištěné písemce tak
+          // vzniklo nevysvětlené prázdné místo. Radši viditelné upozornění.
+          <View
+            style={{
+              border: LIGHT,
+              padding: 8,
+              minHeight: 32,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 9, color: '#a33' }}>[Obrázek se nepodařilo načíst]</Text>
+          </View>
+        )}
         {block.caption ? (
-          <Text style={{ fontSize: 8, color: '#555', marginTop: 2 }}>{block.caption}</Text>
+          <Text style={{ fontSize: 8, color: '#555', marginTop: 2 }}>{sanitizeText(block.caption)}</Text>
         ) : null}
       </View>
     )
   }
   return (
     <View style={{ marginTop: 6, marginBottom: 4 }}>
-      {block.caption ? <Text style={{ fontSize: 9, marginBottom: 2 }}>{block.caption}</Text> : null}
+      {block.caption ? <Text style={{ fontSize: 9, marginBottom: 2 }}>{sanitizeText(block.caption)}</Text> : null}
       <View style={{ border: LIGHT }}>
         {block.rows.map((row, r) => (
           <View key={r} style={{ flexDirection: 'row', borderBottom: r < block.rows.length - 1 ? LIGHT : undefined }}>
@@ -59,7 +82,7 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
                 }}
               >
                 <Text style={{ fontWeight: cell.header ? 'bold' : 'normal' }}>
-                  {cell.blank ? '' : cell.text}
+                  {cell.blank ? '' : sanitizeText(cell.text)}
                 </Text>
               </View>
             ))}
@@ -114,7 +137,7 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
               }}
             >
               <View style={{ flex: 1, padding: 4 }}>
-                <Text>{statement.text}</Text>
+                <Text>{sanitizeText(statement.text)}</Text>
               </View>
               <View style={{ width: 44, borderLeft: LIGHT }} />
               <View style={{ width: 44, borderLeft: LIGHT }} />
@@ -126,10 +149,14 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
     case 'fill_blank':
       return (
         <View style={{ marginTop: 6 }}>
-          <Text style={{ lineHeight: 1.9 }}>{question.payload.text.replace(/___/g, ' ______________ ')}</Text>
+          <Text style={{ lineHeight: 1.9 }}>
+            {sanitizeText(question.payload.text).replace(/___/g, ' ______________ ')}
+          </Text>
           {question.payload.wordBank.length > 0 ? (
             <View style={{ marginTop: 6, padding: 5, border: LIGHT }}>
-              <Text style={{ fontSize: 9 }}>Nabídka: {question.payload.wordBank.join(' • ')}</Text>
+              <Text style={{ fontSize: 9 }}>
+                Nabídka: {question.payload.wordBank.map(sanitizeText).join(' • ')}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -137,23 +164,26 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
 
     case 'matching':
       return (
-        <View style={{ flexDirection: 'row', marginTop: 6 }}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            {question.payload.left.map((item, i) => (
-              <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
-                <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
-                <Text style={{ flex: 1 }}>
-                  {i + 1}. {item}
+        <View style={{ marginTop: 6 }}>
+          <AnswerHint text="Do rámečku napiš písmeno možnosti vpravo, která patří k položce vlevo." />
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              {question.payload.left.map((item, i) => (
+                <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
+                  <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
+                  <Text style={{ flex: 1 }}>
+                    {i + 1}. {sanitizeText(item)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <View style={{ flex: 1, paddingLeft: 8, borderLeft: LIGHT }}>
+              {question.payload.right.map((item, i) => (
+                <Text key={i} style={{ marginBottom: 5 }}>
+                  {LETTERS[i] ?? i + 1}) {sanitizeText(item)}
                 </Text>
-              </View>
-            ))}
-          </View>
-          <View style={{ flex: 1, paddingLeft: 8, borderLeft: LIGHT }}>
-            {question.payload.right.map((item, i) => (
-              <Text key={i} style={{ marginBottom: 5 }}>
-                {LETTERS[i] ?? i + 1}) {item}
-              </Text>
-            ))}
+              ))}
+            </View>
           </View>
         </View>
       )
@@ -162,10 +192,11 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
       const order = displayOrder(question, variant)
       return (
         <View style={{ marginTop: 6 }}>
+          <AnswerHint text="Do rámečku napiš pořadové číslo (1, 2, 3, …), v jakém pořadí položky jdou za sebou." />
           {order.map((sourceIndex, i) => (
             <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
               <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
-              <Text style={{ flex: 1 }}>{question.payload.items[sourceIndex]}</Text>
+              <Text style={{ flex: 1 }}>{sanitizeText(question.payload.items[sourceIndex] ?? '')}</Text>
             </View>
           ))}
         </View>
@@ -181,7 +212,7 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
                 key={i}
                 style={{ flex: 1, padding: 4, borderRight: i < question.payload.headers.length - 1 ? LIGHT : undefined }}
               >
-                <Text style={{ fontWeight: 'bold' }}>{header}</Text>
+                <Text style={{ fontWeight: 'bold' }}>{sanitizeText(header)}</Text>
               </View>
             ))}
           </View>
@@ -195,7 +226,7 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
                   key={c}
                   style={{ flex: 1, padding: 4, minHeight: 18, borderRight: c < row.length - 1 ? LIGHT : undefined }}
                 >
-                  <Text>{cell ?? ''}</Text>
+                  <Text>{cell ? sanitizeText(cell) : ''}</Text>
                 </View>
               ))}
             </View>
@@ -207,7 +238,22 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
       const src = assets[question.payload.assetId]
       return (
         <View style={{ marginTop: 6 }}>
-          {src ? <Image src={src} style={{ width: '70%' }} /> : null}
+          {src ? (
+            <Image src={src} style={{ width: '70%', maxHeight: IMAGE_MAX_HEIGHT, objectFit: 'contain' }} />
+          ) : (
+            <View
+              style={{
+                width: '70%',
+                border: LIGHT,
+                padding: 8,
+                minHeight: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 9, color: '#a33' }}>[Obrázek se nepodařilo načíst]</Text>
+            </View>
+          )}
           {question.payload.labels.map((_, i) => (
             <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 }}>
               <Text>{i + 1}.</Text>
@@ -221,6 +267,16 @@ function AnswerArea({ question, style, config, variant, assets }: Props) {
     default:
       return null
   }
+}
+
+/**
+ * Krátký pokyn, jak vyplnit odpověď (písmeno, nebo pořadové číslo) —
+ * bez něj u přiřazování a řazení žák jen vidí prázdný čtvereček a musí
+ * hádat, co se od něj čeká. Patří do vykreslení, ne do dat otázky, protože
+ * jde o obecné vysvětlení symbolu čtverečku, ne o obsah konkrétní otázky.
+ */
+function AnswerHint({ text }: { text: string }) {
+  return <Text style={{ fontSize: 8, color: '#555', marginBottom: 4 }}>{text}</Text>
 }
 
 function Lines({ count, height }: { count: number; height: number }) {
@@ -258,7 +314,7 @@ function Options({
       ) : (
         <Text style={{ marginRight: 4 }}>{LETTERS[i] ?? i + 1})</Text>
       )}
-      <Text style={{ flex: 1 }}>{option}</Text>
+      <Text style={{ flex: 1 }}>{sanitizeText(option)}</Text>
     </View>
   ))
 

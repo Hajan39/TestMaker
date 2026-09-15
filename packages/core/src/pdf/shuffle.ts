@@ -30,11 +30,27 @@ export function shuffled<T>(items: T[], rand: () => number): T[] {
   return out
 }
 
+/**
+ * Zamíchá pole a zaručí, že se výsledné pořadí liší od vstupního, pokud je
+ * to vůbec možné. Náhodné zamíchání může u krátkého pole (typicky dvě
+ * možnosti) nebo shodou náhod vrátit totéž pořadí — u varianty B by test
+ * pak nesplnil svůj účel (žák by mohl opisovat, protože varianty vyjdou
+ * stejně). Když se `shuffled` netrefí, prohodíme první dvě položky —
+ * deterministicky, ale zaručeně jinak.
+ */
+export function shuffledDistinct<T>(items: T[], rand: () => number): T[] {
+  const out = shuffled(items, rand)
+  if (out.length > 1 && out.every((item, i) => item === items[i])) {
+    ;[out[0], out[1]] = [out[1] as T, out[0] as T]
+  }
+  return out
+}
+
 /** Přeháže možnosti uvnitř otázky a přepočítá správné indexy. */
 export function shuffleQuestion(question: Question, rand: () => number): Question {
   switch (question.type) {
     case 'single_choice': {
-      const order = shuffled(question.payload.options.map((_, i) => i), rand)
+      const order = shuffledDistinct(question.payload.options.map((_, i) => i), rand)
       return {
         ...question,
         payload: {
@@ -45,7 +61,7 @@ export function shuffleQuestion(question: Question, rand: () => number): Questio
       }
     }
     case 'multi_choice': {
-      const order = shuffled(question.payload.options.map((_, i) => i), rand)
+      const order = shuffledDistinct(question.payload.options.map((_, i) => i), rand)
       return {
         ...question,
         payload: {
@@ -58,9 +74,12 @@ export function shuffleQuestion(question: Question, rand: () => number): Questio
       }
     }
     case 'true_false':
-      return { ...question, payload: { ...question.payload, statements: shuffled(question.payload.statements, rand) } }
+      return {
+        ...question,
+        payload: { ...question.payload, statements: shuffledDistinct(question.payload.statements, rand) },
+      }
     case 'matching': {
-      const order = shuffled(question.payload.right.map((_, i) => i), rand)
+      const order = shuffledDistinct(question.payload.right.map((_, i) => i), rand)
       return {
         ...question,
         payload: {
@@ -76,25 +95,51 @@ export function shuffleQuestion(question: Question, rand: () => number): Questio
 }
 
 /**
- * Varianta B: otázky se přeházejí uvnitř sekcí (mezi nadpisy), takže
- * struktura testu zůstane zachovaná, ale pořadí se liší.
+ * Přeháže otázky uvnitř jedné sekce (mezi dvěma hranicemi), ale nechá
+ * nekvestionové položky — pokyny — na jejich původních pozicích. Pokyn
+ * uprostřed sekce (např. „Otázky 5–7 se vztahují k obrázku“) je součástí
+ * sekce, ne její hranicí: otázky před ním a za ním musí jít prohodit mezi
+ * sebou, jinak by se varianta B v okolí pokynu vůbec nezamíchala.
+ */
+function shuffleSection(section: ResolvedTestItem[], rand: () => number): ResolvedTestItem[] {
+  const questionSlots = section
+    .map((item, index) => index)
+    .filter((index) => section[index]!.kind === 'question')
+  if (questionSlots.length < 2) return section
+
+  const questions = questionSlots.map((index) => section[index] as ResolvedTestItem)
+  const shuffledQuestions = shuffledDistinct(questions, rand)
+
+  const out = [...section]
+  questionSlots.forEach((index, i) => {
+    out[index] = shuffledQuestions[i] as ResolvedTestItem
+  })
+  return out
+}
+
+/**
+ * Varianta B: otázky se přeházejí uvnitř sekcí, takže struktura testu
+ * zůstane zachovaná, ale pořadí se liší. Hranicí sekce je nadpis (`heading`)
+ * nebo ruční zalomení strany (`page_break`) — ne pokyn, ten zůstává na svém
+ * místě uvnitř sekce (viz `shuffleSection`).
  */
 export function buildVariant(items: ResolvedTestItem[], variant: 'A' | 'B', testId: string): ResolvedTestItem[] {
   if (variant === 'A') return items
   const rand = seededRandom(hashSeed(`${testId}:B`))
 
   const out: ResolvedTestItem[] = []
-  let bucket: ResolvedTestItem[] = []
+  let section: ResolvedTestItem[] = []
   const flush = () => {
-    if (bucket.length > 0) out.push(...shuffled(bucket, rand))
-    bucket = []
+    if (section.length > 0) out.push(...shuffleSection(section, rand))
+    section = []
   }
 
   for (const item of items) {
-    if (item.kind === 'question') bucket.push(item)
-    else {
+    if (item.kind === 'heading' || item.kind === 'page_break') {
       flush()
       out.push(item)
+    } else {
+      section.push(item)
     }
   }
   flush()

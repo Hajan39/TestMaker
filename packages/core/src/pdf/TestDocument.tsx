@@ -6,6 +6,7 @@ import { formatAnswer } from './answerKey'
 import { QuestionBody } from './QuestionBody'
 import { buildVariant } from './shuffle'
 import { pagePadding, questionLabel } from './styles'
+import { sanitizeText } from './text'
 
 const LIGHT = '0.6pt solid #999'
 
@@ -66,7 +67,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
                 wrap={false}
               >
                 <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold' }}>
-                  {config.sectionStyle.uppercase ? (item.text ?? '').toUpperCase() : item.text}
+                  {sanitizeText(config.sectionStyle.uppercase ? (item.text ?? '').toUpperCase() : (item.text ?? ''))}
                 </Text>
               </View>
             )
@@ -74,7 +75,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
           if (item.kind === 'instruction') {
             return (
               <Text key={item.id} style={{ marginTop: 8, fontStyle: 'italic', color: '#333' }}>
-                {item.text}
+                {sanitizeText(item.text ?? '')}
               </Text>
             )
           }
@@ -131,7 +132,7 @@ function Header({
               textAlign: config.header.title.align,
             }}
           >
-            {config.header.title.uppercase ? test.title.toUpperCase() : test.title}
+            {sanitizeText(config.header.title.uppercase ? test.title.toUpperCase() : test.title)}
             {variant === 'B' ? '  (varianta B)' : ''}
           </Text>
           {showScore ? (
@@ -144,7 +145,16 @@ function Header({
       ) : null}
 
       {test.description ? (
-        <Text style={{ marginBottom: 6, fontStyle: 'italic', color: '#333' }}>{test.description}</Text>
+        <Text style={{ marginBottom: 6, fontStyle: 'italic', color: '#333' }}>
+          {sanitizeText(test.description)}
+        </Text>
+      ) : null}
+
+      {/* Vyučující a poznámka jsou součástí datového modelu testu (`test.header`), ale
+          nejsou to pole, která by žák doplňoval — proto se netisknou přes `config.header.fields`
+          (ta jsou pro linky k vyplnění), ale jako pevný řádek hlavičky, jen pokud jsou vyplněné. */}
+      {test.header.teacher ? (
+        <Text style={{ marginBottom: 6 }}>Vyučující: {sanitizeText(test.header.teacher)}</Text>
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -161,9 +171,9 @@ function Header({
                 paddingRight: 10,
               }}
             >
-              <Text>{field.label}:</Text>
+              <Text>{sanitizeText(field.label)}:</Text>
               {value ? (
-                <Text style={{ marginLeft: 4 }}>{value}</Text>
+                <Text style={{ marginLeft: 4 }}>{sanitizeText(value)}</Text>
               ) : (
                 <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 4, height: 12 }} />
               )}
@@ -171,6 +181,12 @@ function Header({
           )
         })}
       </View>
+
+      {test.header.note ? (
+        <Text style={{ marginBottom: 6, fontStyle: 'italic', color: '#333' }}>
+          Poznámka: {sanitizeText(test.header.note)}
+        </Text>
+      ) : null}
 
       {config.header.rule ? (
         <View style={{ borderBottom: '1pt solid #111', marginTop: 2 }} />
@@ -213,7 +229,7 @@ function QuestionView({
     >
       <View style={{ flexDirection: 'row' }}>
         {label ? <Text style={{ fontWeight: 'bold', marginRight: 5 }}>{label}</Text> : null}
-        <Text style={{ flex: 1, fontWeight: 'bold' }}>{prompt}</Text>
+        <Text style={{ flex: 1, fontWeight: 'bold' }}>{sanitizeText(prompt)}</Text>
         {showPoints ? (
           <Text style={{ fontSize: 8, color: '#555', marginLeft: 6 }}>
             ({formatPoints(points)} b.)
@@ -257,7 +273,7 @@ function KeyPage({
       }}
     >
       <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 2 }}>
-        Klíč – {test.title} (varianta {variant})
+        Klíč – {sanitizeText(test.title)} (varianta {variant})
       </Text>
       {test.graded ? (
         <Text style={{ fontSize: 9, color: '#555', marginBottom: 10 }}>
@@ -271,7 +287,7 @@ function KeyPage({
         if (item.kind === 'heading') {
           return (
             <Text key={item.id} style={{ marginTop: 10, fontWeight: 'bold' }}>
-              {item.text}
+              {sanitizeText(item.text ?? '')}
             </Text>
           )
         }
@@ -283,13 +299,15 @@ function KeyPage({
           <View key={item.id} style={{ marginTop: 6 }} wrap={false}>
             <Text>
               <Text style={{ fontWeight: 'bold' }}>{questionLabel(index, config.numbering) || `${index + 1}.`} </Text>
-              {formatAnswer(question, variant)}
+              {sanitizeText(formatAnswer(question, variant))}
               {test.graded ? (
                 <Text style={{ color: '#555', fontSize: 8 }}> ({formatPoints(points)} b.)</Text>
               ) : null}
             </Text>
             {question.explanation ? (
-              <Text style={{ fontSize: 8, color: '#555', marginLeft: 14 }}>{question.explanation}</Text>
+              <Text style={{ fontSize: 8, color: '#555', marginLeft: 14 }}>
+                {sanitizeText(question.explanation)}
+              </Text>
             ) : null}
           </View>
         )
@@ -313,7 +331,7 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string 
       }}
     >
       <Text style={{ fontSize: 8, color: '#777' }}>
-        {testTitle} · varianta {variant}
+        {sanitizeText(testTitle)} · varianta {variant}
       </Text>
       <Text
         style={{ fontSize: 8, color: '#777' }}
