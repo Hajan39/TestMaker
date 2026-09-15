@@ -21,6 +21,14 @@ Postup je vždy stejný: naimportuj složku s materiály → nech si vygenerovat
   možností, pravda/nepravda, doplňování do textu, přiřazování dvojic, řazení,
   doplňovací tabulka a popis obrázku. Učitel může kteroukoli upravit nebo napsat
   vlastní, včetně tabulek jako přílohy otázky.
+- **Knihovna ve třech sloupcích.** Předměty a ročníky, témata vybraného
+  ročníku a obsah tématu jsou vedle sebe na jedné obrazovce, takže učitelka
+  vidí, kde v ročníku je, aniž by se musela proklikávat tam a zpátky.
+- **Kontrola vygenerovaných konceptů po jedné.** Místo dlouhého seznamu ke
+  schválení jde fronta, která ukáže vždy jednu otázku spolu s úryvkem
+  materiálu, ze kterého vznikla, a ovládá se klávesnicí — schválit, zamítnout,
+  upravit nebo přeskočit bez sahání po myši. Ke každé vygenerované otázce se
+  ukládá i doklad původu: název souboru a citovaná pasáž.
 - **Skládání testu napříč knihovnou.** Do jednoho testu jdou otázky z různých
   témat, ročníků i předmětů — hodí se na čtvrtletky a opakování z loňska. Test
   má vlastní strukturu: nadpisy částí, pokyny, zalomení stránky, libovolný počet
@@ -31,6 +39,9 @@ Postup je vždy stejný: naimportuj složku s materiály → nech si vygenerovat
 - **Šablony jako nastavení.** Vzhled testu je uložený jako data, ne jako kód.
   Náhled šablony je skutečná stránka PDF z téhož rendereru, který dělá i hotový
   test.
+- **Náhled testu při skládání.** Osnova testu se skládá přetahováním a hrubý
+  náhled stránky se přitom počítá přímo v prohlížeči, takže je hned vidět, kam
+  padne zalomení stránky, ještě než se test pošle na vykreslení PDF.
 
 ## Rychlý start
 

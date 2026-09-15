@@ -12,6 +12,41 @@ i texty v rozhraní jsou česky a popisují, co s tím dělat.
   měl umět použít i budoucí agent nebo CLI.
 - `packages/ui` — sdílené React komponenty a design tokeny.
 
+## Design systém
+
+Vzhled celé aplikace drží pohromadě `packages/ui`. Design tokeny (barvy, tvary,
+tloušťky) žijí v `packages/ui/src/styles.css` a odtud se importují do webu —
+nová barva se nepřidává napřímo v komponentě, ale jako token tady, jinak vzniknou
+v aplikaci dvě různá zelená a nikdo nepozná, které je to „správné".
+
+Značková zelená se jmenuje `--color-brand`, ne `accent`. Jméno `accent` patří
+shadcn/ui a znamená u něj jen tiché podbarvení plochy při najetí myší — kdo si
+ta dvě jména splete, zezelenají mu všechna najetí myší v aplikaci.
+
+Komponenty v `packages/ui/src/ui/` pocházejí z shadcn/ui, ale jakmile jednou
+proběhnou přes `shadcn add`, jsou to soubory v tomto repozitáři jako kterékoli
+jiné — commitují se, upravují se, nikdo je znovu negeneruje samovolně. Nad nimi
+stojí doménové komponenty (`AppShell`, `ThreePane`, `NavList`, `StatRow`,
+`ReviewQueue`, `EmptyState`, `QuestionPreview`), které skládají vzhled aplikace
+z těchto základních dílů.
+
+Rozhraní rozlišuje dva důrazy podle toho, jestli plocha patří k navigaci/lištám,
+nebo k obsahu samotnému: třída `surface-chrome` na navigačních plochách a
+`surface-content` na obsahových. Nad svou oblastí přepisují sílu popisků a
+poloměr rohů; komponenty samy o důrazu nevědí a vždy sahají po týchž
+proměnných (`--label-weight`, `--text-strong` apod.), takže stačí obalit
+plochu správnou třídou.
+
+Po každém dalším spuštění `pnpm dlx shadcn add …` v `packages/ui` je nutná
+ruční oprava: CLI generuje importy s aliasem `@/…` (např. `from "@/ui/button"`,
+`from "cn"`), ale tenhle alias se v `apps/web` rozřeší proti aplikaci, ne proti
+balíčku — `packages/ui` se totiž do Next.js vtahuje přes `transpilePackages`,
+takže `@/*` z jeho zdrojáků čte cesty `apps/web/src/*`. Po každém přidání
+komponenty proto přepiš `from "@/ui/<název>"` na `from "./<název>"` a
+`from "cn"` na `from "../cn"` (naše vlastní implementace nad `clsx` a
+`tailwind-merge`) a ověř `grep -rn 'from "@/'` a `grep -rn 'from "cn"'` v
+`packages/ui/src/ui/`, že nic nezbylo.
+
 ## Pravidla
 
 **Jazyk.** Kód, komentáře, commity a dokumentace anglicky nejsou — projekt je

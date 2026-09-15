@@ -6,6 +6,14 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Fronta ke kontrole vygenerovaných konceptů.** Otázky se procházejí jedna po
+  druhé místo dlouhého seznamu, u každé je vidět úryvek materiálu, ze kterého
+  vznikla, a schválit, zamítnout, upravit nebo přeskočit jde jen klávesnicí —
+  psaní vlastního textu do políčka se přitom se zkratkami nekříží.
+- **Doklad původu u vygenerované otázky.** Ke každé otázce z modelu se ukládá
+  název materiálu a citovaná pasáž, ze které vznikla, takže učitelka může
+  ověřit, odkud se odpověď vzala, než ji schválí.
+
 - **Import materiálů z celé složky.** Text z PDF, ODP, ODT, ODS, DOCX, HTML a
   prostého textu se extrahuje v prohlížeči ve web workeru; na server jde jen
   text. Stejný import je k dispozici i jako skript nad složkou na disku.
@@ -32,3 +40,13 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   variantami A/B. Test může být i bez známek.
 - **Tři vestavěné šablony** (Klasická, Kompaktní, Pracovní list) uložené jako
   nastavení, ne jako kód. Náhled šablony je skutečná stránka PDF.
+
+### Změněno
+
+- **Redesign rozhraní.** Knihovna se teď prochází ve třech sloupcích vedle
+  sebe — předměty a ročníky, témata vybraného ročníku a obsah tématu —, takže
+  učitelka vidí souvislosti a nemusí se proklikávat zpátky. Skládání testu se
+  rozpadlo na banku otázek, hrubý náhled stránky, který se skládá přímo v
+  prohlížeči, a osnovu testu, kterou lze přeskládat přetažením. Sjednotil se i
+  vzhled navigace a lišt oproti ploše s obsahem, takže je na první pohled
+  jasné, kde je člověk v aplikaci a kde už pracuje s daty.
