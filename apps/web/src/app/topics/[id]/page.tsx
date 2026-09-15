@@ -1,6 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { StatRow } from '@testmaker/ui'
 import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
@@ -44,6 +45,8 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     loadQuestions({ topicIds: [id] }),
   ])
 
+  const draftCount = questionList.filter((question) => question.status === 'draft').length
+
   return (
     <div className="space-y-5">
       <div>
@@ -53,10 +56,16 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           </Link>
           {topic.gradeName ? ` · ${topic.gradeName}` : ''}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-fg">{topic.name}</h1>
+        <h1 className="mt-1 text-[19px] font-bold tracking-[-0.025em] text-fg">{topic.name}</h1>
       </div>
 
-      <TopicGroup topicId={topic.id} topicName={topic.name} materials={materialRows} />
+      <StatRow
+        items={[
+          { value: materialRows.length, label: 'materiálů' },
+          { value: questionList.length, label: 'otázek' },
+          { value: draftCount, label: 'ke schválení', tone: 'draft' },
+        ]}
+      />
 
       <TopicWorkspace
         topicId={topic.id}
@@ -64,6 +73,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
         ai={aiStatus()}
+        group={<TopicGroup topicId={topic.id} topicName={topic.name} materials={materialRows} />}
       />
     </div>
   )

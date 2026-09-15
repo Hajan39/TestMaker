@@ -41,12 +41,15 @@ export function TopicWorkspace({
   materials,
   questions,
   ai,
+  group,
 }: {
   topicId: string
   topicName: string
   materials: MaterialSummary[]
   questions: Question[]
   ai: { configured: boolean; provider: string; model: string }
+  /** Skupina materiálů — vykreslí se mezi hlavní akcí a seznamem otázek. */
+  group: React.ReactNode
 }) {
   const router = useRouter()
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
@@ -155,6 +158,8 @@ export function TopicWorkspace({
           </div>
         )}
       </Card>
+
+      {group}
 
       <Card className="p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
