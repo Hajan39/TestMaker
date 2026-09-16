@@ -34,6 +34,15 @@ async function reviveAbandoned(): Promise<number> {
  * `remaining > 0` — díky tomu se vejdeme do časového limitu funkce i na Vercelu.
  */
 export async function POST() {
+  return runOne()
+}
+
+/** Totéž pro plánovač (Vercel Cron, cron na Synology). Middleware ho pouští podle CRON_SECRET. */
+export async function GET() {
+  return runOne()
+}
+
+async function runOne() {
   if (!isAiConfigured()) {
     return Response.json({ error: 'AI není nakonfigurovaná' }, { status: 503 })
   }
