@@ -307,5 +307,35 @@ export function validateQuestionContent(q: QuestionContent): string[] {
     default:
       break
   }
+
+  // Slabší modely rády vrátí výběr z možností schovaný do textu zadání a typ
+  // označí jako krátkou odpověď. Na papíře pak stojí „a) … b) … c) …" a pod tím
+  // linka na odpověď, přestože to měl být výběr. Do banky takovou otázku pustit
+  // nesmíme — je to chyba zadání, ne jen jiná forma.
+  if (TYPES_WITHOUT_INLINE_OPTIONS.has(q.type)) {
+    const prompt = (q.payload as { prompt?: unknown }).prompt
+    if (typeof prompt === 'string' && countInlineOptions(prompt) >= 3) {
+      errors.push('zadání obsahuje vypsané možnosti (a), b), c)…) — patří do typu s výběrem, ne sem')
+    }
+  }
+
   return errors
+}
+
+/** Typy, u kterých se možnosti vypisují zvlášť, takže v zadání nemají co dělat. */
+const TYPES_WITHOUT_INLINE_OPTIONS = new Set<QuestionType>([
+  'open',
+  'short_answer',
+  'true_false',
+  'fill_blank',
+])
+
+/**
+ * Kolik značek typu „a)", „B)" nebo „3)" je v textu na začátku výčtu. Hledá se
+ * jen za mezerou nebo na začátku řádku, aby se nechytly zkratky uvnitř věty
+ * („odpověď a) platí" ano, „např) " ne).
+ */
+function countInlineOptions(text: string): number {
+  const matches = text.match(/(^|[\s(])[a-eA-E1-5][).]\s/g)
+  return matches?.length ?? 0
 }

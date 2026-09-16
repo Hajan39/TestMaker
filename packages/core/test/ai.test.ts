@@ -473,3 +473,47 @@ describe('vysvětlení chyb od modelu', () => {
     expect(failure.message.length).toBe(300)
   })
 })
+
+describe('možnosti vypsané v zadání', () => {
+  it('krátká odpověď s vypsanými možnostmi neprojde', () => {
+    const chyby = validateQuestionContent({
+      type: 'short_answer',
+      payload: {
+        prompt:
+          'Které znaky jsou typické pro bezlebečné? a) struna zaniká b) chorda zůstává c) žijí na souši',
+        answer: 'b',
+        acceptedAnswers: [],
+      },
+      blocks: [],
+      points: 1,
+      difficulty: 2,
+    })
+    expect(chyby.join(' ')).toContain('vypsané možnosti')
+  })
+
+  it('výběr z možností se stejným textem projde, tam možnosti patří', () => {
+    const chyby = validateQuestionContent({
+      type: 'single_choice',
+      payload: {
+        prompt: 'Které znaky jsou typické pro bezlebečné?',
+        options: ['Struna zaniká', 'Chorda zůstává', 'Žijí na souši'],
+        correctIndex: 1,
+      },
+      blocks: [],
+      points: 1,
+      difficulty: 2,
+    })
+    expect(chyby).toEqual([])
+  })
+
+  it('běžná věta se závorkou otázku nezahodí', () => {
+    const chyby = validateQuestionContent({
+      type: 'open',
+      payload: { prompt: 'Popiš, jak probíhá dýchání (výměna plynů) v plicích.', lines: 4, answer: 'x' },
+      blocks: [],
+      points: 3,
+      difficulty: 2,
+    })
+    expect(chyby).toEqual([])
+  })
+})

@@ -46,6 +46,7 @@ export function buildSystemPrompt(): string {
     '8. Rozlož otázky po celém materiálu, ne jen po jeho začátku.',
     '9. Nepoužívej odkazy na "obrázek na slidu" ani na číslování stránek zdroje.',
     '10. Ke každé otázce vyplň evidence: název souboru ze záhlaví === … === a doslovnou větu z materiálu, o kterou se správná odpověď opírá.',
+    '11. Drž se zadaného typu otázky. Možnosti k výběru patří jedině do pole `options`; do textu zadání je nikdy nevypisuj jako "a) … b) … c) …". Když má otázka nabízet možnosti, musí mít typ s výběrem.',
   ].join('\n')
 }
 
