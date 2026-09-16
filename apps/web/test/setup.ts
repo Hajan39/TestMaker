@@ -38,5 +38,9 @@ await migrate(drizzle(client), {
 client.close()
 
 afterAll(() => {
-  rmSync(dir, { recursive: true, force: true })
+  // Na Windows drží libsql soubor databáze otevřený i po skončení testů a smazání
+  // skončí EPERM. Neuklizená dočasná složka je menší zlo než červený běh.
+  try {
+    rmSync(dir, { recursive: true, force: true })
+  } catch {}
 })

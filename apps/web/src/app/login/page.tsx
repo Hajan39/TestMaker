@@ -44,7 +44,7 @@ export default function LoginPage() {
           />
         </div>
         {error ? <p className="text-sm text-danger-600">{error}</p> : null}
-        <Button type="submit" variant="primary" disabled={busy || password.length === 0}>
+        <Button type="submit" disabled={busy || password.length === 0}>
           Přihlásit se
         </Button>
       </form>
