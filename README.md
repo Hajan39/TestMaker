@@ -62,10 +62,10 @@ když modelu dojde limit nebo je přetížený.
 AI_MODELS=google:gemini-flash-latest,google:gemini-flash-lite-latest
 ```
 
-Položka může určit i poskytovatele (`google:`, `anthropic:`, `ollama:`), takže
-jde míchat Gemini a Claude; bez dvojtečky patří model poskytovateli podle
-`AI_PROVIDER`. Bez `AI_MODELS` se použije jediný model podle `AI_PROVIDER`
-a `AI_MODEL` — přesně jako dřív. Placený model se zapojí jedině tím, že ho do
+Položka může určit i poskytovatele (`google:`, `anthropic:`, `ollama:`
+a služby s rozhraním OpenAI níž), takže jde míchat Gemini a Claude; bez
+dvojtečky patří model poskytovateli podle `AI_PROVIDER`. Bez `AI_MODELS` se
+použije jediný model podle `AI_PROVIDER` a `AI_MODEL` — přesně jako dřív. Placený model se zapojí jedině tím, že ho do
 žebříčku sám napíšeš; nic se na placeného poskytovatele nepřepne samo.
 
 Přepíná se po dávce, ne po tématu: otázky, které už jsou uložené, zůstávají
@@ -82,6 +82,56 @@ nebo z přepínače:
 ```bash
 pnpm --filter @testmaker/web generate:bulk -- --all --target 10 \
   --models google:gemini-flash-latest,google:gemini-flash-lite-latest
+```
+
+### Jeden klíč na víc modelů
+
+Každý další poskytovatel v žebříčku obvykle znamená další registraci a další
+klíč. Služby s rozhraním OpenAI („OpenAI-compatible") to obcházejí: u jedné
+z nich si založíš účet jednou a její klíč otevře modely od různých výrobců —
+žebříček se pak dá složit z nich. Nejširší nabídku (a nejvíc modelů zdarma) má
+OpenRouter.
+
+| Služba | Předpona v `AI_MODELS` | Klíč | Kde ho vzít |
+| --- | --- | --- | --- |
+| OpenRouter | `openrouter:` | `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
+| Groq | `groq:` | `GROQ_API_KEY` | https://console.groq.com/keys |
+| Mistral | `mistral:` | `MISTRAL_API_KEY` | https://console.mistral.ai |
+| DeepInfra | `deepinfra:` | `DEEPINFRA_API_KEY` | https://deepinfra.com/dash/api_keys |
+| Together | `together:` | `TOGETHER_API_KEY` | https://api.together.ai/settings/api-keys |
+
+Adresu služby psát nemusíš, ke každé je zabudovaná; přebít ji jde proměnnou
+`OPENROUTER_BASE_URL` (a obdobně u ostatních). Do `.env.local` tedy stačí klíč
+a žebříček — doporučené nastavení pro toho, kdo chce vystačit s jedním klíčem:
+
+```bash
+OPENROUTER_API_KEY=sk-or-…
+# Modely si vyber v seznamu níž — nabídka bezplatných se u OpenRouteru mění,
+# takže tenhle řádek ber jako tvar, ne jako doporučení konkrétních jmen.
+AI_MODELS=openrouter:nvidia/nemotron-3.5-lightning:free,openrouter:dots-studio/dots-3-note-preview:free
+```
+
+Modely zdarma poznáš podle `:free` na konci názvu. Jejich nabídka se u
+OpenRouteru mění (model, který je dnes zdarma, může za měsíc zmizet), takže
+než žebříček napíšeš, projdi aktuální seznam na
+https://openrouter.ai/models?q=free. Dvojtečka uvnitř názvu modelu ničemu
+nevadí — za poskytovatele se bere jen první slovo před dvojtečkou, a jen když
+je to název známé služby (stejně jako u `ollama:qwen3:14b`).
+
+Když limit dojde i u posledního modelu žebříčku, generování skončí českou
+hláškou o vyčerpaném limitu; otázky, které do té chvíle vznikly, zůstanou
+v tématu uložené a druhý den se dá jen spustit generování znovu. Kdyby se
+čekat nechtělo, dopiš na konec žebříčku placený model — přepne se na něj jedině
+proto, že tam je.
+
+Stejnou cestou jde oslovit i vlastní adresu: model běžící na jiném počítači,
+v LM Studiu nebo za vlastní proxy. Klíč je u ní nepovinný, adresa povinná
+a model musíš napsat vždycky:
+
+```bash
+AI_PROVIDER=custom
+AI_MODEL=qwen3-14b
+CUSTOM_BASE_URL=http://127.0.0.1:1234/v1
 ```
 
 Generování otázek běží v pozadí — fronta se zpracuje, dokud je aplikace otevřená

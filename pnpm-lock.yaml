@@ -126,6 +126,9 @@ importers:
       '@ai-sdk/google':
         specifier: ^4.0.72
         version: 4.0.72(zod@4.6.5)
+      '@ai-sdk/openai-compatible':
+        specifier: ^3.0.49
+        version: 3.0.49(zod@4.6.5)
       '@react-pdf/renderer':
         specifier: ^4.9.0
         version: 4.9.0(react@19.3.0)
@@ -247,6 +250,12 @@ packages:
 
   '@ai-sdk/google@4.0.72':
     resolution: {integrity: sha512-0e8BKY1/P9/YJ2K09jNG3E0PZlsvtN3dugBjmfCc8vEEQr28tpkv/KB1V6cP3CHw4MKxqQU4wppPYUntpkiM1w==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@3.0.49':
+    resolution: {integrity: sha512-BuJp3/ujLkOf0wdMLPrI68ceyGUr85MrUvccJX+OXJ18imILzyN0B6JQf+8HbBBqqYwzTOvtwqMCbjHI1XBt6Q==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -4723,6 +4732,12 @@ snapshots:
       zod: 4.6.5
 
   '@ai-sdk/google@4.0.72(zod@4.6.5)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.15
+      '@ai-sdk/provider-utils': 5.0.41(zod@4.6.5)
+      zod: 4.6.5
+
+  '@ai-sdk/openai-compatible@3.0.49(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 4.0.15
       '@ai-sdk/provider-utils': 5.0.41(zod@4.6.5)

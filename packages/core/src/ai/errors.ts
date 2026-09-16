@@ -28,8 +28,9 @@ export function describeAiError(error: unknown): AiFailure {
   if (lower.includes('exceeded your current quota') || lower.includes('free_tier') || lower.includes('rate limit')) {
     return {
       message:
-        'Vyčerpaný limit modelu. U bezplatného tarifu Gemini se počítá na den — zkus to znovu zítra, ' +
-        'přepni v .env.local na jiný model (AI_MODEL), nebo použij klíč k placenému tarifu.',
+        'Vyčerpaný limit modelu. U bezplatných tarifů (Gemini, OpenRouter a spol.) se počítá na den — ' +
+        'zkus to znovu zítra, dopiš do .env.local další model do žebříčku (AI_MODELS), přepni na jiný ' +
+        'model (AI_MODEL), nebo použij klíč k placenému tarifu.',
       retryable: true,
     }
   }
