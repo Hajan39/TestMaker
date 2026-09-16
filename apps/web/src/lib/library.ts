@@ -146,28 +146,24 @@ export async function searchLibrary(query: string): Promise<LibrarySearchResult[
 }
 
 /**
- * Najde nebo založí téma podle názvů předmětu, ročníku a tématu.
+ * Najde nebo založí předmět daného názvu.
  *
- * Když `group` platí, soubor se připojí k existujícímu tématu se stejným
- * obsahovým názvem („Měkkýši“ a „6.22 Měkkýši (Mollusca)“). Jedno téma je
- * skupina materiálů, ze které se pak generuje dohromady.
+ * Patra knihovny (předmět → ročník → téma) mají každé svou funkci, aby šlo
+ * založit i samotný předmět bez ročníku a tématu. `ensureTopic` je jen skládá
+ * dohromady — jiná cesta k založení položky v knihovně neexistuje.
  */
-export async function ensureTopic(input: {
-  subject: string
-  grade: string | null
-  topic: string
-  group?: boolean
-}): Promise<string> {
-  const subjectName = input.subject.trim()
-  const gradeName = (input.grade ?? '').trim()
-  const topicName = input.topic.trim()
-
-  const subjectId = await upsertReturningId(
+export async function ensureSubject(name: string): Promise<string> {
+  const subjectName = name.trim()
+  return upsertReturningId(
     () => db.select({ id: subjects.id }).from(subjects).where(eq(subjects.name, subjectName)).limit(1),
     (id) => db.insert(subjects).values({ id, name: subjectName }).onConflictDoNothing(),
   )
+}
 
-  const gradeId = await upsertReturningId(
+/** Najde nebo založí ročník daného názvu v předmětu. Prázdný název znamená „bez ročníku“. */
+export async function ensureGradeIn(subjectId: string, name: string): Promise<string> {
+  const gradeName = name.trim()
+  return upsertReturningId(
     () =>
       db
         .select({ id: grades.id })
@@ -180,6 +176,21 @@ export async function ensureTopic(input: {
         .values({ id, subjectId, name: gradeName, position: gradePosition(gradeName) })
         .onConflictDoNothing(),
   )
+}
+
+/**
+ * Najde nebo založí téma daného názvu v ročníku.
+ *
+ * Když `group` platí, materiál se připojí k existujícímu tématu se stejným
+ * obsahovým názvem („Měkkýši“ a „6.22 Měkkýši (Mollusca)“). Při ručním
+ * zakládání se slučování vypíná: co učitelka napíše, má vzniknout přesně tak.
+ */
+export async function ensureTopicIn(
+  gradeId: string,
+  name: string,
+  options: { group?: boolean } = {},
+): Promise<string> {
+  const topicName = name.trim()
 
   const [exact] = await db
     .select({ id: topics.id })
@@ -188,7 +199,7 @@ export async function ensureTopic(input: {
     .limit(1)
   if (exact) return exact.id
 
-  if (input.group !== false) {
+  if (options.group !== false) {
     const siblings = await db
       .select({ id: topics.id, name: topics.name })
       .from(topics)
@@ -205,13 +216,36 @@ export async function ensureTopic(input: {
   }
 
   const id = newId()
-  await db.insert(topics).values({ id, gradeId, name: topicName }).onConflictDoNothing()
+  // Čerstvé téma nemá žádný materiál, takže použitelného textu má nula —
+  // `lowContent` to musí říct rovnou, ne až po prvním přepočtu.
+  await db
+    .insert(topics)
+    .values({ id, gradeId, name: topicName, usableCharCount: 0, lowContent: true })
+    .onConflictDoNothing()
   const [created] = await db
     .select({ id: topics.id })
     .from(topics)
     .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
     .limit(1)
   return created?.id ?? id
+}
+
+/**
+ * Najde nebo založí téma podle názvů předmětu, ročníku a tématu.
+ *
+ * Když `group` platí, soubor se připojí k existujícímu tématu se stejným
+ * obsahovým názvem. Jedno téma je skupina materiálů, ze které se pak generuje
+ * dohromady.
+ */
+export async function ensureTopic(input: {
+  subject: string
+  grade: string | null
+  topic: string
+  group?: boolean
+}): Promise<string> {
+  const subjectId = await ensureSubject(input.subject)
+  const gradeId = await ensureGradeIn(subjectId, input.grade ?? '')
+  return ensureTopicIn(gradeId, input.topic, { group: input.group })
 }
 
 /** Ročník řadíme číselně, prázdný ("bez ročníku") jde první. */
@@ -230,6 +264,199 @@ async function upsertReturningId(
   await insert(id)
   const after = await find()
   return after[0]?.id ?? id
+}
+
+/** Patro knihovny, se kterým se pracuje. */
+export type LibraryKind = 'subject' | 'grade' | 'topic'
+
+/** Hotovo: id založené nebo přejmenované položky. */
+export interface LibraryDone {
+  ok: true
+  id: string
+}
+
+/** Odmítnutí i s hláškou pro učitelku; `status` jde rovnou do odpovědi API. */
+export interface LibraryRefusal {
+  ok: false
+  status: number
+  error: string
+}
+
+export type LibraryResult = LibraryDone | LibraryRefusal
+
+const KIND_LABEL: Record<LibraryKind, string> = {
+  subject: 'Předmět',
+  grade: 'Ročník',
+  topic: 'Téma',
+}
+
+/**
+ * Založí předmět, ročník nebo téma ručně, bez importu materiálů.
+ *
+ * Ročník bez předmětu ani téma bez ročníku neexistují — chybějící nadřazená
+ * položka je odmítnutí s vysvětlením, ne pád.
+ */
+export async function createLibraryItem(input: {
+  kind: LibraryKind
+  name: string
+  parentId?: string | null
+}): Promise<LibraryResult> {
+  const name = input.name.trim()
+  if (!name) return { ok: false, status: 400, error: `${KIND_LABEL[input.kind]} se bez názvu založit nedá.` }
+
+  if (input.kind === 'subject') {
+    if (await findSubjectByName(name)) {
+      return { ok: false, status: 409, error: `Předmět „${name}“ v knihovně už je.` }
+    }
+    return { ok: true, id: await ensureSubject(name) }
+  }
+
+  if (input.kind === 'grade') {
+    if (!input.parentId) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Ročník patří vždy do nějakého předmětu. Vyber nejdřív předmět, pod který ho chceš založit.',
+      }
+    }
+    const [subject] = await db
+      .select({ id: subjects.id })
+      .from(subjects)
+      .where(eq(subjects.id, input.parentId))
+      .limit(1)
+    if (!subject) {
+      return { ok: false, status: 404, error: 'Předmět, do kterého měl ročník patřit, v knihovně není.' }
+    }
+    if (await findGradeByName(subject.id, name)) {
+      return { ok: false, status: 409, error: `Ročník „${name}“ v tomto předmětu už je.` }
+    }
+    return { ok: true, id: await ensureGradeIn(subject.id, name) }
+  }
+
+  if (!input.parentId) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Téma patří vždy do nějakého ročníku. Vyber nejdřív ročník, ve kterém má téma vzniknout.',
+    }
+  }
+  const [grade] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(eq(grades.id, input.parentId))
+    .limit(1)
+  if (!grade) {
+    return { ok: false, status: 404, error: 'Ročník, do kterého mělo téma patřit, v knihovně není.' }
+  }
+  if (await findTopicByName(grade.id, name)) {
+    return { ok: false, status: 409, error: `Téma „${name}“ v tomto ročníku už je.` }
+  }
+  return { ok: true, id: await ensureTopicIn(grade.id, name, { group: false }) }
+}
+
+/**
+ * Přejmenuje předmět, ročník nebo téma.
+ *
+ * Dva předměty téhož jména ani dva ročníky stejného jména v jednom předmětu
+ * nejsou možné (brání tomu unikátní index) — místo chyby z databáze se vrací
+ * odmítnutí s návodem, co s tím.
+ */
+export async function renameLibraryItem(input: {
+  kind: LibraryKind
+  id: string
+  name: string
+}): Promise<LibraryResult> {
+  const name = input.name.trim()
+  if (!name) return { ok: false, status: 400, error: 'Název nesmí zůstat prázdný.' }
+
+  if (input.kind === 'subject') {
+    const [subject] = await db
+      .select({ id: subjects.id, name: subjects.name })
+      .from(subjects)
+      .where(eq(subjects.id, input.id))
+      .limit(1)
+    if (!subject) return { ok: false, status: 404, error: 'Předmět v knihovně není.' }
+    if (subject.name === name) return { ok: true, id: subject.id }
+
+    const duplicate = await findSubjectByName(name)
+    if (duplicate && duplicate.id !== subject.id) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Předmět „${name}“ v knihovně už je. Dva předměty téhož jména by nešlo rozlišit — zvol jiný název, nebo ročníky z tohoto předmětu přeřaď po tématech do toho druhého a tenhle smaž.`,
+      }
+    }
+    await db.update(subjects).set({ name }).where(eq(subjects.id, subject.id))
+    return { ok: true, id: subject.id }
+  }
+
+  if (input.kind === 'grade') {
+    const [grade] = await db
+      .select({ id: grades.id, name: grades.name, subjectId: grades.subjectId })
+      .from(grades)
+      .where(eq(grades.id, input.id))
+      .limit(1)
+    if (!grade) return { ok: false, status: 404, error: 'Ročník v knihovně není.' }
+    if (grade.name === name) return { ok: true, id: grade.id }
+
+    const duplicate = await findGradeByName(grade.subjectId, name)
+    if (duplicate && duplicate.id !== grade.id) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Ročník „${name}“ v tomto předmětu už je. Zvol jiný název, nebo témata odtud přesuň do něj — v podrobnostech tématu přes „Upravit skupinu“ a volbu ročníku.`,
+      }
+    }
+    // Řazení ročníků se počítá z názvu, takže se musí přepočítat spolu s ním —
+    // jinak by přejmenovaný „9. ročník“ zůstal viset tam, kde byl „2. ročník“.
+    await db
+      .update(grades)
+      .set({ name, position: gradePosition(name) })
+      .where(eq(grades.id, grade.id))
+    return { ok: true, id: grade.id }
+  }
+
+  const [topic] = await db
+    .select({ id: topics.id, name: topics.name, gradeId: topics.gradeId })
+    .from(topics)
+    .where(eq(topics.id, input.id))
+    .limit(1)
+  if (!topic) return { ok: false, status: 404, error: 'Téma v knihovně není.' }
+  if (topic.name === name) return { ok: true, id: topic.id }
+
+  const duplicate = await findTopicByName(topic.gradeId, name)
+  if (duplicate && duplicate.id !== topic.id) {
+    return {
+      ok: false,
+      status: 409,
+      error: `Téma „${name}“ v tomto ročníku už je. Zvol jiný název, nebo obě témata spoj — v podrobnostech tématu přes „Upravit skupinu“ a „Sloučit do jiné skupiny“.`,
+    }
+  }
+  await db.update(topics).set({ name }).where(eq(topics.id, topic.id))
+  return { ok: true, id: topic.id }
+}
+
+async function findSubjectByName(name: string): Promise<{ id: string } | undefined> {
+  const [row] = await db.select({ id: subjects.id }).from(subjects).where(eq(subjects.name, name)).limit(1)
+  return row
+}
+
+async function findGradeByName(subjectId: string, name: string): Promise<{ id: string } | undefined> {
+  const [row] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(and(eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .limit(1)
+  return row
+}
+
+async function findTopicByName(gradeId: string, name: string): Promise<{ id: string } | undefined> {
+  const [row] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, name)))
+    .limit(1)
+  return row
 }
 
 /** Názvy témat pro zobrazení u otázek. */

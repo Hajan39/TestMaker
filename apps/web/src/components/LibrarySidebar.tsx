@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { NavList } from '@testmaker/ui'
 import type { SubjectNode } from '@/lib/library'
 import { LibrarySearch } from '@/components/LibrarySearch'
+import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 
 /** První sloupec: hledání přes celou knihovnu, pak předměty jako popisky, ročníky jako položky. */
 export function LibrarySidebar({
@@ -16,7 +17,11 @@ export function LibrarySidebar({
       <LibrarySearch />
       {tree.map((subject) => (
         <div key={subject.id}>
-          <p className="ui-label mb-1 px-2">{subject.name}</p>
+          <div className="mb-1 flex items-center justify-between gap-1 px-2">
+            <p className="ui-label min-w-0 truncate">{subject.name}</p>
+            {/* Ročník se zakládá tam, kde jsou ročníky vidět — tedy u předmětu. */}
+            <NewLibraryItem kind="grade" parentId={subject.id} label="+ ročník" variant="ghost" />
+          </div>
           <NavList
             activeId={activeGradeId}
             items={subject.grades.map((grade) => ({
@@ -33,6 +38,9 @@ export function LibrarySidebar({
           />
         </div>
       ))}
+      <div className="px-2">
+        <NewLibraryItem kind="subject" />
+      </div>
     </nav>
   )
 }

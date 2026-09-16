@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
+import { createLibraryItem, renameLibraryItem } from '@/lib/library'
 
 export const runtime = 'nodejs'
 
@@ -32,6 +33,42 @@ export async function GET(request: Request) {
   const impact = await measure(kind.data, id)
   if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
   return Response.json(impact)
+}
+
+const createSchema = z.object({
+  kind: kindSchema,
+  name: z.string().max(200),
+  /** Předmět u ročníku, ročník u tématu. U předmětu se nevyplňuje. */
+  parentId: z.string().min(1).nullish(),
+})
+
+const renameSchema = z.object({
+  kind: kindSchema,
+  id: z.string().min(1),
+  name: z.string().max(200),
+})
+
+/**
+ * Založí předmět, ročník nebo téma ručně — bez importu materiálů.
+ * Učitelka si tak může připravit prázdné téma a napsat si do něj vlastní otázky.
+ */
+export async function POST(request: Request) {
+  const parsed = createSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+
+  const result = await createLibraryItem(parsed.data)
+  if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
+  return Response.json({ ok: true, id: result.id })
+}
+
+/** Přejmenuje předmět, ročník nebo téma. */
+export async function PATCH(request: Request) {
+  const parsed = renameSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+
+  const result = await renameLibraryItem(parsed.data)
+  if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
+  return Response.json({ ok: true, id: result.id })
 }
 
 /** Smaže předmět, ročník nebo téma i se vším, co pod ním leží. */

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { NavList } from '@testmaker/ui'
 import type { GradeNode } from '@/lib/library'
+import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 
 /** Druhý sloupec: témata zvoleného ročníku. */
 export function TopicList({
@@ -15,9 +16,12 @@ export function TopicList({
   }
   return (
     <div>
-      <p className="ui-label mb-1 px-2">
-        {grade.name || 'Bez ročníku'} · {grade.topics.length} témat
-      </p>
+      <div className="mb-1 flex items-center justify-between gap-1 px-2">
+        <p className="ui-label min-w-0 truncate">
+          {grade.name || 'Bez ročníku'} · {grade.topics.length} témat
+        </p>
+        <NewLibraryItem kind="topic" parentId={grade.id} label="+ téma" variant="ghost" />
+      </div>
       <NavList
         activeId={activeTopicId}
         items={grade.topics.map((topic) => ({
