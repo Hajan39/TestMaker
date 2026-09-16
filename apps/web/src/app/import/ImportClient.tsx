@@ -3,24 +3,59 @@
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { ChevronDown, FolderUp, Loader2 } from 'lucide-react'
+import { groupForImport } from '@testmaker/core/extract'
+import { ChevronDown, FileUp, FolderUp, Loader2, Undo2 } from 'lucide-react'
 import {
   Badge,
   Button,
   Card,
+  Checkbox,
   cn,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Input,
   Progress,
 } from '@testmaker/ui'
-import { extractAll, triageFiles, uploadMaterials, type FileEntry } from '@/lib/importClient'
+import {
+  entriesFromInput,
+  extractAll,
+  filesFromDrop,
+  lookupDestination,
+  triageEntries,
+  uploadMaterials,
+  type FileEntry,
+  type ImportDestination,
+} from '@/lib/importClient'
 
-type Phase = 'idle' | 'extracting' | 'ready' | 'uploading' | 'done'
+type Phase = 'idle' | 'extracting' | 'preview' | 'uploading' | 'done'
 
 interface Failure {
   relativePath: string
   reason: string
+}
+
+/** Předměty a jejich ročníky, jak už v knihovně jsou — pro našeptávání. */
+export interface LibraryHint {
+  subject: string
+  grades: string[]
+}
+
+/** Jeden soubor v náhledu; `include` říká, jestli se má poslat. */
+interface PreviewFile {
+  key: string
+  material: ExtractedMaterial
+  include: boolean
+}
+
+/** Skupina souborů v náhledu — zařazení se dá přepsat, celá skupina vynechat. */
+interface PreviewGroup {
+  id: string
+  subject: string
+  grade: string
+  topic: string
+  include: boolean
+  files: PreviewFile[]
 }
 
 const SKIP_LABELS: Record<string, string> = {
@@ -32,38 +67,79 @@ const SKIP_LABELS: Record<string, string> = {
   'stary-format': 'starý formát – převeď na .docx / .odp',
 }
 
-export function ImportClient() {
+/** Čeština nemá jedno „skupin“ pro všechny počty — „2 skupin“ by bilo do očí. */
+function plural(count: number, one: string, few: string, many: string): string {
+  if (count === 1) return one
+  if (count < 5) return few
+  return many
+}
+
+/** Pod tímhle počtem znaků na otázky text nejspíš nestačí. */
+const LOW_TEXT = 400
+
+/** Bez diakritiky a velikosti písmen — aby „PŘÍRODOPIS“ našlo „Přírodopis“. */
+function fold(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLocaleLowerCase('cs')
+    .trim()
+}
+
+export function ImportClient({ library }: { library: LibraryHint[] }) {
   const router = useRouter()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const folderRef = useRef<HTMLInputElement>(null)
+  const filesRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
+  const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
-  const [materials, setMaterials] = useState<ExtractedMaterial[]>([])
+  const [groups, setGroups] = useState<PreviewGroup[]>([])
   const [skipped, setSkipped] = useState<Failure[]>([])
   const [failed, setFailed] = useState<Failure[]>([])
   const [summary, setSummary] = useState<{ imported: number; duplicates: number } | null>(null)
+  const [destinations, setDestinations] = useState<ImportDestination[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const material of materials) {
-      const key = [material.subject, material.grade].filter(Boolean).join(' · ') || material.subject
-      map.set(key, (map.get(key) ?? 0) + 1)
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'cs'))
-  }, [materials])
+  const allSubjects = useMemo(() => library.map((hint) => hint.subject), [library])
+  const allGrades = useMemo(
+    () => [...new Set(library.flatMap((hint) => hint.grades))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'cs')),
+    [library],
+  )
 
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return
+  /** Ročníky zvoleného předmětu; u neznámého předmětu všechny, co v knihovně jsou. */
+  function gradeHints(subject: string): string[] {
+    const own = library.find((hint) => fold(hint.subject) === fold(subject))?.grades.filter(Boolean)
+    return own && own.length > 0 ? own : allGrades
+  }
+
+  /** Předmět, který se od napsaného liší jen velikostí písmen nebo diakritikou. */
+  function nearDuplicateSubject(subject: string): string | null {
+    if (!subject.trim()) return null
+    const existing = allSubjects.find((name) => fold(name) === fold(subject))
+    return existing && existing !== subject.trim() ? existing : null
+  }
+
+  const selected = useMemo(
+    () =>
+      groups
+        .filter((group) => group.include)
+        .flatMap((group) => group.files.filter((file) => file.include)),
+    [groups],
+  )
+
+  async function handleEntries(entries: FileEntry[]) {
+    if (entries.length === 0) return
     setError(null)
     setSummary(null)
-    setMaterials([])
+    setDestinations([])
+    setGroups([])
     setFailed([])
 
-    const { accepted, skipped: skippedFiles } = triageFiles(fileList)
-    setSkipped(skippedFiles.map((s) => ({ ...s, reason: SKIP_LABELS[s.reason] ?? s.reason })))
+    const { accepted, skipped: skippedFiles } = triageEntries(entries)
+    setSkipped(skippedFiles.map((item) => ({ ...item, reason: SKIP_LABELS[item.reason] ?? item.reason })))
 
     if (accepted.length === 0) {
-      setPhase('ready')
+      setPhase('preview')
       return
     }
 
@@ -75,7 +151,7 @@ export function ImportClient() {
     let done = 0
 
     try {
-      await extractAll(accepted as FileEntry[], (result) => {
+      await extractAll(accepted, (result) => {
         done += 1
         setProgress({ done, total: accepted.length })
         if (result.status === 'ok' && result.material) extracted.push(result.material)
@@ -87,22 +163,67 @@ export function ImportClient() {
       setError(workerError instanceof Error ? workerError.message : String(workerError))
     }
 
-    setMaterials(extracted)
+    setGroups(toPreview(extracted))
     setFailed(failures)
-    setPhase('ready')
+    setPhase('preview')
   }
 
-  async function handleUpload() {
+  function update(groupId: string, change: Partial<PreviewGroup>) {
+    setGroups((current) =>
+      current.map((group) => (group.id === groupId ? { ...group, ...change } : group)),
+    )
+  }
+
+  function toggleFile(groupId: string, fileKey: string) {
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              files: group.files.map((file) =>
+                file.key === fileKey ? { ...file, include: !file.include } : file,
+              ),
+            }
+          : group,
+      ),
+    )
+  }
+
+  async function handleImport() {
+    const ready = groups.filter((group) => group.include && group.files.some((file) => file.include))
+    const materials: ExtractedMaterial[] = ready.flatMap((group) =>
+      group.files
+        .filter((file) => file.include)
+        .map((file) => ({
+          ...file.material,
+          subject: group.subject.trim() || 'Nezařazeno',
+          grade: group.grade.trim() || null,
+          topic: group.topic.trim() || file.material.topic,
+        })),
+    )
+    if (materials.length === 0) return
+
     setPhase('uploading')
     setError(null)
     try {
       const result = await uploadMaterials(materials, (done, total) => setProgress({ done, total }))
       setSummary(result)
+      // Kam pokračovat: první tři skupiny stačí, víc odkazů by byl seznam.
+      const found = await Promise.all(
+        ready
+          .slice(0, 3)
+          .map((group) =>
+            lookupDestination(group.subject.trim() || 'Nezařazeno', group.grade.trim(), group.topic.trim()).catch(
+              () => null,
+            ),
+          ),
+      )
+      setDestinations(found.filter((item): item is ImportDestination => item !== null))
       setPhase('done')
       router.refresh()
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
-      setPhase('ready')
+      setPhase('preview')
     }
   }
 
@@ -110,22 +231,58 @@ export function ImportClient() {
 
   return (
     <div className="space-y-4">
-      <Card className="items-center p-8 text-center">
+      <Card
+        className={cn(
+          'items-center p-8 text-center transition-colors',
+          dragging && 'border-brand bg-brand-bg',
+        )}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragging(false)
+          if (busy) return
+          void filesFromDrop(event.dataTransfer).then(handleEntries)
+        }}
+      >
         <input
-          ref={inputRef}
+          ref={folderRef}
           type="file"
           multiple
           className="hidden"
+          data-testid="import-folder"
           // @ts-expect-error nestandardní atribut pro výběr celé složky
           webkitdirectory=""
-          onChange={(event) => void handleFiles(event.target.files)}
+          onChange={(event) => void handleEntries(entriesFromInput(event.target.files))}
         />
+        <input
+          ref={filesRef}
+          type="file"
+          multiple
+          className="hidden"
+          data-testid="import-files"
+          onChange={(event) => void handleEntries(entriesFromInput(event.target.files))}
+        />
+
         <FolderUp className="size-8 text-fg-muted" aria-hidden />
-        <Button size="lg" disabled={busy} onClick={() => inputRef.current?.click()}>
-          Vybrat složku
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button size="lg" disabled={busy} onClick={() => folderRef.current?.click()}>
+            Vybrat složku
+          </Button>
+          <Button size="lg" variant="outline" disabled={busy} onClick={() => filesRef.current?.click()}>
+            <FileUp className="size-4" aria-hidden />
+            Vybrat soubory
+          </Button>
+        </div>
+        <p className="text-sm text-fg-soft">
+          Nebo sem soubory i celé složky přetáhni myší.
+        </p>
         <p className="max-w-md text-sm text-fg-muted">
           Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí.
+          Nic se neuloží dřív, než si zařazení v náhledu projdeš.
         </p>
 
         {busy ? (
@@ -144,44 +301,155 @@ export function ImportClient() {
       {summary ? (
         <Card className="border-brand bg-brand-bg p-5">
           <p className="text-sm text-fg-soft">
-            Naimportováno {summary.imported} materiálů
+            Naimportováno {summary.imported}{' '}
+            {plural(summary.imported, 'materiál', 'materiály', 'materiálů')}
             {summary.duplicates > 0 ? `, ${summary.duplicates} už v knihovně bylo` : ''}.
           </p>
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={() => router.push('/')}>
-              Přejít na přehled
+          <p className="mt-1 text-sm text-fg-muted">Kam chceš pokračovat?</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {destinations.map((destination) => (
+              <Button
+                key={destination.topicId}
+                size="sm"
+                onClick={() => router.push(`/topics/${destination.topicId}`)}
+              >
+                Téma {destination.topicName}
+              </Button>
+            ))}
+            {[...new Map(destinations.filter((d) => d.gradeId).map((d) => [d.gradeId, d])).values()].map(
+              (destination) => (
+                <Button
+                  key={destination.gradeId}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => router.push(`/?grade=${destination.gradeId}`)}
+                >
+                  Ročník {destination.gradeName || 'bez ročníku'}
+                </Button>
+              ),
+            )}
+            <Button size="sm" variant="ghost" onClick={() => router.push('/')}>
+              Přehled knihovny
             </Button>
           </div>
         </Card>
       ) : null}
 
-      {materials.length > 0 && phase !== 'done' ? (
-        <Card className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {groups.length > 0 && phase !== 'done' ? (
+        <>
+          <Card className="sticky top-2 z-10 flex-row flex-wrap items-center justify-between gap-3 p-4">
             <div>
               <h2 className="text-sm font-semibold text-fg">
-                Připraveno k importu: {materials.length}
+                Náhled importu: {groups.length}{' '}
+                {plural(groups.length, 'skupina', 'skupiny', 'skupin')}, {selected.length}{' '}
+                {plural(selected.length, 'soubor', 'soubory', 'souborů')}
               </h2>
               <p className="mt-1 text-sm text-fg-muted">
-                {grouped.map(([key, value]) => `${key} (${value})`).join(', ')}
+                Zkontroluj zařazení. Co se uloží, rozhoduje tlačítko níž — teď ještě v knihovně nic není.
               </p>
             </div>
-            <Button disabled={busy} onClick={() => void handleUpload()}>
-              Naimportovat
+            <Button disabled={busy || selected.length === 0} onClick={() => void handleImport()}>
+              Importovat ({selected.length})
             </Button>
-          </div>
+          </Card>
 
-          <ul className="mt-4 max-h-72 divide-y divide-line-soft overflow-y-auto text-sm">
-            {materials.map((material) => (
-              <li key={material.contentHash} className="flex flex-wrap items-center gap-2 py-1.5">
-                <span className="font-medium text-fg-soft">{material.topic}</span>
-                <span className="text-fg-muted">{material.relativePath}</span>
-                <span className="ml-auto text-fg-muted">{material.text.length.toLocaleString('cs')} znaků</span>
-                {material.needsOcr ? <Badge className="bg-draft-bg text-draft-fg">skoro bez textu</Badge> : null}
-              </li>
-            ))}
-          </ul>
-        </Card>
+          {groups.map((group) => {
+            const near = nearDuplicateSubject(group.subject)
+            const chosen = group.files.filter((file) => file.include).length
+            return (
+              <Card
+                key={group.id}
+                className={cn('gap-4 p-5', !group.include && 'opacity-55')}
+                data-testid="import-group"
+              >
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field
+                    label="Předmět"
+                    value={group.subject}
+                    listId={`predmety-${group.id}`}
+                    options={allSubjects}
+                    placeholder="Doplň předmět"
+                    invalid={!group.subject.trim()}
+                    disabled={!group.include}
+                    onChange={(value) => update(group.id, { subject: value })}
+                  />
+                  <Field
+                    label="Ročník"
+                    value={group.grade}
+                    listId={`rocniky-${group.id}`}
+                    options={gradeHints(group.subject)}
+                    placeholder="bez ročníku"
+                    disabled={!group.include}
+                    onChange={(value) => update(group.id, { grade: value })}
+                  />
+                  <Field
+                    label="Téma"
+                    value={group.topic}
+                    className="min-w-56 flex-1"
+                    disabled={!group.include}
+                    onChange={(value) => update(group.id, { topic: value })}
+                  />
+                  <Button
+                    size="sm"
+                    variant={group.include ? 'outline' : 'default'}
+                    onClick={() => update(group.id, { include: !group.include })}
+                  >
+                    {group.include ? (
+                      'Vynechat skupinu'
+                    ) : (
+                      <>
+                        <Undo2 className="size-4" aria-hidden />
+                        Vrátit zpět
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {!group.subject.trim() && group.include ? (
+                  <p className="text-sm text-draft-fg">
+                    Předmět z cesty vyčíst nešel. Doplň ho, jinak skupina skončí v „Nezařazeno“.
+                  </p>
+                ) : null}
+                {near ? (
+                  <p className="text-sm text-draft-fg">
+                    V knihovně už je „{near}“. Napiš to stejně, ať nevzniknou dva předměty.
+                  </p>
+                ) : null}
+
+                <ul className="divide-y divide-line-soft text-sm">
+                  {group.files.map((file) => (
+                    <li key={file.key} className="flex flex-wrap items-center gap-2 py-1.5">
+                      <Checkbox
+                        checked={file.include}
+                        disabled={!group.include}
+                        aria-label={`Zahrnout ${file.material.fileName}`}
+                        onCheckedChange={() => toggleFile(group.id, file.key)}
+                      />
+                      <span className={cn('font-medium text-fg-soft', !file.include && 'line-through')}>
+                        {file.material.fileName}
+                      </span>
+                      {/* U samostatného souboru je cesta jen jeho název — psát ho dvakrát nemá smysl. */}
+                      {file.material.relativePath !== file.material.fileName ? (
+                        <span className="text-fg-muted">{file.material.relativePath}</span>
+                      ) : null}
+                      <span className="ml-auto text-fg-muted">
+                        {file.material.text.length.toLocaleString('cs')} znaků
+                      </span>
+                      {file.material.needsOcr ? (
+                        <Badge className="bg-draft-bg text-draft-fg">skoro bez textu – nejspíš sken</Badge>
+                      ) : file.material.text.length < LOW_TEXT ? (
+                        <Badge className="bg-draft-bg text-draft-fg">málo textu</Badge>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                {chosen === 0 && group.include ? (
+                  <p className="text-sm text-fg-muted">Ze skupiny se neuloží nic — všechny řádky jsou vynechané.</p>
+                ) : null}
+              </Card>
+            )
+          })}
+        </>
       ) : null}
 
       {failed.length > 0 ? (
@@ -191,6 +459,64 @@ export function ImportClient() {
         <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} kind="neutral" />
       ) : null}
     </div>
+  )
+}
+
+/** Z extrahovaných materiálů udělá skupiny náhledu. */
+function toPreview(materials: ExtractedMaterial[]): PreviewGroup[] {
+  const keyed = materials.map((material, index) => ({ ...material, key: `soubor-${index}` }))
+  return groupForImport(keyed).map((group) => ({
+    id: group.id,
+    subject: group.subject,
+    grade: group.grade,
+    topic: group.topic,
+    include: true,
+    files: group.files.map((file) => ({ key: file.key, material: file, include: true })),
+  }))
+}
+
+/** Editovatelné políčko zařazení s našeptáváním z knihovny. */
+function Field({
+  label,
+  value,
+  onChange,
+  options,
+  listId,
+  placeholder,
+  invalid,
+  disabled,
+  className,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options?: string[]
+  listId?: string
+  placeholder?: string
+  invalid?: boolean
+  disabled?: boolean
+  className?: string
+}) {
+  return (
+    <label className={cn('block min-w-44', className)}>
+      <span className="ui-label block pb-1">{label}</span>
+      <Input
+        value={value}
+        list={listId}
+        placeholder={placeholder}
+        disabled={disabled}
+        aria-label={label}
+        className={cn(invalid && 'border-draft-fg')}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {listId && options ? (
+        <datalist id={listId}>
+          {options.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      ) : null}
+    </label>
   )
 }
 

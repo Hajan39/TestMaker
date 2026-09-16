@@ -134,3 +134,77 @@ export function preferredTopicName(a: string, b: string): string {
   if (tokensA !== tokensB) return tokensA < tokensB ? a : b
   return a.length <= b.length ? a : b
 }
+
+/** Zařazení materiálu v knihovně: předmět → ročník → téma. */
+export interface Placement {
+  subject: string
+  grade: string | null
+  topic: string
+}
+
+/**
+ * Skupina souborů, které při importu spadnou do jednoho tématu.
+ * `grade` je prázdný řetězec, ne null, aby se dal rovnou psát do políčka;
+ * prázdný předmět znamená, že z cesty nešlo nic vyčíst a učitelka ho doplní.
+ */
+export interface ImportGroup<T> {
+  id: string
+  subject: string
+  grade: string
+  topic: string
+  files: T[]
+}
+
+/** Název, který `parsePath` použije, když z cesty předmět vyčíst nejde. */
+export const UNPLACED_SUBJECT = 'Nezařazeno'
+
+/**
+ * Seskupí odhadnutá zařazení do skupin pro náhled před importem.
+ *
+ * Dělá nanečisto totéž, co pak udělá server: v rámci jednoho předmětu a
+ * ročníku spojí soubory, jejichž názvy patří k témuž tématu („Měkkýši“ a
+ * „6.22 Měkkýši (Mollusca)“), a skupině nechá ten srozumitelnější název.
+ * Díky tomu učitelka v náhledu vidí skutečné skupiny, ne seznam souborů.
+ *
+ * Předmět „Nezařazeno“ (samostatný soubor bez složky) se převede na prázdný —
+ * takové skupiny jdou v seznamu první, protože se bez doplnění neuloží tam,
+ * kam učitelka čeká.
+ */
+export function groupForImport<T extends Placement>(items: T[]): ImportGroup<T>[] {
+  const groups: ImportGroup<T>[] = []
+
+  for (const item of items) {
+    const subject = item.subject.trim() === UNPLACED_SUBJECT ? '' : item.subject.trim()
+    const grade = (item.grade ?? '').trim()
+    const topic = item.topic.trim()
+
+    const siblings = groups.filter((group) => group.subject === subject && group.grade === grade)
+    const exact = siblings.find((group) => group.topic === topic)
+    if (exact) {
+      exact.files.push(item)
+      continue
+    }
+
+    const match = findMatchingTopic(
+      siblings.map((group) => ({ name: group.topic, group })),
+      topic,
+    )
+    if (match) {
+      match.group.topic = preferredTopicName(match.group.topic, topic)
+      match.group.files.push(item)
+      continue
+    }
+
+    groups.push({ id: `skupina-${groups.length + 1}`, subject, grade, topic, files: [item] })
+  }
+
+  // Nezařazené napřed: právě ty čekají na doplnění.
+  return [...groups].sort((a, b) => {
+    if (!a.subject !== !b.subject) return a.subject ? 1 : -1
+    return (
+      a.subject.localeCompare(b.subject, 'cs') ||
+      a.grade.localeCompare(b.grade, 'cs') ||
+      a.topic.localeCompare(b.topic, 'cs')
+    )
+  })
+}

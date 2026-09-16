@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { findMatchingTopic, preferredTopicName, sameTopic, topicTokens } from '../src/extract/grouping'
+import {
+  findMatchingTopic,
+  groupForImport,
+  preferredTopicName,
+  sameTopic,
+  topicTokens,
+} from '../src/extract/grouping'
 
 describe('topicTokens', () => {
   it('zahodí čísla, diakritiku a balast', () => {
@@ -101,5 +107,64 @@ describe('reálný případ z knihovny: "Rostliny" (7. ročník)', () => {
 
   it('export prezentace stejné lekce se připojí', () => {
     expect(findMatchingTopic(existing, '7.11 Rostliny prezentace')?.name).toBe('Rostliny')
+  })
+})
+
+describe('groupForImport', () => {
+  /** Zkratka: zařazení tak, jak ho z cesty odhadne `parsePath`. */
+  function place(subject: string, grade: string | null, topic: string) {
+    return { subject, grade, topic }
+  }
+
+  it('spojí soubory téhož tématu a nechá skupině srozumitelnější název', () => {
+    const groups = groupForImport([
+      place('PŘÍRODOPIS', '6. ročník', '6.22 Měkkýši (Mollusca)'),
+      place('PŘÍRODOPIS', '6. ročník', 'Měkkýši'),
+      place('PŘÍRODOPIS', '6. ročník', 'Hlísti'),
+    ])
+
+    expect(groups).toHaveLength(2)
+    const mekkysi = groups.find((group) => group.topic === 'Měkkýši')
+    expect(mekkysi?.files).toHaveLength(2)
+    expect(groups.find((group) => group.topic === 'Hlísti')?.files).toHaveLength(1)
+  })
+
+  it('stejné téma ve dvou ročnících zůstane dvěma skupinami', () => {
+    const groups = groupForImport([
+      place('PŘÍRODOPIS', '7. ročník', 'Savci'),
+      place('PŘÍRODOPIS', '8. ročník', 'Savci'),
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups.map((group) => group.grade)).toEqual(['7. ročník', '8. ročník'])
+  })
+
+  it('samostatný soubor bez složky skončí bez zařazení, ale s názvem tématu', () => {
+    const groups = groupForImport([place('Nezařazeno', null, 'Opakování - zlomky')])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ subject: '', grade: '', topic: 'Opakování - zlomky' })
+  })
+
+  it('nezařazené skupiny jdou první, zbytek abecedně', () => {
+    const groups = groupForImport([
+      place('ZEMĚPIS', '9. ročník', 'Afrika'),
+      place('Nezařazeno', null, 'Pracovní list'),
+      place('PŘÍRODOPIS', '6. ročník', 'Viry'),
+    ])
+
+    expect(groups.map((group) => group.subject)).toEqual(['', 'PŘÍRODOPIS', 'ZEMĚPIS'])
+  })
+
+  it('zachová i data navíc, aby šel z náhledu poslat celý materiál', () => {
+    const groups = groupForImport([
+      { ...place('PŘÍRODOPIS', '6. ročník', 'Viry'), fileName: 'Viry.pdf', charCount: 4200 },
+    ])
+
+    expect(groups[0]?.files[0]?.fileName).toBe('Viry.pdf')
+  })
+
+  it('prázdný vstup dá prázdný seznam skupin', () => {
+    expect(groupForImport([])).toEqual([])
   })
 })
