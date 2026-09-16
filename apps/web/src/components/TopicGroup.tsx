@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import {
   Badge,
+  BusyButton,
   Button,
   DeleteButton,
   cn,
@@ -49,21 +50,29 @@ export function TopicGroup({
   const [newGrade, setNewGrade] = useState('')
   const [addingGrade, setAddingGrade] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
+  // Nabídky sourozeneckých skupin a ročníků se dotahují až při otevření
+  // úprav. Než dojdou, jsou rozbalovací seznamy prázdné — kdyby zůstaly
+  // ovladatelné, otevřely by se do prázdna a vypadalo by to jako chyba.
+  const [optionsReady, setOptionsReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!manage) return
-    void fetch(`/api/topics?siblingsOf=${encodeURIComponent(topicId)}`)
-      .then((response) => response.json())
-      .then((data: { topics: { id: string; name: string }[] }) => setSiblings(data.topics))
-    void fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
-      .then((response) => response.json())
-      .then((data: { grades: { id: string; name: string }[]; currentGrade: string }) => {
-        setGradeOptions(data.grades)
-        setCurrentGrade(data.currentGrade)
-      })
+    // Shození příznaku patří k přepnutí do úprav, ne sem: stav se nemá měnit
+    // synchronně v efektu (React to hlásí jako řetězení překreslení).
+    void Promise.all([
+      fetch(`/api/topics?siblingsOf=${encodeURIComponent(topicId)}`)
+        .then((response) => response.json())
+        .then((data: { topics: { id: string; name: string }[] }) => setSiblings(data.topics)),
+      fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
+        .then((response) => response.json())
+        .then((data: { grades: { id: string; name: string }[]; currentGrade: string }) => {
+          setGradeOptions(data.grades)
+          setCurrentGrade(data.currentGrade)
+        }),
+    ]).finally(() => setOptionsReady(true))
   }, [manage, topicId])
 
   async function call(method: string, body: unknown) {
@@ -99,7 +108,14 @@ export function TopicGroup({
           Skupina materiálů ({active.length}
           {materials.length !== active.length ? ` + ${materials.length - active.length} duplicit` : ''})
         </h2>
-        <Button size="sm" variant="ghost" onClick={() => setManage(!manage)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            if (!manage) setOptionsReady(false)
+            setManage(!manage)
+          }}
+        >
           {manage ? 'Hotovo' : 'Upravit skupinu'}
         </Button>
       </div>
@@ -134,16 +150,16 @@ export function TopicGroup({
                   {material.duplicateScore ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)` : ''}
                 </span>
               ) : null}
-              {manage && siblings.length > 0 ? (
+              {manage && (!optionsReady || siblings.length > 0) ? (
                 <Select
                   value="presun"
-                  disabled={busy}
+                  disabled={busy || !optionsReady}
                   onValueChange={(value) =>
                     value !== 'presun' && void call('PUT', { materialId: material.id, topicId: value })
                   }
                 >
-                  <SelectTrigger className="ml-auto w-full shrink-0 sm:w-56">
-                    <SelectValue />
+                  <SelectTrigger className="ml-auto w-full shrink-0 sm:w-56" aria-busy={!optionsReady || undefined}>
+                    {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám skupiny…</span>}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="presun">Přesunout do…</SelectItem>
@@ -177,14 +193,16 @@ export function TopicGroup({
             <Label htmlFor="topic-group-name">Název skupiny</Label>
             <div className="flex gap-2">
               <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
-              <Button
+              <BusyButton
                 size="sm"
                 variant="outline"
-                disabled={busy || !name.trim() || name === topicName}
+                busy={busy}
+                busyLabel="Ukládám…"
+                disabled={!name.trim() || name === topicName}
                 onClick={() => void call('PATCH', { id: topicId, name })}
               >
                 Uložit
-              </Button>
+              </BusyButton>
             </div>
           </div>
           <div>
@@ -201,8 +219,8 @@ export function TopicGroup({
                 void call('PATCH', { id: topicId, gradeName: value === 'bez-rocniku' ? '' : value })
               }}
             >
-              <SelectTrigger id="topic-group-grade" className="w-full">
-                <SelectValue />
+              <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady}>
+                {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám ročníky…</span>}
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="bez-rocniku">Bez ročníku</SelectItem>
@@ -225,17 +243,19 @@ export function TopicGroup({
                   value={newGrade}
                   onChange={(event) => setNewGrade(event.target.value)}
                 />
-                <Button
+                <BusyButton
                   size="sm"
                   variant="outline"
-                  disabled={busy || !newGrade.trim()}
+                  busy={busy}
+                  busyLabel="Přeřazuji…"
+                  disabled={!newGrade.trim()}
                   onClick={() => {
                     setAddingGrade(false)
                     void call('PATCH', { id: topicId, gradeName: newGrade })
                   }}
                 >
                   Přeřadit
-                </Button>
+                </BusyButton>
               </div>
             ) : null}
 
@@ -248,8 +268,8 @@ export function TopicGroup({
             <Label htmlFor="topic-group-merge-target">Sloučit do jiné skupiny</Label>
             <div className="flex gap-2">
               <Select value={mergeTarget || 'zadna'} onValueChange={(value) => setMergeTarget(value === 'zadna' ? '' : value)}>
-                <SelectTrigger id="topic-group-merge-target" className="w-full">
-                  <SelectValue />
+                <SelectTrigger id="topic-group-merge-target" className="w-full" disabled={!optionsReady}>
+                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám skupiny…</span>}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="zadna">Vyber skupinu…</SelectItem>
@@ -260,14 +280,16 @@ export function TopicGroup({
                   ))}
                 </SelectContent>
               </Select>
-              <Button
+              <BusyButton
                 size="sm"
                 variant="outline"
-                disabled={busy || !mergeTarget}
+                busy={busy}
+                busyLabel="Slučuji…"
+                disabled={!mergeTarget}
                 onClick={() => void call('POST', { sourceId: topicId, targetId: mergeTarget })}
               >
                 Sloučit
-              </Button>
+              </BusyButton>
             </div>
             <p className="mt-1 text-xs text-fg-muted">
               Materiály i otázky se přesunou do vybrané skupiny, tato zanikne.

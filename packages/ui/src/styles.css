@@ -50,6 +50,11 @@
   --color-danger: #b03a35;
   --color-danger-bg: #fbeceb;
 
+  /* Kostra obsahu při načítání. Vlastní token, ne `surface-muted`: kostra se
+     kreslí i do postranních sloupců, které samy `surface-muted` jsou, a tam
+     by se ztratila. Musí být vidět na obou plochách, ale nesmí křičet. */
+  --color-skeleton: #e7e9ee;
+
   /* Tvary */
   --radius-inner: 5px;
   --radius-outer: 8px;
@@ -83,6 +88,8 @@
 
     --color-danger: #e0706a;
     --color-danger-bg: #3a1f1e;
+
+    --color-skeleton: #282d36;
   }
 }
 
@@ -126,6 +133,42 @@
 /* Čísla v přehledech nesmějí poskakovat. */
 .ui-numeric {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Odložené objevení kostry — jediná obrana proti blikání pro celou aplikaci.
+ *
+ * Odpověď do zhruba čtvrt vteřiny vnímá člověk jako okamžitou. Kdyby se na ni
+ * stihla naskočit kostra a hned zase zmizet, je to rušivější než klid, ve
+ * kterém se prostě objeví hotový obsah. Kostra je proto v DOM hned, ale prvních
+ * 400 ms je průhledná a teprve pak se plynule vynoří.
+ *
+ * Řeší se to animací, ne časovačem v Reactu: `loading.tsx` v App Routeru je
+ * serverová komponenta bez stavu a časovač by si vynutil klientskou obálku a
+ * druhé překreslení. Plynulý náběh navíc zmírní i hraniční případ, kdy data
+ * dorazí těsně po 400 ms — kostra je v tu chvíli sotva viditelná, takže to
+ * nevypadá jako bliknutí, ale jako náznak, který se nedotáhl.
+ */
+@keyframes ui-delayed-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.ui-delayed {
+  opacity: 0;
+  animation: ui-delayed-in 180ms ease-out 400ms forwards;
+}
+
+/* Kdo si vypnul pohyb, dostane kostru bez prolnutí — ale pořád až se zpožděním. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-delayed {
+    animation-duration: 1ms;
+  }
+
+  [data-slot='skeleton'] {
+    animation: none;
+  }
 }
 
 /* Nadpis obrazovky — jediná definice pro celou aplikaci. */

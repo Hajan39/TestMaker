@@ -49,3 +49,43 @@ export function printPdf(href: string, timeoutMs = 4000): Promise<void> {
     document.body.appendChild(frame)
   })
 }
+
+/**
+ * Stáhne PDF a uloží ho jako soubor. Odkaz `target="_blank"` tu nestačí:
+ * vykreslení testu trvá vteřiny a otevřená prázdná záložka nic neříká, zatímco
+ * původní stránka se tváří, že se nic nestalo. Takhle se čekání odehraje tam,
+ * kde na něj jde ukázat — volající si po dobu příslibu drží stav „Připravuji…“.
+ *
+ * Název souboru posílá server v hlavičce `content-disposition`; když chybí
+ * nebo se nedá přečíst, použije se záložní.
+ */
+export async function downloadPdf(href: string, fallbackName = 'test.pdf'): Promise<void> {
+  const response = await fetch(href)
+  if (!response.ok) throw new Error(`PDF se nepodařilo připravit (${response.status}).`)
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileNameFromHeader(response.headers.get('content-disposition')) ?? fallbackName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  // Uvolnit až po chvíli: některé prohlížeče si adresu ještě čtou.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+/** Vytáhne název souboru z hlavičky; zvládá i tvar `filename*=UTF-8''…`. */
+function fileNameFromHeader(header: string | null): string | undefined {
+  if (!header) return undefined
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]!)
+    } catch {
+      // Poškozená hlavička: raději záložní název než spadnout.
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header)
+  return plain?.[1]
+}

@@ -8,6 +8,7 @@ import type { PickerTopic } from '@/lib/questionPicker'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestOutline } from '@/components/test-builder/TestOutline'
 import { RoughPreview } from '@/components/test-builder/RoughPreview'
+import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
 import { formatPoints, nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
 
@@ -127,6 +128,19 @@ export function TestBuilder({
       const present = new Set(current.map((item) => item.questionId).filter(Boolean) as string[])
       const added = list.filter((question) => !present.has(question.id)).map(questionItem)
       return [...current, ...added]
+    })
+  }
+
+  /**
+   * Vylosovaný test do osnovy. Rozpracovaná osnova se nesmí ztratit potichu:
+   * `append` přidá vylosované na konec, `replace` nahradí celou osnovu, a
+   * učitelka si v dialogu vybírá, co z toho. Uloženo není nic — na to je
+   * pořád tlačítko Uložit.
+   */
+  function insertRandom(questions: Question[], mode: InsertMode) {
+    setDraft((current) => {
+      const added = questions.map(questionItem)
+      return mode === 'replace' ? added : [...current, ...added]
     })
   }
 
@@ -290,6 +304,7 @@ export function TestBuilder({
               ) : null}
             </>
           ) : null}
+          <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />
           <TestSettings value={settings} templates={templates} onChange={setSettings} />
           <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
         </div>

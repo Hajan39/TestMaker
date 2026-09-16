@@ -2,8 +2,8 @@
 
 import type { ReactNode } from 'react'
 import { useState } from 'react'
+import { BusyButton } from './BusyButton'
 import { printPdf } from './print'
-import { Button } from './ui/button'
 
 /** Tlačítko, které pošle PDF rovnou do tisku. */
 export function PrintButton({
@@ -29,8 +29,14 @@ export function PrintButton({
   }
 
   return (
-    <Button size={size} variant={variant} disabled={preparing} onClick={() => void handleClick()}>
-      {preparing ? 'Připravuji tisk…' : children}
-    </Button>
+    <BusyButton
+      size={size}
+      variant={variant}
+      busy={preparing}
+      busyLabel="Připravuji tisk…"
+      onClick={() => void handleClick()}
+    >
+      {children}
+    </BusyButton>
   )
 }

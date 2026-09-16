@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from './ui/alert-dialog'
 import { Button } from './ui/button'
+import { Delayed, LoadingLines } from './Loading'
 
 /**
  * Tlačítko pro nevratnou akci. Potvrzení se ptá vždy a v popisu ukazuje,
@@ -77,7 +78,16 @@ export function DeleteButton({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               {description ? <p>{description}</p> : null}
-              {describe ? (detail ?? <p className="text-fg-muted">Zjišťuji, co zmizí…</p>) : null}
+              {/* Dokud dopad neznáme, drží jeho místo kostra: text „Zjišťuji…“
+                  byl o řádek kratší než výpis a tlačítko Smazat pak poskočilo
+                  přesně ve chvíli, kdy na něj někdo mířil myší. */}
+              {describe
+                ? (detail ?? (
+                    <Delayed label="Zjišťuji, co zmizí…">
+                      <LoadingLines lines={2} />
+                    </Delayed>
+                  ))
+                : null}
               <p className="text-fg-muted">Akci nejde vrátit zpět.</p>
             </div>
           </AlertDialogDescription>
@@ -87,6 +97,7 @@ export function DeleteButton({
           <AlertDialogAction
             variant="destructive"
             disabled={busy}
+            aria-busy={busy || undefined}
             onClick={(event) => {
               event.preventDefault()
               void confirm()

@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import {
   Badge,
+  BusyButton,
   Button,
   Card,
   Checkbox,
@@ -31,6 +32,12 @@ import { QuestionEditor } from '@/components/QuestionEditor'
 export function ReviewPanel({ topicId, questions }: { topicId: string; questions: Question[] }) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Hromadná akce má dvě části, které trvají: zápis na server a obnovení
+  // stránky. `useTransition` pokrývá i tu druhou — bez něj tlačítko po zápisu
+  // zase ožilo, ale seznam se ještě chvíli nehýbal a vypadalo to, že se nic
+  // nestalo. `pending` říká, co se právě děje, aby to šlo napsat na tlačítko.
+  const [pending, setPending] = useState<'approved' | 'rejected' | null>(null)
+  const [refreshing, startRefresh] = useTransition()
   const [editing, setEditing] = useState<Question | 'new' | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [filters, setFilters] = useState<{
@@ -63,12 +70,17 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ids, status }),
     })
-    router.refresh()
+    startRefresh(() => router.refresh())
   }
 
-  async function bulkStatus(next: QuestionStatus) {
-    await setStatus([...selected], next)
-    setSelected(new Set())
+  async function bulkStatus(next: 'approved' | 'rejected') {
+    setPending(next)
+    try {
+      await setStatus([...selected], next)
+      setSelected(new Set())
+    } finally {
+      setPending(null)
+    }
   }
 
   async function removeSelected() {
@@ -76,8 +88,11 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
     const query = [...selected].map((id) => `id=${encodeURIComponent(id)}`).join('&')
     await fetch(`/api/questions?${query}`, { method: 'DELETE' })
     setSelected(new Set())
-    router.refresh()
+    startRefresh(() => router.refresh())
   }
+
+  /** Cokoli právě běží — zápis stavu i obnovení seznamu po něm. */
+  const busy = pending !== null || refreshing
 
   /**
    * Hromadný výběr se vztahuje na to, co je právě vidět. Filtr („koncepty
@@ -192,12 +207,25 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
       {selected.size > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded bg-surface-muted px-3 py-2">
           <span className="text-sm text-fg-soft">Vybráno {selected.size}</span>
-          <Button size="sm" onClick={() => void bulkStatus('approved')}>
+          <BusyButton
+            size="sm"
+            busy={pending === 'approved'}
+            busyLabel="Schvaluji…"
+            disabled={busy}
+            onClick={() => void bulkStatus('approved')}
+          >
             Schválit
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => void bulkStatus('rejected')}>
+          </BusyButton>
+          <BusyButton
+            size="sm"
+            variant="outline"
+            busy={pending === 'rejected'}
+            busyLabel="Zamítám…"
+            disabled={busy}
+            onClick={() => void bulkStatus('rejected')}
+          >
             Zamítnout
-          </Button>
+          </BusyButton>
           <DeleteButton
             label={`Smazat (${selected.size})`}
             variant="destructive"
@@ -207,7 +235,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
             }. Pokud jsou použité v uloženém testu, zmizí i odtamtud.`}
             onConfirm={removeSelected}
           />
-          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>
             Zrušit výběr
           </Button>
         </div>

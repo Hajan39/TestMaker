@@ -6,8 +6,17 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Náhodně sestavená písemka.** Učitelka zaškrtne okruhy (klidně celý ročník),
+  řekne kolik otázek nebo kolik bodů, jaké typy a obtížnost, a aplikace test
+  poskládá — otázky rozprostře mezi vybraná témata i mezi typy. Los jde
+  zopakovat („Zamíchat znovu“), nic se neukládá bez potvrzení a vložené
+  položky jdou v osnově dál upravit.
+- **Stavy načítání.** Místo zmrzlé plochy se ukáže kostra obsahu ve tvaru
+  toho, co přijde, a tlačítka akcí po dobu běhu říkají, co dělají
+  („Schvaluji…“, „Mažu…“). Kostra se objevuje se zpožděním, aby u rychlé
+  odpovědi nezablikala.
 - **Dogenerování na cílový počet.** U tématu i u hromadného generování jde
-  místo „vytvoř N nových" zvolit „doplň téma na N otázek celkem"; zamítnuté
+  místo „vytvoř N nových“ zvolit „doplň téma na N otázek celkem“; zamítnuté
   se do počtu nepočítají, takže po kontrole konceptů stačí dorovnat počet.
   Detail tématu ukazuje, kolik otázek v něm už je a kolik jich přibude.
 - **Hromadné generování z příkazové řádky** (`generate:bulk`) pro celý

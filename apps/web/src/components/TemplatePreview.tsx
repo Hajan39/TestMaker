@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { cn } from '@testmaker/ui'
+import { Delayed, LoadingPaper, cn } from '@testmaker/ui'
 
 /**
  * Náhled šablony jako skutečná stránka PDF. Vykresluje ji tentýž renderer,
@@ -39,8 +39,16 @@ export function TemplatePreview({
         className,
       )}
     >
-      {/* Klidná plocha, ne pulzující — než se náhled objeví, nemá to blikat. */}
-      {!ready ? <div className="absolute inset-0 bg-surface-muted" aria-hidden /> : null}
+      {/*
+        Než se náhled objeví, drží jeho místo kostra stránky. Blikání hrozit
+        nemůže: kostra je prvních 400 ms průhledná (viz `ui-delayed`), takže
+        u náhledu, který má prohlížeč v mezipaměti, se vůbec neukáže.
+      */}
+      {!ready ? (
+        <Delayed label="Připravuji náhled šablony…" className="absolute inset-0">
+          <LoadingPaper />
+        </Delayed>
+      ) : null}
       <iframe
         src={src}
         title="Náhled šablony"

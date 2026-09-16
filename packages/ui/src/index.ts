@@ -37,7 +37,12 @@ export { DeleteButton } from './DeleteButton'
 export { EmptyState } from './EmptyState'
 export { Mark } from './Mark'
 export { PrintButton } from './PrintButton'
-export { printPdf } from './print'
+export { BusyButton } from './BusyButton'
+export { printPdf, downloadPdf } from './print'
+export {
+  Delayed, LoadingLines, LoadingList, LoadingHeading, LoadingTiles, LoadingTable,
+  LoadingCards, LoadingCard, LoadingPaper,
+} from './Loading'
 export { AppShell } from './AppShell'
 export type { NavItem } from './AppShell'
 export { ThreePane } from './ThreePane'

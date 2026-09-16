@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
-import { Input } from '@testmaker/ui'
+import { Delayed, Input, LoadingList } from '@testmaker/ui'
 import type { LibrarySearchResult } from '@/lib/library'
 
 /**
@@ -73,7 +73,13 @@ export function LibrarySearch() {
       {open && searching ? (
         <div className="absolute inset-x-2 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-[var(--radius-outer)] border border-line bg-surface p-1 shadow-lg">
           {loading ? (
-            <p className="px-2 py-2 text-sm text-fg-muted">Hledám…</p>
+            // Kostra místo hlášky „Hledám…“: nabídka si udrží výšku, takže při
+            // psaní dalšího písmene neposkakuje a výsledky naskočí na místo,
+            // kam se člověk už dívá. Ukáže se až po prodlevě — hledání v malé
+            // knihovně je hotové dřív, než by ji bylo vidět.
+            <Delayed label="Hledám…" className="p-1">
+              <LoadingList items={3} />
+            </Delayed>
           ) : results.length === 0 ? (
             <p className="px-2 py-2 text-sm text-fg-muted">Nic neodpovídá hledání „{needle}&ldquo;.</p>
           ) : (

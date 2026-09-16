@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
+    "./compose": "./src/compose/index.ts",
     "./extract": "./src/extract/index.ts",
     "./ai": "./src/ai/index.ts",
     "./pdf": "./src/pdf/index.ts",

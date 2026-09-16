@@ -48,6 +48,10 @@ export function BulkGenerate({
   async function start(scope: BulkScope) {
     setErrors([])
     setRunning(true)
+    // Sestavení fronty přes celý předmět trvá pár vteřin. Bez tohohle řádku
+    // byla plocha po kliknutí prázdná až do chvíle, kdy přišel první počet,
+    // a vypadalo to, že se kliknutí nechytlo.
+    setStatus('Připravuji frontu…')
     stopRef.current = false
     try {
       const response = await fetch('/api/jobs', {
