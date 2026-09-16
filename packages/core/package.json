@@ -11,7 +11,8 @@
     "./ai": "./src/ai/index.ts",
     "./pdf": "./src/pdf/index.ts",
     "./pdf/estimate": "./src/pdf/estimate.ts",
-    "./pdf/node": "./src/pdf/node.ts"
+    "./pdf/node": "./src/pdf/node.ts",
+    "./pdf/layout": "./src/pdf/layout.ts"
   },
   "scripts": {
     "test": "vitest run",

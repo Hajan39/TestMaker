@@ -3,6 +3,7 @@ import type { Block } from '../schema/blocks'
 import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
 import { answerLines } from '../schema/test'
+import { numberedBlanks, tableBlankNumbers } from './layout'
 import { displayOrder } from './shuffle'
 import { LETTERS } from './styles'
 import { sanitizeText } from './text'
@@ -163,18 +164,9 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
 
     case 'fill_blank': {
       // Každá mezera dostane pořadové číslo v závorce — týmiž značkami se na ni
-      // odkazuje klíč, takže se odpovědi nemusí dopočítávat podle pořadí v textu.
-      let blankNumber = 0
-      const text = sanitizeText(question.payload.text)
-        .replace(/___/g, () => {
-          blankNumber += 1
-          return ` (${blankNumber}) ______________ `
-        })
-        // Mezery kolem značky drží čitelnost i tam, kde je „___“ přilepené ke
-        // slovu; tady se jen uklidí, co tím vzniklo navíc.
-        .replace(/ {2,}/g, ' ')
-        .replace(/ ([,.;:!?])/g, '$1')
-        .trim()
+      // odkazuje klíč (viz `numberedBlanks`, kterou používá i papírová stránka
+      // ve skladači), takže se odpovědi nemusí dopočítávat podle pořadí v textu.
+      const text = numberedBlanks(sanitizeText(question.payload.text))
       return (
         <View style={{ marginTop: 6 }}>
           <Text style={{ lineHeight: 1.9 }}>{text}</Text>
@@ -233,10 +225,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
     case 'table_fill': {
       // Prázdné buňky se očíslují v pořadí, v jakém k nim patří odpovědi
       // v klíči — jinak by se musely dopočítávat podle pozice v tabulce.
-      let blankNumber = 0
-      const blankNumbers = question.payload.rows.map((row) =>
-        row.map((cell) => (cell ? null : (blankNumber += 1))),
-      )
+      const blankNumbers = tableBlankNumbers(question.payload.rows)
       return (
         <View style={{ marginTop: 6, border: LIGHT }}>
           <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderBottom: LIGHT }}>

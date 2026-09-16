@@ -3,6 +3,7 @@ import type { Question } from '../schema/question'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import type { RenderableTest, ResolvedTestItem } from '../schema/test'
 import { formatAnswer } from './answerKey'
+import { formatPoints } from './layout'
 import { QuestionBody } from './QuestionBody'
 import { buildVariant } from './shuffle'
 import { pagePadding, questionLabel } from './styles'
@@ -340,8 +341,4 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string 
       />
     </View>
   )
-}
-
-function formatPoints(points: number): string {
-  return Number.isInteger(points) ? String(points) : points.toFixed(1).replace('.', ',')
 }

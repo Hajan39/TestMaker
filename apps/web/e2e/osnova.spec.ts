@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
 
 /**
- * Osnova testu: co jde u jednotlivé položky nastavit jen pro tenhle test,
- * aniž by se měnila otázka v bance.
+ * Položka na stránce písemky: co jde nastavit jen pro tenhle test, aniž by se
+ * měnila otázka v bance. Ovládání položky (body, řádky, odebrání) se vynoří
+ * u okraje listu, když je položka pod myší nebo v ní stojí ohnisko.
  */
 test.describe('položka osnovy', () => {
   test('u volné odpovědi jde nastavit počet řádků a uloží se s testem', async ({ page }) => {
@@ -45,8 +46,8 @@ test.describe('položka osnovy', () => {
 })
 
 /**
- * Skládání osnovy: kam se dá nová položka vložit a jestli se táž otázka
- * smí do testu dostat víckrát.
+ * Skládání písemky: kam se dá nová položka na stránku vložit a jestli se táž
+ * otázka smí do testu dostat víckrát.
  */
 test.describe('skládání osnovy', () => {
   /** Přidá do prázdné osnovy dvě různé otázky z první rozbalené skupiny. */
@@ -63,24 +64,23 @@ test.describe('skládání osnovy', () => {
   test('nadpis části jde vložit před první položku, ne jen na konec', async ({ page }) => {
     await pridejDveOtazky(page)
 
-    const outline = page.locator('ol').filter({ has: page.getByLabel('Vložit na konec') })
-    const rows = outline.locator('> li')
+    // Položky napříč všemi listy: stránka se láme, kde se zlomí PDF.
+    const rows = page.locator('[data-slot="paper-sheet"] ol > li')
     // Prokládané vkládací pruhy: 2 otázky = 3 místa k vložení + 2 řádky.
     await expect(rows).toHaveCount(5)
 
     await page.getByLabel('Vložit před 1. položku').click()
     await page.getByRole('menuitem', { name: 'Nadpis části' }).click()
 
-    // Nadpis je opravdu první položkou osnovy, ne poslední.
-    const texts = outline.getByRole('textbox')
-    await expect(texts.first()).toHaveValue('Nová část')
-    await expect(rows.nth(1)).toContainText('nadpis části')
+    // Nadpis je opravdu první položkou stránky, ne poslední. Na papíře je to
+    // rovnou nadpis části, ne řádek s odznakem — poznáme ho podle popisku pole.
+    await expect(rows.nth(1).getByLabel('Nadpis části')).toHaveValue('Nová část')
     await expect(rows).toHaveCount(7)
 
     // A pokyn vložený doprostřed skončí mezi oběma otázkami.
     await page.getByLabel('Vložit před 3. položku').click()
     await page.getByRole('menuitem', { name: 'Pokyn' }).click()
-    await expect(rows.nth(5)).toContainText('pokyn')
+    await expect(rows.nth(5).getByLabel('Pokyn k vypracování')).toBeVisible()
   })
 
   test('vkládací tlačítko se ovládá i klávesnicí', async ({ page }) => {
@@ -92,8 +92,9 @@ test.describe('skládání osnovy', () => {
     await page.getByRole('menuitem', { name: 'Zalomení strany' }).click()
 
     // Poslední <li> je vkládací pruh na konci, položka je předposlední.
-    const rows = page.locator('ol').filter({ has: insert }).locator('> li')
-    await expect(rows.nth((await rows.count()) - 2)).toContainText('zalomení strany')
+    // Zalomení se na stránce ukazuje jako předěl „nová strana“.
+    const rows = page.locator('[data-slot="paper-sheet"] ol > li')
+    await expect(rows.nth((await rows.count()) - 2)).toContainText('nová strana')
   })
 
   test('táž otázka jde do testu zařadit dvakrát a uloží se dvakrát', async ({ page }) => {
@@ -118,7 +119,7 @@ test.describe('skládání osnovy', () => {
     // na konci osnovy, kam se přidal.
     await page.goto(page.url())
     await expect(page.getByText(/^\d+ otázek/).first()).toHaveText(pocet ?? '')
-    const rows = page.locator('ol').filter({ has: page.getByLabel('Vložit na konec') }).locator('> li')
+    const rows = page.locator('[data-slot="paper-sheet"] ol > li')
     await expect(rows.nth(1)).toContainText('1. použití')
     // Předposlední <li>: za poslední položkou je ještě vkládací pruh.
     await expect(rows.nth((await rows.count()) - 2)).toContainText('2. použití')

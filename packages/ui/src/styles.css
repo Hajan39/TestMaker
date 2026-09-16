@@ -41,6 +41,10 @@
   --color-paper: #ffffff;
   --color-paper-fg: #14161a;
   --color-paper-line: #d8dade;
+  /* Podbarvení hlavičkového řádku tabulek na papíře — táž šedá, jakou
+     tiskne PDF (`QuestionBody.tsx`). Do tmavého režimu nepatří, papír
+     zůstává papírem. */
+  --color-paper-shade: #f0f0f0;
 
   /* Stav koncept */
   --color-draft-bg: #fdefd6;

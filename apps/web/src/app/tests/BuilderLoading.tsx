@@ -5,7 +5,7 @@ import { Delayed, LoadingCard, PageShell, Skeleton } from '@testmaker/ui'
  * banka otázek napříč tématy, takže je to jeden z nejdelších přechodů.
  *
  * Tvar kopíruje rozvržení skládání: lišta s názvem a akcemi, pod ní sloupce
- * (banka, nastavení, osnova) vysoké jako ty skutečné, aby stránka po načtení
+ * (banka a stránka písemky) vysoké jako ty skutečné, aby stránka po načtení
  * nepodskočila.
  */
 export function BuilderLoading({ label }: { label: string }) {
@@ -19,9 +19,8 @@ export function BuilderLoading({ label }: { label: string }) {
             <Skeleton className="h-8 w-28" />
           </div>
         </div>
-        <div className="grid h-[70vh] grid-cols-2 gap-4 xl:grid-cols-3">
+        <div className="grid h-[70vh] grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4">
           <LoadingCard lines={9} className="min-h-0" />
-          <LoadingCard lines={6} className="hidden min-h-0 xl:block" />
           <LoadingCard lines={7} className="min-h-0" />
         </div>
       </Delayed>

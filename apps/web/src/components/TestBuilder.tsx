@@ -7,8 +7,7 @@ import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, useMatc
 import type { PickerTopic } from '@/lib/questionPicker'
 import { PrintMenu } from '@/components/PrintMenu'
 import { BankPanel } from '@/components/test-builder/BankPanel'
-import { TestOutline } from '@/components/test-builder/TestOutline'
-import { RoughPreview } from '@/components/test-builder/RoughPreview'
+import { TestPage } from '@/components/test-builder/TestPage'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
 import { formatPoints, nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
@@ -19,7 +18,14 @@ const STRUCTURAL_TEXT: Record<'heading' | 'instruction' | 'page_break', string |
   page_break: null,
 }
 
-/** Skládání testu. Drží stav, sloupce (banka / náhled / osnova) jsou řízené komponenty. */
+/**
+ * Skládání testu. Drží stav; oba sloupce — banka otázek vlevo a stránka
+ * písemky vpravo — jsou řízené komponenty.
+ *
+ * Stránka je zároveň náhled i pracovní plocha: dřív se vedle sebe ukazoval
+ * hrubý náhled a zvlášť osnova, takže učitelka skládala v jednom sloupci a
+ * výsledek si domýšlela podle druhého.
+ */
 export function TestBuilder({
   topics,
   templates,
@@ -282,9 +288,12 @@ export function TestBuilder({
       onToggleMany={toggleMany}
     />
   )
-  const outline = (
-    <TestOutline
+  const sheet = (
+    <TestPage
       items={draft}
+      title={settings.title}
+      description={settings.description}
+      header={settings.header}
       graded={settings.graded}
       template={template}
       onReorder={reorder}
@@ -340,19 +349,17 @@ export function TestBuilder({
         <Tabs defaultValue="banka">
           <TabsList>
             <TabsTrigger value="banka">Banka</TabsTrigger>
-            <TabsTrigger value="osnova">Osnova</TabsTrigger>
+            <TabsTrigger value="stranka">Stránka</TabsTrigger>
           </TabsList>
           <TabsContent value="banka"><div className="h-[70vh]">{bank}</div></TabsContent>
-          <TabsContent value="osnova"><div className="h-[70vh]">{outline}</div></TabsContent>
+          <TabsContent value="stranka"><div className="h-[70vh]">{sheet}</div></TabsContent>
         </Tabs>
       ) : (
-        // 1024–1280 px: banka a osnova. Od 1280 px přibude náhled uprostřed.
-        <div className="grid h-[70vh] gap-4 grid-cols-2 xl:grid-cols-3">
+        // Od 1024 px vedle sebe: banka vlevo, stránka vpravo. Stránka dostane
+        // víc místa — je na ní vidět, jak se písemka vytiskne, a pracuje se na ní.
+        <div className="grid h-[70vh] gap-4 grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-h-0">{bank}</div>
-          <div className="hidden min-h-0 xl:block">
-            {template ? <RoughPreview items={draft} template={template} graded={settings.graded} title={settings.title} /> : null}
-          </div>
-          <div className="min-h-0">{outline}</div>
+          <div className="min-h-0">{sheet}</div>
         </div>
       )}
     </div>
