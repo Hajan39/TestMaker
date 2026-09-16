@@ -28,7 +28,6 @@ test.describe('hromadný výběr', () => {
 
   test('v bance otázek přidá celé téma do osnovy', async ({ page }) => {
     await page.goto('/tests/new')
-    await page.getByText('jen schválené').click()
 
     const selectAll = page.getByRole('checkbox', { name: 'Vybrat vše', exact: true })
     await selectAll.waitFor({ state: 'visible' })

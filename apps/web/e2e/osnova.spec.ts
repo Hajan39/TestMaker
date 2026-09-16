@@ -8,7 +8,6 @@ import { expect, test } from '@playwright/test'
 test.describe('položka osnovy', () => {
   test('u volné odpovědi jde nastavit počet řádků a uloží se s testem', async ({ page }) => {
     await page.goto('/tests/new')
-    await page.getByText('jen schválené').click()
 
     // Volná odpověď je jediný typ, u kterého má počet řádků smysl. Nehledá se
     // jen v první skupině — pořadí skupin závisí na obsahu databáze a první
@@ -53,7 +52,6 @@ test.describe('skládání osnovy', () => {
   /** Přidá do prázdné osnovy dvě různé otázky z první rozbalené skupiny. */
   async function pridejDveOtazky(page: import('@playwright/test').Page) {
     await page.goto('/tests/new')
-    await page.getByText('jen schválené').click()
     await page.locator('details summary').first().click()
     const questions = page.locator('details[open] > ul > li')
     await questions.first().getByRole('checkbox').click()

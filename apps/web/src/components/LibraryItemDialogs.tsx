@@ -2,7 +2,7 @@
 
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import {
   BusyButton,
   Button,
@@ -147,16 +147,20 @@ export function NewLibraryItem({
   kind,
   parentId,
   label,
+  iconOnly = false,
   size = 'sm',
   variant = 'outline',
 }: {
   kind: LibraryKind
   parentId?: string
   label?: string
+  /** Jen ikona s popiskem při najetí — pro místa, kde by se texty u každé položky sčítaly. */
+  iconOnly?: boolean
   size?: ComponentProps<typeof Button>['size']
   variant?: ComponentProps<typeof Button>['variant']
 }) {
   const router = useRouter()
+  const popisek = label ?? NAZVY[kind].novy
 
   return (
     <NameDialog
@@ -167,9 +171,15 @@ export function NewLibraryItem({
       confirmLabel="Založit"
       busyLabel="Zakládám…"
       trigger={
-        <Button size={size} variant={variant}>
-          {label ?? NAZVY[kind].novy}
-        </Button>
+        iconOnly ? (
+          <Button size="icon-sm" variant={variant} aria-label={popisek} title={popisek}>
+            <Plus aria-hidden />
+          </Button>
+        ) : (
+          <Button size={size} variant={variant}>
+            {popisek}
+          </Button>
+        )
       }
       onSubmit={async (name) => {
         const response = await fetch('/api/library', {

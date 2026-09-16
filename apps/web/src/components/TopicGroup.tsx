@@ -104,9 +104,15 @@ export function TopicGroup({
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Bez počtu: ten je nahoře u názvu tématu. Zůstává jen údaj, který
+            jinde není — kolik souborů se přeskakuje jako duplicitní. */}
         <h2 className="text-sm font-semibold text-fg">
-          Skupina materiálů ({active.length}
-          {materials.length !== active.length ? ` + ${materials.length - active.length} duplicit` : ''})
+          Materiály
+          {materials.length !== active.length ? (
+            <span className="ml-2 font-normal text-fg-muted">
+              {materials.length - active.length} duplicitních se vynechává
+            </span>
+          ) : null}
         </h2>
         <Button
           size="sm"

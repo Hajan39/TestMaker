@@ -68,11 +68,13 @@ test.describe('ruční správa knihovny', () => {
       // Téma bez materiálů nesmí přehled rozbít — počty jsou prostě nulové.
       await expect(page.getByText('materiálů', { exact: false }).first()).toBeVisible()
 
-      // --- Přejmenování tématu ---------------------------------------------
+      // --- Přejmenování tématu (na místě, bez dialogu) ---------------------
       await page.goto(adresaRocniku)
       await expect(page.getByText(TEMA, { exact: true }).first()).toBeVisible()
       await page.getByRole('button', { name: 'Přejmenovat téma' }).first().click()
-      await vyplnDialog(page, 'Název tématu', TEMA_NOVE, 'Uložit')
+      const poleTematu = page.getByRole('textbox', { name: 'Přejmenovat téma' })
+      await poleTematu.fill(TEMA_NOVE)
+      await poleTematu.press('Enter')
       await expect(page.getByText(TEMA_NOVE, { exact: true }).first()).toBeVisible()
       await expect(page.getByText(TEMA, { exact: true })).toHaveCount(0)
 
@@ -86,7 +88,7 @@ test.describe('ruční správa knihovny', () => {
       // --- Dva ročníky téhož jména to odmítne a řekne proč ------------------
       await panel.getByText(PREDMET, { exact: true }).waitFor()
       const blokPredmetu = panel.locator('div').filter({ hasText: PREDMET }).first()
-      await blokPredmetu.getByRole('button', { name: '+ ročník' }).click()
+      await blokPredmetu.getByRole('button', { name: 'Nový ročník' }).click()
       await vyplnDialog(page, 'Název ročníku', ROCNIK_DRUHY, 'Založit')
       await expect(page.getByRole('heading', { name: ROCNIK_DRUHY, exact: true })).toBeVisible()
 

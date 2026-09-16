@@ -128,7 +128,9 @@ test.describe('dlaždice témat', () => {
       )
       if (!grid) return ['mřížka dlaždic nenalezena']
 
-      for (const tile of Array.from(grid.querySelectorAll('a[href^="/topics/"]'))) {
+      // Dlaždice je celá karta, ne jen odkaz uvnitř ní: název s tužkou
+      // k přejmenování odkaz není, ale z karty čouhat taky nesmí.
+      for (const tile of Array.from(grid.querySelectorAll('[data-slot="card"]'))) {
         const limit = tile.getBoundingClientRect().right
         for (const child of Array.from(tile.querySelectorAll('*'))) {
           // Ořezaný text tři tečky mít smí; chyba je až text čouhající ven z dlaždice.

@@ -9,10 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
-    // Sestavení pro testy v prohlížeči (vlastní distDir, viz next.config.ts).
-    ".next-e2e/**",
-    // Totéž pro testy přihlášení (playwright.login.config.ts).
-    ".next-e2e-login/**",
+    // Sestavení pro testy v prohlížeči (vlastní distDir, viz next.config.ts);
+    // hvězdička pokrývá i jednorázové složky z ověřovacích běhů.
+    ".next-*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

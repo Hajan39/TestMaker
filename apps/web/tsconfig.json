@@ -42,7 +42,11 @@
     ".next-verify/types/**/*.ts",
     ".next-verify/dev/types/**/*.ts",
     ".next-e2e-login/types/**/*.ts",
-    ".next-e2e-login/dev/types/**/*.ts"
+    ".next-e2e-login/dev/types/**/*.ts",
+    ".next-e2e-overeni/types/**/*.ts",
+    ".next-e2e-overeni/dev/types/**/*.ts",
+    ".next-kontrola/types/**/*.ts",
+    ".next-kontrola/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

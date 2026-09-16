@@ -23,7 +23,6 @@ interface MaterialSummary {
 
 export function TopicWorkspace({
   topicId,
-  topicName,
   materials,
   questions,
   lowContent,
@@ -31,7 +30,6 @@ export function TopicWorkspace({
   group,
 }: {
   topicId: string
-  topicName: string
   materials: MaterialSummary[]
   questions: Question[]
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
@@ -51,7 +49,6 @@ export function TopicWorkspace({
   // obsah vynechává, takže se nesmí počítat ani tady — jinak na obrazovce
   // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
   const usable = materials.filter((material) => !material.duplicateOfId)
-  const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
   // Zamítnuté se nepočítají — po kontrole konceptů je smysl doplňovat právě
   // na počet těch, které v tématu zůstaly použitelné.
   const kept = questions.filter((question) => question.status !== 'rejected').length
@@ -87,20 +84,20 @@ export function TopicWorkspace({
       {ai.configured ? (
         <Card className="p-4">
           <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
+          {/* Počty materiálů a otázek stojí nahoře u názvu tématu — tady by se
+              jen opakovaly. Zůstává to, co nikde jinde není: co model dostane
+              a co z toho vznikne. */}
           <p className="mt-1 text-sm text-fg-muted">
-            Zdrojem je celá skupina „{topicName}“: {usable.length}{' '}
-            {usable.length === 1 ? 'materiál' : 'materiálů'},{' '}
-            {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
-            otázky neopakovaly. Vzniknou jako koncepty ke schválení.
+            Model {ai.model} dostane všechny materiály skupiny naráz, aby se otázky neopakovaly.
+            Vzniknou jako koncepty ke schválení.
           </p>
           {kept > 0 ? (
             <p className="mt-1 text-sm text-fg-muted">
-              V tématu už je {kept} {kept === 1 ? 'otázka' : kept < 5 ? 'otázky' : 'otázek'}.{' '}
               {topUp
                 ? willCreate > 0
-                  ? `Doplní se ${willCreate} ${willCreate === 1 ? 'nová' : willCreate < 5 ? 'nové' : 'nových'}.`
+                  ? `Doplní se ${willCreate} ${willCreate === 1 ? 'nová otázka' : willCreate < 5 ? 'nové otázky' : 'nových otázek'}.`
                   : 'Zvolený počet je už naplněný, nic se nevytvoří.'
-                : 'Nové vzniknou navíc; model dostane ty stávající jako seznam, kterému se má vyhnout.'}
+                : 'Stávající otázky dostane model jako seznam, kterému se má vyhnout.'}
             </p>
           ) : null}
           {lowContent ? (

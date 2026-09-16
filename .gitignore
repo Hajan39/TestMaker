@@ -28,8 +28,11 @@ sources/
 .DS_Store
 packages/core/test/tmp/
 apps/web/.next/
-apps/web/.next-e2e/
-apps/web/.next-e2e-login/
+# Sestavení pro testy v prohlížeči. Vzor s hvězdičkou schválně: každý běh si
+# někdy udělá vlastní složku (…-login, …-overeni) a Tailwind by ji jinak
+# prohledal a vyrobil z vygenerovaných chunků nesmyslné třídy, na kterých
+# pak spadne build.
+apps/web/.next-*/
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 .superpowers/

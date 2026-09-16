@@ -19,8 +19,9 @@ export function LibrarySidebar({
         <div key={subject.id}>
           <div className="mb-1 flex items-center justify-between gap-1 px-2">
             <p className="ui-label min-w-0 truncate">{subject.name}</p>
-            {/* Ročník se zakládá tam, kde jsou ročníky vidět — tedy u předmětu. */}
-            <NewLibraryItem kind="grade" parentId={subject.id} label="+ ročník" variant="ghost" />
+            {/* Ročník se zakládá tam, kde jsou ročníky vidět — tedy u předmětu.
+                Stačí ikona: popisek u každého předmětu by přebil jeho název. */}
+            <NewLibraryItem kind="grade" parentId={subject.id} iconOnly variant="ghost" />
           </div>
           <NavList
             activeId={activeGradeId}
@@ -38,8 +39,10 @@ export function LibrarySidebar({
           />
         </div>
       ))}
+      {/* Popisek by tu byl třetí „Nový…" pod sebou; ikona s popiskem při
+          najetí říká totéž a nechá vyniknout názvy předmětů. */}
       <div className="px-2">
-        <NewLibraryItem kind="subject" />
+        <NewLibraryItem kind="subject" iconOnly variant="ghost" />
       </div>
     </nav>
   )

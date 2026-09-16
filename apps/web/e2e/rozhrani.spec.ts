@@ -53,11 +53,8 @@ test.describe('odhad stran pod osnovou testu', () => {
   test('se objeví po přidání otázky a roste s dalšími', async ({ page }) => {
     await page.goto('/tests/new')
 
-    // Banka ve výchozím stavu ukazuje jen schválené otázky; v testovací
-    // databázi bývají i koncepty, proto filtr vypneme.
-    await page.getByText('jen schválené').click()
-
-    // Témata jsou v bance sbalená, otázky se ukážou až po rozbalení.
+    // Banka nabízí rovnou jen schválené otázky (server jiné neposílá), takže se
+    // nic nepřepíná. Témata jsou sbalená, otázky se ukážou až po rozbalení.
     await page.locator('details summary').first().click()
     // Přímí potomci: uvnitř náhledu otázky jsou další seznamy s možnostmi.
     const questions = page.locator('details[open] > ul > li')

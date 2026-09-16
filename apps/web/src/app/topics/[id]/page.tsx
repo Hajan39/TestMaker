@@ -1,6 +1,8 @@
 import { asc, eq } from 'drizzle-orm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { InlineName } from '@/components/InlineName'
+import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { StatRow } from '@testmaker/ui'
 import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
@@ -48,6 +50,10 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   ])
 
   const draftCount = questionList.filter((question) => question.status === 'draft').length
+  // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
+  const usable = materialRows.filter((material) => !material.duplicateOfId)
+  const usableCount = usable.length
+  const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
 
   return (
     <div className="space-y-5">
@@ -58,12 +64,25 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           </Link>
           {topic.gradeName ? ` · ${topic.gradeName}` : ''}
         </p>
-        <h1 className="ui-page-title mt-1">{topic.name}</h1>
+        {/* Název a akce k němu na jednom řádku; čísla o téma níž, na jediném
+            místě — dřív se počty materiálů a otázek opakovaly v každé kartě. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          <InlineName
+            kind="topic"
+            id={topic.id}
+            name={topic.name}
+            as="h1"
+            className="ui-page-title"
+            label="Přejmenovat téma"
+          />
+          <DeleteFromLibrary kind="topic" id={topic.id} iconOnly redirectTo="/" />
+        </div>
       </div>
 
       <StatRow
         items={[
-          { value: materialRows.length, label: 'materiálů' },
+          { value: usableCount, label: usableCount === 1 ? 'materiál' : 'materiálů' },
+          { value: totalChars.toLocaleString('cs'), label: 'znaků k dispozici' },
           { value: questionList.length, label: 'otázek' },
           { value: draftCount, label: 'ke schválení', tone: 'draft' },
         ]}
@@ -71,7 +90,6 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
       <TopicWorkspace
         topicId={topic.id}
-        topicName={topic.name}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList}
         lowContent={topic.lowContent}

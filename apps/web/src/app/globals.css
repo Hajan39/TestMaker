@@ -1,4 +1,12 @@
-@import "tailwindcss";
+/*
+ * `source(none)` vypíná automatické prohledávání projektu. Tailwind jinak čte
+ * i soubory, které se zdrojovým kódem nesouvisí — dočasné složky sestavení
+ * (`.next-*`) nebo snímky obrazovek —, vytáhne z jejich binárního obsahu
+ * náhodné řetězce jako názvy tříd a vyrobí z nich neplatné CSS, na kterém
+ * build spadne. Zdroje si proto vyjmenujeme sami.
+ */
+@import "tailwindcss" source(none);
+@source "../**/*.{ts,tsx}";
 @import "@testmaker/ui/styles.css";
 
 html,

@@ -2,15 +2,22 @@
 
 import Link from 'next/link'
 import { Badge, Card, Tooltip, TooltipContent, TooltipTrigger } from '@testmaker/ui'
+import { InlineName } from '@/components/InlineName'
 
 /**
  * Dlaždice tématu v přehledu ročníku. Názvy bývají dlouhé a bez mezer
  * (`prirodopis-6_pl-bezobratli-vztahy._test_2018`), proto se zkracují
  * a celé znění se ukáže při najetí myší.
  *
- * Dlaždice má dva řádky: na prvním samotný název, na druhém stav tématu —
- * kolik má materiálů a jak daleko je kontrola otázek. Bez druhého řádku se
- * z přehledu nedalo poznat, kde ještě čeká práce, a musel se otevřít.
+ * Dlaždice má tři řádky a každý má jednu úlohu:
+ *
+ * 1. samotný název a tužka k přejmenování — nic víc, ať jde přehled ročníku
+ *    přejet očima po názvech,
+ * 2. čísla: kolik má téma materiálů a jak daleko je kontrola otázek,
+ * 3. odznaky: co čeká ke kontrole a co vázne.
+ *
+ * Dřív stály odznaky vedle názvu a čísla pod nimi totéž opakovala. Název se
+ * tím krátil o to dřív, čím víc se u tématu dělo.
  */
 export function TopicTile({
   id,
@@ -18,6 +25,7 @@ export function TopicTile({
   materialCount,
   questionCount,
   approvedCount,
+  draftCount = 0,
   lowContent,
 }: {
   id: string
@@ -25,44 +33,48 @@ export function TopicTile({
   materialCount: number
   questionCount: number
   approvedCount: number
+  /** Kolik otázek čeká ke kontrole (stav „koncept“). */
+  draftCount?: number
   /** Použitelného textu je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
   lowContent?: boolean
 }) {
-  const pendingCount = questionCount - approvedCount
-
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link href={`/topics/${id}`} className="block">
-          {/* Karta ze shadcn skládá obsah svisle, tady to tak i chceme:
-              nahoře název s odznakem, pod ním řádek se stavem. */}
-          <Card className="gap-1 p-3 hover:border-brand">
-            <div className="flex flex-row items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-fg-soft">{name}</span>
-              {questionCount > 0 ? (
-                <Badge className="shrink-0">{questionCount} ot.</Badge>
-              ) : (
-                <Badge variant="secondary" className="shrink-0">
-                  bez otázek
-                </Badge>
-              )}
-            </div>
-            <p className="truncate text-xs text-fg-muted">
-              {formatMaterials(materialCount)}
-              {questionCount > 0
-                ? pendingCount > 0
-                  ? ` · ${approvedCount} schváleno, ${pendingCount} ke kontrole`
-                  : ` · vše schváleno`
-                : ''}
-              {lowContent ? ' · málo textu na otázky' : ''}
-            </p>
-          </Card>
+    <Card className="gap-1.5 p-3 hover:border-brand">
+      {/* Přejmenování patří k názvu, proto je uvnitř karty, ne vedle ní. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex min-w-0 items-center gap-1">
+            <InlineName
+              kind="topic"
+              id={id}
+              name={name}
+              className="text-sm text-fg-soft"
+              label="Přejmenovat téma"
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-md">
+          {name}
+        </TooltipContent>
+      </Tooltip>
+
+      <Link href={`/topics/${id}`} className="block">
+        <p className="truncate text-xs text-fg-muted">
+          {formatMaterials(materialCount)}
+          {questionCount > 0 ? ` · ${approvedCount} z ${questionCount} zkontrolováno` : ''}
+        </p>
+      </Link>
+
+      {draftCount > 0 || questionCount === 0 || lowContent ? (
+        <Link href={`/topics/${id}`} className="flex flex-wrap items-center gap-1">
+          {draftCount > 0 ? (
+            <Badge className="bg-draft-bg text-draft-fg">{draftCount} ke kontrole</Badge>
+          ) : null}
+          {questionCount === 0 ? <Badge variant="secondary">bez otázek</Badge> : null}
+          {lowContent ? <Badge variant="secondary">málo textu</Badge> : null}
         </Link>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-md">
-        {name}
-      </TooltipContent>
-    </Tooltip>
+      ) : null}
+    </Card>
   )
 }
 

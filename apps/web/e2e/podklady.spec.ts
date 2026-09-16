@@ -58,7 +58,7 @@ test.describe('upozornění na chudé téma', () => {
       .locator('section', { has: page.getByRole('heading', { name: 'PODKLADY', exact: true }) })
       .last()
     await podkladyOverview.getByRole('link', { name: '9. ročník' }).first().click()
-    await expect(page.getByText('málo textu na otázky')).toBeVisible()
+    await expect(page.getByText('málo textu', { exact: true }).first()).toBeVisible()
 
     // Uklidit po sobě — test si založil vlastní předmět, do skutečné knihovny nepatří.
     await page.goto('/')
@@ -114,7 +114,7 @@ test.describe('stejný soubor ve dvou tématech', () => {
       await result.click()
 
       await expect(page.getByRole('heading', { name: 'Sdílené téma' })).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Skupina materiálů (1)' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Materiály' })).toBeVisible()
       await expect(page.getByText(fileName).first()).toBeVisible()
       await expect(page.getByText('stejný obsah jako')).toHaveCount(0)
       await expect(page.getByText('Materiálů je v téhle skupině málo')).toHaveCount(0)

@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from './ui/alert-dialog'
+import { Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Delayed, LoadingLines } from './Loading'
 
@@ -30,6 +31,7 @@ export function DeleteButton({
   description,
   describe,
   confirmLabel = 'Smazat',
+  iconOnly = false,
   size = 'sm',
   variant = 'ghost',
   onConfirm,
@@ -39,6 +41,11 @@ export function DeleteButton({
   description?: ReactNode
   describe?: () => Promise<ReactNode>
   confirmLabel?: string
+  /**
+   * Jen ikona koše s popiskem při najetí. Hodí se tam, kde je akcí u každé
+   * položky víc a texty by přebily to, na čem záleží — tedy názvy.
+   */
+  iconOnly?: boolean
   size?: 'sm' | 'default' | 'lg' | 'icon-sm'
   variant?: 'ghost' | 'outline' | 'destructive'
   onConfirm: () => Promise<void> | void
@@ -74,11 +81,13 @@ export function DeleteButton({
           se jí barva textu vnutila, vznikne červená na červené a nápis zmizí.
         */}
         <Button
-          size={size}
+          size={iconOnly ? 'icon-sm' : size}
           variant={variant}
+          aria-label={iconOnly ? title : undefined}
+          title={iconOnly ? title : undefined}
           className={variant === 'destructive' ? undefined : 'text-danger hover:text-danger'}
         >
-          {label}
+          {iconOnly ? <Trash2 aria-hidden /> : label}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>

@@ -62,11 +62,14 @@ export function DeleteFromLibrary({
   kind,
   id,
   label,
+  iconOnly = false,
   redirectTo,
 }: {
   kind: Kind
   id: string
   label?: string
+  /** Jen ikona koše; popisek se ukáže při najetí. */
+  iconOnly?: boolean
   /** Kam odejít po smazání; bez toho se jen obnoví stránka. */
   redirectTo?: string
 }) {
@@ -75,6 +78,7 @@ export function DeleteFromLibrary({
   return (
     <DeleteButton
       label={label ?? TITLES[kind]}
+      iconOnly={iconOnly}
       title={`${TITLES[kind]}?`}
       confirmLabel="Smazat"
       describe={async () => {
