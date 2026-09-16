@@ -19,9 +19,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  downloadPdf,
-  printPdf,
 } from '@testmaker/ui'
+import { PrintMenuItems } from '@/components/PrintMenu'
 
 export interface TestRowData {
   id: string
@@ -105,34 +104,14 @@ export function TestRow({ row }: { row: TestRowData }) {
               <DropdownMenuItem asChild>
                 <Link href={`/tests/${row.id}`}>Upravit</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  void withPdfWork('Připravuji tisk…', () => printPdf(`/api/tests/${row.id}/pdf?variant=A`))
-                }
-              >
-                Vytisknout
-              </DropdownMenuItem>
-              {/* Ne `<a target="_blank">`: prázdná záložka po dobu vykreslování
-                  neřekne nic a původní stránka se tváří, že se nic nestalo.
-                  Takhle se čeká tady, kde na to jde ukázat. */}
-              <DropdownMenuItem
-                onSelect={() =>
-                  void withPdfWork('Připravuji PDF…', () => downloadPdf(`/api/tests/${row.id}/pdf?variant=A`))
-                }
-              >
-                Stáhnout PDF
-              </DropdownMenuItem>
-              {row.variants === 2 ? (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    void withPdfWork('Připravuji PDF…', () =>
-                      downloadPdf(`/api/tests/${row.id}/pdf?variant=B`),
-                    )
-                  }
-                >
-                  Stáhnout PDF, varianta B
-                </DropdownMenuItem>
-              ) : null}
+              {/* Tisk i stažení berou popisky ze sdílené nabídky — aby se
+                  seznam testů a skladač nemohly rozejít v tom, co „Vytisknout"
+                  vlastně udělá s klíčem správných odpovědí. */}
+              <PrintMenuItems
+                testId={row.id}
+                variants={row.variants}
+                onRun={(action) => void withPdfWork(action.busyLabel, action.run)}
+              />
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={(event) => {

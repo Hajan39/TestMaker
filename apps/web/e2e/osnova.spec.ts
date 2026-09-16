@@ -8,23 +8,30 @@ test.describe('položka osnovy', () => {
   test('u volné odpovědi jde nastavit počet řádků a uloží se s testem', async ({ page }) => {
     await page.goto('/tests/new')
     await page.getByText('jen schválené').click()
-    await page.locator('details summary').first().click()
 
-    // Najdeme volnou odpověď — jen ta má v testu smysl u počtu řádků.
-    const openQuestion = page
-      .locator('details[open] > ul > li')
-      .filter({ hasText: 'Volná odpověď' })
-      .first()
+    // Volná odpověď je jediný typ, u kterého má počet řádků smysl. Nehledá se
+    // jen v první skupině — pořadí skupin závisí na obsahu databáze a první
+    // z nich nemusí volnou odpověď obsahovat vůbec.
+    const groups = page.locator('details')
+    let openQuestion = groups.first()
+    for (let i = 0; i < (await groups.count()); i++) {
+      const group = groups.nth(i)
+      await group.locator('summary').click()
+      const candidate = group.locator('> ul > li').filter({ hasText: 'Volná odpověď' }).first()
+      if ((await candidate.count()) > 0) {
+        openQuestion = candidate
+        break
+      }
+      await group.locator('summary').click()
+    }
     await openQuestion.getByRole('checkbox').click()
 
     const lines = page.getByLabel('Řádků na odpověď')
     await expect(lines).toBeVisible()
     await lines.fill('9')
 
-    // Název je v postranním panelu s nastavením testu.
-    await page.getByRole('button', { name: 'Nastavení' }).click()
-    await page.getByLabel('Název testu').fill('Zkouška počtu řádků')
-    await page.keyboard.press('Escape')
+    // Název je rovnou v hlavičce skladače.
+    await page.getByLabel('Název písemky').fill('Zkouška počtu řádků')
     await page.getByRole('button', { name: 'Uložit' }).click()
     // Po uložení se adresa změní na detail testu (pozor: „/tests/new" by
     // obecnému vzoru taky vyhovělo).
@@ -103,9 +110,7 @@ test.describe('skládání osnovy', () => {
     await expect(prvni.getByText('2\u00d7')).toBeVisible()
     const pocet = await page.getByText(/^\d+ otázek/).first().textContent()
 
-    await page.getByRole('button', { name: 'Nastavení' }).click()
-    await page.getByLabel('Název testu').fill('Zkouška dvojího použití')
-    await page.keyboard.press('Escape')
+    await page.getByLabel('Název písemky').fill('Zkouška dvojího použití')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 

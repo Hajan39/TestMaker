@@ -108,7 +108,7 @@ test.describe('tisk testu', () => {
     try {
       await page.goto('/tests')
       await page.getByRole('button', { name: 'Akce' }).first().click()
-      await page.getByRole('menuitem', { name: 'Vytisknout' }).click()
+      await page.getByRole('menuitem', { name: 'Vytisknout zadání pro žáky' }).click()
 
       // Do stránky se vloží rám s PDF; to je pozorovatelný důsledek.
       await expect

@@ -40,9 +40,7 @@ test.describe('náhodně sestavený test', () => {
 
     // V osnově je pět otázek a test jde uložit.
     await expect(page.getByText(/^5 otázek/).first()).toBeVisible()
-    await page.getByRole('button', { name: 'Nastavení' }).click()
-    await page.getByLabel('Název testu').fill('Náhodná písemka')
-    await page.keyboard.press('Escape')
+    await page.getByLabel('Název písemky').fill('Náhodná písemka')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 

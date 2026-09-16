@@ -20,7 +20,11 @@ import {
 import { TemplatePreview } from '@/components/TemplatePreview'
 import type { TestSettingsValue } from './types'
 
-/** Nastavení testu — název, hlavička, šablona a varianty. Otevírá se z lišty jako Sheet, ne jako blok nad obsahem. */
+/**
+ * Nastavení testu — podtitul, hlavička, šablona a varianty. Otevírá se z lišty
+ * jako Sheet, ne jako blok nad obsahem. Název písemky sem nepatří: bez něj se
+ * test neuloží, takže stojí v hlavičce skladače, kde je vidět bez otevírání.
+ */
 export function TestSettings({
   value,
   templates,
@@ -43,16 +47,6 @@ export function TestSettings({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-4">
-          <div>
-            <Label htmlFor="test-title">Název testu</Label>
-            <Input
-              id="test-title"
-              value={value.title}
-              placeholder="Např. Čtvrtletní písemka – přírodopis"
-              onChange={(event) => onChange({ ...value, title: event.target.value })}
-            />
-          </div>
-
           <div>
             <Label htmlFor="test-description">Podtitul / úvodní věta (nepovinné)</Label>
             <Input
@@ -140,6 +134,8 @@ export function TestSettings({
             </div>
           </div>
 
+          {/* Klíč správných odpovědí se tu nenastavuje: volí se až při tisku,
+              kde se vybírá mezi „Zadání pro žáky" a „Klíč pro mě". */}
           <div className="flex flex-wrap gap-5">
             <label className="flex items-center gap-2 text-sm text-fg-soft">
               <Checkbox
@@ -147,13 +143,6 @@ export function TestSettings({
                 onCheckedChange={() => onChange({ ...value, graded: !value.graded })}
               />
               Test na známky (tiskne body a políčko na známku)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-fg-soft">
-              <Checkbox
-                checked={value.showKey}
-                onCheckedChange={() => onChange({ ...value, showKey: !value.showKey })}
-              />
-              Přiložit klíč správných odpovědí
             </label>
           </div>
         </div>

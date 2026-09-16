@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
-import { Button, PrintButton, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
+import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
 import type { PickerTopic } from '@/lib/questionPicker'
+import { PrintMenu } from '@/components/PrintMenu'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestOutline } from '@/components/test-builder/TestOutline'
 import { RoughPreview } from '@/components/test-builder/RoughPreview'
@@ -39,6 +40,8 @@ export function TestBuilder({
     templateId: test?.templateId ?? templates[0]?.id ?? '',
     header: test?.header ?? { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
     variants: test?.variants ?? 1,
+    // Klíč se už nenastavuje u testu, ale volí se až při tisku („Zadání pro
+    // žáky" / „Klíč pro mě"). Sloupec v databázi zůstává, jen ho nic nemění.
     showKey: test?.showKey ?? true,
   }))
   const [draft, setDraft] = useState<DraftItem[]>(() =>
@@ -66,6 +69,10 @@ export function TestBuilder({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
+  // Chybějící název se dřív ohlásil u lišty, ale pole bylo schované v panelu
+  // nastavení. Teď je pole v hlavičce a při chybě se na něj rovnou zaostří.
+  const titleRef = useRef<HTMLInputElement>(null)
+  const [titleInvalid, setTitleInvalid] = useState(false)
 
   /**
    * Kolikrát je která otázka v osnově. Táž otázka smí být v testu víckrát
@@ -214,7 +221,12 @@ export function TestBuilder({
 
   async function save() {
     setError(null)
-    if (!settings.title.trim()) return setError('Vyplň název testu.')
+    setTitleInvalid(false)
+    if (!settings.title.trim()) {
+      setTitleInvalid(true)
+      titleRef.current?.focus()
+      return setError('Vyplň název písemky.')
+    }
     if (questionCount === 0) return setError('Přidej aspoň jednu otázku.')
 
     setSaving(true)
@@ -281,36 +293,45 @@ export function TestBuilder({
       onAdd={addStructural}
     />
   )
-  const pdfHref = (variant: 'A' | 'B') => `/api/tests/${savedId}/pdf?variant=${variant}${settings.showKey ? '&key=1' : ''}`
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="ui-page-title">{test ? 'Úprava testu' : 'Nový test'}</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        {/* Název není nastavení mezi ostatními: bez něj se test neuloží, takže
+            patří do hlavičky na oči, ne do panelu, který se ani neotevře. */}
+        <div className="min-w-0 flex-1 basis-64">
+          <h1 className="ui-page-title">{test ? 'Úprava testu' : 'Nový test'}</h1>
+          <div className="mt-2 max-w-md">
+            <Label htmlFor="test-title">Název písemky</Label>
+            <Input
+              id="test-title"
+              ref={titleRef}
+              value={settings.title}
+              placeholder="Např. Čtvrtletní písemka – přírodopis"
+              aria-invalid={titleInvalid || undefined}
+              aria-describedby={titleInvalid ? 'test-title-error' : undefined}
+              onChange={(event) => {
+                setTitleInvalid(false)
+                setSettings({ ...settings, title: event.target.value })
+              }}
+            />
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-fg-muted">
             {questionCount} otázek{settings.graded ? ` · ${formatPoints(totalPoints)} b.` : ''}
           </span>
-          {savedId ? (
-            <>
-              <PrintButton href={pdfHref('A')}>Vytisknout</PrintButton>
-              <a href={pdfHref('A')} target="_blank" rel="noreferrer">
-                <Button size="sm" variant="outline">PDF varianta A</Button>
-              </a>
-              {settings.variants === 2 ? (
-                <a href={pdfHref('B')} target="_blank" rel="noreferrer">
-                  <Button size="sm" variant="outline">PDF varianta B</Button>
-                </a>
-              ) : null}
-            </>
-          ) : null}
+          {savedId ? <PrintMenu testId={savedId} variants={settings.variants} /> : null}
           <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />
           <TestSettings value={settings} templates={templates} onChange={setSettings} />
           <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
         </div>
       </div>
 
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? (
+        <p id="test-title-error" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
 
       {/* Vykresluje se jen jedna podoba. Obě naráz (jedna schovaná) znamenaly
           zdvojená `id` filtrů a zdvojené zaškrtávátko „Vybrat vše". */}
