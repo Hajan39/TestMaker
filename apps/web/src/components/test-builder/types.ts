@@ -21,12 +21,12 @@ export interface DraftItem {
   questionMissing?: boolean
 }
 
+/** Filtry banky. Stav otázky mezi nimi není — v bance jsou vždy jen schválené. */
 export interface BankFilters {
   search: string
   subject: string
   grade: string
   type: string
-  onlyApproved: boolean
 }
 
 /** Nastavení testu upravovaná v postranním panelu (Sheet). */

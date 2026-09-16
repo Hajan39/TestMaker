@@ -1,6 +1,6 @@
 import 'server-only'
-import { asc, eq } from 'drizzle-orm'
-import type { Question } from '@testmaker/core/schema'
+import { asc, eq, inArray } from 'drizzle-orm'
+import type { Question, QuestionStatus } from '@testmaker/core/schema'
 import { db, grades, questions, subjects, topics } from '@/db'
 import { toQuestion } from './questions'
 
@@ -14,10 +14,29 @@ export interface PickerTopic {
 }
 
 /**
- * Všechny otázky seskupené podle tématu pro výběr do testu.
+ * Otázky seskupené podle tématu pro výběr do testu.
+ *
+ * Ve výchozím stavu jen schválené: co učitelka zamítla nebo zatím
+ * nezkontrolovala, nemá do písemky kudy proklouznout. Kdyby se sem posílalo
+ * všechno a odfiltrovávalo se to až v prohlížeči, bylo by schvalování jen
+ * ozdoba — stačilo by odškrtnout zaškrtávátko.
+ *
+ * `statuses` je tu pro přehled banky (`/questions`), který naopak má ukazovat
+ * i koncepty a zamítnuté, ať je vidět, co kde leží.
+ *
  * Test se skládá napříč předměty i ročníky, proto se načítá celá knihovna.
+ *
+ * Poznámka k rozsahu dat: `blocks` ani `explanation` se nevynechávají, i když
+ * to na první pohled vypadá jako zbytečná zátěž. `blocks` vykresluje
+ * `PaperQuestion` (obrázky u zadání) a `explanation` se ukazuje v náhledu
+ * u vzorové odpovědi — obojí přímo ve skladači testu, takže bez nich by se
+ * v písemce tiše ztratily obrázky a poznámky do klíče.
  */
-export async function loadPickerTopics(): Promise<PickerTopic[]> {
+export async function loadPickerTopics(
+  options: { statuses?: QuestionStatus[] } = {},
+): Promise<PickerTopic[]> {
+  const statuses = options.statuses ?? ['approved']
+
   const rows = await db
     .select({
       topicId: topics.id,
@@ -30,6 +49,7 @@ export async function loadPickerTopics(): Promise<PickerTopic[]> {
     .innerJoin(topics, eq(topics.id, questions.topicId))
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+    .where(inArray(questions.status, statuses))
     .orderBy(asc(subjects.name), asc(grades.position), asc(topics.name), asc(questions.createdAt))
 
   const byTopic = new Map<string, PickerTopic>()

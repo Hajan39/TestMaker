@@ -43,6 +43,13 @@
       "when": 1789506652576,
       "tag": "0005_materials-hash-per-topic",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789575600000,
+      "tag": "0006_approve-existing-drafts",
+      "breakpoints": true
     }
   ]
 }

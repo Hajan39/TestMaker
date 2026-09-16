@@ -23,8 +23,10 @@ import type { BankFilters } from './types'
 
 /**
  * Banka otázek — filtrování napříč předměty a ročníky, zaškrtnutím se otázka
- * přidá do osnovy. U otázky, která v testu už je, přibude počet použití
- * a tlačítko, kterým jde zařadit ještě jednou (rozcvička a pak znovu v jiné části).
+ * přidá do osnovy. Nabízí jen schválené otázky; koncept ani zamítnutou sem
+ * server neposílá, takže se filtr na stav nenabízí — nebylo by co filtrovat.
+ * U otázky, která v testu už je, přibude počet použití a tlačítko, kterým jde
+ * zařadit ještě jednou (rozcvička a pak znovu v jiné části).
  */
 export function BankPanel({
   topics,
@@ -60,7 +62,6 @@ export function BankPanel({
         ...topic,
         questions: topic.questions.filter((question) => {
           if (filters.type && question.type !== filters.type) return false
-          if (filters.onlyApproved && question.status !== 'approved') return false
           if (needle) {
             const haystack = `${topic.label} ${JSON.stringify(question.payload)}`.toLocaleLowerCase('cs')
             if (!haystack.includes(needle)) return false
@@ -84,6 +85,7 @@ export function BankPanel({
       <h2 className="text-sm font-semibold text-fg">Banka otázek</h2>
       <p className="mt-1 text-sm text-fg-muted">
         Vybírej napříč předměty i ročníky — hodí se pro čtvrtletky a opakování z loňska.
+        Jsou tu jen schválené otázky; koncepty čekají ke kontrole.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -152,13 +154,6 @@ export function BankPanel({
             onChange={(event) => onFiltersChange({ ...filters, search: event.target.value })}
           />
         </div>
-        <label className="flex items-center gap-2 self-end pb-2 text-sm text-fg-soft">
-          <Checkbox
-            checked={filters.onlyApproved}
-            onCheckedChange={() => onFiltersChange({ ...filters, onlyApproved: !filters.onlyApproved })}
-          />
-          jen schválené
-        </label>
       </div>
 
       {visibleQuestions.length > 0 ? (

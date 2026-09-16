@@ -35,7 +35,8 @@ export type InsertMode = 'append' | 'replace'
  * do osnovy, kde jde s položkami dál hýbat, mazat je a přidávat ručně.
  *
  * Samotný výběr dělá `composeRandomTest` z `@testmaker/core/compose`, tahle
- * komponenta je jen zadání a náhled.
+ * komponenta je jen zadání a náhled. Losuje se z týchž otázek, jaké nabízí
+ * banka, tedy jen ze schválených.
  */
 export function RandomDialog({
   topics,
@@ -54,7 +55,6 @@ export function RandomDialog({
   // `null` = na typu nezáleží; jinak výslovný seznam povolených typů.
   const [types, setTypes] = useState<QuestionType[] | null>(null)
   const [difficulty, setDifficulty] = useState<DifficultyChoice>('mix')
-  const [onlyApproved, setOnlyApproved] = useState(true)
   const [mode, setMode] = useState<InsertMode>('append')
   // Seed drží losování: dokud se nezmění, vyjde tentýž test. „Zamíchat znovu"
   // není nic jiného než nový seed.
@@ -94,10 +94,12 @@ export function RandomDialog({
         limit: limitKind === 'count' ? { kind: 'count', count: amount } : { kind: 'points', points: amount },
         types: activeTypes,
         difficulty,
-        onlyApproved,
+        // Neschválená otázka se do banky nedostane, tohle je jen pojistka:
+        // kdyby se rozsah načítaných otázek někdy rozšířil, los se přes ni nepřenese.
+        onlyApproved: true,
         seed,
       }),
-    [allQuestions, selected, limitKind, amount, activeTypes, difficulty, onlyApproved, seed],
+    [allQuestions, selected, limitKind, amount, activeTypes, difficulty, seed],
   )
 
   const selectedSet = new Set(selected)
@@ -283,11 +285,6 @@ export function RandomDialog({
                 ))}
               </div>
             </div>
-
-            <label className="flex items-center gap-2 text-sm text-fg-soft">
-              <Checkbox checked={onlyApproved} onCheckedChange={() => setOnlyApproved(!onlyApproved)} />
-              jen schválené otázky
-            </label>
 
             <div className="flex flex-wrap items-end gap-2">
               <div className="w-36">

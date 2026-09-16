@@ -64,13 +64,13 @@ export function TestBuilder({
       questionMissing: item.questionMissing,
     })),
   )
-  // Ve výchozím stavu jen schválené — do ostré písemky nemá proklouznout koncept.
+  // Na stav otázky se tu nefiltruje: do banky jdou ze serveru jen schválené
+  // otázky, takže do ostré písemky nemá koncept kudy proklouznout.
   const [filters, setFilters] = useState<BankFilters>({
     search: '',
     subject: '',
     grade: '',
     type: '',
-    onlyApproved: true,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
