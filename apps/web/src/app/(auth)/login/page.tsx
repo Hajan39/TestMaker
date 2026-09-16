@@ -30,11 +30,11 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="mx-auto mt-16 max-w-sm p-6">
-      <h1 className="text-lg font-semibold text-ink-900">Přihlášení</h1>
+    <Card className="mx-auto max-w-sm p-6">
+      <h1 className="text-lg font-semibold text-fg">Přihlášení</h1>
       <form className="mt-4 space-y-3" onSubmit={submit}>
         <div>
-          <Label>Heslo</Label>
+          <Label htmlFor="password">Heslo</Label>
           <Input
             id="password"
             type="password"
@@ -43,7 +43,7 @@ export default function LoginPage() {
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
-        {error ? <p className="text-sm text-danger-600">{error}</p> : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
         <Button type="submit" disabled={busy || password.length === 0}>
           Přihlásit se
         </Button>

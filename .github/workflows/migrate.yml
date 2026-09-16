@@ -54,3 +54,13 @@ jobs:
           DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           DATABASE_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: pnpm db:migrate
+
+      - name: Nasadit vestavěné šablony
+        if: steps.check-secrets.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        # `tests.templateId` je NOT NULL s cizím klíčem na `templates`; bez šablon
+        # by v nasazení nešlo uložit test. Seed je idempotentní (konflikt na `slug`),
+        # takže smí běžet po každé migraci.
+        run: pnpm db:seed

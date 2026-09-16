@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     // Sestavení pro testy v prohlížeči (vlastní distDir, viz next.config.ts).
     ".next-e2e/**",
+    // Totéž pro testy přihlášení (playwright.login.config.ts).
+    ".next-e2e-login/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

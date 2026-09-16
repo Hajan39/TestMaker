@@ -51,17 +51,27 @@ pnpm --filter @testmaker/web import:local ../../sources
 
 Bez `ANTHROPIC_API_KEY` aplikace funguje dál, jen se skryje generování otázek.
 
-Generování otázek běží v pozadí — fronta se zpracuje běžným spouštěním aplikace z prohlížeče,
-nebo ji můžete spustit plánovačem. Na Vercelu to zajišťuje `vercel.json` (každou minutu).
-Při self-hostingu (Synology apod.) spusťte po minutě naplánovaný příkaz:
+Generování otázek běží v pozadí — fronta se zpracuje, dokud je aplikace otevřená
+v prohlížeči. Plánovač na Vercelu nepoužíváme: bezplatný tarif (Hobby) pouští cron
+nejvýš jednou denně, a rozvrh po minutě v `vercel.json` shodí build. Hromadné
+generování proto běží u majitele na počítači:
+
+```bash
+pnpm --filter @testmaker/web generate:bulk
+```
+
+Při self-hostingu (Synology apod.) můžete frontu pohánět naplánovaným příkazem;
+endpoint pouští dovnitř sdílené tajemství `CRON_SECRET`:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://<adresa>/api/jobs/run
 ```
 
-Má-li aplikace běžet vystavená (ne jen lokálně), doplň do `.env.local` vedle
-`ANTHROPIC_API_KEY` i `APP_PASSWORD` a `AUTH_SECRET` — zapnou přihlášení
-jedním sdíleným heslem. Prázdné `APP_PASSWORD` znamená běh bez přihlášení.
+Má-li aplikace běžet vystavená (ne jen lokálně), doplň vedle `ANTHROPIC_API_KEY`
+i `APP_PASSWORD` a `AUTH_SECRET` — zapnou přihlášení jedním sdíleným heslem.
+Lokálně (`pnpm dev`) se bez `APP_PASSWORD` běží bez přihlášení; v nasazení na
+Vercelu se ale aplikace bez hesla neotevře nikomu a odpoví 503 s vysvětlením,
+co doplnit, aby se veřejná adresa omylem nespustila dokořán.
 
 ## Uspořádání
 
@@ -94,9 +104,23 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 
 ## Nasazení
 
-Projekt cílí na Vercel. Databáze je Turso: nastav `DATABASE_URL`
-(`libsql://…`) a `DATABASE_AUTH_TOKEN`. Generování otázek zatím běží lokálně,
-proto `ANTHROPIC_API_KEY` v nasazení nastavený být nemusí.
+Projekt cílí na Vercel (bezplatný tarif Hobby). Ve Vercelu nastav proměnné
+prostředí:
+
+| Proměnná | K čemu |
+| --- | --- |
+| `DATABASE_URL` | Turso, `libsql://…` |
+| `DATABASE_AUTH_TOKEN` | token k Tursu |
+| `APP_PASSWORD` | heslo do aplikace; bez něj se nasazení neotevře |
+| `AUTH_SECRET` | podpis přihlašovací cookie, `openssl rand -hex 32` |
+
+Generování otázek zatím běží lokálně, proto `ANTHROPIC_API_KEY` v nasazení
+nastavený být nemusí; `CRON_SECRET` taky ne, plánovač na Hobby tarifu neběží.
+
+Schéma databáze i vestavěné šablony vyřídí po každém pushi do `main` workflow
+[`.github/workflows/migrate.yml`](.github/workflows/migrate.yml) (migrace
+a `pnpm db:seed`). Potřebuje tajemství `TURSO_DATABASE_URL` a `TURSO_AUTH_TOKEN`
+v nastavení repozitáře.
 
 Co je v plánu dál, popisuje [ROADMAP.md](ROADMAP.md). Historie změn je
 v [CHANGELOG.md](CHANGELOG.md).

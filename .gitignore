@@ -29,6 +29,7 @@ sources/
 packages/core/test/tmp/
 apps/web/.next/
 apps/web/.next-e2e/
+apps/web/.next-e2e-login/
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
 .superpowers/

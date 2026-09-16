@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { THEME_INIT_SCRIPT, Toaster, TooltipProvider } from '@testmaker/ui'
-import { MainNav } from '@/components/MainNav'
+import { authMode } from '@/lib/session'
+import { AppChrome } from './AppChrome'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -9,6 +10,9 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Bez přihlašování (lokální běh) nemá odhlašovací tlačítko co dělat.
+  const prihlasovaniZapnuto = authMode() === 'zapnuto'
+
   return (
     <html lang="cs" suppressHydrationWarning>
       <head>
@@ -17,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full antialiased">
         <TooltipProvider delayDuration={300}>
-          <MainNav>{children}</MainNav>
+          <AppChrome prihlasovaniZapnuto={prihlasovaniZapnuto}>{children}</AppChrome>
         </TooltipProvider>
         {/*
           Hlášky sedí vpravo dole: nahoře je lišta, vlevo navigace a uprostřed

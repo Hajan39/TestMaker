@@ -1,11 +1,36 @@
 import { z } from 'zod'
-import { SESSION_COOKIE, sessionToken } from '@/lib/session'
+import {
+  LOGIN_MAX_ATTEMPTS,
+  SESSION_COOKIE,
+  clearLoginAttempts,
+  equalConstantTime,
+  recordLoginAttempt,
+  sessionToken,
+} from '@/lib/session'
 
 export const runtime = 'nodejs'
 
 const loginSchema = z.object({ password: z.string().min(1) })
 
+/** Zdržení po chybném hesle: zpomalí zkoušení a uživatelka si ho nevšimne. */
+const WRONG_PASSWORD_DELAY_MS = 400
+
 export async function POST(request: Request) {
+  // Adresa volajícího. Za Vercelem je skutečná adresa v `x-forwarded-for`;
+  // když hlavička chybí, počítají se pokusy dohromady — pro jednu uživatelku
+  // je to přijatelné, zamknout by se tím dala nanejvýš ona sama.
+  const client = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'neznámá-adresa'
+
+  const attempt = recordLoginAttempt(client)
+  if (!attempt.allowed) {
+    return Response.json(
+      {
+        error: `Příliš mnoho pokusů o přihlášení. Zkuste to znovu za ${Math.ceil(attempt.retryAfterSeconds / 60)} min.`,
+      },
+      { status: 429, headers: { 'retry-after': String(attempt.retryAfterSeconds) } },
+    )
+  }
+
   const parsed = loginSchema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Vyplň heslo.' }, { status: 400 })
@@ -19,9 +44,21 @@ export async function POST(request: Request) {
       { status: 503 },
     )
   }
-  if (parsed.data.password !== password) {
-    return Response.json({ error: 'Heslo nesouhlasí.' }, { status: 401 })
+  if (!equalConstantTime(parsed.data.password, password)) {
+    await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS))
+    return Response.json(
+      {
+        error:
+          attempt.remaining <= 3
+            ? `Heslo nesouhlasí. Zbývající pokusy: ${attempt.remaining} z ${LOGIN_MAX_ATTEMPTS}. Po vyčerpání se přihlašování na 15 minut uzavře.`
+            : 'Heslo nesouhlasí.',
+      },
+      { status: 401 },
+    )
   }
+
+  // Po úspěchu nemá smysl si pokusy pamatovat: příště se přihlašuje znovu načisto.
+  clearLoginAttempts(client)
 
   const response = Response.json({ ok: true })
   response.headers.append(
