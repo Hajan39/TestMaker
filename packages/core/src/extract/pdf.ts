@@ -1,3 +1,4 @@
+import './uint8array-polyfill'
 import { normalizeText, type ExtractionResult } from './types'
 
 /**
