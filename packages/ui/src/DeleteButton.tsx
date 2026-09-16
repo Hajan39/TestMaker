@@ -68,7 +68,16 @@ export function DeleteButton({
   return (
     <AlertDialog open={open} onOpenChange={(next) => void handleOpenChange(next)}>
       <AlertDialogTrigger asChild>
-        <Button size={size} variant={variant} className="text-danger hover:text-danger">
+        {/*
+          Červený text patří jen na neutrální podklad (`ghost`, `outline`).
+          Varianta `destructive` má červené pozadí a světlé písmo sama — kdyby
+          se jí barva textu vnutila, vznikne červená na červené a nápis zmizí.
+        */}
+        <Button
+          size={size}
+          variant={variant}
+          className={variant === 'destructive' ? undefined : 'text-danger hover:text-danger'}
+        >
           {label}
         </Button>
       </AlertDialogTrigger>

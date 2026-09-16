@@ -25,8 +25,17 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  planUndo,
+  toast,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
+
+/** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
+function questionsWord(count: number): string {
+  if (count === 1) return 'otázka'
+  if (count < 5) return 'otázky'
+  return 'otázek'
+}
 
 /** Seznam otázek k tématu s filtry, hromadnými akcemi a soustředěnou frontou ke schválení. */
 export function ReviewPanel({ topicId, questions }: { topicId: string; questions: Question[] }) {
@@ -63,21 +72,64 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
     })
   }, [questions, filters])
 
-  async function setStatus(ids: string[], status: QuestionStatus) {
+  /**
+   * Fronta patří ke konceptům — dialog se jmenuje „Kontrola konceptů“ a
+   * učitelka v ní nechce znovu potkávat, co už jednou schválila. Filtry se
+   * přitom pořád uplatní, takže jde projít třeba jen lehké koncepty.
+   */
+  const drafts = useMemo(() => visible.filter((question) => question.status === 'draft'), [visible])
+
+  /** Zápis stavu bez obnovení seznamu — hodí se, když se zapisuje víc skupin za sebou. */
+  async function writeStatus(ids: string[], status: QuestionStatus) {
     if (ids.length === 0) return
     await fetch('/api/questions', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ids, status }),
     })
+  }
+
+  async function setStatus(ids: string[], status: QuestionStatus) {
+    if (ids.length === 0) return
+    await writeStatus(ids, status)
     startRefresh(() => router.refresh())
   }
 
+  /**
+   * Vrácení hromadné akce. Otázky mohly mít před ní různé stavy (něco byl
+   * koncept, něco už bylo schválené), proto se vracejí po skupinách — plán
+   * sestaví `planUndo`.
+   */
+  async function undoBulk(previous: [string, QuestionStatus][]) {
+    for (const step of planUndo(previous)) {
+      await writeStatus(step.ids, step.status)
+    }
+    startRefresh(() => router.refresh())
+    toast.success(`Vráceno zpět: ${previous.length} ${questionsWord(previous.length)}`)
+  }
+
   async function bulkStatus(next: 'approved' | 'rejected') {
+    const ids = [...selected]
+    if (ids.length === 0) return
+
+    // Stavy před akcí se poznamenají dřív, než se seznam obnoví — jinak by
+    // se „Vzít zpět“ nemělo k čemu vrátit.
+    const previous = ids.flatMap((id): [string, QuestionStatus][] => {
+      const question = questions.find((item) => item.id === id)
+      return question ? [[id, question.status]] : []
+    })
+
     setPending(next)
     try {
-      await setStatus([...selected], next)
+      await setStatus(ids, next)
       setSelected(new Set())
+      toast.success(
+        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${ids.length} ${questionsWord(ids.length)}`,
+        {
+          duration: 10_000,
+          action: { label: 'Vzít zpět', onClick: () => void undoBulk(previous) },
+        },
+      )
     } finally {
       setPending(null)
     }
@@ -195,8 +247,8 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
               onChange={(event) => setFilters({ ...filters, search: event.target.value })}
             />
           </div>
-          <Button size="sm" variant="outline" onClick={() => setReviewing(true)} disabled={visible.length === 0}>
-            Projít po jedné
+          <Button size="sm" variant="outline" onClick={() => setReviewing(true)} disabled={drafts.length === 0}>
+            Projít po jedné ({drafts.length})
           </Button>
           <Button size="sm" variant="outline" onClick={() => setEditing('new')}>
             Vlastní otázka
@@ -260,7 +312,9 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
         </label>
         <ul className="mt-2 divide-y divide-line-soft">
           {visible.map((question) => (
-            <li key={question.id} className="flex gap-3 py-3">
+            // Id otázky je v atributu, aby se dal v testech spárovat řádek se
+            // záznamem v databázi; v rozhraní samotném nic neznamená.
+            <li key={question.id} data-question-id={question.id} className="flex gap-3 py-3">
               <Checkbox
                 className="mt-1"
                 checked={selected.has(question.id)}
@@ -303,7 +357,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
           </DialogHeader>
           {reviewing ? (
             <ReviewQueue
-              questions={visible}
+              questions={drafts}
               onApprove={(id) => void setStatus([id], 'approved')}
               onReject={(id) => void setStatus([id], 'rejected')}
               onEdit={(id) => {

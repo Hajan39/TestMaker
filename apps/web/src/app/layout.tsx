@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { THEME_INIT_SCRIPT, TooltipProvider } from '@testmaker/ui'
+import { THEME_INIT_SCRIPT, Toaster, TooltipProvider } from '@testmaker/ui'
 import { MainNav } from '@/components/MainNav'
 import './globals.css'
 
@@ -19,6 +19,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TooltipProvider delayDuration={300}>
           <MainNav>{children}</MainNav>
         </TooltipProvider>
+        {/*
+          Hlášky sedí vpravo dole: nahoře je lišta, vlevo navigace a uprostřed
+          se otevírají dialogy — v pravém dolním rohu tak nic nepřekrývají.
+          Barvy si berou z tokenů, takže se v tmavém režimu přebarví samy.
+        */}
+        <Toaster position="bottom-right" />
       </body>
     </html>
   )

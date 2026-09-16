@@ -29,6 +29,10 @@ export {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from './ui/alert-dialog'
+export { Toaster } from './ui/sonner'
+export { toast } from 'sonner'
+export { planUndo } from './undoStatus'
+export type { UndoStatus, UndoStep } from './undoStatus'
 
 // Doménové komponenty přibudou v dalších úkolech.
 export { QuestionPreview } from './QuestionPreview'

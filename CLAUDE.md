@@ -86,6 +86,13 @@ pnpm typecheck
 pnpm build
 ```
 
+**Ruční ověřování nikdy nesahá na ostrou databázi.** Server na portu 3000 běží nad
+`apps/web/local.db`, kde jsou skutečné materiály a otázky majitelovy manželky.
+Pomocné skripty ani zkoušky v prohlížeči proti němu nespouštěj — dřívější běhy
+tam nechaly devětadvacet zkušebních testů a jeden běh smazal dva skutečné
+předměty. Vše ověřuj proti testovacímu serveru (port 3100, `apps/web/e2e.db`),
+který si Playwright spustí sám.
+
 Testy v prohlížeči (`cd apps/web && pnpm exec playwright test`) běží proti
 vlastní databázi `apps/web/e2e.db` a vlastnímu serveru na portu 3100, nikdy
 proti ostré `local.db`; databázi staví `apps/web/scripts/seed-e2e.ts`
