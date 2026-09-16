@@ -165,6 +165,8 @@ export interface GenerationJobParams {
   count: number
   types: QuestionContent['type'][]
   difficulty: 1 | 2 | 3 | 'mix'
+  /** `add` = tolik nových otázek, `target` = doplnit téma na tenhle počet. */
+  mode?: 'add' | 'target'
 }
 
 export const templates = sqliteTable(

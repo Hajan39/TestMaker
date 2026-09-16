@@ -76,6 +76,26 @@ poskytovatele proměnnou `AI_PROVIDER`.
 
 Bez klíče aplikace funguje dál, jen se skryje generování otázek.
 
+### Hromadné generování z příkazové řádky
+
+Fronta v aplikaci potřebuje otevřené okno. Celý ročník nebo celou knihovnu
+proto jde nechat projet skriptem, klidně přes noc:
+
+```bash
+# deset nových otázek u témat, která zatím žádné nemají
+pnpm --filter @testmaker/web generate:bulk -- --grade <id> --count 10
+
+# doplnit každé téma předmětu na dvanáct otázek
+pnpm --filter @testmaker/web generate:bulk -- --subject <id> --target 12
+
+# celá knihovna levnějším modelem
+pnpm --filter @testmaker/web generate:bulk -- --all --target 10 --model gemini-flash-lite-latest
+```
+
+`--count` vytvoří tolik nových otázek, `--target` doplní téma na celkový
+počet (zamítnuté se do něj nepočítají). Témata s málo textem se přeskakují.
+Totéž nastavení je i v aplikaci, u tématu i u hromadného generování.
+
 ## Uspořádání
 
 | Balíček | Obsah |

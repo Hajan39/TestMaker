@@ -23,12 +23,15 @@ export interface GenerateSettings {
   count: number
   types: QuestionType[]
   difficulty: 1 | 2 | 3 | 'mix'
+  /** `add` = tolik nových otázek, `target` = doplnit téma na tenhle počet. */
+  mode: 'add' | 'target'
 }
 
 export const DEFAULT_SETTINGS: GenerateSettings = {
   count: 12,
   types: [...AI_QUESTION_TYPES],
   difficulty: 'mix',
+  mode: 'add',
 }
 
 /** Společné nastavení generování — používá se u jednoho materiálu i u fronty. */
@@ -69,6 +72,22 @@ export function GenerateSettingsForm({
               disabled={disabled}
               onChange={(event) => onChange({ ...value, count: Number(event.target.value) || 1 })}
             />
+          </div>
+          <div className="w-56">
+            <Label htmlFor="generate-mode">Počet otázek znamená</Label>
+            <Select
+              value={value.mode}
+              disabled={disabled}
+              onValueChange={(next) => onChange({ ...value, mode: next === 'target' ? 'target' : 'add' })}
+            >
+              <SelectTrigger id="generate-mode" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="add">Přidat nové</SelectItem>
+                <SelectItem value="target">Doplnit na celkový počet</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="w-40">
             <Label htmlFor="generate-difficulty">Obtížnost</Label>

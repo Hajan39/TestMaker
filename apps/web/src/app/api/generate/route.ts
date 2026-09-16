@@ -11,6 +11,8 @@ const bodySchema = z.object({
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
+  /** `add` = vytvořit `count` nových, `target` = doplnit téma na `count`. */
+  mode: z.enum(['add', 'target']).default('add'),
 })
 
 /** Streamuje průběh generování jako text, aby UI vidělo postup u dlouhých materiálů. */
@@ -48,6 +50,7 @@ export async function POST(request: Request) {
             count: parsed.data.count,
             types: parsed.data.types,
             difficulty: parsed.data.difficulty,
+            mode: parsed.data.mode,
           },
           {
             signal: request.signal,

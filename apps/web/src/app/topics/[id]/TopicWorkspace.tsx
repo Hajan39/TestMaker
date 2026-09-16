@@ -52,6 +52,11 @@ export function TopicWorkspace({
   // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
   const usable = materials.filter((material) => !material.duplicateOfId)
   const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
+  // Zamítnuté se nepočítají — po kontrole konceptů je smysl doplňovat právě
+  // na počet těch, které v tématu zůstaly použitelné.
+  const kept = questions.filter((question) => question.status !== 'rejected').length
+  const topUp = settings.mode === 'target'
+  const willCreate = topUp ? Math.max(0, settings.count - kept) : settings.count
 
   async function generate() {
     setError(null)
@@ -88,6 +93,16 @@ export function TopicWorkspace({
             {totalChars.toLocaleString('cs')} znaků. Model {ai.model} dostane všechny naráz, aby se
             otázky neopakovaly. Vzniknou jako koncepty ke schválení.
           </p>
+          {kept > 0 ? (
+            <p className="mt-1 text-sm text-fg-muted">
+              V tématu už je {kept} {kept === 1 ? 'otázka' : kept < 5 ? 'otázky' : 'otázek'}.{' '}
+              {topUp
+                ? willCreate > 0
+                  ? `Doplní se ${willCreate} ${willCreate === 1 ? 'nová' : willCreate < 5 ? 'nové' : 'nových'}.`
+                  : 'Zvolený počet je už naplněný, nic se nevytvoří.'
+                : 'Nové vzniknou navíc; model dostane ty stávající jako seznam, kterému se má vyhnout.'}
+            </p>
+          ) : null}
           {lowContent ? (
             <p className="mt-2 text-sm text-fg-muted">
               Materiálů je v téhle skupině málo — model z nich zvládne vytvořit jen pár otázek a
@@ -102,10 +117,10 @@ export function TopicWorkspace({
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               variant={lowContent ? 'outline' : 'default'}
-              disabled={generating || usable.length === 0}
+              disabled={generating || usable.length === 0 || willCreate === 0}
               onClick={() => void generate()}
             >
-              Vygenerovat ze skupiny
+              {kept > 0 ? 'Dogenerovat ze skupiny' : 'Vygenerovat ze skupiny'}
             </Button>
             {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
             {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}

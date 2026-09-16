@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type QuestionType } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
@@ -10,12 +10,34 @@ export interface GenerateParams {
   count: number
   types: QuestionType[]
   difficulty: 1 | 2 | 3 | 'mix'
+  /**
+   * `add` = vytvoř `count` nových otázek.
+   * `target` = doplň téma tak, aby v něm bylo dohromady `count` otázek.
+   * Doplňování je to, co učitelka chce u tématu, kde už něco má: po kontrole
+   * konceptů část zamítne a potřebuje dorovnat počet, ne začínat znovu.
+   */
+  mode?: 'add' | 'target'
 }
 
 export const DEFAULT_GENERATE_PARAMS: GenerateParams = {
   count: 12,
   types: [...AI_QUESTION_TYPES],
   difficulty: 'mix',
+  mode: 'add',
+}
+
+/**
+ * Kolik otázek se má v tomhle běhu opravdu vytvořit. U doplňování se počítají
+ * jen otázky, které v tématu zůstaly použitelné — zamítnuté se do počtu
+ * nepočítají, jinak by doplnění nikdy nic nevytvořilo.
+ */
+export async function resolveCount(topicId: string, params: GenerateParams): Promise<number> {
+  if (params.mode !== 'target') return params.count
+  const [row] = await db
+    .select({ value: sql<number>`count(*)` })
+    .from(questions)
+    .where(and(eq(questions.topicId, topicId), ne(questions.status, 'rejected')))
+  return Math.max(0, params.count - Number(row?.value ?? 0))
 }
 
 export interface GenerateOutcome {
@@ -131,6 +153,11 @@ export async function generateForTopic(
   params: GenerateParams,
   options: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
 ): Promise<GenerateOutcome> {
+  const wanted = await resolveCount(topicId, params)
+  if (wanted <= 0) {
+    return { created: 0, rejected: 0, failedCalls: 0, topicId, sources: 0 }
+  }
+
   const source = await loadTopicSource(topicId)
   if (!source) throw new Error('Téma nenalezeno')
   if (source.text.trim().length < 200) {
@@ -147,7 +174,7 @@ export async function generateForTopic(
       topicName: source.topicName,
       subjectName: source.subjectName,
       gradeName: source.gradeName || null,
-      count: params.count,
+      count: wanted,
       types: params.types,
       difficulty: params.difficulty,
       avoid: existing.map((item) => questionPrompt(toQuestion(item))),

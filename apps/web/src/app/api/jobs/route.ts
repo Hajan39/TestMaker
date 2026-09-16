@@ -15,8 +15,10 @@ const enqueueSchema = z.object({
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
-  /** Přeskočit témata, která už otázky mají. */
+  /** Přeskočit témata, která už otázky mají. U doplňování nedává smysl. */
   skipWithQuestions: z.boolean().default(true),
+  /** `add` = tolik nových otázek, `target` = doplnit každé téma na tenhle počet. */
+  mode: z.enum(['add', 'target']).default('add'),
 })
 
 /** Stav fronty. */
@@ -55,7 +57,9 @@ export async function POST(request: Request) {
 
   // Témata, která už otázky mají nebo čekají ve frontě, znovu nezařazujeme.
   const busy = new Set<string>()
-  if (input.skipWithQuestions) {
+  // Doplňování se témat s otázkami týká ze všeho nejvíc, proto se u něj
+  // nepřeskakují.
+  if (input.skipWithQuestions && input.mode !== 'target') {
     const withQuestions = await db
       .selectDistinct({ id: questions.topicId })
       .from(questions)
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
       toEnqueue.map((topicId) => ({
         id: newId(),
         topicId,
-        params: { count: input.count, types: input.types, difficulty: input.difficulty },
+        params: { count: input.count, types: input.types, difficulty: input.difficulty, mode: input.mode },
       })),
     )
   }

@@ -6,6 +6,13 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Dogenerování na cílový počet.** U tématu i u hromadného generování jde
+  místo „vytvoř N nových" zvolit „doplň téma na N otázek celkem"; zamítnuté
+  se do počtu nepočítají, takže po kontrole konceptů stačí dorovnat počet.
+  Detail tématu ukazuje, kolik otázek v něm už je a kolik jich přibude.
+- **Hromadné generování z příkazové řádky** (`generate:bulk`) pro celý
+  ročník, předmět, nebo celou knihovnu — nepotřebuje otevřené okno.
+
 - **Hotová písemka se nemění pod rukama.** Při zařazení otázky do testu se
   uloží snímek jejího obsahu; pozdější úprava ani smazání otázky v bance už
   vytištěný test nezmění. V osnově je vidět, že se banka mezitím rozešla.
