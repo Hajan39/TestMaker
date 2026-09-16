@@ -6,6 +6,13 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Předmět, ročník i téma jde založit a přejmenovat ručně**, bez importu
+  materiálů. Do prázdného tématu si tak jde rovnou psát vlastní otázky a název
+  převzatý z názvu složky se dá opravit.
+- **Název písemky je vidět v hlavičce** skladače, ne schovaný v postranním
+  panelu; když chybí, aplikace na pole rovnou skočí.
+- **Hromadné schválení a zamítnutí jde vzít zpět.** Aplikace řekne, co udělala,
+  a deset sekund nabízí návrat do původního stavu.
 - **Náhodně sestavená písemka.** Učitelka zaškrtne okruhy (klidně celý ročník),
   řekne kolik otázek nebo kolik bodů, jaké typy a obtížnost, a aplikace test
   poskládá — otázky rozprostře mezi vybraná témata i mezi typy. Los jde
@@ -89,6 +96,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   nastavení, ne jako kód. Náhled šablony je skutečná stránka PDF.
 
 ### Opraveno
+
+- **Tisk už nikdy nepřiloží klíč k zadání pro žáky.** Dřív byl klíč ve výchozím
+  stavu zapnutý, takže učitelka mohla rozdat i správné odpovědi; totéž tlačítko
+  v seznamu testů klíč naopak nepřidalo nikdy. Nově je všude dvojice „Zadání pro
+  žáky“ a „Klíč pro mě“, pro tisk i pro stažení.
+- **Fronta ke kontrole ukazuje jen koncepty.** Dědila zapnutý filtr, takže
+  učitelka procházela i otázky, které už schválila.
+- **Tlačítko „Smazat“ bylo červené písmo na červeném pozadí** všude, kde stálo
+  v destruktivní variantě.
 
 - **Chyby od modelu jsou česky a říkají, co dělat.** Místo „You exceeded your
   current quota" stojí u generování věta o vyčerpaném denním limitu
