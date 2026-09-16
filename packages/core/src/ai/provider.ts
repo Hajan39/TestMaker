@@ -49,15 +49,10 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
  * `@ai-sdk/google`), Ollama jen běžící server.
  */
 export function isAiConfigured(env: Record<string, string | undefined> = process.env): boolean {
-  const { provider } = readAiConfig(env)
-  switch (provider) {
-    case 'ollama':
-      return true
-    case 'google':
-      return Boolean(env.GOOGLE_GENERATIVE_AI_API_KEY)
-    case 'anthropic':
-      return Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN)
-  }
+  // Se žebříčkem (`AI_MODELS`) stačí, aby se dalo přihlásit aspoň k jednomu
+  // modelu ze seznamu; bez něj je v žebříčku jediná položka a chování je stejné
+  // jako dřív.
+  return readAiLadder(env).some((config) => hasCredentials(config.provider, env))
 }
 
 export async function getModel(config: AiConfig = readAiConfig()): Promise<LanguageModel> {
@@ -79,4 +74,76 @@ export async function getModel(config: AiConfig = readAiConfig()): Promise<Langu
     ? createAnthropic({ authToken, headers: { 'anthropic-beta': 'oauth-2025-04-20' } })
     : createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   return anthropic(config.model)
+}
+
+/** Má prostředí, čím se u tohohle poskytovatele přihlásit? */
+function hasCredentials(provider: AiProviderName, env: Record<string, string | undefined>): boolean {
+  switch (provider) {
+    case 'ollama':
+      return true
+    case 'google':
+      return Boolean(env.GOOGLE_GENERATIVE_AI_API_KEY)
+    case 'anthropic':
+      return Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN)
+  }
+}
+
+function isProviderName(value: string): value is AiProviderName {
+  return value === 'anthropic' || value === 'google' || value === 'ollama'
+}
+
+/**
+ * Jedna položka žebříčku: `poskytovatel:model` (`google:gemini-flash-latest`),
+ * nebo jen `model` — ten pak patří poskytovateli podle `AI_PROVIDER`, případně
+ * podle klíčů v prostředí. Dvojtečka se dělí jen na prvním výskytu a jen když
+ * před ní stojí známý poskytovatel: model Ollamy se jmenuje `qwen3:14b` a ten
+ * se rozdělit nesmí.
+ */
+function parseLadderItem(item: string, fallback: AiProviderName): AiConfig | null {
+  const trimmed = item.trim()
+  if (!trimmed) return null
+  const separator = trimmed.indexOf(':')
+  if (separator > 0) {
+    const prefix = trimmed.slice(0, separator).trim()
+    const rest = trimmed.slice(separator + 1).trim()
+    if (isProviderName(prefix) && rest) return { provider: prefix, model: rest }
+  }
+  return { provider: fallback, model: trimmed }
+}
+
+/**
+ * Žebříček modelů z `AI_MODELS` — seznam oddělený čárkami, ve kterém se
+ * pokračuje, když předchozímu modelu dojde limit nebo je přetížený.
+ *
+ * Bez `AI_MODELS` vrací jediný model podle `AI_PROVIDER`/`AI_MODEL`, tedy
+ * přesně to, co dělala aplikace dřív. Do žebříčku se nikdy nedostane
+ * poskytovatel, kterého tam majitel sám nenapsal — placený model se nesmí
+ * zapnout sám od sebe.
+ *
+ * Položky pro poskytovatele bez klíče se vynechávají: jinak by žebříček
+ * skončil hned na první z nich („klíč neplatí" není chyba na opakování).
+ * Kdyby po vynechání nezbylo nic, vrátí se seznam tak, jak ho majitel napsal,
+ * ať se chyba o chybějícím klíči objeví normálně.
+ */
+export function readAiLadder(env: Record<string, string | undefined> = process.env): AiConfig[] {
+  const raw = env.AI_MODELS?.trim()
+  if (!raw) return [readAiConfig(env)]
+
+  const fallback = readAiConfig(env).provider
+  const parsed: AiConfig[] = []
+  for (const item of raw.split(',')) {
+    const config = parseLadderItem(item, fallback)
+    if (!config) continue
+    if (parsed.some((other) => other.provider === config.provider && other.model === config.model)) continue
+    parsed.push(config)
+  }
+  if (parsed.length === 0) return [readAiConfig(env)]
+
+  const usable = parsed.filter((config) => hasCredentials(config.provider, env))
+  return usable.length > 0 ? usable : parsed
+}
+
+/** Popis modelu do logu a do hlášky: `google:gemini-flash-latest`. */
+export function describeAiConfig(config: AiConfig): string {
+  return `${config.provider}:${config.model}`
 }

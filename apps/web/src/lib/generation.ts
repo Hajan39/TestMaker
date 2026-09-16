@@ -48,6 +48,12 @@ export interface GenerateOutcome {
   topicId: string
   /** Z kolika materiálů se generovalo. */
   sources: number
+  /**
+   * Modely, které otázky vyrobily (`poskytovatel:model`). Víc než jeden
+   * znamená, že se v tématu při vyčerpaném limitu přepnulo dál v žebříčku —
+   * kvalita se mezi modely liší, takže to musí být z hlášky poznat.
+   */
+  models: string[]
 }
 
 /**
@@ -151,11 +157,16 @@ export async function loadTopicSource(topicId: string): Promise<{
 export async function generateForTopic(
   topicId: string,
   params: GenerateParams,
-  options: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+  options: {
+    signal?: AbortSignal
+    onProgress?: (done: number, total: number) => void
+    /** Podvržené generování pro testy; v aplikaci se nepředává. */
+    generate?: typeof generateQuestions
+  } = {},
 ): Promise<GenerateOutcome> {
   const wanted = await resolveCount(topicId, params)
   if (wanted <= 0) {
-    return { created: 0, rejected: 0, failedCalls: 0, topicId, sources: 0 }
+    return { created: 0, rejected: 0, failedCalls: 0, topicId, sources: 0, models: [] }
   }
 
   const source = await loadTopicSource(topicId)
@@ -168,7 +179,8 @@ export async function generateForTopic(
 
   // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
   let created = 0
-  const result = await generateQuestions(
+  const generate = options.generate ?? generateQuestions
+  const result = await generate(
     {
       text: source.text,
       topicName: source.topicName,
@@ -182,8 +194,13 @@ export async function generateForTopic(
     {
       signal: options.signal,
       onChunk: options.onProgress,
-      onBatch: async (batch) => {
-        await insertQuestions(batch, { topicId, source: 'ai', status: 'draft' })
+      onBatch: async (batch, info) => {
+        const ids = await insertQuestions(batch, { topicId, source: 'ai', status: 'draft' })
+        // Který model otázku vyrobil, se ukládá jen do databáze pro pozdější
+        // porovnání kvality — v rozhraní se nikde nezobrazuje. Zapisuje se
+        // zvlášť, aby `insertQuestions` zůstalo o obsahu otázky, ne o tom,
+        // odkud přišla.
+        if (ids.length > 0) await db.update(questions).set({ model: info.model }).where(inArray(questions.id, ids))
         created += batch.length
       },
     },
@@ -195,6 +212,7 @@ export async function generateForTopic(
     failedCalls: result.failedCalls.length,
     topicId,
     sources: source.sources,
+    models: result.models,
   }
 }
 
@@ -275,6 +293,9 @@ export async function regenerateQuestion(
 
   // Až teď — náhrada je na světě, původní otázka může odejít.
   const [newId] = await insertQuestions([replacement], { topicId, source: 'ai', status: 'draft' })
+  // Model jen do databáze, stejně jako u dávkového generování (v rozhraní nikde).
+  const usedModel = result.models[0]
+  if (newId && usedModel) await db.update(questions).set({ model: usedModel }).where(eq(questions.id, newId))
   await db.update(questions).set({ status: 'rejected' }).where(eq(questions.id, questionId))
 
   const [row] = await db.select().from(questions).where(eq(questions.id, newId!)).limit(1)

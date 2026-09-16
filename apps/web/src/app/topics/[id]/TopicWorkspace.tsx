@@ -66,6 +66,9 @@ export function TopicWorkspace({
         else if (event.type === 'done') {
           setStatus(
             `Vytvořeno ${event.created} otázek z ${event.sources} materiálů` +
+              // Když se v jednom tématu vystřídalo víc modelů, otázky nemusí být
+              // stejně kvalitní — učitelka to má vědět dřív, než je začne číst.
+              ((event.models?.length ?? 0) > 1 ? `, modely: ${event.models?.join(' → ')}` : '') +
               (event.rejected > 0 ? `, ${event.rejected} zahozeno` : '') +
               (event.failedCalls > 0 ? `, ${event.failedCalls}× model neodpověděl použitelně` : ''),
           )

@@ -1,4 +1,4 @@
-import { generateObject, NoObjectGeneratedError } from 'ai'
+import { generateObject, NoObjectGeneratedError, type LanguageModel } from 'ai'
 import { z } from 'zod'
 import {
   DEFAULT_POINTS,
@@ -8,8 +8,9 @@ import {
   type QuestionContent,
   type QuestionType,
 } from '../schema/question'
+import { describeAiError } from './errors'
 import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt'
-import { getModel, readAiConfig, type AiConfig } from './provider'
+import { describeAiConfig, getModel, readAiLadder, type AiConfig } from './provider'
 
 /** Maximální délka materiálu v jednom volání; delší se dělí na části. */
 const MAX_CHARS_PER_CALL = 120_000
@@ -33,7 +34,22 @@ export interface GenerationResult {
   chunks: number
   /** Volání, ze kterých se nepodařilo použít vůbec nic. */
   failedCalls: { reason: string }[]
+  /**
+   * Modely, které v tomhle běhu opravdu odpověděly, v pořadí, jak se braly
+   * ze žebříčku (`poskytovatel:model`). Když je jich víc, míchaly se v jednom
+   * tématu otázky z různých modelů — a protože se kvalita mezi modely liší,
+   * musí to být vidět v hlášce po doběhnutí.
+   */
+  models: string[]
 }
+
+/** Jedno volání modelu — v testech se podstrkuje, aby nesahaly na skutečný model. */
+export type ModelCall = (input: {
+  config: AiConfig
+  system: string
+  prompt: string
+  signal?: AbortSignal
+}) => Promise<{ questions: QuestionContent[] }>
 
 /** Rozdělí dlouhý text na části na hranicích odstavců. */
 export function chunkText(text: string, maxChars = MAX_CHARS_PER_CALL): string[] {
@@ -106,19 +122,99 @@ function rawTextOf(error: unknown): string | null {
  * Nevalidní otázky zahodí a vrátí je v `rejected`. Když schéma odmítne celou
  * odpověď, pokusí se z ní vytáhnout aspoň otázky, které v pořádku jsou, aby
  * jedna špatně tvarovaná nezahodila práci ostatních.
+ *
+ * Modelů může být víc (žebříček z `AI_MODELS`). Přepíná se po dávce, ne po
+ * celém tématu: když prvnímu modelu dojde uprostřed generování denní limit,
+ * dogeneruje zbytek další model ze žebříčku a dávky, které už jsou hotové,
+ * zůstávají (ukládá je `onBatch` průběžně). U chyby, která není na opakování
+ * — chybný klíč, zrušený model — se nic dalšího nezkouší.
  */
 export async function generateQuestions(
   request: GenerationRequest,
   options: {
+    /** Jediný model — kdo si vybírá sám, žebříček nepotřebuje. */
     config?: AiConfig
+    /** Žebříček modelů; přebíjí `config`. Bez obojího se čte z prostředí. */
+    configs?: AiConfig[]
     signal?: AbortSignal
     onChunk?: (done: number, total: number) => void
-    /** Zavolá se po každé dokončené dávce, ať se dá ukládat průběžně. */
-    onBatch?: (questions: QuestionContent[]) => Promise<void> | void
+    /**
+     * Zavolá se po každé dokončené dávce, ať se dá ukládat průběžně. Dostane
+     * i model, který dávku vyrobil — při přepnutí v žebříčku má každá dávka
+     * jiný.
+     */
+    onBatch?: (questions: QuestionContent[], info: { model: string }) => Promise<void> | void
+    /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
+    callModel?: ModelCall
   } = {},
 ): Promise<GenerationResult> {
-  const config = options.config ?? readAiConfig()
-  const model = await getModel(config)
+  const ladder =
+    options.configs && options.configs.length > 0
+      ? options.configs
+      : options.config
+        ? [options.config]
+        : readAiLadder()
+
+  const models = new Map<string, LanguageModel>()
+  const callModel: ModelCall =
+    options.callModel ??
+    (async ({ config, system, prompt, signal }) => {
+      const key = describeAiConfig(config)
+      let model = models.get(key)
+      if (!model) {
+        model = await getModel(config)
+        models.set(key, model)
+      }
+      const { object } = await generateObject({
+        model,
+        schema: responseSchema,
+        system,
+        prompt,
+        abortSignal: signal,
+        maxRetries: 2,
+      })
+      return { questions: object.questions }
+    })
+
+  /**
+   * Modely, kterým v tomhle běhu došel limit (nebo jsou přetížené). Pamatují
+   * se do konce běhu — jinak by se na vyčerpaný model naráželo u každé další
+   * dávky znovu a každá by čekala na tutéž chybu.
+   */
+  const exhausted = new Set<string>()
+  const used: string[] = []
+
+  /** Jedna dávka: zkouší modely žebříčku, dokud některý neodpoví. */
+  async function runBatch(system: string, prompt: string): Promise<{ questions: QuestionContent[]; model: string }> {
+    let lastError: unknown = new Error('Žádný model k dispozici')
+    for (const config of ladder) {
+      const key = describeAiConfig(config)
+      if (exhausted.has(key)) continue
+      try {
+        const result = await callModel({ config, system, prompt, signal: options.signal })
+        if (!used.includes(key)) used.push(key)
+        return { questions: result.questions, model: key }
+      } catch (error) {
+        // Přerušení uživatelem není důvod ke střídání modelů.
+        if (options.signal?.aborted || (error as { name?: string })?.name === 'AbortError') throw error
+        // Odpověď přišla, jen se netrefila do tvaru — model funguje, dávku
+        // zachrání volající (salvageQuestions). Přepínat nemá co.
+        if (rawTextOf(error) !== null) {
+          if (!used.includes(key)) used.push(key)
+          throw error
+        }
+        // Chybný klíč nebo zrušený model — na tom nic nezmění ani další pokus,
+        // natož jiný model ze žebříčku.
+        if (!describeAiError(error).retryable) throw error
+        exhausted.add(key)
+        lastError = error
+      }
+    }
+    // Žebříček došel: hotová práce je díky onBatch uložená, chyba posledního
+    // modelu putuje nahoru, ať ji volající přeloží do češtiny.
+    throw lastError
+  }
+
   const chunks = chunkText(request.text)
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
   // Rozvrh typů pro celé generování (viz distributeTypes) — každá dávka si
@@ -141,24 +237,21 @@ export async function generateQuestions(
       // (nemělo by se stát, ale ať dávka i tak dostane platné typy).
       const batchTypes = typeSchedule.slice(accepted.length, accepted.length + batchSize)
 
+      const prompt = buildUserPrompt({
+        ...request,
+        text: chunk,
+        count: batchSize,
+        types: batchTypes.length > 0 ? batchTypes : request.types,
+        // Nově vzniklé otázky jdou první, ať se ořezem seznamu neztratí.
+        avoid: [...accepted.map(promptOf), ...(request.avoid ?? [])],
+      })
+
       let produced: QuestionContent[] = []
+      let batchModel = describeAiConfig(ladder[0] as AiConfig)
       try {
-        const { object } = await generateObject({
-          model,
-          schema: responseSchema,
-          system: buildSystemPrompt(),
-          prompt: buildUserPrompt({
-            ...request,
-            text: chunk,
-            count: batchSize,
-            types: batchTypes.length > 0 ? batchTypes : request.types,
-            // Nově vzniklé otázky jdou první, ať se ořezem seznamu neztratí.
-            avoid: [...accepted.map(promptOf), ...(request.avoid ?? [])],
-          }),
-          abortSignal: options.signal,
-          maxRetries: 2,
-        })
-        produced = object.questions
+        const result = await runBatch(buildSystemPrompt(), prompt)
+        produced = result.questions
+        batchModel = result.model
       } catch (error) {
         const raw = rawTextOf(error)
         if (raw === null) throw error
@@ -185,13 +278,19 @@ export async function generateQuestions(
       }
 
       accepted.push(...batch)
-      if (batch.length > 0) await options.onBatch?.(batch)
+      if (batch.length > 0) await options.onBatch?.(batch, { model: batchModel })
     }
 
     options.onChunk?.(index + 1, chunks.length)
   }
 
-  return { questions: accepted.slice(0, request.count), rejected, chunks: chunks.length, failedCalls }
+  return {
+    questions: accepted.slice(0, request.count),
+    rejected,
+    chunks: chunks.length,
+    failedCalls,
+    models: used,
+  }
 }
 
 /**

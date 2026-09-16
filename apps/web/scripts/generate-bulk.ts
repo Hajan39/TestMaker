@@ -10,10 +10,15 @@
  *   pnpm --filter @testmaker/web generate:bulk -- --grade <id> --count 10
  *   pnpm --filter @testmaker/web generate:bulk -- --subject <id> --target 12
  *   pnpm --filter @testmaker/web generate:bulk -- --all --target 10 --model gemini-flash-lite-latest
+ *   pnpm --filter @testmaker/web generate:bulk -- --all --models google:gemini-flash-latest,google:gemini-flash-lite-latest
  *
  * `--count` vytvoří tolik nových otázek, `--target` doplní téma na tenhle
  * celkový počet. Bez `--force` se přeskakují témata, která už otázky mají
  * (u `--target` se přeskočí jen ta, kde je počet naplněný).
+ *
+ * `--models` je žebříček (totéž co proměnná `AI_MODELS`): když prvnímu modelu
+ * dojde denní limit, běh pokračuje dalším a nespadne celý ročník. Placený
+ * model se do žebříčku dostane jen tím, že ho tam napíšeš.
  */
 import { existsSync, readFileSync } from 'node:fs'
 
@@ -24,6 +29,7 @@ interface Options {
   count: number
   mode: 'add' | 'target'
   model?: string
+  models?: string
   force: boolean
 }
 
@@ -40,6 +46,7 @@ function parseArgs(argv: string[]): Options {
       options.count = Number(next)
       options.mode = 'target'
     } else if (arg === '--model') options.model = next
+    else if (arg === '--models') options.models = next
     else if (arg === '--force') options.force = true
   }
   return options
@@ -60,6 +67,7 @@ async function main(): Promise<void> {
   loadEnv()
   const options = parseArgs(process.argv.slice(2))
   if (options.model) process.env.AI_MODEL = options.model
+  if (options.models) process.env.AI_MODELS = options.models
   if (!options.gradeId && !options.subjectId && !options.all) {
     console.error('Chybí rozsah: --grade <id>, --subject <id>, nebo --all.')
     process.exit(1)
@@ -72,7 +80,7 @@ async function main(): Promise<void> {
   const { db, grades, questions, topics } = await import('../src/db/index')
   const { and, eq, ne, sql } = await import('drizzle-orm')
   const { DEFAULT_GENERATE_PARAMS, generateForTopic, resolveCount } = await import('../src/lib/generation')
-  const { isAiConfigured, readAiConfig } = await import('@testmaker/core/ai')
+  const { describeAiConfig, isAiConfigured, readAiLadder } = await import('@testmaker/core/ai')
 
   if (!isAiConfigured()) {
     console.error('Chybí klíč k modelu — doplň ho do apps/web/.env.local.')
@@ -93,12 +101,18 @@ async function main(): Promise<void> {
     .where(and(scope, eq(topics.lowContent, false)))
     .orderBy(topics.name)
 
-  const config = readAiConfig()
-  console.log(`poskytovatel ${config.provider}, model ${config.model}`)
+  const ladder = readAiLadder()
+  console.log(
+    ladder.length > 1
+      ? `žebříček modelů: ${ladder.map(describeAiConfig).join(' → ')}`
+      : `poskytovatel ${ladder[0]?.provider}, model ${ladder[0]?.model}`,
+  )
   console.log(`témat v rozsahu: ${rows.length}`)
 
   let created = 0
   let failed = 0
+  /** Co se za celý běh použilo — na konci je vidět, jestli se přepínalo. */
+  const usedModels = new Set<string>()
   for (const [index, topic] of rows.entries()) {
     const label = `${index + 1}/${rows.length} ${topic.grade ? `${topic.grade} · ` : ''}${topic.name}`
 
@@ -126,10 +140,18 @@ async function main(): Promise<void> {
         mode: options.mode,
       })
       created += outcome.created
+      for (const model of outcome.models) usedModels.add(model)
       console.log(
         `${label}: ${outcome.created} otázek za ${Math.round((Date.now() - started) / 1000)} s` +
           (outcome.rejected > 0 ? `, ${outcome.rejected} zahozeno` : '') +
-          (outcome.failedCalls > 0 ? `, ${outcome.failedCalls}× model neodpověděl použitelně` : ''),
+          (outcome.failedCalls > 0 ? `, ${outcome.failedCalls}× model neodpověděl použitelně` : '') +
+          // Kvalita se mezi modely liší — u tématu, kde se v půlce přepnulo,
+          // to musí být z výpisu poznat.
+          (outcome.models.length > 1
+            ? `, míchané modely: ${outcome.models.join(' → ')}`
+            : outcome.models.length === 1 && ladder.length > 1
+              ? `, model ${outcome.models[0]}`
+              : ''),
       )
     } catch (error) {
       failed += 1
@@ -138,7 +160,10 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`hotovo: ${created} nových otázek, ${failed} témat skončilo chybou`)
+  console.log(
+    `hotovo: ${created} nových otázek, ${failed} témat skončilo chybou` +
+      (usedModels.size > 0 ? `, použité modely: ${[...usedModels].join(', ')}` : ''),
+  )
 }
 
 main()

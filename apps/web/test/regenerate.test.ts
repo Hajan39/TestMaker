@@ -27,6 +27,7 @@ const modelVrati: typeof generateQuestions = async () => ({
   rejected: [],
   chunks: 1,
   failedCalls: [],
+  models: ['google:gemini-flash-latest'],
 })
 
 /** Podvržený poskytovatel, kterému se volání nepovede (vyčerpaná kvóta). */
@@ -40,6 +41,7 @@ const modelVratiNic: typeof generateQuestions = async () => ({
   rejected: [{ index: 0, errors: ['nesmysl'] }],
   chunks: 1,
   failedCalls: [],
+  models: ['google:gemini-flash-latest'],
 })
 
 /** Stavy otázek jednoho tématu — soubor testů sdílí jednu databázi. */

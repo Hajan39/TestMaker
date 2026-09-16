@@ -134,6 +134,13 @@ export const questions = sqliteTable(
     sourceFile: text('source_file'),
     /** Pasáž z materiálu, o kterou se správná odpověď opírá. */
     sourceQuote: text('source_quote'),
+    /**
+     * Model, který otázku vygeneroval (`google:gemini-flash-latest`). Slouží
+     * jen k pozdějšímu porovnání kvality, když se v jednom tématu vystřídalo
+     * víc modelů ze žebříčku — v rozhraní se nikde nezobrazuje, učitelku to
+     * nezajímá. Prázdné u ručně psaných otázek i u všeho staršího.
+     */
+    model: text('model'),
   },
   (table) => [
     index('questions_topic_idx').on(table.topicId),

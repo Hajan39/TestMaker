@@ -51,6 +51,39 @@ pnpm --filter @testmaker/web import:local ../../sources
 
 Bez `ANTHROPIC_API_KEY` aplikace funguje dál, jen se skryje generování otázek.
 
+### Víc modelů pro generování
+
+Bezplatným tarifům dochází denní limit — a když se to stane uprostřed
+generování celého ročníku, nemá smysl, aby zbytek spadl. Do `.env.local` proto
+jde napsat žebříček modelů: seznam oddělený čárkami, ve kterém se pokračuje,
+když modelu dojde limit nebo je přetížený.
+
+```bash
+AI_MODELS=google:gemini-flash-latest,google:gemini-flash-lite-latest
+```
+
+Položka může určit i poskytovatele (`google:`, `anthropic:`, `ollama:`), takže
+jde míchat Gemini a Claude; bez dvojtečky patří model poskytovateli podle
+`AI_PROVIDER`. Bez `AI_MODELS` se použije jediný model podle `AI_PROVIDER`
+a `AI_MODEL` — přesně jako dřív. Placený model se zapojí jedině tím, že ho do
+žebříčku sám napíšeš; nic se na placeného poskytovatele nepřepne samo.
+
+Přepíná se po dávce, ne po tématu: otázky, které už jsou uložené, zůstávají
+a zbytek tématu dogeneruje další model v pořadí. Vyčerpaný model se do konce
+běhu přeskakuje, aby se na něj nenaráželo u každé další dávky. U chyby, která
+není na opakování (chybný klíč, zrušený model), se další model nezkouší.
+Když dojde celý žebříček, generování skončí českou hláškou od posledního
+modelu a to, co do té chvíle vzniklo, zůstává v tématu.
+
+Kvalita se mezi modely liší, proto je v hlášce po doběhnutí vidět, když se
+v jednom tématu modely míchaly. Hromadné generování bere žebříček z prostředí,
+nebo z přepínače:
+
+```bash
+pnpm --filter @testmaker/web generate:bulk -- --all --target 10 \
+  --models google:gemini-flash-latest,google:gemini-flash-lite-latest
+```
+
 Generování otázek běží v pozadí — fronta se zpracuje, dokud je aplikace otevřená
 v prohlížeči. Plánovač na Vercelu nepoužíváme: bezplatný tarif (Hobby) pouští cron
 nejvýš jednou denně, a rozvrh po minutě v `vercel.json` shodí build. Hromadné

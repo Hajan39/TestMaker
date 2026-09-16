@@ -19,6 +19,8 @@ export type GenerateEvent =
       failedCalls: number
       topicId: string
       sources: number
+      /** Použité modely v pořadí, jak na ně došlo (žebříček při vyčerpaném limitu). */
+      models?: string[]
     }
   | { type: 'error'; message: string }
 
