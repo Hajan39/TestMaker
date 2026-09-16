@@ -141,6 +141,16 @@ export const questions = sqliteTable(
      * nezajímá. Prázdné u ručně psaných otázek i u všeho staršího.
      */
     model: text('model'),
+    /**
+     * Text otázky (zadání, možnosti, odpovědi i vysvětlení) malými písmeny —
+     * jen pro hledání v bance. Bez něj by se hledalo v prohlížeči nad vším,
+     * co se stáhlo, a banka by se kvůli tomu musela posílat celá.
+     *
+     * Plní se při každém zápisu otázky (`searchTextFor` v `lib/questions.ts`)
+     * a malá písmena se dělají v JavaScriptu, aby se česká písmena s háčky
+     * chovala stejně jako ostatní — `lower()` v SQLite umí jen ASCII.
+     */
+    searchText: text('search_text').notNull().default(''),
   },
   (table) => [
     index('questions_topic_idx').on(table.topicId),

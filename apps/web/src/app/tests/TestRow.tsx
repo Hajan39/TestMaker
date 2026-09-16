@@ -19,6 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  toast,
 } from '@testmaker/ui'
 import { PrintMenuItems } from '@/components/PrintMenu'
 
@@ -38,6 +39,7 @@ export function TestRow({ row }: { row: TestRowData }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [copying, setCopying] = useState(false)
   // Co se s testem právě děje. Nabídka se po kliknutí zavře, takže se stav
   // nemá kde ukázat v ní — ukazuje se místo tlačítka s třemi tečkami.
   const [pdfWork, setPdfWork] = useState<string | null>(null)
@@ -53,6 +55,32 @@ export function TestRow({ row }: { row: TestRowData }) {
       setPdfError(error instanceof Error ? error.message : String(error))
     } finally {
       setPdfWork(null)
+    }
+  }
+
+  /**
+   * Kopie testu. Loňskou písemku chce učitelka použít znovu, ne přepsat —
+   * kopie si bere i zmrazené znění otázek, takže vypadá přesně jako originál,
+   * i kdyby se otázky v bance mezitím změnily.
+   */
+  async function copy() {
+    setCopying(true)
+    try {
+      const response = await fetch(`/api/tests?copyOf=${encodeURIComponent(row.id)}`, { method: 'POST' })
+      const data = (await response.json()) as { id?: string; error?: string }
+      if (!response.ok || !data.id) {
+        toast.error(data.error ?? 'Kopii se nepodařilo vytvořit')
+        return
+      }
+      router.refresh()
+      toast.success(`Kopie „${row.title} (kopie)“ je hotová.`, {
+        duration: 10_000,
+        action: { label: 'Otevřít', onClick: () => router.push(`/tests/${data.id}`) },
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Kopii se nepodařilo vytvořit')
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -85,13 +113,13 @@ export function TestRow({ row }: { row: TestRowData }) {
         {new Date(row.updatedAt).toLocaleDateString('cs')}
       </td>
       <td className="py-2 pr-0 text-right">
-        {pdfWork ? (
+        {pdfWork || copying ? (
           <span
             role="status"
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-fg-soft"
           >
             <Loader2 className="size-3.5 animate-spin" />
-            {pdfWork}
+            {pdfWork ?? 'Kopíruji…'}
           </span>
         ) : (
           <DropdownMenu>
@@ -104,6 +132,9 @@ export function TestRow({ row }: { row: TestRowData }) {
               <DropdownMenuItem asChild>
                 <Link href={`/tests/${row.id}`}>Upravit</Link>
               </DropdownMenuItem>
+              {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
+                  místo tlačítka s třemi tečkami, stejně jako u tisku. */}
+              <DropdownMenuItem onSelect={() => void copy()}>Vytvořit kopii</DropdownMenuItem>
               {/* Tisk i stažení berou popisky ze sdílené nabídky — aby se
                   seznam testů a skladač nemohly rozejít v tom, co „Vytisknout"
                   vlastně udělá s klíčem správných odpovědí. */}

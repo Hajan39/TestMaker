@@ -6,7 +6,7 @@ export default function QuestionsLoading() {
     <PageShell>
       <Delayed label="Načítám banku otázek…" className="space-y-4">
         <LoadingHeading />
-        <LoadingTable rows={8} columns={5} />
+        <LoadingTable rows={8} columns={7} />
       </Delayed>
     </PageShell>
   )

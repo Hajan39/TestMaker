@@ -335,6 +335,8 @@ async function main() {
             difficulty: question.difficulty,
             source: 'manual',
             status: 'approved',
+            // Text pro hledání v bance se plní při každém zápisu otázky.
+            searchText: `${JSON.stringify(question.payload)} `.toLocaleLowerCase('cs'),
           })
           questionCount += 1
         }

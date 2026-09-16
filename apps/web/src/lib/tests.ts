@@ -1,5 +1,5 @@
 import 'server-only'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
   resolveTestItemQuestion,
   serializeQuestionSnapshot,
@@ -11,6 +11,40 @@ import {
 } from '@testmaker/core/schema'
 import { db, assets, questions, templates, testItems, tests } from '@/db'
 import { toQuestion } from './questions'
+
+export interface TestQuery {
+  /** Hledá se v názvu a v popisu testu. */
+  search?: string
+  templateId?: string
+}
+
+/**
+ * Podmínky pro seznam testů. Hledá se v databázi, ne v prohlížeči — seznam
+ * testů se dřív načítal celý bez omezení a loňskou písemku v něm nešlo najít
+ * jinak než očima.
+ *
+ * Na velikosti písmen nezáleží, protože `like` je v SQLite u ASCII necitlivé;
+ * u písmen s háčky a čárkami rozlišuje („Řepa" nenajde „řepa"). Na názvy
+ * testů, které píše učitelka sama, to stačí — banka otázek na tohle má vlastní
+ * sloupec `search_text` s předem převedeným textem.
+ *
+ * Procenta a podtržítka v hledaném textu jsou v `like` zástupné znaky, proto
+ * se odzávorkují; jinak by „100 %" vrátilo všechno.
+ */
+export function testConditions(query: TestQuery): SQL[] {
+  const conditions: SQL[] = []
+  const needle = query.search?.trim()
+  if (needle) {
+    const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
+    const match = or(
+      sql`${tests.title} like ${pattern} escape '\\'`,
+      sql`coalesce(${tests.description}, '') like ${pattern} escape '\\'`,
+    )
+    if (match) conditions.push(match)
+  }
+  if (query.templateId) conditions.push(eq(tests.templateId, query.templateId))
+  return conditions
+}
 
 export async function loadTemplates(): Promise<Template[]> {
   const rows = await db.select().from(templates).orderBy(asc(templates.position), asc(templates.name))

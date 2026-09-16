@@ -113,7 +113,7 @@ describe('ukládání testu', () => {
 
   it('v seznamu testů je i počet položek', async () => {
     const id = await createTest([{ kind: 'heading', text: 'Část A' }, { kind: 'page_break' }])
-    const { tests } = (await (await GET()).json()) as {
+    const { tests } = (await (await GET(req('/api/tests'))).json()) as {
       tests: { id: string; itemCount: number; templateName: string }[]
     }
     const row = tests.find((test) => test.id === id)

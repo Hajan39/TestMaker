@@ -1,6 +1,11 @@
 import { inArray } from 'drizzle-orm'
 import { z } from 'zod'
-import { QUESTION_STATUSES, questionContentSchema, validateQuestionContent } from '@testmaker/core/schema'
+import {
+  QUESTION_STATUSES,
+  QUESTION_TYPES,
+  questionContentSchema,
+  validateQuestionContent,
+} from '@testmaker/core/schema'
 import { db, questions } from '@/db'
 import {
   QUESTION_PAGE_SIZE,
@@ -8,6 +13,7 @@ import {
   deleteQuestionsWithAssets,
   insertQuestions,
   loadQuestionPage,
+  searchTextFor,
   setStatusForTopic,
   type QuestionQuery,
 } from '@/lib/questions'
@@ -44,9 +50,13 @@ const bulkTopicSchema = z.object({
 /** Stránka fronty: filtr, velikost a kurzor za poslední přečtenou otázkou. */
 const listSchema = z.object({
   statuses: z.array(z.enum(QUESTION_STATUSES)).optional(),
+  /** Typy otázek — banka se jimi zužuje, fronta ke kontrole je neposílá. */
+  types: z.array(z.enum(QUESTION_TYPES)).optional(),
   topicId: z.string().optional(),
   gradeId: z.string().optional(),
   subjectId: z.string().optional(),
+  /** Hledaný text; porovnává se se sloupcem `search_text`, ne v prohlížeči. */
+  q: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(QUESTION_PAGE_SIZE),
   cursor: z.string().optional(),
 })
@@ -62,6 +72,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams
   const parsed = listSchema.safeParse({
     statuses: params.getAll('status').length > 0 ? params.getAll('status') : undefined,
+    types: params.getAll('type').length > 0 ? params.getAll('type') : undefined,
+    q: params.get('q') ?? undefined,
     topicId: params.get('topicId') ?? undefined,
     gradeId: params.get('gradeId') ?? undefined,
     subjectId: params.get('subjectId') ?? undefined,
@@ -74,9 +86,11 @@ export async function GET(request: Request) {
 
   const query: QuestionQuery = {
     statuses: parsed.data.statuses,
+    types: parsed.data.types,
     topicId: parsed.data.topicId,
     gradeId: parsed.data.gradeId,
     subjectId: parsed.data.subjectId,
+    search: parsed.data.q,
   }
 
   const [page, total] = await Promise.all([
@@ -122,6 +136,9 @@ export async function PATCH(request: Request) {
     update.points = parsed.data.question.points
     update.difficulty = parsed.data.question.difficulty
     update.explanation = parsed.data.question.explanation ?? null
+    // Text pro hledání se přepočítá spolu s obsahem — jinak by se upravená
+    // otázka dala v bance najít jen podle svého původního znění.
+    update.searchText = searchTextFor(parsed.data.question)
   }
 
   await db.update(questions).set(update).where(inArray(questions.id, [parsed.data.id]))

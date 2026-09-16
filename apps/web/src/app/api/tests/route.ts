@@ -1,9 +1,9 @@
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { buildQuestionSnapshots } from '@/lib/tests'
+import { buildQuestionSnapshots, testConditions } from '@/lib/tests'
 
 export const runtime = 'nodejs'
 
@@ -33,7 +33,17 @@ const testSchema = z.object({
   items: z.array(itemSchema).default([]),
 })
 
-export async function GET() {
+/**
+ * Seznam testů. Volitelně zúžený hledáním v názvu a popisu (`q`) a šablonou
+ * (`templateId`) — testů přibývá každý rok a projít je očima přestalo stačit.
+ */
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams
+  const conditions = testConditions({
+    search: params.get('q') ?? undefined,
+    templateId: params.get('templateId') ?? undefined,
+  })
+
   const rows = await db
     .select({
       id: tests.id,
@@ -46,12 +56,72 @@ export async function GET() {
     })
     .from(tests)
     .innerJoin(templates, eq(templates.id, tests.templateId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(tests.updatedAt))
   return Response.json({ tests: rows })
 }
 
-/** Založí test i s položkami. */
+/**
+ * Kopie hotového testu.
+ *
+ * Loňskou písemku chce učitelka použít znovu, ne přepsat — proto kopie, a ne
+ * úprava originálu. Přebírají se i **zmrazené snímky otázek**: kdyby se
+ * pořizovaly znovu z banky, dostala by kopie dnešní znění otázek místo toho,
+ * co se tehdy tisklo, a k loňské písemce by už nešlo vyrobit stejný klíč.
+ */
+async function copyTest(sourceId: string): Promise<Response> {
+  const [source] = await db.select().from(tests).where(eq(tests.id, sourceId)).limit(1)
+  if (!source) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
+
+  const items = await db
+    .select()
+    .from(testItems)
+    .where(eq(testItems.testId, sourceId))
+    .orderBy(asc(testItems.position))
+
+  const id = newId()
+  const now = new Date().toISOString()
+  await db.insert(tests).values({
+    id,
+    title: `${source.title} (kopie)`,
+    description: source.description,
+    graded: source.graded,
+    templateId: source.templateId,
+    header: source.header,
+    variants: source.variants,
+    showKey: source.showKey,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  if (items.length > 0) {
+    await db.insert(testItems).values(
+      items.map((item) => ({
+        id: newId(),
+        testId: id,
+        position: item.position,
+        kind: item.kind,
+        questionId: item.questionId,
+        text: item.text,
+        pointsOverride: item.pointsOverride,
+        linesOverride: item.linesOverride,
+        // Snímek se přebírá tak, jak je — kopie musí vypadat jako originál,
+        // i když se otázka v bance mezitím změnila nebo úplně zmizela.
+        questionSnapshot: item.questionSnapshot,
+      })),
+    )
+  }
+
+  return Response.json({ id, copiedFrom: sourceId, items: items.length })
+}
+
+/** Založí test i s položkami; s `?copyOf=<id>` udělá kopii existujícího. */
 export async function POST(request: Request) {
+  const copyOf = new URL(request.url).searchParams.get('copyOf')
+  // Kopie se pozná podle adresy a tělo požadavku nemá — čte se proto až tady,
+  // po odbočce.
+  if (copyOf) return copyTest(copyOf)
+
   const parsed = testSchema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })

@@ -1,6 +1,7 @@
-import { BUILT_IN_TEMPLATES } from '@testmaker/core/schema'
+import { BUILT_IN_TEMPLATES, type QuestionType } from '@testmaker/core/schema'
 import { db, grades, materials, questions, subjects, templates, topics } from '@/db'
 import { newId } from '@/lib/ids'
+import { searchTextFor } from '@/lib/questions'
 
 /** Požadavek na route handler — ty berou obyčejný `Request`. */
 export function req(url: string, init?: RequestInit): Request {
@@ -85,24 +86,32 @@ export async function seedMaterial(
 /** Otázka v bance. Výchozí je jednoduchý výběr z možností. */
 export async function seedQuestion(
   topicId: string | null,
-  options: { prompt?: string; status?: 'draft' | 'approved' | 'rejected' } = {},
+  options: {
+    prompt?: string
+    status?: 'draft' | 'approved' | 'rejected'
+    /** Typ otázky — kvůli filtru podle typu; payload zůstává jednoduchý. */
+    type?: QuestionType
+  } = {},
 ): Promise<string> {
   const id = newId()
+  const payload = {
+    prompt: options.prompt ?? 'Kde probíhá výměna plynů?',
+    options: ['V průdušnici', 'V plicních sklípcích'],
+    correctIndex: 1,
+  }
   await db.insert(questions).values({
     id,
     topicId,
     materialId: null,
-    type: 'single_choice',
-    payload: {
-      prompt: options.prompt ?? 'Kde probíhá výměna plynů?',
-      options: ['V průdušnici', 'V plicních sklípcích'],
-      correctIndex: 1,
-    },
+    type: options.type ?? 'single_choice',
+    payload,
     blocks: [],
     points: 1,
     difficulty: 2,
     source: 'ai',
     status: options.status ?? 'approved',
+    // Stejně jako v aplikaci: text pro hledání se plní při zápisu otázky.
+    searchText: searchTextFor({ payload }),
   })
   return id
 }

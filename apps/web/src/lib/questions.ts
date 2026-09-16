@@ -65,6 +65,28 @@ export function questionText(question: Question): string {
   return JSON.stringify(question.payload)
 }
 
+/**
+ * Obsah sloupce `questions.search_text`: všechen text otázky malými písmeny.
+ *
+ * Malá písmena se dělají tady v JavaScriptu, ne až v dotazu — `lower()`
+ * v SQLite umí jen ASCII a hledání podle „řeka“ by minulo otázku, která má
+ * v zadání „Řeka“. Uloží se proto rovnou převedené a hledá se nad tím.
+ */
+export function searchTextFor(content: { payload: unknown; explanation?: string | null }): string {
+  return `${JSON.stringify(content.payload)} ${content.explanation ?? ''}`.toLocaleLowerCase('cs')
+}
+
+/**
+ * Podmínka hledání nad `search_text`. Procenta a podtržítka v hledaném textu
+ * jsou v `LIKE` zástupné znaky — kdo hledá „50 %", nechce dostat všechno.
+ */
+export function searchCondition(search: string): SQL | null {
+  const needle = search.trim().toLocaleLowerCase('cs')
+  if (!needle) return null
+  const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
+  return sql`${questions.searchText} like ${pattern} escape '\\'`
+}
+
 /** Zadání otázky pro výpis v seznamu. */
 export function questionPrompt(question: Question): string {
   const payload = question.payload as { prompt?: string; text?: string }
@@ -88,6 +110,7 @@ export async function insertQuestions(
       points: item.points,
       difficulty: item.difficulty,
       explanation: item.explanation ?? null,
+      searchText: searchTextFor(item),
       source: context.source ?? 'ai',
       status: context.status ?? 'draft',
       sourceFile: evidence?.fileName ?? null,
@@ -169,9 +192,12 @@ export async function deleteQuestionsWithAssets(ids: string[]): Promise<void> {
  */
 export interface QuestionQuery {
   statuses?: QuestionStatus[]
+  types?: QuestionType[]
   topicId?: string
   gradeId?: string
   subjectId?: string
+  /** Hledaný text; porovnává se se sloupcem `search_text`. */
+  search?: string
 }
 
 /** Kolik otázek se v jedné stránce fronty načte, když si volající neřekne jinak. */
@@ -204,6 +230,7 @@ export function decodeCursor(value: string | null | undefined): QuestionCursor |
 function queryConditions(query: QuestionQuery): SQL[] {
   const conditions: SQL[] = []
   if (query.statuses?.length) conditions.push(inArray(questions.status, query.statuses))
+  if (query.types?.length) conditions.push(inArray(questions.type, query.types))
   if (query.topicId) conditions.push(eq(questions.topicId, query.topicId))
   if (query.gradeId) {
     conditions.push(
@@ -221,6 +248,10 @@ function queryConditions(query: QuestionQuery): SQL[] {
           .where(eq(grades.subjectId, query.subjectId)),
       ),
     )
+  }
+  if (query.search) {
+    const condition = searchCondition(query.search)
+    if (condition) conditions.push(condition)
   }
   return conditions
 }
