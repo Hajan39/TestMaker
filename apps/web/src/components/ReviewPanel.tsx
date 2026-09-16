@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
@@ -29,6 +30,7 @@ import {
   toast,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
+import { RegenerateButton } from '@/components/RegenerateButton'
 
 /** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
 function questionsWord(count: number): string {
@@ -250,6 +252,13 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
           <Button size="sm" variant="outline" onClick={() => setReviewing(true)} disabled={drafts.length === 0}>
             Projít po jedné ({drafts.length})
           </Button>
+          {/* Fronta přes celou knihovnu — po hromadném generování je konceptů
+              víc, než se dá odbavit po tématech. */}
+          <Link href={`/review?topicId=${encodeURIComponent(topicId)}`}>
+            <Button size="sm" variant="ghost">
+              Kontrola v celé knihovně
+            </Button>
+          </Link>
           <Button size="sm" variant="outline" onClick={() => setEditing('new')}>
             Vlastní otázka
           </Button>
@@ -331,6 +340,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
                 <Button size="sm" variant="ghost" onClick={() => setEditing(question)}>
                   Upravit
                 </Button>
+                <RegenerateButton questionId={question.id} type={question.type} />
               </div>
             </li>
           ))}

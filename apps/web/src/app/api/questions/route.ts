@@ -1,8 +1,16 @@
 import { inArray } from 'drizzle-orm'
 import { z } from 'zod'
-import { questionContentSchema, validateQuestionContent } from '@testmaker/core/schema'
+import { QUESTION_STATUSES, questionContentSchema, validateQuestionContent } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
-import { deleteQuestionsWithAssets, insertQuestions } from '@/lib/questions'
+import {
+  QUESTION_PAGE_SIZE,
+  countQuestions,
+  deleteQuestionsWithAssets,
+  insertQuestions,
+  loadQuestionPage,
+  setStatusForTopic,
+  type QuestionQuery,
+} from '@/lib/questions'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +29,63 @@ const bulkSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
   status: z.enum(['draft', 'approved', 'rejected']),
 })
+
+/**
+ * Hromadná akce nad celým tématem. Fronta ke kontrole jich umí mít přes tisíc
+ * a posílat tisíc identifikátorů jen proto, aby se schválilo jedno téma, nemá
+ * smysl — stačí id tématu a stav, ze kterého se má měnit.
+ */
+const bulkTopicSchema = z.object({
+  topicId: z.string().min(1),
+  from: z.enum(['draft', 'approved', 'rejected']).default('draft'),
+  status: z.enum(['draft', 'approved', 'rejected']),
+})
+
+/** Stránka fronty: filtr, velikost a kurzor za poslední přečtenou otázkou. */
+const listSchema = z.object({
+  statuses: z.array(z.enum(QUESTION_STATUSES)).optional(),
+  topicId: z.string().optional(),
+  gradeId: z.string().optional(),
+  subjectId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(QUESTION_PAGE_SIZE),
+  cursor: z.string().optional(),
+})
+
+/**
+ * Stránka otázek pro obrazovku kontroly. Stránkuje se kurzorem, ne offsetem:
+ * schválená otázka z výsledku vypadne a offset by o tolik položek přeskočil
+ * dál — učitelka by je nikdy neuviděla.
+ *
+ * Vrací i `total`, aby šlo nad frontou ukázat, kolik práce ještě zbývá.
+ */
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams
+  const parsed = listSchema.safeParse({
+    statuses: params.getAll('status').length > 0 ? params.getAll('status') : undefined,
+    topicId: params.get('topicId') ?? undefined,
+    gradeId: params.get('gradeId') ?? undefined,
+    subjectId: params.get('subjectId') ?? undefined,
+    limit: params.get('limit') ?? undefined,
+    cursor: params.get('cursor') ?? undefined,
+  })
+  if (!parsed.success) {
+    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+  }
+
+  const query: QuestionQuery = {
+    statuses: parsed.data.statuses,
+    topicId: parsed.data.topicId,
+    gradeId: parsed.data.gradeId,
+    subjectId: parsed.data.subjectId,
+  }
+
+  const [page, total] = await Promise.all([
+    loadQuestionPage(query, { limit: parsed.data.limit, cursor: parsed.data.cursor }),
+    countQuestions(query),
+  ])
+
+  return Response.json({ items: page.items, nextCursor: page.nextCursor, total })
+}
 
 /** Vlastní otázka učitele. */
 export async function POST(request: Request) {
@@ -63,9 +128,24 @@ export async function PATCH(request: Request) {
   return Response.json({ ok: true })
 }
 
-/** Hromadné schválení nebo zamítnutí. */
+/**
+ * Hromadné schválení nebo zamítnutí — buď výčtem otázek, nebo celým tématem.
+ * U tématu se vracejí id skutečně změněných otázek, aby šlo akci vzít zpět
+ * přesně: co bylo schválené už předtím, se zpátky na koncept měnit nesmí.
+ */
 export async function PUT(request: Request) {
-  const parsed = bulkSchema.safeParse(await request.json())
+  const body = await request.json()
+
+  if (body && typeof body === 'object' && 'topicId' in body) {
+    const parsed = bulkTopicSchema.safeParse(body)
+    if (!parsed.success) {
+      return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    }
+    const ids = await setStatusForTopic(parsed.data.topicId, parsed.data.from, parsed.data.status)
+    return Response.json({ updated: ids.length, ids })
+  }
+
+  const parsed = bulkSchema.safeParse(body)
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }

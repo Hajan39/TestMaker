@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
   normalizeEvidence,
   parseQuestionSnapshot,
@@ -8,7 +8,7 @@ import {
   type QuestionStatus,
   type QuestionType,
 } from '@testmaker/core/schema'
-import { assets, db, questions, testItems, type QuestionRow } from '@/db'
+import { assets, db, grades, questions, testItems, topics, type QuestionRow } from '@/db'
 import { newId } from './ids'
 
 /** Řádek z databáze na doménovou otázku. */
@@ -159,4 +159,133 @@ export async function deleteQuestionsWithAssets(ids: string[]): Promise<void> {
 
   if (candidateAssetIds.size === 0) return
   await db.delete(assets).where(inArray(assets.id, [...candidateAssetIds]))
+}
+
+/**
+ * Filtr pro frontu ke kontrole. Na rozdíl od `QuestionFilter` výš míří na
+ * jedno patro knihovny (téma, ročník, předmět), ne na výčet témat — obrazovka
+ * kontroly se zužuje právě takhle a seznam témat celého předmětu by se do
+ * adresy nevešel.
+ */
+export interface QuestionQuery {
+  statuses?: QuestionStatus[]
+  topicId?: string
+  gradeId?: string
+  subjectId?: string
+}
+
+/** Kolik otázek se v jedné stránce fronty načte, když si volající neřekne jinak. */
+export const QUESTION_PAGE_SIZE = 20
+
+export interface QuestionCursor {
+  createdAt: string
+  id: string
+}
+
+/**
+ * Kurzor je poslední přečtená dvojice (createdAt, id) v base64. Stránkuje se
+ * kurzorem, ne offsetem: schválením otázka z výsledku vypadne a offset by o
+ * tolik položek přeskočil dál — učitelka by je nikdy neuviděla.
+ *
+ * Oddělovačem je svislítko: v čase ve tvaru ISO ani v id (nanoid) se nevyskytuje.
+ */
+export function encodeCursor(cursor: QuestionCursor): string {
+  return Buffer.from(`${cursor.createdAt}|${cursor.id}`, 'utf8').toString('base64url')
+}
+
+export function decodeCursor(value: string | null | undefined): QuestionCursor | null {
+  if (!value) return null
+  const [createdAt, id] = Buffer.from(value, 'base64url').toString('utf8').split('|')
+  if (!createdAt || !id) return null
+  return { createdAt, id }
+}
+
+/** Podmínky filtru; patro knihovny nad tématem se řeší poddotazem nad `topics`. */
+function queryConditions(query: QuestionQuery): SQL[] {
+  const conditions: SQL[] = []
+  if (query.statuses?.length) conditions.push(inArray(questions.status, query.statuses))
+  if (query.topicId) conditions.push(eq(questions.topicId, query.topicId))
+  if (query.gradeId) {
+    conditions.push(
+      inArray(questions.topicId, db.select({ id: topics.id }).from(topics).where(eq(topics.gradeId, query.gradeId))),
+    )
+  }
+  if (query.subjectId) {
+    conditions.push(
+      inArray(
+        questions.topicId,
+        db
+          .select({ id: topics.id })
+          .from(topics)
+          .innerJoin(grades, eq(grades.id, topics.gradeId))
+          .where(eq(grades.subjectId, query.subjectId)),
+      ),
+    )
+  }
+  return conditions
+}
+
+/** Kolik otázek filtru odpovídá — číslo „zbývá" nad frontou. */
+export async function countQuestions(query: QuestionQuery = {}): Promise<number> {
+  const conditions = queryConditions(query)
+  const [row] = await db
+    .select({ value: sql<number>`count(*)` })
+    .from(questions)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+  return Number(row?.value ?? 0)
+}
+
+/**
+ * Jedna stránka fronty. Řadí se podle `createdAt` a `id` vzestupně: dvojice je
+ * jednoznačná (v jedné milisekundě může vzniknout otázek víc najednou), takže
+ * se při posunu kurzorem žádná otázka nezopakuje ani nevynechá.
+ */
+export async function loadQuestionPage(
+  query: QuestionQuery = {},
+  options: { limit?: number; cursor?: string | null } = {},
+): Promise<{ items: Question[]; nextCursor: string | null }> {
+  const limit = Math.min(Math.max(options.limit ?? QUESTION_PAGE_SIZE, 1), 200)
+  const conditions = queryConditions(query)
+
+  const cursor = decodeCursor(options.cursor)
+  if (cursor) {
+    const after = or(
+      gt(questions.createdAt, cursor.createdAt),
+      and(eq(questions.createdAt, cursor.createdAt), gt(questions.id, cursor.id)),
+    )
+    if (after) conditions.push(after)
+  }
+
+  // O jednu navíc: podle toho se pozná, jestli má smysl nabízet další stránku.
+  const rows = await db
+    .select()
+    .from(questions)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(asc(questions.createdAt), asc(questions.id))
+    .limit(limit + 1)
+
+  const page = rows.slice(0, limit)
+  const last = page[page.length - 1]
+  return {
+    items: page.map(toQuestion),
+    nextCursor: rows.length > limit && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
+  }
+}
+
+/**
+ * Hromadná změna stavu celého tématu. Posílat tisíc identifikátorů jen proto,
+ * aby se schválilo jedno téma, nemá smysl — sem jde jen id tématu a výchozí
+ * stav. Vrací id skutečně změněných otázek, aby šlo akci vzít zpět přesně:
+ * otázky, které v cílovém stavu byly už předtím, se vracet nesmějí.
+ */
+export async function setStatusForTopic(
+  topicId: string,
+  from: QuestionStatus,
+  to: QuestionStatus,
+): Promise<string[]> {
+  const where = and(eq(questions.topicId, topicId), eq(questions.status, from))
+  const rows = await db.select({ id: questions.id }).from(questions).where(where)
+  if (rows.length === 0) return []
+  await db.update(questions).set({ status: to }).where(where)
+  return rows.map((row) => row.id)
 }

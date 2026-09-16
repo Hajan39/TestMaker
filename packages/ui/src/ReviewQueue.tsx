@@ -16,6 +16,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 /**
  * Soustředěná fronta ke schvalování konceptů — jedna otázka po druhé,
  * ovládaná klávesami. Bez závislosti na Next.js nebo fetchi.
+ *
+ * `questions` nemusí být celá fronta: obrazovka kontroly nad celou knihovnou
+ * jich drží jen okno a další si dotahuje. Proto je tu `overall` (kolik je
+ * schváleno a kolik zbývá dohromady) a `onPosition` (kde ve svém okně fronta
+ * právě stojí, aby volající věděl, kdy načíst další stránku).
  */
 export function ReviewQueue({
   questions,
@@ -23,12 +28,24 @@ export function ReviewQueue({
   onReject,
   onEdit,
   onClose,
+  onRegenerate,
+  onPosition,
+  overall,
+  busy = false,
 }: {
   questions: Question[]
   onApprove: (id: string) => void
   onReject: (id: string) => void
   onEdit: (id: string) => void
   onClose: () => void
+  /** Nechat modelem vyrobit náhradu téže otázky. Bez toho se tlačítko nekreslí. */
+  onRegenerate?: (id: string) => void
+  /** Kolikátá otázka okna je právě na řadě. */
+  onPosition?: (index: number, id: string) => void
+  /** Postup napříč celou frontou, ne jen načteným oknem. */
+  overall?: { approved: number; remaining: number }
+  /** Něco právě běží (typicky náhrada modelem) — akce se na tu chvíli zamknou. */
+  busy?: boolean
 }) {
   const [index, setIndex] = useState(0)
 
@@ -38,8 +55,10 @@ export function ReviewQueue({
   questionsRef.current = questions
   const indexRef = useRef(0)
   const currentIdRef = useRef<string | undefined>(questions[0]?.id)
-  const handlers = useRef({ onApprove, onReject, onEdit, onClose })
-  handlers.current = { onApprove, onReject, onEdit, onClose }
+  const handlers = useRef({ onApprove, onReject, onEdit, onClose, onRegenerate })
+  handlers.current = { onApprove, onReject, onEdit, onClose, onRegenerate }
+  const busyRef = useRef(busy)
+  busyRef.current = busy
   const isFirstRun = useRef(true)
 
   function goTo(nextIndex: number) {
@@ -101,6 +120,9 @@ export function ReviewQueue({
         goTo(indexRef.current + 1)
       } else if (event.key === 'e' || event.key === 'E') {
         handlers.current.onEdit(active.id)
+      } else if ((event.key === 'n' || event.key === 'N') && handlers.current.onRegenerate) {
+        // Náhrada trvá; druhý stisk během čekání by jich rozjel několik naráz.
+        if (!busyRef.current) handlers.current.onRegenerate(active.id)
       } else if (event.key === 'ArrowRight') {
         goTo(indexRef.current + 1)
       }
@@ -110,19 +132,31 @@ export function ReviewQueue({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Kde fronta stojí ve svém okně — volající podle toho dotahuje další stránku
+  // dřív, než na konec okna dojede.
+  const currentId = questions[index]?.id
+  useEffect(() => {
+    if (currentId) onPosition?.(index, currentId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, currentId])
+
   const current = questions[index]
   if (!current) {
     return <p className="text-sm text-fg-muted">Žádné otázky k projití.</p>
   }
 
-  const progress = questions.length === 0 ? 0 : ((index + 1) / questions.length) * 100
+  // Bez `overall` se ukazuje postup v načteném seznamu; s ním postup celou
+  // frontou, která může být mnohonásobně delší než okno v paměti.
+  const total = overall ? overall.approved + overall.remaining : questions.length
+  const done = overall ? overall.approved : index + 1
+  const progress = total === 0 ? 0 : (done / total) * 100
 
   return (
     <div className="space-y-4">
       <div>
         <div className="mb-1.5 flex items-center justify-between">
           <span className="ui-label text-fg-muted">
-            {index + 1} z {questions.length}
+            {overall ? `Schváleno ${overall.approved} · zbývá ${overall.remaining}` : `${index + 1} z ${questions.length}`}
           </span>
         </div>
         <Progress value={progress} />
@@ -142,6 +176,7 @@ export function ReviewQueue({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
+          disabled={busy}
           onClick={() => {
             onApprove(current.id)
             goTo(indexRef.current + 1)
@@ -149,11 +184,17 @@ export function ReviewQueue({
         >
           Schválit <span className="ml-1 text-xs opacity-70">(A)</span>
         </Button>
-        <Button variant="outline" onClick={() => onEdit(current.id)}>
+        <Button variant="outline" disabled={busy} onClick={() => onEdit(current.id)}>
           Upravit <span className="ml-1 text-xs opacity-70">(E)</span>
         </Button>
+        {onRegenerate ? (
+          <Button variant="outline" disabled={busy} onClick={() => onRegenerate(current.id)}>
+            {busy ? 'Nahrazuji…' : 'Nahradit modelem'} <span className="ml-1 text-xs opacity-70">(N)</span>
+          </Button>
+        ) : null}
         <Button
           variant="destructive"
+          disabled={busy}
           onClick={() => {
             onReject(current.id)
             goTo(indexRef.current + 1)
@@ -161,7 +202,7 @@ export function ReviewQueue({
         >
           Zamítnout <span className="ml-1 text-xs opacity-70">(X)</span>
         </Button>
-        <Button variant="ghost" onClick={() => goTo(indexRef.current + 1)}>
+        <Button variant="ghost" disabled={busy} onClick={() => goTo(indexRef.current + 1)}>
           Přeskočit <span className="ml-1 text-xs opacity-70">(→)</span>
         </Button>
       </div>
