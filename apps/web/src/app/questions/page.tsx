@@ -112,7 +112,10 @@ export default async function QuestionsPage({
     <PageShell>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="ui-page-title">Banka otázek ({total})</h1>
+          {/* Počet je jen jednou, a to nad tabulkou („20 z 57“) — tam se totiž
+              mění s filtrem i s dotahováním dalších otázek. V nadpisu by proti
+              němu stálo druhé číslo téhož. */}
+          <h1 className="ui-page-title">Banka otázek</h1>
           <Link href="/tests/new">
             <Button>Poskládat test</Button>
           </Link>

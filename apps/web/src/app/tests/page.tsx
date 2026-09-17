@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Button, Card, EmptyState, PageShell } from '@testmaker/ui'
 import { db, questions, templates, testItems, tests } from '@/db'
 import { testConditions } from '@/lib/tests'
-import { TestRow } from './TestRow'
+import { TestsTable } from './TestsTable'
 import { TestsFilters } from './TestsFilters'
 
 export const dynamic = 'force-dynamic'
@@ -104,25 +104,7 @@ export default async function TestsPage({
                 />
               </div>
             ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-line-soft text-fg-muted">
-                      <th className="py-2 pr-4 font-medium">Název</th>
-                      <th className="py-2 pr-4 font-medium">Otázky</th>
-                      <th className="py-2 pr-4 font-medium">Body</th>
-                      <th className="py-2 pr-4 font-medium">Šablona</th>
-                      <th className="py-2 pr-4 font-medium">Změněno</th>
-                      <th className="py-2 pr-0 font-medium text-right">Akce</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line-soft">
-                    {rows.map((row) => (
-                      <TestRow key={row.id} row={row} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <TestsTable rows={rows} />
             )}
 
             {total > rows.length ? (

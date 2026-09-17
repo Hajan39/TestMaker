@@ -16,6 +16,10 @@ import {
   CollapsibleTrigger,
   Input,
   Progress,
+  plural,
+  pocet,
+  MATERIALY,
+  TEMATA,
 } from '@testmaker/ui'
 import {
   entriesFromInput,
@@ -48,7 +52,7 @@ interface PreviewFile {
   include: boolean
 }
 
-/** Skupina souborů v náhledu — zařazení se dá přepsat, celá skupina vynechat. */
+/** Téma v náhledu — zařazení se dá přepsat, celé téma vynechat. */
 interface PreviewGroup {
   id: string
   subject: string
@@ -65,13 +69,6 @@ const SKIP_LABELS: Record<string, string> = {
   obrazek: 'obrázek (zatím nepodporován)',
   nepodporovany: 'nepodporovaná přípona',
   'stary-format': 'starý formát – převeď na .docx / .odp',
-}
-
-/** Čeština nemá jedno „skupin“ pro všechny počty — „2 skupin“ by bilo do očí. */
-function plural(count: number, one: string, few: string, many: string): string {
-  if (count === 1) return one
-  if (count < 5) return few
-  return many
 }
 
 /** Pod tímhle počtem znaků na otázky text nejspíš nestačí. */
@@ -208,7 +205,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     try {
       const result = await uploadMaterials(materials, (done, total) => setProgress({ done, total }))
       setSummary(result)
-      // Kam pokračovat: první tři skupiny stačí, víc odkazů by byl seznam.
+      // Kam pokračovat: první tři témata stačí, víc odkazů by byl seznam.
       const found = await Promise.all(
         ready
           .slice(0, 3)
@@ -301,8 +298,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       {summary ? (
         <Card className="border-brand bg-brand-bg p-5">
           <p className="text-sm text-fg-soft">
-            Naimportováno {summary.imported}{' '}
-            {plural(summary.imported, 'materiál', 'materiály', 'materiálů')}
+            Naimportováno {pocet(summary.imported, MATERIALY)}
             {summary.duplicates > 0 ? `, ${summary.duplicates} už v knihovně bylo` : ''}.
           </p>
           <p className="mt-1 text-sm text-fg-muted">Kam chceš pokračovat?</p>
@@ -340,8 +336,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
           <Card className="sticky top-2 z-10 flex-row flex-wrap items-center justify-between gap-3 p-4">
             <div>
               <h2 className="text-sm font-semibold text-fg">
-                Náhled importu: {groups.length}{' '}
-                {plural(groups.length, 'skupina', 'skupiny', 'skupin')}, {selected.length}{' '}
+                Náhled importu: {pocet(groups.length, TEMATA)}, {selected.length}{' '}
                 {plural(selected.length, 'soubor', 'soubory', 'souborů')}
               </h2>
               <p className="mt-1 text-sm text-fg-muted">
@@ -395,7 +390,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                     onClick={() => update(group.id, { include: !group.include })}
                   >
                     {group.include ? (
-                      'Vynechat skupinu'
+                      'Vynechat téma'
                     ) : (
                       <>
                         <Undo2 className="size-4" aria-hidden />
@@ -407,7 +402,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
 
                 {!group.subject.trim() && group.include ? (
                   <p className="text-sm text-draft-fg">
-                    Předmět z cesty vyčíst nešel. Doplň ho, jinak skupina skončí v „Nezařazeno“.
+                    Předmět z cesty vyčíst nešel. Doplň ho, jinak téma skončí v „Nezařazeno“.
                   </p>
                 ) : null}
                 {near ? (
@@ -444,7 +439,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                   ))}
                 </ul>
                 {chosen === 0 && group.include ? (
-                  <p className="text-sm text-fg-muted">Ze skupiny se neuloží nic — všechny řádky jsou vynechané.</p>
+                  <p className="text-sm text-fg-muted">Z tématu se neuloží nic — všechny řádky jsou vynechané.</p>
                 ) : null}
               </Card>
             )
@@ -462,7 +457,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
   )
 }
 
-/** Z extrahovaných materiálů udělá skupiny náhledu. */
+/** Z extrahovaných materiálů udělá témata náhledu. */
 function toPreview(materials: ExtractedMaterial[]): PreviewGroup[] {
   const keyed = materials.map((material, index) => ({ ...material, key: `soubor-${index}` }))
   return groupForImport(keyed).map((group) => ({

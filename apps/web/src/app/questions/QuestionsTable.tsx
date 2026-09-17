@@ -22,9 +22,12 @@ import {
   SelectValue,
   planUndo,
   toast,
+  useMatchesMedia,
+  pocet,
+  OTAZKY,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
-import { RegenerateButton } from '@/components/RegenerateButton'
+import { QuestionActions } from './QuestionActions'
 
 const STATUS_LABELS: Record<QuestionStatus, string> = {
   draft: 'Koncept',
@@ -56,12 +59,6 @@ interface TopicOption {
 }
 
 /** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
-function questionsWord(count: number): string {
-  if (count === 1) return 'otázka'
-  if (count < 5) return 'otázky'
-  return 'otázek'
-}
-
 /** Zadání otázky do řádku tabulky. */
 function promptOf(question: Question): string {
   const payload = question.payload as { prompt?: string; text?: string }
@@ -135,6 +132,11 @@ export function QuestionsTable({
   pageSize: number
 }) {
   const router = useRouter()
+  // Pod 640 px se místo tabulky vykreslují karty: sloupce se stavem i celá
+  // nabídka akcí by na telefonu zůstaly za okrajem obrazovky a s otázkou by
+  // nešlo udělat nic. Vykresluje se vždy jen jedna podoba — obě naráz znamenají
+  // zdvojená zaškrtávátka i popisky.
+  const phone = useMatchesMedia('(max-width: 639.98px)')
   const [rows, setRows] = useState(items)
   const [cursor, setCursor] = useState(nextCursor)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -231,7 +233,7 @@ export function QuestionsTable({
   async function undoBulk(previous: [string, QuestionStatus][]) {
     try {
       for (const step of planUndo(previous)) await writeStatus(step.ids, step.status)
-      toast.success(`Vráceno zpět: ${previous.length} ${questionsWord(previous.length)}`)
+      toast.success(`Vráceno zpět: ${pocet(previous.length, OTAZKY)}`)
       startRefresh(() => router.refresh())
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Vrácení se nepodařilo')
@@ -255,7 +257,7 @@ export function QuestionsTable({
       setSelected(new Set())
       startRefresh(() => router.refresh())
       toast.success(
-        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${ids.length} ${questionsWord(ids.length)}`,
+        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${pocet(ids.length, OTAZKY)}`,
         {
           duration: 10_000,
           action: { label: 'Vzít zpět', onClick: () => void undoBulk(previous) },
@@ -279,7 +281,7 @@ export function QuestionsTable({
     }
     setSelected(new Set())
     startRefresh(() => router.refresh())
-    toast.success(`Smazáno: ${ids.length} ${questionsWord(ids.length)}`)
+    toast.success(`Smazáno: ${pocet(ids.length, OTAZKY)}`)
   }
 
   const busy = pending !== null || refreshing
@@ -316,7 +318,7 @@ export function QuestionsTable({
     <Card className="p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-sm font-semibold text-fg" aria-live="polite">
-          {rows.length} z {total}
+          {rows.length} z {pocet(total, OTAZKY)}
         </h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-44">
@@ -445,10 +447,14 @@ export function QuestionsTable({
       </div>
 
       {selected.size > 0 ? (
+        // Počet je v liště jednou, vlevo; tlačítka ho neopakují a mají tutéž
+        // váhu — dřív stály vedle sebe čtyři různé vzhledy a číslo dvakrát.
+        // Nižší váhu má jen „Zrušit výběr“, protože z lišty vede pryč.
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded bg-surface-muted px-3 py-2">
           <span className="text-sm text-fg-soft">Vybráno {selected.size}</span>
           <BusyButton
             size="sm"
+            variant="outline"
             busy={pending === 'approved'}
             busyLabel="Schvaluji…"
             disabled={busy}
@@ -467,10 +473,10 @@ export function QuestionsTable({
             Zamítnout
           </BusyButton>
           <DeleteButton
-            label={`Smazat (${selected.size})`}
-            variant="destructive"
+            label="Smazat"
+            variant="outline"
             title="Smazat vybrané otázky?"
-            description={`Smaže se ${selected.size} ${questionsWord(selected.size)}. Pokud jsou použité v uloženém testu, zůstane tam jejich zmrazené znění, ale z banky zmizí. Akci nejde vrátit zpět.`}
+            description={`Smaže se ${pocet(selected.size, OTAZKY)}. Pokud jsou použité v uloženém testu, zůstane tam jejich zmrazené znění, ale z banky zmizí. Akci nejde vrátit zpět.`}
             onConfirm={removeSelected}
           />
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>
@@ -503,6 +509,65 @@ export function QuestionsTable({
             }
           />
         </div>
+      ) : phone ? (
+        // Telefon: jedna karta = jedna otázka. Stav, body i akce jsou v ní,
+        // takže se nic neschová za okraj obrazovky.
+        <ul className="mt-3 space-y-2">
+          <li className="flex items-center gap-2 pb-1 text-sm text-fg-muted">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+              onCheckedChange={toggleAll}
+              aria-label={`Vybrat vše viditelné (${rows.length})`}
+            />
+            Vybrat vše viditelné
+          </li>
+          {rows.map((row) => {
+            const topic = row.topicId ? topicById.get(row.topicId) : undefined
+            return (
+              // Id otázky je v atributu, aby se dal v testech spárovat řádek
+              // se záznamem v databázi; v rozhraní nic neznamená.
+              <li
+                key={row.id}
+                data-question-id={row.id}
+                className="rounded-[var(--radius-inner)] border border-line-soft p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={selected.has(row.id)}
+                    onCheckedChange={() => toggle(row.id)}
+                    aria-label={`Vybrat otázku ${promptOf(row)}`}
+                  />
+                  <p className="min-w-0 flex-1 text-sm break-words text-fg">{promptOf(row)}</p>
+                  <QuestionActions
+                    question={row}
+                    label={promptOf(row)}
+                    onEdit={row.topicId ? () => setEditing(row) : null}
+                    onChanged={() => startRefresh(() => router.refresh())}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-soft">
+                  {row.status === 'draft' ? (
+                    <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
+                  ) : null}
+                  {row.status === 'approved' ? <Badge>schváleno</Badge> : null}
+                  {row.status === 'rejected' ? <Badge variant="destructive">zamítnuto</Badge> : null}
+                  <span>{QUESTION_TYPE_LABELS[row.type]}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="ui-numeric">{row.points} b.</span>
+                  <span aria-hidden="true">·</span>
+                  {topic ? (
+                    <Link href={`/topics/${topic.id}`} className="break-words text-brand hover:underline">
+                      {topic.label}
+                    </Link>
+                  ) : (
+                    <span className="text-fg-muted">bez tématu</span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -560,12 +625,12 @@ export function QuestionsTable({
                       <div className="flex items-center justify-end gap-1">
                         {/* Otázka bez tématu se upravovat nedá — editor ukládá
                             právě do tématu a neměl by kam. */}
-                        {row.topicId ? (
-                          <Button size="sm" variant="ghost" onClick={() => setEditing(row)}>
-                            Upravit
-                          </Button>
-                        ) : null}
-                        <RegenerateButton questionId={row.id} type={row.type} />
+                        <QuestionActions
+                          question={row}
+                          label={promptOf(row)}
+                          onEdit={row.topicId ? () => setEditing(row) : null}
+                          onChanged={() => startRefresh(() => router.refresh())}
+                        />
                       </div>
                     </td>
                   </tr>

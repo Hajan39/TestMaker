@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, MoreVertical } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,14 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Badge,
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   toast,
 } from '@testmaker/ui'
 import { PrintMenuItems } from '@/components/PrintMenu'
+import { RowActions } from '@/components/RowActions'
 
 export interface TestRowData {
   id: string
@@ -34,8 +30,11 @@ export interface TestRowData {
   updatedAt: string
 }
 
-/** Jeden řádek tabulky testů: přehled a akce (otevřít, stáhnout, smazat). */
-export function TestRow({ row }: { row: TestRowData }) {
+/**
+ * Akce u jednoho testu: nabídka pod třemi tečkami — týž vzor jako u otázek
+ * v bance. Mazání je v ní, červeně a s potvrzením; omylem se na ně kliknout nedá.
+ */
+function TestActions({ row }: { row: TestRowData }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -96,15 +95,89 @@ export function TestRow({ row }: { row: TestRowData }) {
   }
 
   return (
+    <>
+      <RowActions label={`Akce u testu ${row.title}`} busy={pdfWork ?? (copying ? 'Kopíruji…' : null)}>
+        <DropdownMenuItem asChild>
+          <Link href={`/tests/${row.id}`}>Upravit</Link>
+        </DropdownMenuItem>
+        {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
+            místo tlačítka s třemi tečkami, stejně jako u tisku. */}
+        <DropdownMenuItem onSelect={() => void copy()}>Vytvořit kopii</DropdownMenuItem>
+        {/* Tisk i stažení berou popisky ze sdílené nabídky — aby se
+            seznam testů a skladač nemohly rozejít v tom, co „Vytisknout"
+            vlastně udělá s klíčem správných odpovědí. */}
+        <PrintMenuItems
+          testId={row.id}
+          variants={row.variants}
+          onRun={(action) => void withPdfWork(action.busyLabel, action.run)}
+        />
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={(event) => {
+            event.preventDefault()
+            setConfirmOpen(true)
+          }}
+        >
+          Smazat
+        </DropdownMenuItem>
+      </RowActions>
+      {pdfError ? <p className="mt-1 text-sm text-danger">{pdfError}</p> : null}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Smazat test „{row.title}“?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.
+              Akci nejde vrátit zpět.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Zrušit</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleting}
+              aria-busy={deleting || undefined}
+              onClick={(event) => {
+                event.preventDefault()
+                void remove()
+              }}
+            >
+              {deleting ? 'Mažu…' : 'Smazat'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+/** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
+function otazkyWord(count: number): string {
+  if (count === 1) return 'otázka'
+  if (count < 5) return 'otázky'
+  return 'otázek'
+}
+
+/** Odznáčky testu: na známky / bez známek, případně varianty A/B. */
+function TestBadges({ row }: { row: TestRowData }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {row.graded ? <Badge variant="status">na známky</Badge> : <Badge variant="secondary">bez známek</Badge>}
+      {row.variants === 2 ? <Badge variant="secondary">varianty A/B</Badge> : null}
+    </div>
+  )
+}
+
+/** Jeden řádek tabulky testů: přehled a akce (otevřít, stáhnout, smazat). */
+export function TestRow({ row }: { row: TestRowData }) {
+  return (
     <tr>
       <td className="py-2 pr-4">
         <Link href={`/tests/${row.id}`} className="font-medium text-fg hover:text-brand">
           {row.title}
         </Link>
-        <div className="mt-1 flex flex-wrap gap-1">
-          {row.graded ? <Badge>na známky</Badge> : <Badge variant="secondary">bez známek</Badge>}
-          {row.variants === 2 ? <Badge variant="secondary">varianty A/B</Badge> : null}
-        </div>
+        <TestBadges row={row} />
       </td>
       <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.questionCount}</td>
       <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
@@ -113,76 +186,43 @@ export function TestRow({ row }: { row: TestRowData }) {
         {new Date(row.updatedAt).toLocaleDateString('cs')}
       </td>
       <td className="py-2 pr-0 text-right">
-        {pdfWork || copying ? (
-          <span
-            role="status"
-            className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-fg-soft"
-          >
-            <Loader2 className="size-3.5 animate-spin" />
-            {pdfWork ?? 'Kopíruji…'}
-          </span>
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon-sm" variant="ghost" aria-label="Akce">
-                <MoreVertical className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/tests/${row.id}`}>Upravit</Link>
-              </DropdownMenuItem>
-              {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
-                  místo tlačítka s třemi tečkami, stejně jako u tisku. */}
-              <DropdownMenuItem onSelect={() => void copy()}>Vytvořit kopii</DropdownMenuItem>
-              {/* Tisk i stažení berou popisky ze sdílené nabídky — aby se
-                  seznam testů a skladač nemohly rozejít v tom, co „Vytisknout"
-                  vlastně udělá s klíčem správných odpovědí. */}
-              <PrintMenuItems
-                testId={row.id}
-                variants={row.variants}
-                onRun={(action) => void withPdfWork(action.busyLabel, action.run)}
-              />
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={(event) => {
-                  event.preventDefault()
-                  setConfirmOpen(true)
-                }}
-              >
-                Smazat
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {pdfError ? <p className="mt-1 text-sm text-danger">{pdfError}</p> : null}
-
-        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Smazat test „{row.title}“?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.
-                Akci nejde vrátit zpět.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Zrušit</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={deleting}
-                aria-busy={deleting || undefined}
-                onClick={(event) => {
-                  event.preventDefault()
-                  void remove()
-                }}
-              >
-                {deleting ? 'Mažu…' : 'Smazat'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <TestActions row={row} />
       </td>
     </tr>
+  )
+}
+
+/**
+ * Týž test jako karta — podoba pro telefon. V tabulce by na 390 px zůstaly
+ * sloupce s body i celá nabídka akcí za okrajem obrazovky a s testem by nešlo
+ * udělat vůbec nic.
+ */
+export function TestCard({ row }: { row: TestRowData }) {
+  return (
+    <li className="rounded-[var(--radius-inner)] border border-line-soft p-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/tests/${row.id}`}
+            className="font-medium break-words text-fg hover:text-brand"
+          >
+            {row.title}
+          </Link>
+          <TestBadges row={row} />
+        </div>
+        <TestActions row={row} />
+      </div>
+      <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-fg-soft">
+        <span className="ui-numeric">
+          {row.questionCount} {otazkyWord(row.questionCount)}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span className="ui-numeric">{row.points} b.</span>
+        <span aria-hidden="true">·</span>
+        <span>{row.templateName}</span>
+        <span aria-hidden="true">·</span>
+        <span className="text-fg-muted">{new Date(row.updatedAt).toLocaleDateString('cs')}</span>
+      </p>
+    </li>
   )
 }

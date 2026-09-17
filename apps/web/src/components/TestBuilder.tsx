@@ -10,7 +10,7 @@ import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestPage } from '@/components/test-builder/TestPage'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
-import { formatPoints, nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
+import { nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
 
 const STRUCTURAL_TEXT: Record<'heading' | 'instruction' | 'page_break', string | null> = {
   heading: 'Nová část',
@@ -93,10 +93,6 @@ export function TestBuilder({
     }
     return counts
   }, [draft])
-  const totalPoints = draft.reduce(
-    (sum, item) => (item.kind === 'question' ? sum + (item.pointsOverride ?? item.question?.points ?? 0) : sum),
-    0,
-  )
   const questionCount = draft.filter((item) => item.kind === 'question').length
   const template = templates.find((t) => t.id === settings.templateId) ?? templates[0] ?? null
 
@@ -325,10 +321,10 @@ export function TestBuilder({
             />
           </div>
         </div>
+        {/* Počty (otázek, bodů, odhad stran) se čtou na jediném místě — v patičce
+            pod stránkou písemky, kde vznikají. V liště nahoře stálo totéž ještě
+            jednou a obě čísla se musela hlídat, aby si neodporovala. */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-fg-muted">
-            {questionCount} otázek{settings.graded ? ` · ${formatPoints(totalPoints)} b.` : ''}
-          </span>
           {savedId ? <PrintMenu testId={savedId} variants={settings.variants} /> : null}
           <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />
           <TestSettings value={settings} templates={templates} onChange={setSettings} />
