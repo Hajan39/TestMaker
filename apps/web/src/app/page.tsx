@@ -1,5 +1,16 @@
 import Link from 'next/link'
-import { Badge, Button, Card, EmptyState, ThreePane } from '@testmaker/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  MATERIALY,
+  OTAZKY,
+  TEMATA,
+  ThreePane,
+  plural,
+  pocet,
+} from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { LibrarySidebar } from '@/components/LibrarySidebar'
 import { TopicList } from '@/components/TopicList'
@@ -48,14 +59,12 @@ export default async function LibraryPage({
 }
 
 /**
- * Věta o čekající práci. Češtině nestačí jedno „otázek čeká“ pro všechny
- * počty — „2 otázek čeká“ je znát na první pohled a učitelka by si právem
- * ťukala na čelo.
+ * Věta o čekající práci. Celé rozhraní počítá jedním směrem — kolik zbývá
+ * ke kontrole — a jedním slovem: „ke kontrole“. Skloňování řeší sdílená
+ * pomocná funkce z návrhového systému, ne pátá kopie téhož pravidla.
  */
-function cekaKeKontrole(count: number): string {
-  if (count === 1) return '1 otázka čeká ke kontrole'
-  if (count < 5) return `${count} otázky čekají ke kontrole`
-  return `${count} otázek čeká ke kontrole`
+function keKontrole(count: number): string {
+  return `${pocet(count, OTAZKY)} ke kontrole`
 }
 
 /** Souhrn celé knihovny a rozcestník na jednotlivé ročníky. */
@@ -82,17 +91,20 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
         <div>
           <h1 className="ui-page-title">Přehled knihovny</h1>
           <p className="mt-1 text-sm text-fg-soft">
-            {totals.topics} témat · {totals.materials} materiálů · {totals.questions} otázek (
-            {totals.approved} schválených)
+            {pocet(totals.topics, TEMATA)} · {pocet(totals.materials, MATERIALY)} ·{' '}
+            {pocet(totals.questions, OTAZKY)} ({totals.approved} schválených)
           </p>
           {/* Kolik otázek čeká na kontrolu, je to první, co učitelka potřebuje
               vědět — proto vlastním řádkem a barvou konceptu, ne v závorce
               mezi ostatními čísly. */}
           {totals.drafts > 0 ? (
-            <p className="mt-1 text-sm font-medium text-draft-fg">{cekaKeKontrole(totals.drafts)}</p>
+            <p className="mt-1 text-sm font-medium text-draft-fg">{keKontrole(totals.drafts)}</p>
           ) : null}
         </div>
-        <div className="flex gap-2">
+        {/* Na úzké obrazovce se akce zalomí pod sebe místo toho, aby vytekly
+            z hlavičky — `main` vodorovné rolování skrývá, takže tlačítko za
+            okrajem by bylo nedosažitelné. */}
+        <div className="flex flex-wrap items-center gap-2">
           <BulkGenerate
             ai={aiStatus()}
             scopes={tree.map((subject) => ({ label: `Celý ${subject.name}`, subjectId: subject.id }))}
@@ -132,7 +144,7 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
                         <Badge className="shrink-0 bg-draft-bg text-draft-fg">{drafts} ke kontrole</Badge>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-fg-muted">{gradeNode.topics.length} témat</p>
+                    <p className="mt-1 text-sm text-fg-muted">{pocet(gradeNode.topics.length, TEMATA)}</p>
                   </Card>
                 </Link>
               )
@@ -156,12 +168,12 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
         <div>
           <h1 className="ui-page-title">{grade.name || 'Bez ročníku'}</h1>
           <p className="mt-1 text-sm text-fg-soft">
-            {grade.topics.length} témat · {questionCount} otázek
+            {pocet(grade.topics.length, TEMATA)} · {pocet(questionCount, OTAZKY)}
           </p>
           {draftCount > 0 ? (
             <p className="mt-1 text-sm font-medium text-draft-fg">
-              {cekaKeKontrole(draftCount)} v {topicsWithDrafts}{' '}
-              {topicsWithDrafts === 1 ? 'tématu' : 'tématech'}
+              {keKontrole(draftCount)} v {topicsWithDrafts}{' '}
+              {plural(topicsWithDrafts, 'tématu', 'tématech', 'tématech')}
             </p>
           ) : null}
         </div>
@@ -185,7 +197,6 @@ function GradeOverview({ grade }: { grade: GradeNode }) {
               name={topic.name}
               materialCount={topic.materialCount}
               questionCount={topic.questionCount}
-              approvedCount={topic.approvedCount}
               draftCount={topic.draftCount}
               lowContent={topic.lowContent}
             />

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { NavList } from '@testmaker/ui'
+import { EmptyState, NavList, TEMATA, pocet } from '@testmaker/ui'
 import type { GradeNode } from '@/lib/library'
 import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 
@@ -12,13 +12,19 @@ export function TopicList({
   activeTopicId?: string
 }) {
   if (!grade) {
-    return <p className="px-2 text-sm text-fg-muted">Vyber ročník vlevo.</p>
+    // Prázdný stav vypadá všude v aplikaci stejně — i tady, kde je jen věta.
+    return (
+      <EmptyState
+        title="Zatím není vybraný ročník"
+        hint="Vyber ročník v levém sloupci a objeví se tu jeho témata."
+      />
+    )
   }
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-1 px-2">
         <p className="ui-label min-w-0 truncate">
-          {grade.name || 'Bez ročníku'} · {grade.topics.length} témat
+          {grade.name || 'Bez ročníku'} · {pocet(grade.topics.length, TEMATA)}
         </p>
         <NewLibraryItem kind="topic" parentId={grade.id} label="+ téma" variant="ghost" />
       </div>

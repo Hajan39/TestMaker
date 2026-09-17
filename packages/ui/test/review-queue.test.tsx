@@ -24,7 +24,7 @@ describe('ReviewQueue', () => {
   it('ukáže první otázku a postup', () => {
     render(<ReviewQueue questions={questions} onApprove={vi.fn()} onReject={vi.fn()} onEdit={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByText('První otázka?')).toBeInTheDocument()
-    expect(screen.getByText('1 z 2')).toBeInTheDocument()
+    expect(screen.getByText('Zbývá ke kontrole 2')).toBeInTheDocument()
   })
 
   it('klávesa A schválí a posune na další', async () => {
@@ -92,7 +92,7 @@ describe('ReviewQueue', () => {
       />,
     )
     expect(screen.getByText('Druhá otázka?')).toBeInTheDocument()
-    expect(screen.getByText('1 z 2')).toBeInTheDocument()
+    expect(screen.getByText('Zbývá ke kontrole 2')).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 

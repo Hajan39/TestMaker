@@ -30,8 +30,12 @@ export interface GroupMaterial {
 }
 
 /**
- * Skupina materiálů jednoho tématu. Učitel ji může přejmenovat, sloučit s jinou
- * skupinou téhož ročníku nebo z ní jednotlivý materiál vyjmout.
+ * Materiály jednoho tématu. Učitelka téma může přejmenovat, sloučit s jiným
+ * tématem téhož ročníku nebo z něj jednotlivý materiál vyjmout.
+ *
+ * Všechno se tu jmenuje „téma“ — navigace, dlaždice i filtry mluví o tématu a
+ * druhé jméno („skupina“) pro touž věc vedlo k tomu, že si učitelka před
+ * „Smazat skupinu“ nebyla jistá, jestli maže totéž, co jinde téma.
  */
 export function TopicGroup({
   topicId,
@@ -50,7 +54,7 @@ export function TopicGroup({
   const [newGrade, setNewGrade] = useState('')
   const [addingGrade, setAddingGrade] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
-  // Nabídky sourozeneckých skupin a ročníků se dotahují až při otevření
+  // Nabídky sourozeneckých témat a ročníků se dotahují až při otevření
   // úprav. Než dojdou, jsou rozbalovací seznamy prázdné — kdyby zůstaly
   // ovladatelné, otevřely by se do prázdna a vypadalo by to jako chyba.
   const [optionsReady, setOptionsReady] = useState(false)
@@ -122,7 +126,7 @@ export function TopicGroup({
             setManage(!manage)
           }}
         >
-          {manage ? 'Hotovo' : 'Upravit skupinu'}
+          {manage ? 'Hotovo' : 'Upravit téma'}
         </Button>
       </div>
 
@@ -165,7 +169,7 @@ export function TopicGroup({
                   }
                 >
                   <SelectTrigger className="ml-auto w-full shrink-0 sm:w-56" aria-busy={!optionsReady || undefined}>
-                    {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám skupiny…</span>}
+                    {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám témata…</span>}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="presun">Přesunout do…</SelectItem>
@@ -181,7 +185,7 @@ export function TopicGroup({
                 <DeleteButton
                   label="Smazat"
                   title="Smazat materiál?"
-                  description={`Materiál „${material.fileName}" zmizí ze skupiny. Otázky, které z něj vznikly, zůstanou.`}
+                  description={`Materiál „${material.fileName}" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.`}
                   onConfirm={async () => {
                     await fetch(`/api/materials?id=${encodeURIComponent(material.id)}`, { method: 'DELETE' })
                     router.refresh()
@@ -196,7 +200,7 @@ export function TopicGroup({
       {manage ? (
         <div className="mt-4 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="topic-group-name">Název skupiny</Label>
+            <Label htmlFor="topic-group-name">Název tématu</Label>
             <div className="flex gap-2">
               <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
               <BusyButton
@@ -266,19 +270,19 @@ export function TopicGroup({
             ) : null}
 
             <p className="mt-1 text-xs text-fg-muted">
-              Přeřadí celou skupinu i s materiály a otázkami do zvoleného ročníku téhož předmětu.
+              Přeřadí celé téma i s materiály a otázkami do zvoleného ročníku téhož předmětu.
               Ročník, který ještě neexistuje, se založí.
             </p>
           </div>
           <div>
-            <Label htmlFor="topic-group-merge-target">Sloučit do jiné skupiny</Label>
+            <Label htmlFor="topic-group-merge-target">Sloučit do jiného tématu</Label>
             <div className="flex gap-2">
               <Select value={mergeTarget || 'zadna'} onValueChange={(value) => setMergeTarget(value === 'zadna' ? '' : value)}>
                 <SelectTrigger id="topic-group-merge-target" className="w-full" disabled={!optionsReady}>
-                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám skupiny…</span>}
+                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám témata…</span>}
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="zadna">Vyber skupinu…</SelectItem>
+                  <SelectItem value="zadna">Vyber téma…</SelectItem>
                   {siblings.map((sibling) => (
                     <SelectItem key={sibling.id} value={sibling.id}>
                       {sibling.name}
@@ -298,14 +302,14 @@ export function TopicGroup({
               </BusyButton>
             </div>
             <p className="mt-1 text-xs text-fg-muted">
-              Materiály i otázky se přesunou do vybrané skupiny, tato zanikne.
+              Materiály i otázky se přesunou do vybraného tématu, toto zanikne.
             </p>
           </div>
           <div className="sm:col-span-2 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
             <p className="text-xs text-fg-muted">
-              Smazání skupiny odstraní i její materiály a otázky. Soubory na disku zůstanou.
+              Smazání tématu odstraní i jeho materiály a otázky. Soubory na disku zůstanou.
             </p>
-            <DeleteFromLibrary kind="topic" id={topicId} label="Smazat skupinu" redirectTo="/" />
+            <DeleteFromLibrary kind="topic" id={topicId} label="Smazat téma" redirectTo="/" />
           </div>
         </div>
       ) : null}

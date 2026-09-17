@@ -404,7 +404,7 @@ export async function renameLibraryItem(input: {
       return {
         ok: false,
         status: 409,
-        error: `Ročník „${name}“ v tomto předmětu už je. Zvol jiný název, nebo témata odtud přesuň do něj — v podrobnostech tématu přes „Upravit skupinu“ a volbu ročníku.`,
+        error: `Ročník „${name}“ v tomto předmětu už je. Zvol jiný název, nebo témata odtud přesuň do něj — v podrobnostech tématu přes „Upravit téma“ a volbu ročníku.`,
       }
     }
     // Řazení ročníků se počítá z názvu, takže se musí přepočítat spolu s ním —
@@ -429,7 +429,7 @@ export async function renameLibraryItem(input: {
     return {
       ok: false,
       status: 409,
-      error: `Téma „${name}“ v tomto ročníku už je. Zvol jiný název, nebo obě témata spoj — v podrobnostech tématu přes „Upravit skupinu“ a „Sloučit do jiné skupiny“.`,
+      error: `Téma „${name}“ v tomto ročníku už je. Zvol jiný název, nebo obě témata spoj — v podrobnostech tématu přes „Upravit téma“ a „Sloučit do jiného tématu“.`,
     }
   }
   await db.update(topics).set({ name }).where(eq(topics.id, topic.id))

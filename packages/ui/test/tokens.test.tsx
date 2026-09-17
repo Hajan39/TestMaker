@@ -12,6 +12,21 @@ describe('design tokeny', () => {
     expect(css).toContain('--color-danger: #b03a35')
   })
 
+  // Dráha ukazatele průběhu bývala zesvětlená značková zelená (`bg-primary/20`);
+  // při „schváleno 0“ pak svítil zelený pruh přes celou šířku a vypadalo to
+  // jako hotovo. Musí to být vlastní neutrální token, a to v obou režimech.
+  it('mají neutrální token pro dráhu ukazatele průběhu, ve světlém i tmavém režimu', () => {
+    const light = css.slice(0, css.indexOf(':root.dark'))
+    const dark = css.slice(css.indexOf(':root.dark'))
+    expect(light).toMatch(/--color-track:\s*#/)
+    expect(dark).toMatch(/--color-track:\s*#/)
+    expect(css).not.toMatch(/--color-track:\s*(var\(--color-brand\)|#0d7355)/)
+
+    const progress = readFileSync(resolve(import.meta.dirname, '../src/ui/progress.tsx'), 'utf8')
+    expect(progress).toContain('bg-track')
+    expect(progress).not.toContain('bg-primary/20')
+  })
+
   it('definují poloměry podle specifikace', () => {
     expect(css).toContain('--radius-inner: 5px')
     expect(css).toContain('--radius-outer: 8px')

@@ -26,7 +26,11 @@ export function QuestionPreview({
         <Badge variant="secondary">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
         {/* Stav se ukazuje vždy. Chybějící odznak si nikdo nevšimne, a do písemky
             pak může proklouznout nezkontrolovaný nebo zamítnutý koncept. */}
-        {'status' in question && question.status === 'approved' ? <Badge>schváleno</Badge> : null}
+        {/* Stav, ne akce: značková zelená patří tlačítkům. Odznak „schváleno“
+            u dvaceti řádků banky by jinak přezářil všechno ostatní. */}
+        {'status' in question && question.status === 'approved' ? (
+          <Badge variant="status">schváleno</Badge>
+        ) : null}
         {'status' in question && question.status === 'draft' ? (
           <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
         ) : null}

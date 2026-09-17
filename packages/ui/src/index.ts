@@ -32,6 +32,8 @@ export {
 export { Toaster } from './ui/sonner'
 export { toast } from 'sonner'
 export { planUndo } from './undoStatus'
+export { plural, pocet, OTAZKY, TEMATA, MATERIALY, ROCNIKY } from './plural'
+export type { PluralForms } from './plural'
 export type { UndoStatus, UndoStep } from './undoStatus'
 
 // Doménové komponenty přibudou v dalších úkolech.

@@ -8,6 +8,7 @@ import {
   Card,
   EmptyState,
   Label,
+  OTAZKY,
   ReviewQueue,
   Select,
   SelectContent,
@@ -15,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
   planUndo,
+  pocet,
   toast,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
@@ -44,14 +46,7 @@ interface TopicOption {
   draftCount: number
 }
 
-/** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
-function questionsWord(count: number): string {
-  if (count === 1) return 'otázka'
-  if (count < 5) return 'otázky'
-  return 'otázek'
-}
-
-/** Zápis stavu po skupinách — jeden požadavek nemá nést tisíc identifikátorů. */
+/** Zápis stavu po dávkách — jeden požadavek nemá nést tisíc identifikátorů. */
 async function writeStatus(ids: string[], status: QuestionStatus): Promise<void> {
   for (let start = 0; start < ids.length; start += UNDO_CHUNK) {
     const response = await fetch('/api/questions', {
@@ -67,7 +62,7 @@ async function writeStatus(ids: string[], status: QuestionStatus): Promise<void>
  * Kontrola konceptů přes celou knihovnu: nahoře zúžení na předmět, ročník
  * nebo téma, pod ním fronta.
  *
- * Postup („schváleno X · zbývá Y") drží tahle vnější vrstva, aby ho přežilo
+ * Postup („zbývá ke kontrole X") drží tahle vnější vrstva, aby ho přežilo
  * i znovunačtení fronty. Fronta samotná je `ReviewFeed` s klíčem podle filtru
  * — změnou filtru se vymění celá, takže se nemusí ručně uklízet rozdělaný
  * stav kurzoru.
@@ -105,11 +100,11 @@ export function ReviewScreen({
     setApproved(0)
   }
 
-  /** Vrácení hromadné akce po skupinách — otázky mohly mít různé předchozí stavy. */
+  /** Vrácení hromadné akce po dávkách — otázky mohly mít různé předchozí stavy. */
   async function undoBulk(previous: [string, QuestionStatus][]) {
     try {
       for (const step of planUndo(previous)) await writeStatus(step.ids, step.status)
-      toast.success(`Vráceno zpět: ${previous.length} ${questionsWord(previous.length)}`)
+      toast.success(`Vráceno zpět: ${pocet(previous.length, OTAZKY)}`)
       setApproved((value) => Math.max(0, value - previous.length))
       setRemaining((value) => value + previous.length)
       setReloadKey((value) => value + 1)
@@ -142,7 +137,7 @@ export function ReviewScreen({
       setRemaining((value) => Math.max(0, value - updated))
       setReloadKey((value) => value + 1)
       router.refresh()
-      toast.success(`Schváleno ${updated} ${questionsWord(updated)} v tématu`, {
+      toast.success(`Schváleno ${pocet(updated, OTAZKY)} v tématu`, {
         duration: 10_000,
         action: {
           label: 'Vzít zpět',
@@ -490,10 +485,10 @@ function ReviewFeed({
           <p className="text-sm text-fg-muted">Načítám frontu…</p>
         ) : (
           <EmptyState
-            title={finished && approved > 0 ? 'Hotovo, fronta je prázdná' : 'Žádné koncepty ke kontrole'}
+            title={finished && approved > 0 ? 'Hotovo, ke kontrole nic nezbývá' : 'Ke kontrole nic nezbývá'}
             hint={
               approved > 0
-                ? `V tomhle sezení jsi schválila ${approved} ${questionsWord(approved)}.`
+                ? `V tomhle sezení jsi zkontrolovala ${pocet(approved, OTAZKY)}.`
                 : 'Koncepty vznikají generováním z materiálů tématu.'
             }
           />

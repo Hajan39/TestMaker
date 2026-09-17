@@ -3,11 +3,11 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { InlineName } from '@/components/InlineName'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
-import { StatRow } from '@testmaker/ui'
+import { MATERIALY, OTAZKY, StatRow, plural } from '@testmaker/ui'
 import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
-import { loadQuestions } from '@/lib/questions'
+import { countQuestions, loadQuestions } from '@/lib/questions'
 import { TopicWorkspace } from './TopicWorkspace'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +32,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   if (!topic) notFound()
 
-  const [materialRows, questionList] = await Promise.all([
+  // Počty se berou dotazem, ne délkou seznamu: seznam je useknutý limitem
+  // a u tématu s tisícem otázek by čísla nahoře lhala.
+  const [materialRows, questionList, questionCount, draftCount, keptCount] = await Promise.all([
     db
       .select({
         id: materials.id,
@@ -47,9 +49,11 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
       .where(eq(materials.topicId, id))
       .orderBy(asc(materials.fileName)),
     loadQuestions({ topicIds: [id] }),
+    countQuestions({ topicId: id }),
+    countQuestions({ topicId: id, statuses: ['draft'] }),
+    // Zamítnuté se do doplňování počtu nepočítají.
+    countQuestions({ topicId: id, statuses: ['draft', 'approved'] }),
   ])
-
-  const draftCount = questionList.filter((question) => question.status === 'draft').length
   // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
   const usable = materialRows.filter((material) => !material.duplicateOfId)
   const usableCount = usable.length
@@ -81,22 +85,26 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
       <StatRow
         items={[
-          { value: usableCount, label: usableCount === 1 ? 'materiál' : 'materiálů' },
+          { value: usableCount, label: plural(usableCount, ...MATERIALY) },
           { value: totalChars.toLocaleString('cs'), label: 'znaků k dispozici' },
-          { value: questionList.length, label: 'otázek' },
-          { value: draftCount, label: 'ke schválení', tone: 'draft' },
+          { value: questionCount, label: plural(questionCount, ...OTAZKY) },
+          // Jedno sloveso a jeden směr napříč aplikací: kolik zbývá ke kontrole.
+          { value: draftCount, label: 'ke kontrole', tone: 'draft' },
         ]}
       />
 
       <TopicWorkspace
         topicId={topic.id}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
-        questions={questionList}
+        questions={questionList.items}
+        listTruncated={questionList.truncated}
+        listLimit={questionList.limit}
+        keptCount={keptCount}
         lowContent={topic.lowContent}
         ai={aiStatus()}
         // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný
         // klientské komponentě jako prop se přenáší jako položka seznamu.
-        group={<TopicGroup key="skupina" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
+        group={<TopicGroup key="materialy" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
       />
     </div>
   )

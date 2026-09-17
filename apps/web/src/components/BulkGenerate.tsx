@@ -61,26 +61,26 @@ export function BulkGenerate({
       })
       const queued = (await response.json()) as { enqueued: number; skipped: number }
       if (queued.enqueued === 0) {
-        setStatus(`Není co generovat (přeskočeno ${queued.skipped} skupin, které už otázky mají).`)
+        setStatus(`Není co generovat (přeskočeno ${queued.skipped} témat, která už otázky mají).`)
         setRunning(false)
         return
       }
 
       let created = 0
       let done = 0
-      setStatus(`Ve frontě ${queued.enqueued} skupin.`)
+      setStatus(`Ve frontě ${queued.enqueued} témat.`)
 
       await drainQueue(
         (step) => {
           done += 1
           created += step.created ?? 0
           if (step.error) setErrors((current) => [...current, step.error as string])
-          setStatus(`Hotovo ${done} skupin, vytvořeno ${created} otázek, zbývá ${step.remaining}.`)
+          setStatus(`Hotovo ${done} témat, vytvořeno ${created} otázek, zbývá ${step.remaining}.`)
         },
         () => stopRef.current,
       )
 
-      setStatus(`Dokončeno: ${created} otázek z ${done} skupin.`)
+      setStatus(`Dokončeno: ${created} otázek z ${done} témat.`)
       router.refresh()
     } catch (error) {
       setErrors((current) => [...current, error instanceof Error ? error.message : String(error)])
@@ -106,7 +106,7 @@ export function BulkGenerate({
 
         <div className="space-y-4 px-4 pb-4">
           <p className="text-sm text-fg-muted">
-                Projde všechny skupiny materiálů ve zvoleném rozsahu. Běží po jedné skupině, průběh
+                Projde všechna témata ve zvoleném rozsahu. Běží po jednom tématu, průběh
                 se průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
               </p>
 
@@ -118,7 +118,7 @@ export function BulkGenerate({
                   disabled={running}
                   onCheckedChange={() => setSkipWithQuestions(!skipWithQuestions)}
                 />
-                Přeskočit skupiny, které už otázky mají
+                Přeskočit témata, která už otázky mají
               </label>
 
               <div className="flex flex-wrap items-center gap-2">

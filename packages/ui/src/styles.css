@@ -46,6 +46,11 @@
      zůstává papírem. */
   --color-paper-shade: #f0f0f0;
 
+  /* Dráha ukazatelů průběhu. Vlastní token, ne zesvětlená značková zelená:
+     při nule schválených by se přes celou šířku svítila zelená dráha a
+     vypadalo by to jako hotovo. */
+  --color-track: #e4e6eb;
+
   /* Stav koncept */
   --color-draft-bg: #fdefd6;
   --color-draft-fg: #8a5a06;
@@ -86,6 +91,8 @@
     --color-brand: #2f9e79;
     --color-brand-bg: #16302a;
     --color-brand-fg: #08130f;
+
+    --color-track: #2b2f37;
 
     --color-draft-bg: #3a2c11;
     --color-draft-fg: #f0c579;

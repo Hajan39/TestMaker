@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { DeleteButton } from '@testmaker/ui'
+import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet } from '@testmaker/ui'
 
 type Kind = 'subject' | 'grade' | 'topic'
 
@@ -17,16 +17,16 @@ interface Impact {
 const TITLES: Record<Kind, string> = {
   subject: 'Smazat předmět',
   grade: 'Smazat ročník',
-  topic: 'Smazat skupinu',
+  topic: 'Smazat téma',
 }
 
 /** Vypíše dopad lidsky: jen to, čeho se to skutečně týká. */
 function describeImpact(impact: Impact) {
   const parts: string[] = []
-  if (impact.grades > 0) parts.push(`${impact.grades} ${plural(impact.grades, 'ročník', 'ročníky', 'ročníků')}`)
-  if (impact.topics > 0) parts.push(`${impact.topics} ${plural(impact.topics, 'téma', 'témata', 'témat')}`)
-  if (impact.materials > 0)
-    parts.push(`${impact.materials} ${plural(impact.materials, 'materiál', 'materiály', 'materiálů')}`)
+  if (impact.grades > 0) parts.push(pocet(impact.grades, ROCNIKY))
+  if (impact.topics > 0) parts.push(pocet(impact.topics, TEMATA))
+  if (impact.materials > 0) parts.push(pocet(impact.materials, MATERIALY))
+  // Ve větě „smaže se … a s ním 5 otázek“ stojí otázka ve čtvrtém pádě.
   if (impact.questions > 0)
     parts.push(`${impact.questions} ${plural(impact.questions, 'otázku', 'otázky', 'otázek')}`)
 
@@ -51,13 +51,7 @@ function describeImpact(impact: Impact) {
   )
 }
 
-function plural(count: number, one: string, few: string, many: string): string {
-  if (count === 1) return one
-  if (count < 5) return few
-  return many
-}
-
-/** Smazání předmětu, ročníku nebo skupiny včetně všeho, co pod nimi leží. */
+/** Smazání předmětu, ročníku nebo tématu včetně všeho, co pod nimi leží. */
 export function DeleteFromLibrary({
   kind,
   id,

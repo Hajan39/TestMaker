@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question } from '@testmaker/core/schema'
-import { Button, Card } from '@testmaker/ui'
+import { Button, Card, OTAZKY, pocet } from '@testmaker/ui'
 import {
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
@@ -25,6 +25,9 @@ export function TopicWorkspace({
   topicId,
   materials,
   questions,
+  listTruncated,
+  listLimit,
+  keptCount,
   lowContent,
   ai,
   group,
@@ -32,10 +35,20 @@ export function TopicWorkspace({
   topicId: string
   materials: MaterialSummary[]
   questions: Question[]
+  /** Seznam otázek je useknutý limitem — v tématu jich je víc, než se vypisuje. */
+  listTruncated: boolean
+  /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
+  listLimit: number
+  /**
+   * Otázky tématu kromě zamítnutých. Po kontrole konceptů má smysl doplňovat
+   * právě na počet těch, které v tématu zůstaly použitelné. Počítá se dotazem,
+   * ne z vypsaného seznamu — ten je useknutý limitem.
+   */
+  keptCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
   lowContent: boolean
   ai: { configured: boolean; provider: string; model: string }
-  /** Skupina materiálů — vykreslí se mezi hlavní akcí a seznamem otázek. */
+  /** Materiály tématu — vykreslí se mezi hlavní akcí a seznamem otázek. */
   group: React.ReactNode
 }) {
   const router = useRouter()
@@ -49,11 +62,8 @@ export function TopicWorkspace({
   // obsah vynechává, takže se nesmí počítat ani tady — jinak na obrazovce
   // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
   const usable = materials.filter((material) => !material.duplicateOfId)
-  // Zamítnuté se nepočítají — po kontrole konceptů je smysl doplňovat právě
-  // na počet těch, které v tématu zůstaly použitelné.
-  const kept = questions.filter((question) => question.status !== 'rejected').length
   const topUp = settings.mode === 'target'
-  const willCreate = topUp ? Math.max(0, settings.count - kept) : settings.count
+  const willCreate = topUp ? Math.max(0, settings.count - keptCount) : settings.count
 
   async function generate() {
     setError(null)
@@ -65,7 +75,7 @@ export function TopicWorkspace({
         if (event.type === 'progress') setStatus(`Zpracovávám část ${event.done} z ${event.total}`)
         else if (event.type === 'done') {
           setStatus(
-            `Vytvořeno ${event.created} otázek z ${event.sources} materiálů` +
+            `Vytvořeno ${pocet(event.created, OTAZKY)} z ${event.sources} materiálů` +
               // Když se v jednom tématu vystřídalo víc modelů, otázky nemusí být
               // stejně kvalitní — učitelka to má vědět dřív, než je začne číst.
               ((event.models?.length ?? 0) > 1 ? `, modely: ${event.models?.join(' → ')}` : '') +
@@ -87,14 +97,13 @@ export function TopicWorkspace({
       {ai.configured ? (
         <Card className="p-4">
           <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
-          {/* Počty materiálů a otázek stojí nahoře u názvu tématu — tady by se
-              jen opakovaly. Zůstává to, co nikde jinde není: co model dostane
-              a co z toho vznikne. */}
+          {/* Obrazovka tématu začínala odstavcem o tom, co dostane model —
+              poznámkou pro vývojáře. Nahoře zůstává jedna věta o tom, co z
+              toho učitelce vznikne; podrobnosti čekají v nastavení. */}
           <p className="mt-1 text-sm text-fg-muted">
-            Model {ai.model} dostane všechny materiály skupiny naráz, aby se otázky neopakovaly.
-            Vzniknou jako koncepty ke schválení.
+            Z materiálů tématu vzniknou nové otázky jako koncepty ke kontrole.
           </p>
-          {kept > 0 ? (
+          {keptCount > 0 ? (
             <p className="mt-1 text-sm text-fg-muted">
               {topUp
                 ? willCreate > 0
@@ -105,14 +114,24 @@ export function TopicWorkspace({
           ) : null}
           {lowContent ? (
             <p className="mt-2 text-sm text-fg-muted">
-              Materiálů je v téhle skupině málo — model z nich zvládne vytvořit jen pár otázek a
+              Materiálů je v tomhle tématu málo — model z nich zvládne vytvořit jen pár otázek a
               některé se budou opakovat. Spolehlivější je nejdřív přidat další materiál nebo téma
               sloučit s příbuzným. Generovat i tak jde, jen počítej s tím, že výsledek bude potřeba
               víc kontrolovat.
             </p>
           ) : null}
           <div className="mt-3">
-            <GenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
+            <GenerateSettingsForm
+              value={settings}
+              onChange={setSettings}
+              disabled={generating}
+              note={
+                <p className="text-xs text-fg-muted">
+                  Model {ai.model} dostane všechny materiály tématu naráz, aby se otázky
+                  neopakovaly. Materiály označené jako duplicitní obsah se vynechávají.
+                </p>
+              }
+            />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
@@ -120,7 +139,7 @@ export function TopicWorkspace({
               disabled={generating || usable.length === 0 || willCreate === 0}
               onClick={() => void generate()}
             >
-              {kept > 0 ? 'Dogenerovat ze skupiny' : 'Vygenerovat ze skupiny'}
+              {keptCount > 0 ? 'Dogenerovat z tématu' : 'Vygenerovat z tématu'}
             </Button>
             {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
             {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}
@@ -130,6 +149,13 @@ export function TopicWorkspace({
       ) : null}
 
       {group}
+
+      {listTruncated ? (
+        <p className="text-sm text-fg-muted">
+          Otázek je v tomhle tématu víc, než se sem vejde — vypisuje se prvních {listLimit}{' '}
+          od nejnovější. Zbytek najdeš v bance otázek, kde se dá filtrovat i hledat.
+        </p>
+      ) : null}
 
       <ReviewPanel topicId={topicId} questions={questions} />
     </div>

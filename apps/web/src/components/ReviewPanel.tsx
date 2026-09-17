@@ -19,6 +19,7 @@ import {
   EmptyState,
   Input,
   Label,
+  OTAZKY,
   QuestionPreview,
   ReviewQueue,
   Select,
@@ -27,17 +28,11 @@ import {
   SelectTrigger,
   SelectValue,
   planUndo,
+  pocet,
   toast,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
 import { RegenerateButton } from '@/components/RegenerateButton'
-
-/** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
-function questionsWord(count: number): string {
-  if (count === 1) return 'otázka'
-  if (count < 5) return 'otázky'
-  return 'otázek'
-}
 
 /** Seznam otázek k tématu s filtry, hromadnými akcemi a soustředěnou frontou ke schválení. */
 export function ReviewPanel({ topicId, questions }: { topicId: string; questions: Question[] }) {
@@ -81,7 +76,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
    */
   const drafts = useMemo(() => visible.filter((question) => question.status === 'draft'), [visible])
 
-  /** Zápis stavu bez obnovení seznamu — hodí se, když se zapisuje víc skupin za sebou. */
+  /** Zápis stavu bez obnovení seznamu — hodí se, když se zapisuje víc dávek za sebou. */
   async function writeStatus(ids: string[], status: QuestionStatus) {
     if (ids.length === 0) return
     await fetch('/api/questions', {
@@ -99,7 +94,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
 
   /**
    * Vrácení hromadné akce. Otázky mohly mít před ní různé stavy (něco byl
-   * koncept, něco už bylo schválené), proto se vracejí po skupinách — plán
+   * koncept, něco už bylo schválené), proto se vracejí po dávkách — plán
    * sestaví `planUndo`.
    */
   async function undoBulk(previous: [string, QuestionStatus][]) {
@@ -107,7 +102,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
       await writeStatus(step.ids, step.status)
     }
     startRefresh(() => router.refresh())
-    toast.success(`Vráceno zpět: ${previous.length} ${questionsWord(previous.length)}`)
+    toast.success(`Vráceno zpět: ${pocet(previous.length, OTAZKY)}`)
   }
 
   async function bulkStatus(next: 'approved' | 'rejected') {
@@ -126,7 +121,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
       await setStatus(ids, next)
       setSelected(new Set())
       toast.success(
-        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${ids.length} ${questionsWord(ids.length)}`,
+        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${pocet(ids.length, OTAZKY)}`,
         {
           duration: 10_000,
           action: { label: 'Vzít zpět', onClick: () => void undoBulk(previous) },
@@ -291,9 +286,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
             label={`Smazat (${selected.size})`}
             variant="destructive"
             title="Smazat vybrané otázky?"
-            description={`Smaže se ${selected.size} ${
-              selected.size === 1 ? 'otázka' : selected.size < 5 ? 'otázky' : 'otázek'
-            }. Pokud jsou použité v uloženém testu, zmizí i odtamtud.`}
+            description={`Smaže se ${pocet(selected.size, OTAZKY)}. Pokud jsou použité v uloženém testu, zmizí i odtamtud.`}
             onConfirm={removeSelected}
           />
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>
@@ -306,7 +299,7 @@ export function ReviewPanel({ topicId, questions }: { topicId: string; questions
         <div className="mt-4">
           <EmptyState
             title={questions.length === 0 ? 'K tématu zatím nejsou otázky' : 'Filtru nic neodpovídá'}
-            hint={questions.length === 0 ? 'Vygeneruj je ze skupiny materiálů, nebo přidej vlastní.' : undefined}
+            hint={questions.length === 0 ? 'Vygeneruj je z materiálů tématu, nebo přidej vlastní.' : undefined}
           />
         </div>
       ) : (

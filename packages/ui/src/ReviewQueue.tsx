@@ -19,7 +19,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  *
  * `questions` nemusí být celá fronta: obrazovka kontroly nad celou knihovnou
  * jich drží jen okno a další si dotahuje. Proto je tu `overall` (kolik je
- * schváleno a kolik zbývá dohromady) a `onPosition` (kde ve svém okně fronta
+ * zkontrolováno a kolik zbývá dohromady) a `onPosition` (kde ve svém okně fronta
  * právě stojí, aby volající věděl, kdy načíst další stránku).
  */
 export function ReviewQueue({
@@ -156,7 +156,13 @@ export function ReviewQueue({
       <div>
         <div className="mb-1.5 flex items-center justify-between">
           <span className="ui-label text-fg-muted">
-            {overall ? `Schváleno ${overall.approved} · zbývá ${overall.remaining}` : `${index + 1} z ${questions.length}`}
+            {/* Jedno sloveso a jeden směr pro celé rozhraní: kolik zbývá.
+                Bez „z kolika“ — zamítnutá otázka z fronty odejde, takže by
+                se jmenovatel pod rukama zmenšoval. Kolik už je odbaveno,
+                ukazuje pruh pod popiskem. */}
+            {overall
+              ? `Zbývá ke kontrole ${overall.remaining}`
+              : `Zbývá ke kontrole ${questions.length - index}`}
           </span>
         </div>
         <Progress value={progress} />

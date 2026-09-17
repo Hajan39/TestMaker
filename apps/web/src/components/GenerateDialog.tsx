@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from '@testmaker/core/schema'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import {
@@ -39,10 +39,13 @@ export function GenerateSettingsForm({
   value,
   onChange,
   disabled,
+  note,
 }: {
   value: GenerateSettings
   onChange: (next: GenerateSettings) => void
   disabled?: boolean
+  /** Podrobnost k vysvětlení až tady dole — nahoře na obrazovce by zdržovala. */
+  note?: ReactNode
 }) {
   const toggleType = (type: QuestionType) => {
     const types = value.types.includes(type)
@@ -144,6 +147,7 @@ export function GenerateSettingsForm({
             ))}
           </div>
         </div>
+        {note}
       </CollapsibleContent>
     </Collapsible>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Badge, Card, Tooltip, TooltipContent, TooltipTrigger } from '@testmaker/ui'
+import { Badge, Card, MATERIALY, OTAZKY, Tooltip, TooltipContent, TooltipTrigger, pocet } from '@testmaker/ui'
 import { InlineName } from '@/components/InlineName'
 
 /**
@@ -13,7 +13,7 @@ import { InlineName } from '@/components/InlineName'
  *
  * 1. samotný název a tužka k přejmenování — nic víc, ať jde přehled ročníku
  *    přejet očima po názvech,
- * 2. čísla: kolik má téma materiálů a jak daleko je kontrola otázek,
+ * 2. čísla: kolik má téma materiálů a otázek,
  * 3. odznaky: co čeká ke kontrole a co vázne.
  *
  * Dřív stály odznaky vedle názvu a čísla pod nimi totéž opakovala. Název se
@@ -24,7 +24,6 @@ export function TopicTile({
   name,
   materialCount,
   questionCount,
-  approvedCount,
   draftCount = 0,
   lowContent,
 }: {
@@ -32,7 +31,6 @@ export function TopicTile({
   name: string
   materialCount: number
   questionCount: number
-  approvedCount: number
   /** Kolik otázek čeká ke kontrole (stav „koncept“). */
   draftCount?: number
   /** Použitelného textu je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
@@ -59,9 +57,12 @@ export function TopicTile({
       </Tooltip>
 
       <Link href={`/topics/${id}`} className="block">
+        {/* Jeden směr počítání pro celé rozhraní: kolik zbývá ke kontrole.
+            Dřív tu stálo „3 z 3 zkontrolováno“, tedy přesný opak toho, co
+            hlásí odznak pod tím i navigace nahoře. */}
         <p className="truncate text-xs text-fg-muted">
-          {formatMaterials(materialCount)}
-          {questionCount > 0 ? ` · ${approvedCount} z ${questionCount} zkontrolováno` : ''}
+          {pocet(materialCount, MATERIALY)}
+          {questionCount > 0 ? ` · ${pocet(questionCount, OTAZKY)}` : ''}
         </p>
       </Link>
 
@@ -70,17 +71,10 @@ export function TopicTile({
           {draftCount > 0 ? (
             <Badge className="bg-draft-bg text-draft-fg">{draftCount} ke kontrole</Badge>
           ) : null}
-          {questionCount === 0 ? <Badge variant="secondary">bez otázek</Badge> : null}
-          {lowContent ? <Badge variant="secondary">málo textu</Badge> : null}
+          {questionCount === 0 ? <Badge variant="status">bez otázek</Badge> : null}
+          {lowContent ? <Badge variant="status">málo textu</Badge> : null}
         </Link>
       ) : null}
     </Card>
   )
-}
-
-function formatMaterials(count: number): string {
-  if (count === 0) return 'bez materiálů'
-  if (count === 1) return '1 materiál'
-  if (count < 5) return `${count} materiály`
-  return `${count} materiálů`
 }
