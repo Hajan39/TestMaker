@@ -46,10 +46,10 @@ test.describe('filtry otázek', () => {
   })
 })
 
-test.describe('správa skupiny materiálů', () => {
+test.describe('správa materiálů tématu', () => {
   test('nabídne přeřazení do jiného ročníku', async ({ page }) => {
     await page.goto(await testTopicPath(page.request))
-    await page.getByRole('button', { name: 'Upravit skupinu' }).click()
+    await page.getByRole('button', { name: 'Upravit téma' }).click()
 
     // Přesně „Ročník" — postranní panely mají v názvu „ročníky" a „ročníku".
     const gradeSelect = page.getByLabel('Ročník', { exact: true })
@@ -69,7 +69,7 @@ test.describe('nabídka generování', () => {
     const configured = probe.status() !== 503
 
     // Popisek se liší podle toho, jestli téma otázky už má („Dogenerovat").
-    const topicButton = page.getByRole('button', { name: /generovat ze skupiny$/i })
+    const topicButton = page.getByRole('button', { name: /generovat z tématu$/i })
     const bulkButton = page.getByRole('button', { name: 'Hromadné generování' })
 
     await page.goto(await testTopicPath(page.request))

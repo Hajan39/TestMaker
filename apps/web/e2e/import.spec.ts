@@ -31,6 +31,13 @@ const DROPPED = {
 
 test.describe('náhled importu', () => {
   test('samostatné soubory se zařadí ručně a uloží se jen vybrané', async ({ page }) => {
+    // Úklid po případném dřívějším spadlém běhu: téma téhož jména by rozbilo
+    // kontrolu „dokud se náhled nepotvrdí, v knihovně nic není".
+    const zbytky = await page.request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
+    for (const found of ((await zbytky.json()) as { results: { topicId: string }[] }).results) {
+      await page.request.delete(`/api/library?kind=topic&id=${encodeURIComponent(found.topicId)}`)
+    }
+
     await page.goto('/import')
 
     // Vedle výběru složky musí být i výběr jednotlivých souborů a zóna pro přetažení.

@@ -38,13 +38,13 @@ test.describe('náhodně sestavený test', () => {
     await dialog.getByRole('button', { name: 'Vložit do osnovy' }).click()
     await expect(dialog).toBeHidden()
 
-    // V osnově je pět otázek a test jde uložit.
-    await expect(page.getByText(/^5 otázek/).first()).toBeVisible()
+    // V osnově je pět otázek a test jde uložit; počty jsou v patičce stránky.
+    await expect(page.getByText(/^Otázek:\s*5/)).toBeVisible()
     await page.getByLabel('Název písemky').fill('Náhodná písemka')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 
     await page.goto(page.url())
-    await expect(page.getByText(/^5 otázek/).first()).toBeVisible()
+    await expect(page.getByText(/^Otázek:\s*5/)).toBeVisible()
   })
 })

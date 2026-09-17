@@ -64,6 +64,13 @@
       "when": 1789586447343,
       "tag": "0008_question-search-text",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789593224987,
+      "tag": "0009_query-indexes",
+      "breakpoints": true
     }
   ]
 }

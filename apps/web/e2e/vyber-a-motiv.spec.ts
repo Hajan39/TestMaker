@@ -33,8 +33,8 @@ test.describe('hromadný výběr', () => {
     await selectAll.waitFor({ state: 'visible' })
     await selectAll.click()
 
-    // Osnova hlásí počet otázek v hlavičce stránky.
-    await expect(page.getByText(/[1-9]\d* otázek/).first()).toBeVisible()
+    // Počty se čtou na jediném místě: v patičce pod stránkou písemky.
+    await expect(page.getByText(/^Otázek:\s*[1-9]/)).toBeVisible()
   })
 
   test('u typů otázek doplní všechny zpět jedním tlačítkem', async ({ page }) => {

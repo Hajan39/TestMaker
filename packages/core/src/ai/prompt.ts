@@ -31,6 +31,31 @@ const TYPE_HINTS: Record<QuestionType, string> = {
   label_image: 'Nepoužívej — obrázky se ve fázi 1 negenerují.',
 }
 
+/**
+ * Kolik zadání se vejde do seznamu „těmhle otázkám se vyhni".
+ *
+ * Seznam se ořezává, aby prompt nenarůstal do nekonečna u témat s dlouhou
+ * historií generování — 40 položek stačilo, dokud šly první ty starší
+ * z databáze. Volající dává napřed nově vzniklé otázky z běžícího generování
+ * (viz generate.ts), takže při tématu s desítkami existujících otázek se do 40
+ * nevešly ani ty čerstvé z právě běžící dávky.
+ *
+ * Podle téhož čísla si volající (`loadAvoidPrompts` ve webu) načítá otázky
+ * z databáze — jinak by vybíral víc, než se do promptu vejde, a o tom, které
+ * zahodit, by rozhodovalo pořadí řádků v databázi.
+ */
+export const AVOID_LIMIT = 80
+
+/**
+ * Delší zadání by prompt prodražilo neúměrně k přínosu — pro odlišení
+ * duplicity stačí začátek.
+ */
+const AVOID_ITEM_MAX_LEN = 100
+
+function truncateAvoidItem(text: string): string {
+  return text.length > AVOID_ITEM_MAX_LEN ? `${text.slice(0, AVOID_ITEM_MAX_LEN)}…` : text
+}
+
 export function buildSystemPrompt(): string {
   return [
     'Jsi zkušený učitel na české základní škole a tvoříš otázky do písemek.',
@@ -79,21 +104,10 @@ export function buildUserPrompt(request: GenerationRequest): string {
   ]
 
   if (request.avoid?.length) {
-    // Seznam se ořezává, aby prompt nenafukoval do nekonečna u témat s dlouhou
-    // historií generování — 40 položek stačilo, dokud šly první ty starší
-    // z databáze. Volající teď dává napřed nově vzniklé otázky z běžícího
-    // generování (viz generate.ts), takže při tématu s desítkami existujících
-    // otázek se do 40 nevešly ani ty čerstvé z právě běžící dávky. Řešíme to
-    // z obou stran: strop zvedáme (víc prostoru pro čerstvé i starší otázky)
-    // a každou položku zkracujeme (delší zadání by prompt prodražila
-    // neúměrně k přínosu — pro odlišení duplicity stačí začátek).
-    const AVOID_LIMIT = 80
-    const AVOID_ITEM_MAX_LEN = 100
-    const truncate = (s: string) => (s.length > AVOID_ITEM_MAX_LEN ? `${s.slice(0, AVOID_ITEM_MAX_LEN)}…` : s)
     sections.push(
       '',
       'Tyto otázky už existují, vytvoř jiné (ani parafráze):',
-      ...request.avoid.slice(0, AVOID_LIMIT).map((q) => `- ${truncate(q)}`),
+      ...request.avoid.slice(0, AVOID_LIMIT).map((q) => `- ${truncateAvoidItem(q)}`),
     )
   }
 

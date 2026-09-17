@@ -146,3 +146,72 @@ test.describe('dlaždice témat', () => {
     expect(offenders, 'název tématu přetéká z dlaždice').toEqual([])
   })
 })
+
+/**
+ * Telefon. Banka i seznam testů byly tabulky s vodorovným rolováním bez
+ * jakéhokoli náznaku, že se dá rolovat — na 390 px zůstal stav i celá nabídka
+ * akcí za okrajem obrazovky a s testem nešlo udělat nic. Místo tabulky jsou
+ * proto karty: jedna karta = jeden řádek, akce v ní.
+ */
+test.describe('telefon (390 px)', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  for (const target of [
+    { path: '/questions', name: 'banka otázek', akce: /^Akce u otázky/ },
+    { path: '/tests', name: 'testy', akce: /^Akce u testu/ },
+  ]) {
+    test(`${target.name}: u každé položky jde otevřít nabídka akcí`, async ({ page }) => {
+      if (target.path === '/tests') await zajistiTest(page)
+      await page.goto(target.path)
+      await page.waitForLoadState('networkidle')
+
+      // Žádná tabulka, a tedy ani vodorovné rolování, ve kterém se dá ztratit.
+      await expect(page.locator('main table')).toHaveCount(0)
+      expect(await horizontalOverflow(page), `${target.name} přetéká vodorovně`).toBeLessThanOrEqual(0)
+
+      const akce = page.getByRole('button', { name: target.akce })
+      const kolik = await akce.count()
+      expect(kolik, `${target.name}: na telefonu není u položek nabídka akcí`).toBeGreaterThan(0)
+
+      // Tlačítko musí být celé v okně, jinak se na ně nedá klepnout.
+      const box = await akce.first().boundingBox()
+      expect(box, 'nabídka akcí není vidět').not.toBeNull()
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390)
+
+      // V nabídce je i nevratné mazání — na telefonu tak jde s položkou udělat
+      // všechno, ne jen si ji přečíst.
+      await akce.first().click()
+      await expect(page.getByRole('menuitem', { name: 'Smazat' })).toBeVisible()
+    })
+  }
+})
+
+/**
+ * Aspoň jeden test v seznamu. Databáze e2e se testy neseeduje — zakládají si je
+ * jednotlivé zkoušky, a ta o seznamu testů běží až po téhle.
+ */
+async function zajistiTest(page: Page): Promise<void> {
+  const seznam = await page.request.get('/api/tests')
+  if (seznam.ok()) {
+    const { tests: existujici } = (await seznam.json()) as { tests?: unknown[] }
+    if (existujici && existujici.length > 0) return
+  }
+  const bank = await page.request.get('/api/questions?status=approved&limit=1')
+  expect(bank.ok()).toBe(true)
+  const { items } = (await bank.json()) as { items: { id: string }[] }
+  expect(items.length, 'v knihovně nejsou schválené otázky').toBeGreaterThan(0)
+
+  const created = await page.request.post('/api/tests', {
+    data: {
+      title: `E2E rozvržení ${Date.now()}`,
+      description: null,
+      graded: true,
+      templateId: 'builtin-klasicka',
+      header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+      variants: 1,
+      showKey: true,
+      items: [{ kind: 'question', questionId: items[0]!.id }],
+    },
+  })
+  expect(created.ok(), 'zkušební test se nepodařilo založit').toBe(true)
+}

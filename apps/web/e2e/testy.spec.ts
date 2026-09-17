@@ -38,7 +38,7 @@ test.describe('seznam testů', () => {
     await page.goto(`/tests?q=${encodeURIComponent(nazev)}`)
     await expect(page.getByRole('link', { name: nazev, exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Akce' }).first().click()
+    await page.getByRole('button', { name: /^Akce u testu/ }).first().click()
     await page.getByRole('menuitem', { name: 'Vytvořit kopii' }).click()
 
     await expect(page.getByText(/^Kopie /).first()).toBeVisible()

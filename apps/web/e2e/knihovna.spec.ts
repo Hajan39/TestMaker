@@ -97,7 +97,7 @@ test.describe('ruční správa knihovny', () => {
       await dialog.getByLabel('Název ročníku').fill(ROCNIK_NOVY)
       await dialog.getByRole('button', { name: 'Uložit', exact: true }).click()
       await expect(dialog).toContainText('už je')
-      await expect(dialog).toContainText('Upravit skupinu')
+      await expect(dialog).toContainText('Upravit téma')
       await dialog.getByRole('button', { name: 'Zrušit' }).click()
       await expect(page.getByRole('heading', { name: ROCNIK_DRUHY, exact: true })).toBeVisible()
 

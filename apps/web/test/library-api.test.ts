@@ -296,7 +296,7 @@ describe('přejmenování v knihovně', () => {
 
     const { status, body } = await rename({ kind: 'grade', id: gradeId, name: '7. ročník' })
     expect(status).toBe(409)
-    expect(body.error).toContain('Upravit skupinu')
+    expect(body.error).toContain('Upravit téma')
   })
 
   it('odmítne dvě témata téhož jména v ročníku a nabídne sloučení', async () => {
@@ -305,7 +305,7 @@ describe('přejmenování v knihovně', () => {
 
     const { status, body } = await rename({ kind: 'topic', id: topicId, name: 'Ptáci' })
     expect(status).toBe(409)
-    expect(body.error).toContain('Sloučit do jiné skupiny')
+    expect(body.error).toContain('Sloučit do jiného tématu')
   })
 
   it('přejmenování na tentýž název projde', async () => {

@@ -107,7 +107,7 @@ test.describe('skládání osnovy', () => {
     // Otázka, která v testu už je, nabídne zařazení dalšího výskytu na konec.
     await prvni.getByRole('button', { name: 'Zařadit do testu ještě jednou' }).click()
     await expect(prvni.getByText('2\u00d7')).toBeVisible()
-    const pocet = await page.getByText(/^\d+ otázek/).first().textContent()
+    const pocet = await page.getByText(/^Otázek:\s*\d+/).first().textContent()
 
     await page.getByLabel('Název písemky').fill('Zkouška dvojího použití')
     await page.getByRole('button', { name: 'Uložit' }).click()
@@ -116,7 +116,7 @@ test.describe('skládání osnovy', () => {
     // Po znovunačtení musí oba výskyty přežít včetně pořadí — druhý zůstává
     // na konci osnovy, kam se přidal.
     await page.goto(page.url())
-    await expect(page.getByText(/^\d+ otázek/).first()).toHaveText(pocet ?? '')
+    await expect(page.getByText(/^Otázek:\s*\d+/).first()).toHaveText(pocet ?? '')
     const rows = page.locator('[data-slot="paper-sheet"] ol > li')
     await expect(rows.nth(1)).toContainText('1. použití')
     // Předposlední <li>: za poslední položkou je ještě vkládací pruh.

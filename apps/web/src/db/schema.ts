@@ -104,6 +104,13 @@ export const materials = sqliteTable(
     uniqueIndex('materials_topic_hash_idx').on(table.topicId, table.contentHash),
     index('materials_topic_idx').on(table.topicId),
     index('materials_duplicate_idx').on(table.duplicateOfId),
+    /**
+     * Hledání podle samotného obsahu (import se ptá „známe už tenhle hash?“
+     * napříč tématy). Složený index výš začíná tématem, takže na tenhle dotaz
+     * použít nejde a import každého souboru četl celou tabulku materiálů
+     * i s texty.
+     */
+    index('materials_content_hash_idx').on(table.contentHash),
   ],
 )
 
@@ -153,9 +160,21 @@ export const questions = sqliteTable(
     searchText: text('search_text').notNull().default(''),
   },
   (table) => [
-    index('questions_topic_idx').on(table.topicId),
+    /**
+     * Nejčastější dotaz v aplikaci: otázky jednoho tématu, obvykle zúžené
+     * stavem (koncepty ke kontrole, doplňování počtu v `resolveCount`).
+     * Nahrazuje dřívější index jen podle tématu — ten je jeho předponou,
+     * takže dotazy bez stavu zvládne taky.
+     */
+    index('questions_topic_status_idx').on(table.topicId, table.status),
     index('questions_material_idx').on(table.materialId),
     index('questions_status_idx').on(table.status),
+    /**
+     * Řazení seznamů a stránkování kurzorem jde vždycky podle dvojice
+     * (`created_at`, `id`) — bez indexu se kvůli každé stránce řadila celá
+     * banka.
+     */
+    index('questions_created_idx').on(table.createdAt, table.id),
   ],
 )
 
@@ -175,7 +194,15 @@ export const generationJobs = sqliteTable(
     startedAt: text('started_at'),
     finishedAt: text('finished_at'),
   },
-  (table) => [index('generation_jobs_status_idx').on(table.status)],
+  (table) => [
+    index('generation_jobs_status_idx').on(table.status),
+    /**
+     * Rezervace tématu (`claimTopic`, `isTopicBusy`) i zařazování do fronty
+     * se ptají na dvojici tématu a stavu. Index jen podle stavu na to nestačí:
+     * čekajících a běžících úloh je málo, ale hotových přibývá donekonečna.
+     */
+    index('generation_jobs_topic_status_idx').on(table.topicId, table.status),
+  ],
 )
 
 export interface GenerationJobParams {
@@ -249,7 +276,15 @@ export const testItems = sqliteTable(
      */
     questionSnapshot: text('question_snapshot'),
   },
-  (table) => [index('test_items_test_idx').on(table.testId, table.position)],
+  (table) => [
+    index('test_items_test_idx').on(table.testId, table.position),
+    /**
+     * Cizí klíč se `set null`: při každém smazání otázky musí SQLite najít
+     * položky testů, které na ni ukazují. Bez indexu kvůli tomu projde celou
+     * tabulku i se zmrazenými snímky otázek.
+     */
+    index('test_items_question_idx').on(table.questionId),
+  ],
 )
 
 export type SubjectRow = typeof subjects.$inferSelect

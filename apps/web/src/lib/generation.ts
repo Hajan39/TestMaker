@@ -4,7 +4,7 @@ import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
 import { newId } from '@/lib/ids'
-import { insertQuestions, questionPrompt, toQuestion } from './questions'
+import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
 
 export interface GenerateParams {
   count: number
@@ -65,40 +65,24 @@ export interface GenerateOutcome {
  * Vrací id rezervace, nebo `null`, když už téma někdo zpracovává.
  */
 export async function claimTopic(topicId: string): Promise<string | null> {
-  const running = await db
-    .select({ id: generationJobs.id })
-    .from(generationJobs)
-    .where(and(eq(generationJobs.topicId, topicId), inArray(generationJobs.status, ['queued', 'running'])))
-    .limit(1)
-  if (running.length > 0) return null
-
   const id = newId()
-  await db.insert(generationJobs).values({
-    id,
-    topicId,
-    params: DEFAULT_GENERATE_PARAMS,
-    status: 'running',
-    startedAt: new Date().toISOString(),
-  })
+  const startedAt = new Date().toISOString()
 
-  // Pojistka proti souběhu: kdyby rezervaci stihl založit i někdo další,
-  // zůstane ta starší a tahle se uklidí.
-  const others = await db
-    .select({ id: generationJobs.id, createdAt: generationJobs.createdAt })
-    .from(generationJobs)
-    .where(
-      and(
-        eq(generationJobs.topicId, topicId),
-        inArray(generationJobs.status, ['queued', 'running']),
-        ne(generationJobs.id, id),
-      ),
+  // Celá rezervace je jeden příkaz: `insert … select … where not exists`.
+  // Čtení a zápis ve dvou krocích nad Turso atomické nejsou — mezi ně se vejde
+  // druhé generování a obě si téma zaberou. Jeden příkaz zapisuje pod zámkem
+  // databáze, takže podmínku vyhodnotí právě jeden z nich.
+  const claimed = await db.all<{ id: string }>(sql`
+    insert into ${generationJobs} (id, topic_id, params, status, started_at)
+    select ${id}, ${topicId}, ${JSON.stringify(DEFAULT_GENERATE_PARAMS)}, 'running', ${startedAt}
+    where not exists (
+      select 1 from ${generationJobs}
+      where topic_id = ${topicId} and status in ('queued', 'running')
     )
-  if (others.length > 0) {
-    await db.delete(generationJobs).where(eq(generationJobs.id, id))
-    return null
-  }
+    returning id
+  `)
 
-  return id
+  return claimed.length > 0 ? id : null
 }
 
 /** Uvolní rezervaci tématu a zapíše, jak generování dopadlo. */
@@ -175,7 +159,7 @@ export async function generateForTopic(
     throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
   }
 
-  const existing = await db.select().from(questions).where(eq(questions.topicId, topicId)).limit(80)
+  const avoid = await loadAvoidPrompts(topicId)
 
   // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
   let created = 0
@@ -189,7 +173,7 @@ export async function generateForTopic(
       count: wanted,
       types: params.types,
       difficulty: params.difficulty,
-      avoid: existing.map((item) => questionPrompt(toQuestion(item))),
+      avoid,
     },
     {
       signal: options.signal,
@@ -269,7 +253,7 @@ export async function regenerateQuestion(
 
   // Nahrazovaná otázka je v seznamu „vyhni se" taky — jinak by model klidně
   // vrátil tutéž otázku, kterou učitelka právě zavrhla.
-  const existing = await db.select().from(questions).where(eq(questions.topicId, topicId)).limit(80)
+  const avoid = await loadAvoidPrompts(topicId)
 
   const generate = options.generate ?? generateQuestions
   const result = await generate(
@@ -281,7 +265,7 @@ export async function regenerateQuestion(
       count: 1,
       types: [type as (typeof AI_QUESTION_TYPES)[number]],
       difficulty: (original.difficulty as 1 | 2 | 3) ?? 2,
-      avoid: existing.map((item) => questionPrompt(toQuestion(item))),
+      avoid,
     },
     { signal: options.signal },
   )

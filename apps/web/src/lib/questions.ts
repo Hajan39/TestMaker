@@ -1,5 +1,6 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { AVOID_LIMIT } from '@testmaker/core/ai'
 import {
   normalizeEvidence,
   parseQuestionSnapshot,
@@ -39,25 +40,47 @@ export interface QuestionFilter {
   limit?: number
 }
 
-export async function loadQuestions(filter: QuestionFilter = {}): Promise<Question[]> {
+/** Kolik otázek `loadQuestions` vrátí, když si volající neřekne jinak. */
+export const QUESTION_LIST_LIMIT = 500
+
+export interface QuestionList {
+  items: Question[]
+  /**
+   * Otázek bylo víc, než se vešlo do limitu — vrácený seznam tedy není úplný.
+   * Volající to musí dát najevo: mlčky useknutý seznam vypadá jako celá banka
+   * a učitelka by marně hledala otázku, která v něm prostě není.
+   */
+  truncated: boolean
+  /** Limit, o který se seznam usekl — do hlášky pro učitelku. */
+  limit: number
+}
+
+export async function loadQuestions(filter: QuestionFilter = {}): Promise<QuestionList> {
+  const limit = filter.limit ?? QUESTION_LIST_LIMIT
   const conditions: SQL[] = []
   if (filter.topicIds?.length) conditions.push(inArray(questions.topicId, filter.topicIds))
   if (filter.types?.length) conditions.push(inArray(questions.type, filter.types))
   if (filter.statuses?.length) conditions.push(inArray(questions.status, filter.statuses))
   if (filter.materialId) conditions.push(eq(questions.materialId, filter.materialId))
 
+  // O jednu navíc: podle toho se pozná, že seznam není úplný.
   const rows = await db
     .select()
     .from(questions)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(questions.createdAt), asc(questions.id))
-    .limit(filter.limit ?? 500)
+    .limit(limit + 1)
 
-  const list = rows.map(toQuestion)
-  if (!filter.search) return list
+  const truncated = rows.length > limit
+  const list = rows.slice(0, limit).map(toQuestion)
+  if (!filter.search) return { items: list, truncated, limit }
 
   const needle = filter.search.toLocaleLowerCase('cs')
-  return list.filter((question) => questionText(question).toLocaleLowerCase('cs').includes(needle))
+  return {
+    items: list.filter((question) => questionText(question).toLocaleLowerCase('cs').includes(needle)),
+    truncated,
+    limit,
+  }
 }
 
 /** Veškerý text otázky pro fulltextové hledání. */
@@ -88,9 +111,28 @@ export function searchCondition(search: string): SQL | null {
 }
 
 /** Zadání otázky pro výpis v seznamu. */
-export function questionPrompt(question: Question): string {
+export function questionPrompt(question: { payload: unknown }): string {
   const payload = question.payload as { prompt?: string; text?: string }
   return payload.prompt || payload.text?.slice(0, 160) || '(bez zadání)'
+}
+
+/**
+ * Zadání otázek tématu pro seznam „těmhle se vyhni" v promptu.
+ *
+ * Bere se přesně tolik, kolik se do promptu vejde (`AVOID_LIMIT`), a od těch
+ * nejnovějších: právě jim se model musí vyhnout nejvíc, protože z nich se
+ * naposledy generovalo. Dřív se načítalo osmdesát otázek bez řazení, takže
+ * o výběru rozhodovalo pořadí řádků v databázi, a prompt pak seznam ořezával
+ * podruhé.
+ */
+export async function loadAvoidPrompts(topicId: string, limit = AVOID_LIMIT): Promise<string[]> {
+  const rows = await db
+    .select({ payload: questions.payload })
+    .from(questions)
+    .where(eq(questions.topicId, topicId))
+    .orderBy(desc(questions.createdAt), desc(questions.id))
+    .limit(limit)
+  return rows.map((row) => questionPrompt(row))
 }
 
 export async function insertQuestions(

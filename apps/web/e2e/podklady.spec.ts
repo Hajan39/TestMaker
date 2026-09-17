@@ -47,8 +47,8 @@ test.describe('upozornění na chudé téma', () => {
 
     // Detail tématu vysvětlí, co málo textu znamená, a generování nechá možné.
     await expect(page.getByRole('heading', { name: 'Chudé téma' })).toBeVisible()
-    await expect(page.getByText('Materiálů je v téhle skupině málo')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Vygenerovat ze skupiny' })).toBeVisible()
+    await expect(page.getByText('Materiálů je v tomhle tématu málo')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Vygenerovat z tématu' })).toBeVisible()
 
     // A tatáž klidná poznámka je vidět na dlaždici v přehledu ročníku.
     await page.goto('/')
@@ -117,7 +117,7 @@ test.describe('stejný soubor ve dvou tématech', () => {
       await expect(page.getByRole('heading', { name: 'Materiály' })).toBeVisible()
       await expect(page.getByText(fileName).first()).toBeVisible()
       await expect(page.getByText('stejný obsah jako')).toHaveCount(0)
-      await expect(page.getByText('Materiálů je v téhle skupině málo')).toHaveCount(0)
+      await expect(page.getByText('Materiálů je v tomhle tématu málo')).toHaveCount(0)
     }
 
     // Uklidit po sobě — testovací předmět do skutečné knihovny nepatří.

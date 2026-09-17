@@ -43,7 +43,7 @@ test.describe('kontrola konceptů', () => {
 
     // Projdeme frontu celou a ověříme, že v ní nepotkáme schválenou otázku.
     for (let position = 1; position <= DRAFT_COUNT; position += 1) {
-      await expect(dialog).toContainText(`${position} z ${DRAFT_COUNT}`)
+      await expect(dialog).toContainText(`Zbývá ke kontrole ${DRAFT_COUNT - position + 1}`)
       await expect(dialog).toContainText('Koncept ke kontrole')
       await expect(dialog).not.toContainText('Už schválená otázka')
       await dialog.getByRole('button', { name: 'Přeskočit' }).click()

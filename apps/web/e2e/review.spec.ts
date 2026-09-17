@@ -34,13 +34,13 @@ test.describe('kontrola konceptů přes celou knihovnu', () => {
     await page.goto(`/review?topicId=${topicId}`)
 
     const queue = page.locator('[data-review-queue]')
-    await expect(queue).toContainText(`Schváleno 0 · zbývá ${COUNT}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT}`)
 
     // První stránka: schválíme jich přesně tolik, kolik se jich vejde do
     // jedné dávky. Kdyby se další nedotáhla, fronta by tu skončila.
     for (let done = 1; done <= PAGE_SIZE; done += 1) {
       await page.keyboard.press('a')
-      await expect(queue).toContainText(`Schváleno ${done} · zbývá ${COUNT - done}`)
+      await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT - done}`)
     }
 
     // Za hranicí stránky pořád stojí otázka a dá se schvalovat dál.
@@ -48,13 +48,13 @@ test.describe('kontrola konceptů přes celou knihovnu', () => {
 
     for (let done = PAGE_SIZE + 1; done < COUNT; done += 1) {
       await page.keyboard.press('a')
-      await expect(queue).toContainText(`Schváleno ${done} · zbývá ${COUNT - done}`)
+      await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT - done}`)
     }
 
     // Poslední otázkou fronta došla a řekne to — i s tím, co se stihlo.
     await page.keyboard.press('a')
-    await expect(queue).toContainText('Hotovo, fronta je prázdná')
-    await expect(queue).toContainText(`schválila ${COUNT} otázek`)
+    await expect(queue).toContainText('Hotovo, ke kontrole nic nezbývá')
+    await expect(queue).toContainText(`zkontrolovala ${COUNT} otázek`)
 
     // A schválení se opravdu zapsalo — v tématu nezbyl jediný koncept.
     expect(await draftCount(page.request, topicId)).toBe(0)
@@ -65,18 +65,18 @@ test.describe('kontrola konceptů přes celou knihovnu', () => {
     await page.goto(`/review?topicId=${topicId}`)
 
     const queue = page.locator('[data-review-queue]')
-    await expect(queue).toContainText(`Schváleno 0 · zbývá ${COUNT}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT}`)
 
     // Přeskočení nic nemění — otázka zůstává ve frontě na jindy.
     await page.keyboard.press('ArrowRight')
-    await expect(queue).toContainText(`Schváleno 0 · zbývá ${COUNT}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT}`)
 
     // Zamítnutí ubere ze zbývajících, ale mezi schválené se nepočítá.
     await page.keyboard.press('x')
-    await expect(queue).toContainText(`Schváleno 0 · zbývá ${COUNT - 1}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT - 1}`)
 
     await page.keyboard.press('a')
-    await expect(queue).toContainText(`Schváleno 1 · zbývá ${COUNT - 2}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT - 2}`)
 
     expect(await draftCount(page.request, topicId)).toBe(COUNT - 2)
   })
@@ -86,7 +86,7 @@ test.describe('kontrola konceptů přes celou knihovnu', () => {
     await page.goto(`/review?topicId=${topicId}`)
 
     const queue = page.locator('[data-review-queue]')
-    await expect(queue).toContainText(`Schváleno 0 · zbývá ${COUNT}`)
+    await expect(queue).toContainText(`Zbývá ke kontrole ${COUNT}`)
 
     await page.getByRole('button', { name: 'Schválit celé téma' }).click()
 

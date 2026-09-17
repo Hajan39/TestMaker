@@ -98,7 +98,9 @@ test.describe('banka otázek', () => {
     await expect(rows).toHaveCount(1)
 
     await page.getByRole('checkbox', { name: `Vybrat otázku ${prompt}` }).click()
-    await page.getByRole('button', { name: /^Smazat \(1\)$/ }).click()
+    // Číslo je v liště jen jednou („Vybráno 1“), tlačítko ho neopakuje.
+    await expect(page.getByText('Vybráno 1')).toBeVisible()
+    await page.getByRole('button', { name: 'Smazat', exact: true }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
 
     await expect(page.getByText(/^Smazáno: 1 otázka/)).toBeVisible()
@@ -114,7 +116,9 @@ test.describe('banka otázek', () => {
     const rows = page.locator('tr[data-question-id]')
     await expect(rows).toHaveCount(1)
 
-    await rows.getByRole('button', { name: 'Upravit' }).click()
+    // Akce u řádku jsou v nabídce pod třemi tečkami — týž vzor jako u testů.
+    await rows.getByRole('button', { name: /^Akce u otázky/ }).click()
+    await page.getByRole('menuitem', { name: 'Upravit' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
 
