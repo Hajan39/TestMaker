@@ -118,18 +118,25 @@ export function TopicWorkspace({
           setFresh((current) => [...event.questions.slice().reverse(), ...current])
           prubeh()
         } else if (event.type === 'done') {
-          const souhrn = summarizeRun(event)
           setStatus(null)
-          setOutcome(souhrn)
-          toast.success(souhrn, {
-            duration: 12_000,
-            action: event.created > 0
-              ? {
-                  label: 'Zkontrolovat',
-                  onClick: () => router.push(`/review?topicId=${encodeURIComponent(topicId)}`),
-                }
-              : undefined,
-          })
+          // Podrobný souhrn (co se zahodilo, kolikrát model selhal) má jedno
+          // místo — trvalý řádek v kartě. Bublina jen upozorní, že je hotovo,
+          // ať se táž věta nečte dvakrát vedle sebe.
+          setOutcome(summarizeRun(event))
+          toast.success(
+            event.created > 0
+              ? `Hotovo, ${pocet(event.created, OTAZKY)} ke kontrole.`
+              : 'Hotovo, ale nevznikla ani jedna otázka.',
+            {
+              duration: 12_000,
+              action: event.created > 0
+                ? {
+                    label: 'Zkontrolovat',
+                    onClick: () => router.push(`/review?topicId=${encodeURIComponent(topicId)}`),
+                  }
+                : undefined,
+            },
+          )
           router.refresh()
         } else if (event.type === 'error') setError(event.message)
       }, abortRef.current.signal)
@@ -149,13 +156,13 @@ export function TopicWorkspace({
               poznámkou pro vývojáře. Nahoře zůstává jedna věta o tom, co z
               toho učitelce vznikne; podrobnosti čekají v nastavení. */}
           <p className="mt-1 text-sm text-fg-muted">
-            Z materiálů tématu vzniknou nové otázky jako koncepty ke kontrole.
+            Z materiálů tématu vzniknou nové otázky ke kontrole.
           </p>
           {keptCount > 0 ? (
             <p className="mt-1 text-sm text-fg-muted">
               {topUp
                 ? willCreate > 0
-                  ? `Doplní se ${willCreate} ${willCreate === 1 ? 'nová otázka' : willCreate < 5 ? 'nové otázky' : 'nových otázek'}.`
+                  ? `Doplní se ${pocet(willCreate, OTAZKY)}.`
                   : 'Zvolený počet je už naplněný, nic se nevytvoří.'
                 : 'Stávající otázky dostane model jako seznam, kterému se má vyhnout.'}
             </p>
@@ -201,7 +208,7 @@ export function TopicWorkspace({
                   href={`/review?topicId=${encodeURIComponent(topicId)}`}
                   className="text-brand underline underline-offset-2"
                 >
-                  Zkontrolovat nové koncepty
+                  Zkontrolovat
                 </Link>
               ) : null}
             </p>
@@ -241,7 +248,8 @@ function summarizeRun(event: {
   }
   const parts = [`Vytvořeno ${pocet(event.created, OTAZKY)}.`]
   if (event.rejected > 0) {
-    parts.push(`Zahozeno: ${pocet(event.rejected, OTAZKY)} — byly neúplné nebo si odporovaly.`)
+    // Věta nesmí záviset na počtu: „1 otázka — byly neúplné“ se neshodovalo.
+    parts.push(`Zahozeno: ${pocet(event.rejected, OTAZKY)} — neúplné nebo si odporovaly.`)
   }
   if (event.failedCalls > 0) {
     parts.push(`${event.failedCalls}× model odpověděl něčím, co se nedalo použít.`)

@@ -71,7 +71,12 @@ export async function generateQuestionsStream(
 
 /** Zpracuje frontu hromadného generování voláním runneru, dokud něco zbývá. */
 export async function drainQueue(
-  onStep: (info: { created?: number; error?: string; remaining: number }) => void,
+  /**
+   * Volá se po každém dotazu na runner. `processed` říká, jestli se opravdu
+   * zpracovalo téma — poslední dotaz na prázdnou frontu žádné nezpracuje a
+   * počítat ho jako téma znamenalo o jedno víc v každém souhrnu.
+   */
+  onStep: (info: { processed: boolean; created?: number; error?: string; remaining: number }) => void,
   shouldStop: () => boolean,
 ): Promise<void> {
   for (;;) {
@@ -84,7 +89,12 @@ export async function drainQueue(
       error?: string
       remaining: number
     }
-    onStep({ created: result.created, error: result.error, remaining: result.remaining })
+    onStep({
+      processed: result.processed,
+      created: result.created,
+      error: result.error,
+      remaining: result.remaining,
+    })
     if (!result.processed && result.remaining === 0) return
   }
 }

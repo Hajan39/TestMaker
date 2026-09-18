@@ -9,6 +9,9 @@ import { GenerationStatus } from '@/components/GenerationStatus'
 const NAV: NavItem[] = [
   { href: '/', label: 'Knihovna' },
   { href: '/import', label: 'Import materiálů' },
+  // Přehled generování musí jít otevřít i ve chvíli, kdy nic neběží — ukazatel
+  // v liště sám o sobě k nedokončeným tématům druhý den nedovede.
+  { href: '/generovani', label: 'Generování' },
   { href: '/review', label: 'Kontrola' },
   { href: '/questions', label: 'Banka otázek' },
   { href: '/tests', label: 'Testy' },

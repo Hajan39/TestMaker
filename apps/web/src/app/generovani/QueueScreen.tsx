@@ -20,6 +20,7 @@ import {
 } from '@testmaker/ui'
 import { drainQueue } from '@/lib/generateClient'
 import type { QueueCounts, QueueJob } from '@/lib/jobs'
+import { shrnutiBehu } from '@/lib/queueSummary'
 
 /** Jak často se obrazovka ptá, jak to jde. Jen dokud se něco děje. */
 const REFRESH_MS = 3000
@@ -75,25 +76,30 @@ export function QueueScreen({
     stopRef.current = false
     let created = 0
     let done = 0
+    let failed = 0
     try {
       await drainQueue(
         (step) => {
+          // Poslední dotaz na prázdnou frontu žádné téma nezpracuje — počítají
+          // se jen skutečné kroky, jinak by souhrn hlásil o téma víc.
+          if (!step.processed) return
           done += 1
           created += step.created ?? 0
+          if (step.error) failed += 1
           void refresh()
         },
         () => stopRef.current,
       )
-      toast.success(
-        done === 0
-          ? 'Fronta byla prázdná, nic se negenerovalo.'
-          : `Hotovo: ${pocet(created, OTAZKY)} z ${done} ${plural(done, 'tématu', 'témat', 'témat')}.`,
-        {
-          duration: 12_000,
-          action:
-            created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/review') } : undefined,
-        },
-      )
+      // Chyby jednotlivých témat se dřív zahazovaly a po sedmi spadlých
+      // tématech svítilo zelené „Hotovo“. Vyznění teď určuje výsledek.
+      const shrnuti = shrnutiBehu({ zpracovano: done, chyby: failed, otazky: created })
+      const hlaska =
+        shrnuti.ton === 'chyba' ? toast.error : shrnuti.ton === 'varovani' ? toast.warning : toast.success
+      hlaska(shrnuti.text, {
+        duration: 12_000,
+        action:
+          created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/review') } : undefined,
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -142,7 +148,7 @@ export function QueueScreen({
         <h1 className="ui-page-title">Průběh generování</h1>
         <p className="mt-1 text-sm text-fg-muted">
           Témata, ze kterých se právě tvoří otázky, i ta, která na řadu teprve čekají. Generuje se
-          po jednom tématu a jen tehdy, když je tahle stránka (nebo stránka tématu) otevřená.
+          po jednom tématu.
         </p>
       </div>
 
@@ -163,14 +169,12 @@ export function QueueScreen({
             </Button>
           ) : (
             <Button size="sm" onClick={() => void run()}>
-              Pustit se do čekajících témat
+              Generovat čekající témata
             </Button>
           )
         ) : null}
         {working ? (
-          <span className="text-sm text-fg-soft">
-            Generuji… stránku můžeš nechat otevřenou, průběh se ukládá průběžně.
-          </span>
+          <span className="text-sm text-fg-soft">Generuji… průběh se ukládá průběžně.</span>
         ) : null}
         {counts.error > 0 ? (
           <BusyButton
@@ -180,7 +184,7 @@ export function QueueScreen({
             busyLabel="Vracím do fronty…"
             onClick={() => void retry()}
           >
-            Zkusit znovu ({counts.error})
+            Zkusit znovu vše
           </BusyButton>
         ) : null}
         {counts.queued + counts.running + counts.error > 0 ? (
@@ -203,6 +207,12 @@ export function QueueScreen({
         ) : null}
       </div>
 
+      {/* Podmínka běhu patří k tlačítku, ne jen do úvodního odstavce: odchod
+          ze stránky práci zastaví a to se musí vědět před kliknutím. */}
+      {aiConfigured && counts.queued > 0 ? (
+        <p className="-mt-3 text-sm text-fg-muted">Běží, dokud je tahle stránka otevřená.</p>
+      ) : null}
+
       {jobs.length === 0 ? (
         <EmptyState
           title="Nic se negeneruje"
@@ -217,6 +227,10 @@ export function QueueScreen({
         />
       ) : null}
 
+      {/* Počty se čtou na jediném místě — ve statistickém řádku nahoře. Sekce
+          se vykreslují jen když nejsou prázdné, takže by je číslo v titulku
+          jen zopakovalo; u hotových by navíc lhalo, protože se jich vypisuje
+          nejvýš posledních pár. */}
       <Section title="Právě se tvoří" jobs={running} />
       <Section title="Čeká na řadu" jobs={waiting} />
       <Section
@@ -225,7 +239,12 @@ export function QueueScreen({
         onRetry={(id) => void retry([id])}
         retrying={retrying}
       />
-      <Section title="Hotové" jobs={finished} />
+      <Section
+        title={
+          counts.done > finished.length ? `Hotové — posledních ${finished.length}` : 'Hotové'
+        }
+        jobs={finished}
+      />
     </div>
   )
 }
@@ -244,9 +263,7 @@ function Section({
   if (jobs.length === 0) return null
   return (
     <Card className="p-4">
-      <h2 className="text-sm font-semibold text-fg">
-        {title} ({jobs.length})
-      </h2>
+      <h2 className="text-sm font-semibold text-fg">{title}</h2>
       <ul className="mt-2 divide-y divide-line-soft">
         {jobs.map((job) => (
           <li key={job.id} data-job-id={job.id} className="flex flex-wrap items-start gap-3 py-2.5">
@@ -257,7 +274,10 @@ function Section({
               {job.place ? <p className="text-xs text-fg-muted">{job.place}</p> : null}
               {job.error ? <p className="mt-1 text-sm text-danger">{job.error}</p> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {/* Na úzké obrazovce se pravá skupina zalomí pod název tématu
+                místo toho, aby vytekla z karty — `main` vodorovné rolování
+                skrývá, takže tlačítko za okrajem by bylo nedosažitelné. */}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-xs text-fg-muted">{describe(job)}</span>
               <StateBadge status={job.status} />
               {onRetry ? (

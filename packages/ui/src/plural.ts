@@ -27,3 +27,10 @@ export const OTAZKY: PluralForms = ['otázka', 'otázky', 'otázek']
 export const TEMATA: PluralForms = ['téma', 'témata', 'témat']
 export const MATERIALY: PluralForms = ['materiál', 'materiály', 'materiálů']
 export const ROCNIKY: PluralForms = ['ročník', 'ročníky', 'ročníků']
+
+/**
+ * Témata po předložce, která žádá druhý pád: „z 1 tématu“, „ze 3 témat“.
+ * Bez téhle trojice se v hláškách objevovalo „z 3 témata“ nebo si ji každá
+ * obrazovka psala znovu po svém.
+ */
+export const TEMAT_Z: PluralForms = ['tématu', 'témat', 'témat']

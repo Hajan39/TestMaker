@@ -103,10 +103,12 @@ test.describe('průběh generování u tématu', () => {
     await expect(page.getByText(/Hotovo 2 otázky/)).toBeVisible()
     await expect(page.getByText(DRUHA)).toBeVisible()
 
-    // Konec řekne, co vzniklo a co se zahodilo, a nabídne kontrolu.
-    await expect(page.getByText(/Vytvořeno 2 otázky/).first()).toBeVisible()
-    await expect(page.getByText(/Zahozeno: 1 otázka/).first()).toBeVisible()
-    const odkaz = page.getByRole('link', { name: 'Zkontrolovat nové koncepty' })
+    // Konec řekne, co vzniklo a co se zahodilo — jednou, v kartě. Bublina
+    // jen upozorní, že je hotovo.
+    await expect(page.getByText(/Vytvořeno 2 otázky/)).toHaveCount(1)
+    await expect(page.getByText('Zahozeno: 1 otázka — neúplné nebo si odporovaly.')).toBeVisible()
+    await expect(page.getByText('Hotovo, 2 otázky ke kontrole.')).toBeVisible()
+    const odkaz = page.getByRole('link', { name: 'Zkontrolovat' })
     await expect(odkaz).toBeVisible()
     await odkaz.click()
     await expect(page).toHaveURL(/\/review\?topicId=/)
@@ -130,10 +132,25 @@ test.describe('průběh generování u tématu', () => {
       await spustit(page)
       await expect(page.getByText('Hotovo 1 otázka')).toBeVisible()
       await expect(page.getByText(PRVNI)).toBeVisible()
-      await page.screenshot({ path: `e2e/screenshots/prubeh-generovani-${motiv}.png`, fullPage: false })
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.screenshot({
+        path: `e2e/screenshots/prubeh-generovani-${motiv}-1440.png`,
+        fullPage: false,
+      })
 
       // Doběhnout to musí celé, jinak by druhý průchod začínal doprostřed.
-      await expect(page.getByRole('link', { name: 'Zkontrolovat nové koncepty' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Zkontrolovat' })).toBeVisible()
+      // Stav po doběhnutí: souhrn běhu je v kartě jednou, bublina jen hlásí hotovo.
+      await page.screenshot({ path: `e2e/screenshots/tema-pote-${motiv}-1440.png`, fullPage: false })
+
+      // Úzká obrazovka až nakonec: zúžení okna pracovní plochu tématu přemontuje
+      // (rozvržení se pod `sm` skládá jinak) a souhrn běhu se z ní ztratí.
+      await page.setViewportSize({ width: 390, height: 900 })
+      await page.screenshot({
+        path: `e2e/screenshots/prubeh-generovani-${motiv}-390.png`,
+        fullPage: false,
+      })
+      await page.setViewportSize({ width: 1440, height: 900 })
     }
 
     // Motiv se vrátí zpátky, ať další test nezačíná potmě.

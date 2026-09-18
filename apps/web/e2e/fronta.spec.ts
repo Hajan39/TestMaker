@@ -28,6 +28,51 @@ async function clearQueue(request: APIRequestContext): Promise<void> {
   expect(response.ok()).toBe(true)
 }
 
+/** Podstrčí počty i výpis, ve kterém zbyla jen nedokončená témata. */
+async function stubOnlyErrors(page: Page): Promise<void> {
+  const now = Date.now()
+  const counts = { running: 0, queued: 0, done: 0, error: 2 }
+  const jobs = [
+    {
+      id: 'e1',
+      topicId: 't3',
+      topicName: 'Kosterní soustava',
+      place: 'Přírodopis · 8. ročník',
+      status: 'error',
+      wanted: 12,
+      createdCount: 4,
+      error: 'Dnešní limit modelu je vyčerpaný. Zkus to prosím zítra.',
+      createdAt: new Date(now - 30 * 60_000).toISOString(),
+      startedAt: new Date(now - 29 * 60_000).toISOString(),
+      finishedAt: new Date(now - 28 * 60_000).toISOString(),
+    },
+    {
+      id: 'e2',
+      topicId: 't5',
+      topicName: 'Svalová soustava',
+      place: 'Přírodopis · 8. ročník',
+      status: 'error',
+      wanted: 12,
+      createdCount: 0,
+      error: 'Dnešní limit modelu je vyčerpaný. Zkus to prosím zítra.',
+      createdAt: new Date(now - 32 * 60_000).toISOString(),
+      startedAt: new Date(now - 31 * 60_000).toISOString(),
+      finishedAt: new Date(now - 30 * 60_000).toISOString(),
+    },
+  ]
+  await page.route(
+    (url) => url.pathname === '/api/jobs',
+    (route, request) => {
+      const detail = new URL(request.url()).searchParams.get('vypis') === '1'
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(detail ? { ...counts, jobs } : counts),
+      })
+    },
+  )
+}
+
 /** Podstrčí výpis se všemi stavy — přes API je takhle pestrý nevyrobíme. */
 async function stubJobs(page: Page): Promise<void> {
   const now = Date.now()
@@ -112,7 +157,7 @@ test.describe('přehled generování', () => {
 
     await page.goto('/generovani')
     await expect(page.getByRole('heading', { name: 'Průběh generování' })).toBeVisible()
-    await expect(page.getByText('Čeká na řadu (1)')).toBeVisible()
+    await expect(page.getByText('Čeká na řadu', { exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Zkušební téma' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Vyprázdnit frontu' }).click()
@@ -142,12 +187,49 @@ test.describe('přehled generování', () => {
     await page.goto('/generovani')
     // Obrazovka se doptává sama, dokud něco čeká — podstrčený výpis přijde
     // s prvním takovým dotazem.
-    await expect(page.getByText('Právě se tvoří (1)')).toBeVisible()
+    await expect(page.getByText('Právě se tvoří', { exact: true })).toBeVisible()
     await expect(page.getByText(/běží \d+ minut/)).toBeVisible()
     await expect(page.getByText('Dnešní limit modelu je vyčerpaný. Zkus to prosím zítra.')).toBeVisible()
     await expect(page.getByText('stihlo vzniknout 3 otázky')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Zkusit znovu', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Zkusit znovu \(1\)/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
+  })
+
+  test('po samých chybách vede do přehledu ukazatel v liště i navigace', async ({ page, request }) => {
+    await clearQueue(request)
+    // Aby si přehled o podstrčený výpis vůbec řekl, musí na začátku něco čekat;
+    // podstrčená odpověď pak řekne, že zbyla jen nedokončená témata.
+    await enqueue(request)
+    await stubOnlyErrors(page)
+
+    await page.goto('/questions')
+    // Nic neběží, a přesto musí být kudy se k nedodělané práci dostat.
+    const ukazatel = page.getByRole('link', { name: '2 témata se nedokončila' })
+    await expect(ukazatel).toBeVisible()
+    await ukazatel.click()
+    await expect(page).toHaveURL(/\/generovani$/)
+
+    await page.goto('/questions')
+    await page.getByRole('link', { name: 'Generování', exact: true }).click()
+    await expect(page).toHaveURL(/\/generovani$/)
+    await expect(page.getByRole('heading', { name: 'Průběh generování' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
+  })
+
+  test('na telefonu jde na „Zkusit znovu“ dosáhnout', async ({ page, request }) => {
+    await clearQueue(request)
+    await enqueue(request)
+    await stubOnlyErrors(page)
+    await page.setViewportSize({ width: 390, height: 780 })
+
+    await page.goto('/generovani')
+    const tlacitko = page.getByRole('button', { name: 'Zkusit znovu', exact: true }).first()
+    await expect(tlacitko).toBeVisible()
+
+    // Tlačítko se musí celé vejít do obrazovky — `main` vodorovné rolování
+    // skrývá, takže cokoli za pravým okrajem je nedosažitelné.
+    const box = (await tlacitko.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(390)
   })
 
   test('přehled je čitelný ve světlém i tmavém režimu', async ({ page, request }) => {
@@ -156,16 +238,46 @@ test.describe('přehled generování', () => {
     await stubJobs(page)
 
     await page.goto('/generovani')
-    await expect(page.getByText('Právě se tvoří (1)')).toBeVisible()
+    await expect(page.getByText('Právě se tvoří', { exact: true })).toBeVisible()
 
     for (const motiv of ['svetla', 'tmava'] as const) {
       if (motiv === 'tmava') {
         await page.getByRole('button', { name: 'Tmavý motiv' }).click()
         await expect(page.locator('html')).toHaveClass(/dark/)
       }
-      await page.screenshot({ path: `e2e/screenshots/fronta-${motiv}.png`, fullPage: false })
+      for (const sirka of [1440, 390]) {
+        await page.setViewportSize({ width: sirka, height: 900 })
+        await page.screenshot({ path: `e2e/screenshots/fronta-${motiv}-${sirka}.png`, fullPage: false })
+      }
     }
 
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.getByRole('button', { name: 'Podle systému' }).click()
+  })
+
+  test('přehled se samými chybami je čitelný ve světlém i tmavém režimu', async ({ page, request }) => {
+    await clearQueue(request)
+    await enqueue(request)
+    await stubOnlyErrors(page)
+
+    await page.goto('/generovani')
+    await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
+
+    for (const motiv of ['svetla', 'tmava'] as const) {
+      if (motiv === 'tmava') {
+        await page.getByRole('button', { name: 'Tmavý motiv' }).click()
+        await expect(page.locator('html')).toHaveClass(/dark/)
+      }
+      for (const sirka of [1440, 390]) {
+        await page.setViewportSize({ width: sirka, height: 900 })
+        await page.screenshot({
+          path: `e2e/screenshots/fronta-chyby-${motiv}-${sirka}.png`,
+          fullPage: false,
+        })
+      }
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.getByRole('button', { name: 'Podle systému' }).click()
   })
 })

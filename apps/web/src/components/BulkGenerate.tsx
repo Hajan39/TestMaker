@@ -7,11 +7,14 @@ import { Loader2 } from 'lucide-react'
 import {
   Button,
   Checkbox,
+  OTAZKY,
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  TEMATA,
+  pocet,
 } from '@testmaker/ui'
 import {
   DEFAULT_SETTINGS,
@@ -20,6 +23,7 @@ import {
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { drainQueue } from '@/lib/generateClient'
+import { shrnutiBehu } from '@/lib/queueSummary'
 
 export interface BulkScope {
   label: string
@@ -63,28 +67,41 @@ export function BulkGenerate({
       })
       const queued = (await response.json()) as { enqueued: number; skipped: number }
       if (queued.enqueued === 0) {
-        setStatus(`Není co generovat (přeskočeno ${queued.skipped} témat, která už otázky mají).`)
+        setStatus(
+          queued.skipped > 0
+            ? `Není co generovat — v tomhle rozsahu už otázky mají všechna témata. Přeskočeno: ${pocet(queued.skipped, TEMATA)}.`
+            : 'Není co generovat — v tomhle rozsahu není žádné téma s materiály.',
+        )
         setRunning(false)
         return
       }
 
       let created = 0
       let done = 0
-      setStatus(`Ve frontě ${queued.enqueued} témat.`)
+      let failed = 0
+      setStatus(`Ve frontě ${pocet(queued.enqueued, TEMATA)}.`)
       // Ať se o rozdělané práci ví i v liště, když se panel zavře.
       announceGeneration()
 
       await drainQueue(
         (step) => {
+          // Poslední dotaz na prázdnou frontu žádné téma nezpracuje.
+          if (!step.processed) return
           done += 1
           created += step.created ?? 0
-          if (step.error) setErrors((current) => [...current, step.error as string])
-          setStatus(`Hotovo ${done} témat, vytvořeno ${created} otázek, zbývá ${step.remaining}.`)
+          if (step.error) {
+            failed += 1
+            setErrors((current) => [...current, step.error as string])
+          }
+          // Jeden směr počítání jako ve zbytku aplikace: kolik ještě zbývá.
+          setStatus(`Zbývá ${pocet(step.remaining, TEMATA)} · vytvořeno ${pocet(created, OTAZKY)}.`)
         },
         () => stopRef.current,
       )
 
-      setStatus(`Dokončeno: ${created} otázek z ${done} témat.`)
+      // Táž věta jako na přehledu generování, ze stejné funkce — aby se jeden
+      // běh nehlásil na dvou místech dvojím způsobem.
+      setStatus(shrnutiBehu({ zpracovano: done, chyby: failed, otazky: created }).text)
       router.refresh()
     } catch (error) {
       setErrors((current) => [...current, error instanceof Error ? error.message : String(error)])

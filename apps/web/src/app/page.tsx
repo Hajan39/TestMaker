@@ -107,7 +107,9 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
         <div className="flex flex-wrap items-center gap-2">
           <BulkGenerate
             ai={aiStatus()}
-            scopes={tree.map((subject) => ({ label: `Celý ${subject.name}`, subjectId: subject.id }))}
+            // Rod předmětu se z názvu složky uhodnout nedá („Celý MATEMATIKA“),
+            // tak se do názvu tlačítka přídavné jméno vůbec nedává.
+            scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
           />
           <Link href="/import">
             <Button size="sm" variant="outline">

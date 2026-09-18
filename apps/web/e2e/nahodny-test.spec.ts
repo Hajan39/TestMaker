@@ -27,12 +27,14 @@ test.describe('náhodně sestavený test', () => {
     const summary = dialog.getByTestId('random-summary')
     await expect(summary).toContainText('5 otázek')
 
-    // Jiný los dá jiný výběr; porovnáváme text prvního vylosovaného zadání.
-    const first = async () => (await dialog.locator('ol li').first().innerText()).slice(0, 80)
-    const before = await first()
+    // Jiný los dá jiný výběr. Porovnává se celý seznam, ne jen první položka:
+    // ta se při novém losu může klidně zopakovat, takže by test občas padal,
+    // aniž by bylo co opravovat.
+    const vylosovane = async () => (await dialog.locator('ol li').allInnerTexts()).join('|')
+    const before = await vylosovane()
     await dialog.getByRole('button', { name: 'Zamíchat znovu' }).click()
     await expect
-      .poll(async () => (await first()) !== before, { timeout: 5000, message: 'los se nezměnil' })
+      .poll(async () => (await vylosovane()) !== before, { timeout: 15000, message: 'los se nezměnil' })
       .toBe(true)
 
     await dialog.getByRole('button', { name: 'Vložit do osnovy' }).click()
