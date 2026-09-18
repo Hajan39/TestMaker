@@ -1,10 +1,12 @@
 import { Document, Page, Text, View } from '@react-pdf/renderer'
 import type { Question } from '../schema/question'
+import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import type { RenderableTest, ResolvedTestItem } from '../schema/test'
 import { formatAnswer } from './answerKey'
 import { formatPoints } from './layout'
 import { QuestionBody } from './QuestionBody'
+import { PuzzleBody } from './PuzzleBody'
 import { buildVariant } from './shuffle'
 import { pagePadding, questionLabel } from './styles'
 import { sanitizeText } from './text'
@@ -54,6 +56,9 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
                 assets={assets}
               />
             )
+          }
+          if (item.kind === 'puzzle' && item.puzzle) {
+            return <PuzzleView key={item.id} puzzle={item.puzzle} config={config} />
           }
           if (item.kind === 'heading') {
             return (
@@ -249,6 +254,22 @@ function QuestionView({
   )
 }
 
+/**
+ * Hlavolam v písemce. Celý blok má `wrap={false}`: rozpůlená mřížka přes
+ * zlom stránky je nepoužitelná, takže se radši celá přesune na další stranu.
+ */
+function PuzzleView({ puzzle, config }: { puzzle: PuzzleContent; config: TemplateConfig }) {
+  return (
+    <View style={{ marginTop: config.sectionStyle.spacingBefore }} wrap={false}>
+      <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold' }}>
+        {sanitizeText(puzzle.title)}
+      </Text>
+      <Text style={{ fontStyle: 'italic', color: '#333' }}>{sanitizeText(puzzleInstructions(puzzle))}</Text>
+      <PuzzleBody puzzle={puzzle} />
+    </View>
+  )
+}
+
 function KeyPage({
   test,
   config,
@@ -291,6 +312,16 @@ function KeyPage({
             <Text key={item.id} style={{ marginTop: 10, fontWeight: 'bold' }}>
               {sanitizeText(item.text ?? '')}
             </Text>
+          )
+        }
+        if (item.kind === 'puzzle' && item.puzzle) {
+          return (
+            <View key={item.id} style={{ marginTop: 8 }} wrap={false}>
+              <Text style={{ fontWeight: 'bold' }}>
+                {sanitizeText(`Řešení – ${item.puzzle.title}`)}
+              </Text>
+              <PuzzleBody puzzle={item.puzzle} solved />
+            </View>
           )
         }
         if (item.kind !== 'question' || !item.question) return null

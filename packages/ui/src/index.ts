@@ -39,6 +39,7 @@ export type { UndoStatus, UndoStep } from './undoStatus'
 // Doménové komponenty přibudou v dalších úkolech.
 export { QuestionPreview } from './QuestionPreview'
 export { PaperQuestion } from './PaperQuestion'
+export { PaperPuzzle } from './PaperPuzzle'
 export { PaperSheet, PaperHeader } from './PaperSheet'
 export { ReviewQueue } from './ReviewQueue'
 export { DeleteButton } from './DeleteButton'

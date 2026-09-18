@@ -15,7 +15,13 @@ const NAV: NavItem[] = [
   { href: '/review', label: 'Kontrola' },
   { href: '/questions', label: 'Banka otázek' },
   { href: '/tests', label: 'Testy' },
+  { href: '/hlavolamy', label: 'Hlavolamy' },
   { href: '/templates', label: 'Šablony' },
+  // Poslední v pořadí schválně: záloha není denní práce, ale musí být po ruce
+  // bez hledání — hlavně ve chvíli, kdy se knihovna stěhuje jinam.
+  { href: '/zaloha', label: 'Záloha' },
+  // Poslední v pořadí schválně: záloha není denní práce, ale musí být po ruce
+  // bez hledání — hlavně ve chvíli, kdy se knihovna stěhuje jinam.
 ]
 
 /**

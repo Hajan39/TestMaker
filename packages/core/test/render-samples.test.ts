@@ -16,6 +16,7 @@ import { TestDocument } from '../src/pdf/TestDocument'
 import { registerServerFonts } from '../src/pdf/node'
 import { extractPdf } from '../src/extract/pdf'
 import type { ResolvedTestItem } from '../src/schema/test'
+import { puzzleContentSchema } from '../src/schema/puzzle'
 import { makeItems, makeQuestion, makeTemplate, makeTest, TALL_IMAGE_DATA_URL } from './fixtures'
 
 registerServerFonts()
@@ -160,4 +161,69 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s obrázkovou otázkou 
       await checkSample(path, ['Pozorně si přečti obrázek', 'Část B – Obrázek', 'Popiš očíslované části obrázku.'])
     }
   }
+})
+
+/**
+ * Ukázka s hlavolamy — osmisměrka a tajenka v jedné písemce, s klíčem.
+ * Mřížka je přesně ten obsah, který se láme přes stránku, takže se na
+ * vygenerovaném PDF musí zkontrolovat okem, ne jen podle typů.
+ */
+it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s hlavolamy', async () => {
+  mkdirSync(OUT, { recursive: true })
+
+  const wordsearch = puzzleContentSchema.parse({
+    kind: 'wordsearch',
+    title: 'Osmisměrka: části rostliny',
+    entries: [
+      { word: 'kořen', clue: 'Poutá rostlinu v půdě' },
+      { word: 'stonek', clue: 'Nese listy a květy' },
+      { word: 'list', clue: 'Probíhá v něm fotosyntéza' },
+      { word: 'květ', clue: 'Slouží k rozmnožování' },
+      { word: 'plod', clue: 'Vzniká z květu' },
+      { word: 'semeno', clue: 'Vyroste z něj nová rostlina' },
+      { word: 'pyl', clue: 'Přenáší ho včely' },
+      { word: 'chloroplast', clue: 'Zelené tělísko v buňce' },
+    ],
+    payload: { cols: 14, rows: 14, seed: 'ukazka' },
+  })
+
+  const cryptogram = puzzleContentSchema.parse({
+    kind: 'cryptogram',
+    title: 'Tajenka: co rostlina potřebuje',
+    entries: [
+      { word: 'kořen', clue: 'Poutá rostlinu v půdě' },
+      { word: 'stonek', clue: 'Nese listy a květy' },
+      { word: 'list', clue: 'Probíhá v něm fotosyntéza' },
+      { word: 'plod', clue: 'Vzniká z květu' },
+      { word: 'semeno', clue: 'Vyroste z něj rostlina' },
+      { word: 'voda', clue: 'Bez ní rostlina uschne' },
+      { word: 'světlo', clue: 'Pohání fotosyntézu' },
+      { word: 'půda', clue: 'Roste v ní kořen' },
+    ],
+    payload: { phrase: 'pod list', seed: 'ukazka' },
+  })
+
+  const items: ResolvedTestItem[] = [
+    ...makeItems().slice(0, 2),
+    { id: 'pz-1', testId: 'test-1', order: 80, kind: 'puzzle', questionId: null, text: null, pointsOverride: null, puzzleId: 'p1', puzzle: wordsearch },
+    { id: 'pz-2', testId: 'test-1', order: 81, kind: 'puzzle', questionId: null, text: null, pointsOverride: null, puzzleId: 'p2', puzzle: cryptogram },
+  ]
+
+  const path = resolve(OUT, 'puzzles.pdf')
+  await renderToFile(
+    createElement(TestDocument, {
+      test: makeTest({ graded: false }),
+      template: makeTemplate('klasicka'),
+      items,
+      variant: 'A',
+      withKey: true,
+      assets: {},
+    }) as never,
+    path,
+  )
+  await checkSample(path, ['Osmisměrka: části rostliny', 'CHLOROPLAST', 'Tajenka', 'Řešení'])
+  // Klíč musí mít vyplněná políčka: řádkování šablony dřív písmena z buněk
+  // úplně vymazalo a prázdná mřížka v klíči by se poznala až u tiskárny.
+  const { text } = await extractPdf(new Uint8Array(readFileSync(path)))
+  expect(text).toContain('P O D L I S T')
 })

@@ -71,6 +71,13 @@
       "when": 1789593224987,
       "tag": "0009_query-indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1789736981596,
+      "tag": "0010_puzzles",
+      "breakpoints": true
     }
   ]
 }

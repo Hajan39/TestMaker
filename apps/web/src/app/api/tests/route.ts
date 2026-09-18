@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { buildQuestionSnapshots, testConditions } from '@/lib/tests'
+import { buildPuzzleSnapshots, buildQuestionSnapshots, testConditions } from '@/lib/tests'
 
 export const runtime = 'nodejs'
 
@@ -14,8 +14,10 @@ const itemSchema = z.object({
    * — tam už není z čeho snímek pořídit znovu.
    */
   id: z.string().nullable().default(null),
-  kind: z.enum(['question', 'heading', 'instruction', 'page_break']),
+  kind: z.enum(['question', 'heading', 'instruction', 'page_break', 'puzzle']),
   questionId: z.string().nullable().default(null),
+  /** Vyplněné u položky druhu `puzzle` — hlavolam zařazený do písemky. */
+  puzzleId: z.string().nullable().default(null),
   text: z.string().nullable().default(null),
   pointsOverride: z.number().nullable().default(null),
   /** Počet linek na odpověď jen pro tenhle test; prázdné = podle otázky. */
@@ -108,6 +110,8 @@ async function copyTest(sourceId: string): Promise<Response> {
         // Snímek se přebírá tak, jak je — kopie musí vypadat jako originál,
         // i když se otázka v bance mezitím změnila nebo úplně zmizela.
         questionSnapshot: item.questionSnapshot,
+        puzzleId: item.puzzleId,
+        puzzleSnapshot: item.puzzleSnapshot,
       })),
     )
   }
@@ -149,17 +153,23 @@ export async function PUT(request: Request) {
     .set({ ...test, updatedAt: new Date().toISOString() })
     .where(eq(tests.id, id))
   // Snímky zmizelých otázek se musí načíst dřív, než se staré položky smažou.
+  const existing = await db
+    .select({
+      id: testItems.id,
+      questionSnapshot: testItems.questionSnapshot,
+      puzzleSnapshot: testItems.puzzleSnapshot,
+    })
+    .from(testItems)
+    .where(eq(testItems.testId, id))
   const keptSnapshots = new Map(
-    (await db
-      .select({ id: testItems.id, questionSnapshot: testItems.questionSnapshot })
-      .from(testItems)
-      .where(eq(testItems.testId, id)))
-      .filter((row) => row.questionSnapshot)
-      .map((row) => [row.id, row.questionSnapshot as string]),
+    existing.filter((row) => row.questionSnapshot).map((row) => [row.id, row.questionSnapshot as string]),
+  )
+  const keptPuzzleSnapshots = new Map(
+    existing.filter((row) => row.puzzleSnapshot).map((row) => [row.id, row.puzzleSnapshot as string]),
   )
 
   await db.delete(testItems).where(eq(testItems.testId, id))
-  await writeItems(id, items, keptSnapshots)
+  await writeItems(id, items, keptSnapshots, keptPuzzleSnapshots)
 
   return Response.json({ id })
 }
@@ -175,6 +185,7 @@ async function writeItems(
   testId: string,
   items: z.infer<typeof itemSchema>[],
   keptSnapshots: Map<string, string> = new Map(),
+  keptPuzzleSnapshots: Map<string, string> = new Map(),
 ): Promise<void> {
   if (items.length === 0) return
 
@@ -187,16 +198,25 @@ async function writeItems(
       .filter((id): id is string => Boolean(id)),
   )
 
+  // Totéž pro hlavolam: co se zařadilo do písemky, drží snímek.
+  const puzzleSnapshots = await buildPuzzleSnapshots(
+    items
+      .filter((item) => item.kind === 'puzzle')
+      .map((item) => item.puzzleId)
+      .filter((id): id is string => Boolean(id)),
+  )
+
   await db.insert(testItems).values(
     items.map((item, index) => {
       const questionId = item.kind === 'question' ? item.questionId : null
+      const puzzleId = item.kind === 'puzzle' ? item.puzzleId : null
       return {
         id: newId(),
         testId,
         position: index,
         kind: item.kind,
         questionId,
-        text: item.kind === 'question' ? null : item.text,
+        text: item.kind === 'question' || item.kind === 'puzzle' ? null : item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.kind === 'question' ? item.linesOverride : null,
         // Snímek se pořizuje jednou, při zařazení otázky do testu. U položky,
@@ -206,6 +226,10 @@ async function writeItems(
         questionSnapshot:
           (item.id ? keptSnapshots.get(item.id) : null) ??
           (questionId ? (snapshots.get(questionId) ?? null) : null),
+        puzzleId,
+        puzzleSnapshot:
+          (item.id ? keptPuzzleSnapshots.get(item.id) : null) ??
+          (puzzleId ? (puzzleSnapshots.get(puzzleId) ?? null) : null),
       }
     }),
   )

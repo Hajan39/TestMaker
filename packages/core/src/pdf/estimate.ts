@@ -1,6 +1,8 @@
 import type { Block } from '../schema/blocks'
 import { answerLines, type ResolvedTestItem } from '../schema/test'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
+import { buildPuzzle } from '../puzzle/index'
+import { cellSize } from './PuzzleBody'
 import { mm } from './styles'
 
 /** Výška A4 v bodech (PDF pt); 1 pt = 1/72". */
@@ -97,6 +99,21 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
 
   if (item.kind === 'instruction') {
     return 12 + promptLines(item.text ?? '') * line
+  }
+
+  if (item.kind === 'puzzle' && item.puzzle) {
+    // Nadpis, pokyn a pod tím mřížka nebo řádky tajenky. Hlavolam se na
+    // stránce nedělí (`wrap={false}`), takže odhad rozhoduje o tom, jestli
+    // celý spadne na další stranu.
+    const head = config.sectionStyle.spacingBefore + config.sectionStyle.fontSize * 1.6 + line
+    const built = buildPuzzle(item.puzzle)
+    if (built.kind === 'wordsearch') {
+      const grid = built.wordSearch.rows * cellSize(built.wordSearch.cols)
+      const list = Math.ceil(item.puzzle.entries.length / 3) * 11
+      return head + grid + list + 14
+    }
+    // Řádek tajenky (políčka 14 pt + mezera) a pod tím řádek s tajenkou.
+    return head + built.cryptogram.rows.length * 17 + 26
   }
 
   const question = item.question

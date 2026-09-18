@@ -1,16 +1,19 @@
 import 'server-only'
 import { asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
+  resolveTestItemPuzzle,
   resolveTestItemQuestion,
   serializeQuestionSnapshot,
+  serializePuzzleSnapshot,
   templateConfigSchema,
   type RenderableTest,
   type ResolvedTestItem,
   type Template,
   type Test,
 } from '@testmaker/core/schema'
-import { db, assets, questions, templates, testItems, tests } from '@/db'
+import { db, assets, puzzles, questions, templates, testItems, tests } from '@/db'
 import { toQuestion } from './questions'
+import { toPuzzle } from './puzzles'
 
 export interface TestQuery {
   /** Hledá se v názvu a v popisu testu. */
@@ -100,6 +103,29 @@ export async function buildQuestionSnapshots(
 }
 
 /**
+ * Snímky hlavolamů pro ukládaný test — týž důvod jako u otázek: co se
+ * zařadilo do písemky, nesmí se změnit pozdější úpravou v knihovně.
+ */
+export async function buildPuzzleSnapshots(puzzleIds: string[]): Promise<Map<string, string>> {
+  const ids = [...new Set(puzzleIds)]
+  if (ids.length === 0) return new Map()
+
+  const rows = await db.select().from(puzzles).where(inArray(puzzles.id, ids))
+  const snapshots = new Map<string, string>()
+  for (const row of rows) {
+    try {
+      // `serializePuzzleSnapshot` si obsah přečte schématem, takže metadata
+      // (id, téma, časy) do snímku neprojdou.
+      snapshots.set(row.id, serializePuzzleSnapshot(toPuzzle(row)))
+    } catch {
+      // Hlavolam, který neprojde schématem, se nezmrazí — test se kvůli tomu
+      // uložit neodmítne a při vykreslení se sáhne po živém.
+    }
+  }
+  return snapshots
+}
+
+/**
  * Položky testu i s navázanými otázkami, seřazené podle pořadí. Otázka se
  * bere ze snímku pořízeného při uložení testu; živá otázka z banky se použije
  * jen tam, kde snímek chybí (starší testy) nebo je poškozený.
@@ -118,8 +144,14 @@ export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]>
       : []
   const byId = new Map(questionRows.map((row) => [row.id, toQuestion(row)]))
 
+  const puzzleIds = rows.map((row) => row.puzzleId).filter((id): id is string => Boolean(id))
+  const puzzleRows =
+    puzzleIds.length > 0 ? await db.select().from(puzzles).where(inArray(puzzles.id, puzzleIds)) : []
+  const puzzleById = new Map(puzzleRows.map((row) => [row.id, toPuzzle(row)]))
+
   return rows.map((row) => {
     const live = row.questionId ? (byId.get(row.questionId) ?? null) : null
+    const livePuzzle = row.puzzleId ? (puzzleById.get(row.puzzleId) ?? null) : null
     return {
       id: row.id,
       testId: row.testId,
@@ -130,7 +162,10 @@ export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]>
       pointsOverride: row.pointsOverride,
       linesOverride: row.linesOverride,
       questionSnapshot: row.questionSnapshot,
+      puzzleId: row.puzzleId,
+      puzzleSnapshot: row.puzzleSnapshot,
       ...resolveTestItemQuestion(row.questionSnapshot, live, row.id),
+      ...(row.kind === 'puzzle' ? resolveTestItemPuzzle(row.puzzleSnapshot, livePuzzle) : {}),
     }
   })
 }

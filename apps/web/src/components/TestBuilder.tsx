@@ -62,6 +62,8 @@ export function TestBuilder({
       question: item.question ?? null,
       questionEdited: item.questionEdited,
       questionMissing: item.questionMissing,
+      puzzleId: item.puzzleId ?? null,
+      puzzle: item.puzzle ?? null,
     })),
   )
   // Na stav otázky se tu nefiltruje: do banky jdou ze serveru jen schválené
@@ -106,6 +108,8 @@ export function TestBuilder({
       pointsOverride: null,
       linesOverride: null,
       question,
+      puzzleId: null,
+      puzzle: null,
     }
   }
 
@@ -168,6 +172,8 @@ export function TestBuilder({
         pointsOverride: null,
         linesOverride: null,
         question: null,
+        puzzleId: null,
+        puzzle: null,
       }
       const at = Math.min(Math.max(index ?? current.length, 0), current.length)
       const next = [...current]
@@ -201,6 +207,7 @@ export function TestBuilder({
         items: draft.map((item) => ({
           kind: item.kind,
           questionId: item.questionId,
+          puzzleId: item.puzzleId,
           text: item.text,
           pointsOverride: item.pointsOverride,
           linesOverride: item.linesOverride,
@@ -245,6 +252,9 @@ export function TestBuilder({
         id: item.id,
         kind: item.kind,
         questionId: item.questionId,
+        // Hlavolam se do písemky zařazuje z obrazovky Hlavolamy; tady se jen
+        // veze dál, aby ho přeuložení osnovy nesmazalo.
+        puzzleId: item.puzzleId,
         text: item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,

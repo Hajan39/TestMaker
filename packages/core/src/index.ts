@@ -1,4 +1,5 @@
 export * from './schema/index'
 export * from './compose/index'
+export * from './puzzle/index'
 export * from './extract/paths'
 export * from './extract/types'

@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
   Input,
   PaperHeader,
+  PaperPuzzle,
   PaperQuestion,
   PaperSheet,
 } from '@testmaker/ui'
@@ -452,6 +453,10 @@ function PageRow({
             </p>
           ) : null}
         </>
+      ) : item.kind === 'puzzle' && item.puzzle ? (
+        // Hlavolam se v osnově jen ukazuje tak, jak se vytiskne; slova
+        // a mřížka se mění na obrazovce Hlavolamy, ne tady.
+        <PaperPuzzle puzzle={item.puzzle} className="text-paper-fg" />
       ) : item.kind === 'page_break' ? (
         <p className="my-2 flex items-center gap-2 text-xs text-fg-muted">
           <span aria-hidden="true" className="h-px flex-1 border-b border-dashed border-line" />

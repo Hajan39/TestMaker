@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { questionContentSchema, type Question, type QuestionContent } from './question'
+import { parsePuzzleSnapshot, toPuzzleSnapshot, type Puzzle, type PuzzleContent } from './puzzle'
 import type { Template } from './template'
 
-/** Položka testu — struktura testu není omezená na pouhý seznam otázek. */
-export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break'] as const
+/**
+ * Položka testu — struktura testu není omezená na pouhý seznam otázek.
+ * Pátý druh, `puzzle`, je hotový hlavolam (osmisměrka, tajenka): není to
+ * otázka a v bance nemá co dělat, ale do písemky se zařadit má.
+ */
+export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break', 'puzzle'] as const
 export type TestItemKind = (typeof TEST_ITEM_KINDS)[number]
 
 export const testHeaderConfigSchema = z.object({
@@ -25,6 +30,8 @@ export interface TestItem {
   kind: TestItemKind
   /** Vyplněno u `kind === 'question'`. */
   questionId: string | null
+  /** Vyplněno u `kind === 'puzzle'`. */
+  puzzleId?: string | null
   /** Text nadpisu nebo instrukce. */
   text: string | null
   /** Přepis bodů pro tuto otázku v tomto testu. */
@@ -39,6 +46,11 @@ export interface TestItem {
    * Chybí jen u testů založených dřív, než se snímky zavedly.
    */
   questionSnapshot?: string | null
+  /**
+   * Zmrazený obsah hlavolamu jako JSON — ze stejného důvodu jako u otázky:
+   * pozdější úprava hlavolamu nesmí změnit už vytištěnou písemku ani klíč.
+   */
+  puzzleSnapshot?: string | null
 }
 
 /**
@@ -146,6 +158,26 @@ export interface ResolvedTestItem extends TestItem {
   questionEdited?: boolean
   /** Otázka už v bance není; test žije dál ze snímku. */
   questionMissing?: boolean
+  /** Vyplněno u `kind === 'puzzle'`; pochází ze snímku. */
+  puzzle?: PuzzleContent | null
+  /** Hlavolam už v knihovně není; test žije dál ze snímku. */
+  puzzleMissing?: boolean
+}
+
+/**
+ * Hlavolam položky testu: přednost má snímek, živý hlavolam slouží jako
+ * záloha, když se snímek nepořídil nebo je poškozený. Stejné pravidlo jako
+ * u otázky — na papíře má zůstat to, co se do písemky zařadilo.
+ */
+export function resolveTestItemPuzzle(
+  rawSnapshot: string | null | undefined,
+  live: Puzzle | null,
+): Pick<ResolvedTestItem, 'puzzle' | 'puzzleMissing'> {
+  const snapshot = parsePuzzleSnapshot(rawSnapshot)
+  if (snapshot) return { puzzle: snapshot, puzzleMissing: !live }
+  if (!live) return { puzzle: null, puzzleMissing: true }
+  // Metadata (id, téma, časy) do obsahu položky nepatří; schéma je zahodí.
+  return { puzzle: toPuzzleSnapshot(live), puzzleMissing: false }
 }
 
 /**

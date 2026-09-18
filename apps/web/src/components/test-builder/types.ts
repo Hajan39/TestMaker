@@ -1,4 +1,4 @@
-import type { Question, ResolvedTestItem, TestHeaderConfig } from '@testmaker/core/schema'
+import type { PuzzleContent, Question, ResolvedTestItem, TestHeaderConfig } from '@testmaker/core/schema'
 
 /** Zápis bodů má jedinou definici — tutéž, jakou tiskne PDF. */
 export { formatPoints } from '@testmaker/core/pdf/layout'
@@ -15,6 +15,10 @@ export interface DraftItem {
   /** Přepis počtu linek na odpověď; prázdné = podle otázky. */
   linesOverride: number | null
   question: Question | null
+  /** Vyplněné u položky druhu `puzzle` — hlavolam zařazený do písemky. */
+  puzzleId: string | null
+  /** Obsah hlavolamu ze zmrazeného snímku; jen ke čtení, upravuje se v Hlavolamech. */
+  puzzle: PuzzleContent | null
   /** Živá otázka se od zmrazené v testu liší. */
   questionEdited?: boolean
   /** Otázka už v bance není; test drží jen její snímek. */

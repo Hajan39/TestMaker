@@ -1,4 +1,5 @@
 export * from './provider'
 export * from './prompt'
 export * from './generate'
+export * from './puzzleWords'
 export { describeAiError, type AiFailure } from './errors'

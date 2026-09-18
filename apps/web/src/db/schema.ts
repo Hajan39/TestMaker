@@ -9,7 +9,14 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
-import type { Block, QuestionContent, TemplateConfig, TestHeaderConfig } from '@testmaker/core/schema'
+import type {
+  Block,
+  PuzzleContent,
+  PuzzleEntry,
+  QuestionContent,
+  TemplateConfig,
+  TestHeaderConfig,
+} from '@testmaker/core/schema'
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
 
@@ -178,6 +185,37 @@ export const questions = sqliteTable(
   ],
 )
 
+/**
+ * Hlavolamy (osmisměrka, tajenka). Vlastní tabulka, ne další druh otázky:
+ * hlavolam nemá odpověď ani body, negeneruje se do banky a učitelka ho hledá
+ * jinde než otázky. Do písemky se zařadí jako položka testu (`test_items`
+ * druhu `puzzle`), která si nese zmrazený snímek — stejně jako otázka.
+ */
+export const puzzles = sqliteTable(
+  'puzzles',
+  {
+    id: text('id').primaryKey(),
+    /** Hlavolam vzniká z materiálů tématu; bez tématu zůstane po jeho smazání. */
+    topicId: text('topic_id').references(() => topics.id, { onDelete: 'set null' }),
+    kind: text('kind').notNull().$type<PuzzleContent['kind']>(),
+    title: text('title').notNull(),
+    instructions: text('instructions').notNull().default(''),
+    /** Dvojice slovo + nápověda; mřížku z nich skládá kód, ne databáze. */
+    entries: text('entries', { mode: 'json' }).notNull().$type<PuzzleEntry[]>(),
+    /** Nastavení podle druhu: velikost mřížky a seed, nebo tajená věta. */
+    payload: text('payload', { mode: 'json' }).notNull().$type<PuzzleContent['payload']>(),
+    /** Model, který dodal slovní zásobu; prázdné u ručně psaných hlavolamů. */
+    model: text('model'),
+    createdAt: text('created_at').notNull().default(now),
+    updatedAt: text('updated_at').notNull().default(now),
+  },
+  (table) => [
+    index('puzzles_topic_idx').on(table.topicId),
+    /** Seznam hlavolamů se řadí od nejnovějšího. */
+    index('puzzles_created_idx').on(table.createdAt, table.id),
+  ],
+)
+
 export const generationJobs = sqliteTable(
   'generation_jobs',
   {
@@ -251,7 +289,7 @@ export const testItems = sqliteTable(
       .notNull()
       .references(() => tests.id, { onDelete: 'cascade' }),
     position: integer('position').notNull(),
-    kind: text('kind').notNull().$type<'question' | 'heading' | 'instruction' | 'page_break'>(),
+    kind: text('kind').notNull().$type<'question' | 'heading' | 'instruction' | 'page_break' | 'puzzle'>(),
     /**
      * Odkaz do banky otázek. Cizí klíč se `set null`: smazáním otázky se
      * položka z hotového testu nesmí ztratit — co je na papíře, drží
@@ -275,6 +313,14 @@ export const testItems = sqliteTable(
      * dřív, než se snímky zavedly.
      */
     questionSnapshot: text('question_snapshot'),
+    /**
+     * Odkaz na hlavolam u položky druhu `puzzle`. Cizí klíč se `set null`
+     * ze stejného důvodu jako u otázky: smazáním hlavolamu z knihovny se
+     * hotová písemka nesmí změnit — co je na papíře, drží `puzzleSnapshot`.
+     */
+    puzzleId: text('puzzle_id').references(() => puzzles.id, { onDelete: 'set null' }),
+    /** Zmrazený obsah hlavolamu (JSON podle `puzzleContentSchema`). */
+    puzzleSnapshot: text('puzzle_snapshot'),
   },
   (table) => [
     index('test_items_test_idx').on(table.testId, table.position),
@@ -284,6 +330,8 @@ export const testItems = sqliteTable(
      * tabulku i se zmrazenými snímky otázek.
      */
     index('test_items_question_idx').on(table.questionId),
+    /** Týž důvod jako u otázek: `set null` musí najít položky bez čtení celé tabulky. */
+    index('test_items_puzzle_idx').on(table.puzzleId),
   ],
 )
 
@@ -296,3 +344,4 @@ export type TemplateRow = typeof templates.$inferSelect
 export type TestRow = typeof tests.$inferSelect
 export type TestItemRow = typeof testItems.$inferSelect
 export type GenerationJobRow = typeof generationJobs.$inferSelect
+export type PuzzleRow = typeof puzzles.$inferSelect
