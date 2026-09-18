@@ -69,7 +69,7 @@ test.describe('nabídka generování', () => {
     const configured = probe.status() !== 503
 
     // Popisek se liší podle toho, jestli téma otázky už má („Dogenerovat").
-    const topicButton = page.getByRole('button', { name: /generovat z tématu$/i })
+    const topicButton = page.getByRole('button', { name: /generovat otázky$/i })
     const bulkButton = page.getByRole('button', { name: 'Hromadné generování' })
 
     await page.goto(await testTopicPath(page.request))

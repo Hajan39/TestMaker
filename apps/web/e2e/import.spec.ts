@@ -76,6 +76,10 @@ test.describe('náhled importu', () => {
 
     await expect(page).toHaveURL(/\/topics\//)
     await expect(page.getByRole('heading', { name: TOPIC })).toBeVisible()
+
+    // Materiály jsou na stránce tématu sbalené; rozbalíme je, ať je vidět,
+    // co se naimportovalo a co ne.
+    await page.getByRole('button', { name: /^Materiály/ }).click()
     await expect(page.getByText(KEPT.name).first()).toBeVisible()
     await expect(page.getByText(DROPPED.name)).toHaveCount(0)
 

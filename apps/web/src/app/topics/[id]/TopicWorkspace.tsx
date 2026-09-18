@@ -150,58 +150,53 @@ export function TopicWorkspace({
   return (
     <div className="space-y-5">
       {ai.configured ? (
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold text-fg">Generovat otázky</h2>
-          {/* Obrazovka tématu začínala odstavcem o tom, co dostane model —
-              poznámkou pro vývojáře. Nahoře zůstává jedna věta o tom, co z
-              toho učitelce vznikne; podrobnosti čekají v nastavení. */}
-          <p className="mt-1 text-sm text-fg-muted">
-            Z materiálů tématu vzniknou nové otázky ke kontrole.
-          </p>
-          {keptCount > 0 ? (
-            <p className="mt-1 text-sm text-fg-muted">
-              {topUp
-                ? willCreate > 0
-                  ? `Doplní se ${pocet(willCreate, OTAZKY)}.`
-                  : 'Zvolený počet je už naplněný, nic se nevytvoří.'
-                : 'Stávající otázky dostane model jako seznam, kterému se má vyhnout.'}
-            </p>
-          ) : null}
-          {lowContent ? (
-            <p className="mt-2 text-sm text-fg-muted">
-              Materiálů je v tomhle tématu málo — model z nich zvládne vytvořit jen pár otázek a
-              některé se budou opakovat. Spolehlivější je nejdřív přidat další materiál nebo téma
-              sloučit s příbuzným. Generovat i tak jde, jen počítej s tím, že výsledek bude potřeba
-              víc kontrolovat.
-            </p>
-          ) : null}
-          <div className="mt-3">
-            <GenerateSettingsForm
-              value={settings}
-              onChange={setSettings}
-              disabled={generating}
-              note={
-                <p className="text-xs text-fg-muted">
-                  Model {ai.model} dostane všechny materiály tématu naráz, aby se otázky
-                  neopakovaly. Materiály označené jako duplicitní obsah se vynechávají.
-                </p>
-              }
-            />
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Card className="gap-2 p-3">
+          {/* Karta byla nadpis, dva odstavce a teprve pak tlačítko. Podstatné
+              je jediné: tlačítko, kolik otázek vznikne a kde se to doladí —
+              zbytek patří do nastavení, které je hned vedle. */}
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={lowContent ? 'outline' : 'default'}
               disabled={generating || usable.length === 0 || willCreate === 0}
               onClick={() => void generate()}
             >
-              {keptCount > 0 ? 'Dogenerovat z tématu' : 'Vygenerovat z tématu'}
+              {keptCount > 0 ? 'Dogenerovat otázky' : 'Generovat otázky'}
             </Button>
-            {generating ? <ProgressLine label={status ?? 'Spouštím generování…'} /> : null}
+            <span className="text-sm text-fg-muted">
+              {willCreate === 0
+                ? 'Zvolený počet je už naplněný, nic se nevytvoří.'
+                : topUp
+                  ? `Doplní se ${pocet(willCreate, OTAZKY)}.`
+                  : `Vznikne ${pocet(willCreate, OTAZKY)} ke kontrole.`}
+            </span>
+            <div className="ml-auto">
+              <GenerateSettingsForm
+                value={settings}
+                onChange={setSettings}
+                disabled={generating}
+                note={
+                  <p className="text-xs text-fg-muted">
+                    Model {ai.model} dostane všechny materiály tématu naráz, aby se otázky
+                    neopakovaly; stávající otázky dostane jako seznam, kterému se má vyhnout.
+                    Materiály označené jako duplicitní obsah se vynechávají.
+                  </p>
+                }
+              />
+            </div>
           </div>
+
+          {lowContent ? (
+            <p className="text-sm text-fg-muted">
+              Materiálů je v tomhle tématu málo — otázek vznikne jen pár a budou se opakovat.
+            </p>
+          ) : null}
+
+          {generating ? <ProgressLine label={status ?? 'Spouštím generování…'} /> : null}
+
           {/* Souhrn běhu zůstává na obrazovce i po zmizení hlášky — učitelka se
               k němu vrací, když se rozmýšlí, jestli má jít kontrolovat hned. */}
           {!generating && outcome ? (
-            <p className="mt-3 text-sm text-fg-soft">
+            <p className="text-sm text-fg-soft">
               {outcome}{' '}
               {created > 0 ? (
                 <Link
@@ -213,7 +208,7 @@ export function TopicWorkspace({
               ) : null}
             </p>
           ) : null}
-          {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
       ) : null}
 

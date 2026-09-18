@@ -21,11 +21,11 @@ test.describe('počet otázek při generování', () => {
     await page.getByRole('option', { name: 'Doplnit na celkový počet' }).click()
 
     await expect(page.getByText(/Doplní se \d+/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Dogenerovat z tématu' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Dogenerovat otázky' })).toBeEnabled()
 
     // Nižší počet, než téma má: není co doplňovat a generovat nejde.
     await page.getByLabel('Počet otázek', { exact: true }).fill('1')
     await expect(page.getByText('Zvolený počet je už naplněný, nic se nevytvoří.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Dogenerovat z tématu' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Dogenerovat otázky' })).toBeDisabled()
   })
 })

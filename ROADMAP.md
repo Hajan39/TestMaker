@@ -20,7 +20,52 @@ ročnících a otázky hned procházet frontou ke schválení. *Průběžně.*
 neověřila celá — jednotlivé generování ano, dávka přes celý ročník ne.
 *Hodiny.*
 
-## 2. Kvalita otázek
+## 2. Hlavolamy jako vlastní záložka
+
+Křížovky, osmisměrky a tajenky jsou druhá věc, kterou učitelka z materiálů
+potřebuje — a dnes je dělá ručně. Ve zdrojích po ní jedna úniková hra leží,
+takže je i po ruce jako vzor stylu.
+
+Patří jim **vlastní záložka v horní liště** vedle Knihovny, Kontroly a Testů:
+hlavolam není otázka a nepatří do banky, ale hotový se má dát zařadit do
+písemky jako další druh položky (dnes jsou to otázka, nadpis, pokyn a zalomení
+strany — přibude pátý).
+
+**Jak to postavit.** Mřížku nesmí skládat model, ten se v ní ztratí. Model dodá
+jen dvojice slovo a nápověda z materiálů tématu, což je práce pro dnešní
+generování včetně žebříčku modelů. Samotné rozmístění musí být kód
+v `packages/core`, aby šlo otestovat a zopakovat:
+
+- **osmisměrka** — umístění slov do osmi směrů a dosypání zbylých písmen,
+- **tajenka** — mapování odpovědí na písmena hledané věty,
+- **křížovka** — křížení slov, číslování, seznam legend (nejtěžší kus).
+
+K tomu vykreslení mřížek do PDF včetně vyplněného řešení pro učitelku, náhled
+na obrazovce a jednoduchá úprava seznamu slov, než se to vytiskne.
+
+| Část | Odhad |
+| --- | --- |
+| Osmisměrka: umístění, výplň, PDF, klíč | půl dne |
+| Tajenka: mapování odpovědí na tajenou větu | půl dne |
+| Křížovka: křížení, číslování, legendy | 1,5 až 2 dny |
+| Vykreslení mřížek do PDF a na obrazovku | den |
+| Generování slov a nápověd, obrazovka a záložka | den |
+| Testy a doladění | půl dne až den |
+
+Dohromady pět až šest dní práce.
+
+**Rizika.** Vykreslení PDF je nejkřehčí část projektu a mřížka je přesně ten
+obsah, který se láme přes stránku. Druhé riziko je jazyk: česká slova
+s háčky musí sednout do buněk a nápovědy od modelu budou kolísat stejně jako
+otázky, takže i hlavolam bude chtít kontrolu před tiskem.
+
+**Rozhodnuto (18. září 2026).** Do první dávky jde **osmisměrka a tajenka** —
+tedy to nejlevnější, co projde celou cestou od materiálů přes mřížku po tisk.
+Křížovka počká: je to ta, kterou učitelé chtějí nejvíc, ale i nejdražší, a bez
+ověřené cesty by se v ní ladily dvě věci naráz. Dohromady zhruba dva a půl dne
+místo pěti.
+
+## 3. Kvalita otázek
 
 **Seznam otázek, kterým se má model vyhnout, je oříznutý na osmdesát položek.**
 U témat s historií se tak nově vzniklé otázky do seznamu nemusí vejít.
@@ -35,7 +80,7 @@ u devíti typů a dvanácti otázek neporadí s rovnoměrným rozdělením beze 
 negeneruje. Buď dodělat s editorem bodů, nebo ho ze schématu úplně vypustit.
 *Několik dní, nebo hodina na vypuštění.*
 
-## 3. Až toho bude víc
+## 4. Až toho bude víc
 
 **Banka otázek se načítá celá.** Skládání testu i přehled otázek stáhnou všechny
 otázky knihovny najednou, bez stránkování. Při stovkách otázek to ještě projde,
@@ -47,7 +92,7 @@ naplánovaná úloha na serveru. *Několik dní.*
 **Přihlášení a více učitelek.** Nic v datech nemá vlastníka, takže to nebude
 přidání sloupce, ale migrace napříč modelem. *Týden.*
 
-## 4. Nápady na dál
+## 5. Nápady na dál
 
 - Import existujících písemek učitelky jako vzoru stylu i jako hotových otázek.
 - Export do DOCX pro doladění ve Wordu.
@@ -57,7 +102,6 @@ přidání sloupce, ale migrace napříč modelem. *Týden.*
 - Štítky podle očekávaných výstupů RVP a doporučení skladby písemky.
 - Editor šablon nad uloženým nastavením, s živým náhledem.
 - Rozpoznání textu u skenovaných materiálů.
-- Křížovky, osmisměrky a únikové hry.
 
 ## Hotovo
 

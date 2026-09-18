@@ -75,7 +75,7 @@ async function stubGenerating(page: Page, krok = 400): Promise<void> {
 
 /** Spustí generování na stránce tématu. Vrací se, až se tlačítko chytne. */
 async function spustit(page: Page): Promise<void> {
-  const button = page.getByRole('button', { name: /generovat z tématu$/ })
+  const button = page.getByRole('button', { name: /generovat otázky$/ })
   await expect(button).toBeEnabled()
   await button.click()
 }
@@ -88,7 +88,7 @@ test.describe('průběh generování u tématu', () => {
     await stubGenerating(page, 1000)
     await page.goto(path)
 
-    const generate = page.getByRole('button', { name: /generovat z tématu$/ })
+    const generate = page.getByRole('button', { name: /generovat otázky$/ })
     test.skip((await generate.count()) === 0, 'Generování není nakonfigurované.')
     await spustit(page)
 
@@ -120,7 +120,7 @@ test.describe('průběh generování u tématu', () => {
     await stubGenerating(page, 1200)
     await page.goto(path)
 
-    const generate = page.getByRole('button', { name: /generovat z tématu$/ })
+    const generate = page.getByRole('button', { name: /generovat otázky$/ })
     test.skip((await generate.count()) === 0, 'Generování není nakonfigurované.')
 
     for (const motiv of ['svetla', 'tmava'] as const) {

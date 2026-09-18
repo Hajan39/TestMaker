@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import {
@@ -60,6 +61,7 @@ export function TopicGroup({
   const [optionsReady, setOptionsReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
+  const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -106,23 +108,33 @@ export function TopicGroup({
   const active = materials.filter((material) => !material.duplicateOfId)
 
   return (
-    <Card className="p-4">
+    <Card className="gap-2 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Bez počtu: ten je nahoře u názvu tématu. Zůstává jen údaj, který
-            jinde není — kolik souborů se přeskakuje jako duplicitní. */}
-        <h2 className="text-sm font-semibold text-fg">
+        {/* Seznam souborů je sbalený: na obrazovce tématu jde hlavně o otázky,
+            k materiálům se učitelka vrací, jen když je chce přeskládat. */}
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-fg"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <ChevronDown className={cn('size-4 transition-transform', open ? '' : '-rotate-90')} aria-hidden />
           Materiály
-          {materials.length !== active.length ? (
-            <span className="ml-2 font-normal text-fg-muted">
-              {materials.length - active.length} duplicitních se vynechává
-            </span>
-          ) : null}
-        </h2>
+          <span className="font-normal text-fg-muted">
+            {active.length}
+            {materials.length !== active.length
+              ? ` + ${materials.length - active.length} duplicitních se vynechává`
+              : ''}
+          </span>
+        </button>
         <Button
           size="sm"
           variant="ghost"
           onClick={() => {
-            if (!manage) setOptionsReady(false)
+            if (!manage) {
+              setOptionsReady(false)
+              setOpen(true)
+            }
             setManage(!manage)
           }}
         >
@@ -132,7 +144,8 @@ export function TopicGroup({
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
-      <ul className="mt-2 space-y-1 text-sm">
+      {open ? (
+      <ul className="mt-1 space-y-1 text-sm">
         {materials.map((material) => {
           const original = materials.find((row) => row.id === material.duplicateOfId)
           return (
@@ -196,8 +209,9 @@ export function TopicGroup({
           )
         })}
       </ul>
+      ) : null}
 
-      {manage ? (
+      {open && manage ? (
         <div className="mt-4 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="topic-group-name">Název tématu</Label>
