@@ -1,9 +1,10 @@
-import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
+import { clearJobs, countJobs, loadJobs } from '@/lib/jobs'
 
 export const runtime = 'nodejs'
 
@@ -21,20 +22,16 @@ const enqueueSchema = z.object({
   mode: z.enum(['add', 'target']).default('add'),
 })
 
-/** Stav fronty. */
-export async function GET() {
-  const rows = await db
-    .select({ status: generationJobs.status, value: count() })
-    .from(generationJobs)
-    .groupBy(generationJobs.status)
-
-  const byStatus = Object.fromEntries(rows.map((row) => [row.status, row.value]))
-  return Response.json({
-    queued: byStatus.queued ?? 0,
-    running: byStatus.running ?? 0,
-    done: byStatus.done ?? 0,
-    error: byStatus.error ?? 0,
-  })
+/**
+ * Stav generování. Bez parametru jen počty podle stavu — ptá se na ně ukazatel
+ * v liště, a to opakovaně, takže musí být co nejlevnější. S `?vypis=1` k tomu
+ * přibude i výpis jednotlivých témat pro přehled generování.
+ */
+export async function GET(request: Request) {
+  const detail = new URL(request.url).searchParams.get('vypis') === '1'
+  const counts = await countJobs()
+  if (!detail) return Response.json(counts)
+  return Response.json({ ...counts, jobs: await loadJobs() })
 }
 
 /** Zařadí materiály do fronty hromadného generování. */
@@ -94,13 +91,12 @@ export async function POST(request: Request) {
 /**
  * Vyprázdní frontu. Maže i běžící úlohy — po přerušeném běhu zůstávají viset
  * a bez toho by jejich témata šlo odblokovat jedině zásahem do databáze.
+ * S `?rozsah=vse` zmizí i výpis hotových, když si ho chce učitelka uklidit.
  */
-export async function DELETE() {
-  const removed = await db
-    .delete(generationJobs)
-    .where(inArray(generationJobs.status, ['queued', 'error', 'running']))
-    .returning({ id: generationJobs.id })
-  return Response.json({ ok: true, removed: removed.length })
+export async function DELETE(request: Request) {
+  const scope = new URL(request.url).searchParams.get('rozsah') === 'vse' ? 'vse' : 'cekajici'
+  const removed = await clearJobs(scope)
+  return Response.json({ ok: true, removed })
 }
 
 async function resolveTopicIds(input: z.infer<typeof enqueueSchema>): Promise<string[]> {

@@ -55,6 +55,10 @@ export async function POST(request: Request) {
           {
             signal: request.signal,
             onProgress: (done, total) => send({ type: 'progress', done, total }),
+            // Po každé uložené dávce: kolik otázek už je hotových a jaké to
+            // jsou. Bez toho se u dlouhého materiálu deset minut točí jen
+            // kolečko a nic nenapovídá, že práce opravdu přibývá.
+            onSaved: ({ created, questions }) => send({ type: 'saved', created, questions }),
           },
         )
         await releaseTopic(jobId, { created: outcome.created })

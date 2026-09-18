@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { AppShell, type NavItem } from '@testmaker/ui'
+import { GenerationStatus } from '@/components/GenerationStatus'
 
 const NAV: NavItem[] = [
   { href: '/', label: 'Knihovna' },
@@ -67,6 +68,9 @@ export function MainNav({ children }: { children: React.ReactNode }) {
     <AppShell
       nav={NAV}
       activeHref={activeHref}
+      // Generování běží na pozadí i po odchodu ze stránky tématu; tohle je
+      // jediné místo, kde je vidět odkudkoli.
+      status={<GenerationStatus pathname={pathname} />}
       renderLink={(item, active) => (
         <Link href={item.href} aria-current={active ? 'page' : undefined}>
           {item.label}

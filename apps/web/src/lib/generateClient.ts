@@ -1,6 +1,6 @@
 'use client'
 
-import type { QuestionType } from '@testmaker/core/schema'
+import type { Question, QuestionType } from '@testmaker/core/schema'
 
 export interface GenerateOptions {
   topicId: string
@@ -12,6 +12,8 @@ export interface GenerateOptions {
 export type GenerateEvent =
   | { type: 'start' }
   | { type: 'progress'; done: number; total: number }
+  /** Dávka otázek je uložená: kolik jich už celkem je a které právě přibyly. */
+  | { type: 'saved'; created: number; questions: Question[] }
   | {
       type: 'done'
       created: number

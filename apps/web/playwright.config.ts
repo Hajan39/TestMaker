@@ -22,6 +22,10 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
+  // Sada je dlouhá a poslední testy běží na stroji, který už hodinu překládá;
+  // výchozích 30 s pak u snímků obrazovek nestačí, i když samostatně doběhnou
+  // za pár sekund.
+  timeout: 60_000,
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,

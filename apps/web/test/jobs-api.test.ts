@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { DELETE, GET, POST } from '@/app/api/jobs/route'
 import { db, generationJobs, materials, type GenerationJobParams } from '@/db'
 import { newId } from '@/lib/ids'
-import { jsonReq, seedMaterial, seedQuestion, seedTopic } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTopic } from './helpers'
 
 /**
  * Fronta hromadného generování. Zařazuje se z celé knihovny naráz, takže se tu
@@ -124,7 +124,7 @@ describe('stav a vyprázdnění fronty', () => {
       { id: newId(), topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
 
-    const body = (await (await GET()).json()) as Record<string, number>
+    const body = (await (await GET(req('/api/jobs'))).json()) as Record<string, number>
     expect(body).toMatchObject({ queued: 1, running: 1, done: 1, error: 1 })
   })
 
@@ -138,7 +138,7 @@ describe('stav a vyprázdnění fronty', () => {
       { id: newId(), topicId, params: {} as GenerationJobParams, status: 'done' },
     ])
 
-    const body = (await (await DELETE()).json()) as { removed: number }
+    const body = (await (await DELETE(req('/api/jobs'))).json()) as { removed: number }
     expect(body.removed).toBe(3)
     const zbytek = await db.select().from(generationJobs)
     expect(zbytek.map((row) => row.status)).toEqual(['done'])

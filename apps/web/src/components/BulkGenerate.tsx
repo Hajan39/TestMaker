@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import {
@@ -17,6 +18,7 @@ import {
   GenerateSettingsForm,
   type GenerateSettings,
 } from '@/components/GenerateDialog'
+import { announceGeneration } from '@/components/GenerationStatus'
 import { drainQueue } from '@/lib/generateClient'
 
 export interface BulkScope {
@@ -69,6 +71,8 @@ export function BulkGenerate({
       let created = 0
       let done = 0
       setStatus(`Ve frontě ${queued.enqueued} témat.`)
+      // Ať se o rozdělané práci ví i v liště, když se panel zavře.
+      announceGeneration()
 
       await drainQueue(
         (step) => {
@@ -108,6 +112,14 @@ export function BulkGenerate({
           <p className="text-sm text-fg-muted">
                 Projde všechna témata ve zvoleném rozsahu. Běží po jednom tématu, průběh
                 se průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.
+              </p>
+
+              <p className="text-sm text-fg-muted">
+                Co se právě tvoří, co čeká a co se nepovedlo, je vidět v{' '}
+                <Link href="/generovani" className="text-brand underline underline-offset-2">
+                  přehledu generování
+                </Link>
+                {' '}— i po zavření tohohle panelu.
               </p>
 
               <GenerateSettingsForm value={settings} onChange={setSettings} disabled={running} />

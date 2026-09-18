@@ -16,11 +16,18 @@ export function AppShell({
   nav,
   activeHref,
   renderLink,
+  status,
   children,
 }: {
   nav: NavItem[]
   activeHref: string
   renderLink: (item: NavItem, active: boolean) => ReactNode
+  /**
+   * Tichý ukazatel vpravo v liště, vedle přepínače motivu — třeba to, že se
+   * někde na pozadí generují otázky. Vykresluje ho aplikace, balíček o jeho
+   * obsahu nic neví.
+   */
+  status?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -46,7 +53,10 @@ export function AppShell({
             )
           })}
         </nav>
-        <ThemeToggle className="ml-auto" />
+        <div className="ml-auto flex items-center gap-2">
+          {status}
+          <ThemeToggle />
+        </div>
       </header>
       <main className="surface-content min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
     </div>

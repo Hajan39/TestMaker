@@ -1,15 +1,17 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question } from '@testmaker/core/schema'
-import { Button, Card, OTAZKY, pocet } from '@testmaker/ui'
+import { Button, Card, OTAZKY, pocet, toast } from '@testmaker/ui'
 import {
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
   ProgressLine,
   type GenerateSettings,
 } from '@/components/GenerateDialog'
+import { announceGeneration } from '@/components/GenerationStatus'
 import { ReviewPanel } from '@/components/ReviewPanel'
 import { generateQuestionsStream } from '@/lib/generateClient'
 
@@ -56,7 +58,24 @@ export function TopicWorkspace({
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Kolik otázek v právě běžícím generování už vzniklo. */
+  const [created, setCreated] = useState(0)
+  /**
+   * Otázky vytvořené v tomhle běhu. Seznam níž se obnovuje až po doběhnutí
+   * (router.refresh), a čekat na to znamená deset minut koukat na kolečko —
+   * tyhle se do seznamu přidají hned, jak je server uloží.
+   */
+  const [fresh, setFresh] = useState<Question[]>([])
+  /** Dokončený běh: souhrn zůstane na obrazovce i po zmizení hlášky. */
+  const [outcome, setOutcome] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // Po obnovení seznamu přijdou tytéž otázky i v `questions` — podle id se
+  // proto čerstvé, které už v seznamu jsou, vynechají, ať se nezdvojí.
+  const shownQuestions = useMemo(() => {
+    const known = new Set(questions.map((question) => question.id))
+    return [...fresh.filter((question) => !known.has(question.id)), ...questions]
+  }, [fresh, questions])
 
   // Ukazujeme jen to, co skutečně půjde do modelu: generování duplicitní
   // obsah vynechává, takže se nesmí počítat ani tady — jinak na obrazovce
@@ -68,20 +87,49 @@ export function TopicWorkspace({
   async function generate() {
     setError(null)
     setGenerating(true)
-    setStatus('Generuji…')
+    setOutcome(null)
+    setCreated(0)
+    setFresh([])
+    setStatus('Spouštím generování…')
+    announceGeneration()
     abortRef.current = new AbortController()
+    // Průběh se skládá ze dvou údajů: kolik otázek už je hotových (to učitelku
+    // zajímá) a kde se model v materiálech nachází (to jen dokresluje, jak
+    // dlouho to ještě potrvá).
+    let hotovo = 0
+    let cast: { done: number; total: number } | null = null
+    const prubeh = () => {
+      const otazky = hotovo > 0 ? `Hotovo ${pocet(hotovo, OTAZKY)}` : 'Zatím žádná otázka není hotová'
+      // `done` je počet už zpracovaných částí; pracuje se tedy na následující.
+      // Když je hotová i poslední, žádná další už nezbývá a nemá se co hlásit.
+      const zbyva = cast && cast.done < cast.total
+      setStatus(zbyva ? `${otazky} · pracuji na části ${cast!.done + 1} z ${cast!.total}` : otazky)
+    }
+
     try {
       await generateQuestionsStream({ topicId, ...settings }, (event) => {
-        if (event.type === 'progress') setStatus(`Zpracovávám část ${event.done} z ${event.total}`)
-        else if (event.type === 'done') {
-          setStatus(
-            `Vytvořeno ${pocet(event.created, OTAZKY)} z ${event.sources} materiálů` +
-              // Když se v jednom tématu vystřídalo víc modelů, otázky nemusí být
-              // stejně kvalitní — učitelka to má vědět dřív, než je začne číst.
-              ((event.models?.length ?? 0) > 1 ? `, modely: ${event.models?.join(' → ')}` : '') +
-              (event.rejected > 0 ? `, ${event.rejected} zahozeno` : '') +
-              (event.failedCalls > 0 ? `, ${event.failedCalls}× model neodpověděl použitelně` : ''),
-          )
+        if (event.type === 'progress') {
+          cast = { done: event.done, total: event.total }
+          prubeh()
+        } else if (event.type === 'saved') {
+          hotovo = event.created
+          setCreated(event.created)
+          // Nejnovější nahoře — stejně jako seznam otázek pod tím.
+          setFresh((current) => [...event.questions.slice().reverse(), ...current])
+          prubeh()
+        } else if (event.type === 'done') {
+          const souhrn = summarizeRun(event)
+          setStatus(null)
+          setOutcome(souhrn)
+          toast.success(souhrn, {
+            duration: 12_000,
+            action: event.created > 0
+              ? {
+                  label: 'Zkontrolovat',
+                  onClick: () => router.push(`/review?topicId=${encodeURIComponent(topicId)}`),
+                }
+              : undefined,
+          })
           router.refresh()
         } else if (event.type === 'error') setError(event.message)
       }, abortRef.current.signal)
@@ -141,9 +189,23 @@ export function TopicWorkspace({
             >
               {keptCount > 0 ? 'Dogenerovat z tématu' : 'Vygenerovat z tématu'}
             </Button>
-            {generating ? <ProgressLine label={status ?? 'Generuji…'} /> : null}
-            {!generating && status ? <span className="text-sm text-brand">{status}</span> : null}
+            {generating ? <ProgressLine label={status ?? 'Spouštím generování…'} /> : null}
           </div>
+          {/* Souhrn běhu zůstává na obrazovce i po zmizení hlášky — učitelka se
+              k němu vrací, když se rozmýšlí, jestli má jít kontrolovat hned. */}
+          {!generating && outcome ? (
+            <p className="mt-3 text-sm text-fg-soft">
+              {outcome}{' '}
+              {created > 0 ? (
+                <Link
+                  href={`/review?topicId=${encodeURIComponent(topicId)}`}
+                  className="text-brand underline underline-offset-2"
+                >
+                  Zkontrolovat nové koncepty
+                </Link>
+              ) : null}
+            </p>
+          ) : null}
           {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
         </Card>
       ) : null}
@@ -157,7 +219,35 @@ export function TopicWorkspace({
         </p>
       ) : null}
 
-      <ReviewPanel topicId={topicId} questions={questions} />
+      <ReviewPanel topicId={topicId} questions={shownQuestions} />
     </div>
   )
+}
+
+/**
+ * Věta o tom, jak generování dopadlo: kolik otázek vzniklo, kolik se zahodilo
+ * a proč. Zahozené otázky nejsou chyba učitelky — ale když jich je hodně,
+ * je to jediná stopa po tom, že model nad materiálem tápe.
+ */
+function summarizeRun(event: {
+  created: number
+  rejected: number
+  failedCalls: number
+  sources: number
+  models?: string[]
+}): string {
+  if (event.created === 0) {
+    return 'Nevznikla ani jedna otázka. Zkus to prosím znovu, případně s menším počtem otázek.'
+  }
+  const parts = [`Vytvořeno ${pocet(event.created, OTAZKY)}.`]
+  if (event.rejected > 0) {
+    parts.push(`Zahozeno: ${pocet(event.rejected, OTAZKY)} — byly neúplné nebo si odporovaly.`)
+  }
+  if (event.failedCalls > 0) {
+    parts.push(`${event.failedCalls}× model odpověděl něčím, co se nedalo použít.`)
+  }
+  // Když se v jednom tématu vystřídalo víc modelů, otázky nemusí být stejně
+  // kvalitní — učitelka to má vědět dřív, než je začne číst.
+  if ((event.models?.length ?? 0) > 1) parts.push('Otázky psalo víc různých modelů, kvalita se může lišit.')
+  return parts.join(' ')
 }

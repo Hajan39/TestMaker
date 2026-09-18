@@ -144,6 +144,12 @@ export async function generateForTopic(
   options: {
     signal?: AbortSignal
     onProgress?: (done: number, total: number) => void
+    /**
+     * Zavolá se po každé uložené dávce otázek. Generování trvá i deset minut
+     * a jediné, co učitelce řekne, že se opravdu něco děje, jsou otázky, které
+     * mezitím přibyly — proto putují ven rovnou, ne až na konci.
+     */
+    onSaved?: (info: { created: number; questions: Question[] }) => void | Promise<void>
     /** Podvržené generování pro testy; v aplikaci se nepředává. */
     generate?: typeof generateQuestions
   } = {},
@@ -186,6 +192,21 @@ export async function generateForTopic(
         // odkud přišla.
         if (ids.length > 0) await db.update(questions).set({ model: info.model }).where(inArray(questions.id, ids))
         created += batch.length
+
+        // Hotové otázky ven ještě za běhu — ale jen když o ně někdo stojí,
+        // aby se ve frontě (kde je nikdo nečte) nedělal dotaz navíc.
+        if (options.onSaved && ids.length > 0) {
+          const rows = await db.select().from(questions).where(inArray(questions.id, ids))
+          // Pořadí z databáze není zaručené; vracíme dávku tak, jak vznikla.
+          const byId = new Map(rows.map((row) => [row.id, toQuestion(row)]))
+          await options.onSaved({
+            created,
+            questions: ids.flatMap((id) => {
+              const question = byId.get(id)
+              return question ? [question] : []
+            }),
+          })
+        }
       },
     },
   )
