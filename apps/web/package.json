@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "import:local": "tsx scripts/import-local.ts",
     "generate:bulk": "tsx --conditions=react-server scripts/generate-bulk.ts",
+    "push:remote": "tsx scripts/push-remote.ts",
     "e2e": "playwright test",
     "e2e:db": "tsx scripts/seed-e2e.ts",
     "e2e:ui": "playwright test --ui",

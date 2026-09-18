@@ -184,6 +184,7 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 | `pnpm db:migrate` | Migrace databáze |
 | `pnpm db:seed` | Vestavěné šablony |
 | `pnpm db:studio` | Prohlížeč databáze |
+| `pnpm --filter @testmaker/web push:remote` | Přenos knihovny do produkce (viz níž) |
 
 ## Nasazení
 
@@ -204,6 +205,83 @@ Schéma databáze i vestavěné šablony vyřídí po každém pushi do `main` w
 [`.github/workflows/migrate.yml`](.github/workflows/migrate.yml) (migrace
 a `pnpm db:seed`). Potřebuje tajemství `TURSO_DATABASE_URL` a `TURSO_AUTH_TOKEN`
 v nastavení repozitáře.
+
+## Přenos knihovny do provozu a záloha
+
+Knihovna vzniká na počítači a generování otázek trvá hodiny — na server se
+proto nepřenáší jen aplikace, ale i hotový obsah. Cesty jsou dvě a každá je na
+něco jiného.
+
+### 1. Z počítače do produkce (jedním během)
+
+Skript čte lokální SQLite a zapisuje **přímo do Tursa**, databáze do databáze.
+Nejde přes aplikaci, takže se ho netýká strop 4,5 MB na požadavek ani časový
+limit funkce; 268 materiálů s plnými texty projde jedním během za pár vteřin.
+
+Co nastavit (do prostředí, ne do `.env.local` — jsou to přístupy k produkci):
+
+| Proměnná | K čemu |
+| --- | --- |
+| `TARGET_DATABASE_URL` | cílová databáze, `libsql://…` (`turso db show <jméno> --url`) |
+| `TARGET_DATABASE_AUTH_TOKEN` | token k ní (`turso db tokens create <jméno>`) |
+| `SOURCE_DATABASE_URL` | zdroj; nepovinné, bez něj `file:./local.db` |
+
+Cíl se schválně nebere z `DATABASE_URL`: ta míří na zdroj a kdyby se z ní bral
+i cíl, stačilo by zapomenout jednu proměnnou a knihovna by přepsala sama sebe.
+
+Nejdřív nanečisto — vypíše, co je ve zdroji a co v cíli, a nezapíše nic:
+
+```bash
+export TARGET_DATABASE_URL=libsql://…
+export TARGET_DATABASE_AUTH_TOKEN=…
+pnpm --filter @testmaker/web push:remote
+```
+
+Když čísla sedí, tentýž příkaz s `--zapsat`:
+
+```bash
+pnpm --filter @testmaker/web push:remote -- --zapsat
+```
+
+Přenáší se předměty, ročníky, témata, materiály i s texty, přílohy, otázky,
+hlavolamy, šablony, testy a jejich položky se zmrazenými otázkami — v tomhle
+pořadí, aby každá položka našla to, pod co patří. Fronta generování (`generation_jobs`)
+se nepřenáší: je to pracovní stav jednoho počítače, ne obsah knihovny.
+
+Schéma v cíli si skript nevyrábí — migrace tam pouští workflow
+[`migrate.yml`](.github/workflows/migrate.yml) po pushi do `main`. Když tabulky
+chybí, skript to řekne a nic nezkusí.
+
+**Jak ověřit, že se data přenesla.** Na konci běhu je tabulka „zdroj / cíl /
+posláno“; obě první čísla musí souhlasit. Kdo chce vidět na vlastní oči i
+obsah, otevře nasazenou aplikaci a podívá se na knihovnu a na stránku
+**Záloha**, kde jsou tytéž počty.
+
+**Když se běh přeruší v půlce** (spadne síť, zavře se notebook), nic se
+nerozbije: zapisuje se `insert … on conflict(id) do update`, takže se stejný
+příkaz prostě spustí znovu. Co už v cíli je, se srovná, co chybí, doplní se,
+a nic se nezdvojí. Ze stejného důvodu slouží skript i k pozdější
+dosynchronizaci, když na počítači přibudou další otázky.
+
+Zbývá jediná ruční situace: když někdo mezitím založil **v produkci** položku
+téhož jména (například předmět „PŘÍRODOPIS“), ale s jiným `id`, sloučit je
+podle jména nejde. Skript takový řádek pojmenuje a řekne, že je potřeba jednu
+ze dvou položek přejmenovat a spustit přenos znovu.
+
+### 2. Záloha a obnova pro učitelku
+
+V aplikaci je stránka **Záloha**:
+
+- **Stáhnout zálohu** uloží celou knihovnu do jednoho souboru JSON
+  (`testmaker-zaloha-2026-09-18.json`). Odpověď odtéká postupně, takže se na ni
+  strop 4,5 MB nevztahuje — dnešní knihovna dá přes 3 MB a bude přibývat.
+- **Obnovit ze zálohy** soubor nejdřív jen přečte a vypíše, co v něm je;
+  teprve druhé kliknutí zapisuje. Soubor krájí prohlížeč a posílá ho po
+  dávkách, protože na nahrávání strop platí.
+
+Obnova je **sloučení, ne výměna**: co má stejné `id`, se přepíše podobou ze
+zálohy, co v knihovně chybí, se doplní, a nic se nemaže. Tentýž soubor jde
+nahrát dvakrát, aniž by cokoli přibylo dvakrát.
 
 Co je v plánu dál, popisuje [ROADMAP.md](ROADMAP.md). Historie změn je
 v [CHANGELOG.md](CHANGELOG.md).

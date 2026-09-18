@@ -1,0 +1,116 @@
+import { z } from 'zod'
+import { db } from '@/db'
+import {
+  FORMAT,
+  VERZE,
+  jeTabulka,
+  nazevSouboru,
+  zalohaKousky,
+  zapisOdkazyDuplicit,
+  zapisRadky,
+} from '@/lib/backup'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+/**
+ * Záloha celé knihovny do jednoho souboru JSON.
+ *
+ * Odpověď odtéká postupně (`ReadableStream`), ne jako jeden hotový řetězec:
+ * streamovaná odpověď se nevejde do stropu 4,5 MB na požadavek, protože se
+ * do paměti funkce nikdy celá nedostane. Dnešní knihovna dá přes 3 MB
+ * a bude přibývat.
+ */
+export function GET() {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const kousek of zalohaKousky(db)) {
+          controller.enqueue(encoder.encode(kousek))
+        }
+        controller.close()
+      } catch (error) {
+        // Soubor už se stahuje, takže chybu nejde poslat jako stavový kód —
+        // jediné, co jde, je spojení přerušit, aby nevznikl useklý JSON,
+        // který by šlo obnovit jako by byl v pořádku.
+        controller.error(error)
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${nazevSouboru()}"`,
+      'cache-control': 'no-store',
+    },
+  })
+}
+
+const davkaSchema = z.union([
+  z.object({
+    tabulka: z.string(),
+    radky: z.array(z.record(z.string(), z.unknown())),
+  }),
+  z.object({
+    tabulka: z.literal('materials'),
+    odkazy: z.array(
+      z.object({
+        id: z.string().min(1),
+        duplicateOfId: z.string().min(1),
+        duplicateScore: z.number().nullable().default(null),
+      }),
+    ),
+  }),
+])
+
+/**
+ * Obnova ze zálohy — po dávkách.
+ *
+ * Na rozdíl od stahování se na nahrávání strop 4,5 MB na požadavek vztahuje,
+ * proto soubor krájí prohlížeč (`lib/backupClient.ts`) a posílá sem tabulku
+ * po tabulce, po dávkách. Pořadí dávek hlídá klient; tady se jen zapisuje.
+ *
+ * Slučuje se podle `id` (`on conflict do update`) a nic se nemaže: obnova do
+ * neprázdné knihovny je doplnění, ne výměna. Tentýž soubor jde nahrát dvakrát
+ * a podruhé se nic nezdvojí.
+ */
+export async function POST(request: Request) {
+  const parsed = davkaSchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) {
+    return Response.json(
+      { error: `Tohle nevypadá jako záloha TestMakeru (${FORMAT}, verze ${VERZE}).` },
+      { status: 400 },
+    )
+  }
+
+  const davka = parsed.data
+  if (!jeTabulka(davka.tabulka)) {
+    return Response.json({ error: `Neznámá část zálohy: ${davka.tabulka}` }, { status: 400 })
+  }
+
+  try {
+    if ('odkazy' in davka) {
+      const zapsano = await zapisOdkazyDuplicit(db, davka.odkazy)
+      return Response.json({ ok: true, tabulka: davka.tabulka, zapsano })
+    }
+
+    const vysledek = await zapisRadky(db, davka.tabulka, davka.radky)
+    return Response.json({
+      ok: true,
+      tabulka: davka.tabulka,
+      zapsano: vysledek.zapsano,
+      odkazy: vysledek.odkazy,
+    })
+  } catch (error) {
+    // Typicky chybějící nadřazená položka (téma bez předmětu) nebo soubor
+    // z novější verze aplikace. Učitelce nepomůže hláška z SQLite, ale to,
+    // kde přesně se obnova zadrhla.
+    const detail = error instanceof Error ? error.message : String(error)
+    return Response.json(
+      { error: `Část „${davka.tabulka}“ se nepodařilo obnovit: ${detail}` },
+      { status: 400 },
+    )
+  }
+}
