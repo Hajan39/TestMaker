@@ -40,7 +40,7 @@ export default defineConfig({
   webServer: {
     // Databáze se dopřipraví, jen pokud ještě není — opakovaný běh testů tak
     // nezdržuje a data z předchozího běhu zůstávají.
-    command: `pnpm exec tsx scripts/seed-e2e.ts --if-missing && pnpm exec next dev --port ${PORT}`,
+    command: `pnpm exec tsx --conditions=react-server scripts/seed-e2e.ts --if-missing && pnpm exec next dev --port ${PORT}`,
     url: `http://localhost:${PORT}`,
     env: {
       DATABASE_URL: 'file:./e2e.db',

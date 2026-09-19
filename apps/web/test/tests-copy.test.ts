@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { GET, POST } from '@/app/api/tests/route'
 import { db, questions, testItems } from '@/db'
 import { loadTest, loadTestItems } from '@/lib/tests'
-import { jsonReq, req, seedQuestion, seedTemplate, seedTopic } from './helpers'
+import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 /**
  * Kopie testu a hledání v seznamu testů. Loňskou písemku musí jít použít
@@ -71,8 +71,8 @@ describe('kopie testu', () => {
     expect(kopie.id).toBeTruthy()
     expect(kopie.id).not.toBe(sourceId)
 
-    const puvodni = await loadTestItems(sourceId)
-    const nove = await loadTestItems(kopie.id!)
+    const puvodni = await loadTestItems(UCET, sourceId)
+    const nove = await loadTestItems(UCET, kopie.id!)
     expect(nove).toHaveLength(puvodni.length)
     expect(nove.map((item) => item.kind)).toEqual(puvodni.map((item) => item.kind))
     expect(nove.map((item) => item.order)).toEqual(puvodni.map((item) => item.order))
@@ -96,7 +96,7 @@ describe('kopie testu', () => {
     expect(kopie.status).toBe(200)
 
     expect(await snapshots(kopie.id!)).toEqual(await snapshots(sourceId))
-    const [item] = await loadTestItems(kopie.id!)
+    const [item] = await loadTestItems(UCET, kopie.id!)
     expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení do testu' })
   })
 
@@ -106,7 +106,7 @@ describe('kopie testu', () => {
     await db.delete(questions).where(eq(questions.id, questionId))
 
     const kopie = await copyTest(sourceId)
-    const [item] = await loadTestItems(kopie.id!)
+    const [item] = await loadTestItems(UCET, kopie.id!)
     expect(item?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
     expect(item?.questionMissing).toBe(true)
   })
@@ -115,8 +115,8 @@ describe('kopie testu', () => {
     const sourceId = await createTest([{ kind: 'heading', text: 'Jen nadpis' }], { title: 'Opakování' })
     const kopie = await copyTest(sourceId)
 
-    expect((await loadTest(sourceId))?.title).toBe('Opakování')
-    expect((await loadTest(kopie.id!))?.title).toBe('Opakování (kopie)')
+    expect((await loadTest(UCET, sourceId))?.title).toBe('Opakování')
+    expect((await loadTest(UCET, kopie.id!))?.title).toBe('Opakování (kopie)')
   })
 
   it('kopírovat neexistující test se nedá a řekne to česky', async () => {

@@ -9,6 +9,7 @@ import {
   zapisOdkazyDuplicit,
   zapisRadky,
 } from '@/lib/backup'
+import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,12 +22,14 @@ export const dynamic = 'force-dynamic'
  * do paměti funkce nikdy celá nedostane. Dnešní knihovna dá přes 3 MB
  * a bude přibývat.
  */
-export function GET() {
+export async function GET() {
+  return sRozsahem(
+    async (ucet) => {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const kousek of zalohaKousky(db)) {
+        for await (const kousek of zalohaKousky(db, { schoolId: ucet.schoolId })) {
           controller.enqueue(encoder.encode(kousek))
         }
         controller.close()
@@ -46,6 +49,10 @@ export function GET() {
       'cache-control': 'no-store',
     },
   })
+    },
+    // Záloha je celá škola: patří správci, ne jednotlivé učitelce.
+    { role: ['spravce'] },
+  )
 }
 
 const davkaSchema = z.union([
@@ -77,6 +84,8 @@ const davkaSchema = z.union([
  * a podruhé se nic nezdvojí.
  */
 export async function POST(request: Request) {
+  return sRozsahem(
+    async (ucet) => {
   const parsed = davkaSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
     return Response.json(
@@ -93,10 +102,20 @@ export async function POST(request: Request) {
   try {
     if ('odkazy' in davka) {
       const zapsano = await zapisOdkazyDuplicit(db, davka.odkazy)
+      await zapsatAudit({
+        schoolId: ucet.schoolId,
+        userId: ucet.userId,
+        action: 'obnova-ze-zalohy',
+        entity: davka.tabulka,
+        detail: { odkazy: zapsano },
+      })
       return Response.json({ ok: true, tabulka: davka.tabulka, zapsano })
     }
 
-    const vysledek = await zapisRadky(db, davka.tabulka, davka.radky)
+    const vysledek = await zapisRadky(db, davka.tabulka, davka.radky, {
+      schoolId: ucet.schoolId,
+      userId: ucet.userId,
+    })
     return Response.json({
       ok: true,
       tabulka: davka.tabulka,
@@ -113,4 +132,7 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   }
+    },
+    { role: ['spravce'] },
+  )
 }

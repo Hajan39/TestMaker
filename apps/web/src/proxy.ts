@@ -3,7 +3,10 @@ import {
   AUTH_MISCONFIGURED_MESSAGE,
   SESSION_COOKIE,
   authMode,
-  isValidSession,
+  jeVolnaCesta,
+  maPravo,
+  overitRelaci,
+  smazatStarouCookie,
 } from '@/lib/session'
 
 /** Statické soubory a favicon se neřeší, zbytek aplikace ano. */
@@ -15,7 +18,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const mode = authMode()
 
-  // Špatně nastavené přihlašování (typicky nasazení bez APP_PASSWORD) nesmí
+  // Špatně nastavené přihlašování (typicky nasazení bez AUTH_SECRET) nesmí
   // skončit tichým otevřením aplikace komukoli. Platí i pro /login — přihlásit
   // se stejně nedá, tak ať je aspoň vidět, co chybí.
   if (mode === 'chybne-nastaveno') {
@@ -28,13 +31,14 @@ export async function proxy(request: NextRequest) {
     })
   }
 
-  if (pathname === '/login' || pathname === '/api/login') return NextResponse.next()
+  if (jeVolnaCesta(pathname)) return NextResponse.next()
   if (mode === 'vypnuto') return NextResponse.next()
 
   // Plánovač se hlásí sdíleným tajemstvím; Vercel Cron posílá právě tuhle hlavičku.
   // Na Vercelu Hobby se cron nepoužívá (rozvrh po minutě tam neprojde a `crons`
   // v `vercel.json` shodí build), větev tu ale zůstává pro self-hosting:
-  // naplánovaný `curl` na Synology se hlásí stejnou hlavičkou.
+  // naplánovaný `curl` na Synology se hlásí stejnou hlavičkou. Za koho úloha
+  // generuje, si běh přečte z řádku fronty — relace tu žádná není.
   const cronSecret = process.env.CRON_SECRET
   if (
     pathname === '/api/jobs/run' &&
@@ -44,21 +48,46 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const ok = await isValidSession(
+  const relace = await overitRelaci(
     request.cookies.get(SESSION_COOKIE)?.value,
-    process.env.APP_PASSWORD ?? '',
     process.env.AUTH_SECRET ?? '',
   )
-  if (ok) return NextResponse.next()
+  if (!relace) return odmitnout(request, 'Nepřihlášeno')
 
+  // Hrubé rozhodnutí podle role. Jestli je konkrétní písemka moje, rozhoduje
+  // až server nad databází — proxy je pohodlí, ne bezpečnostní hranice.
+  if (!maPravo(relace, pathname, request.method)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Na tuhle akci nemáte oprávnění.' }, { status: 403 })
+    }
+    const cil = request.nextUrl.clone()
+    cil.pathname = relace.zh ? '/zmena-hesla' : '/'
+    cil.search = ''
+    return NextResponse.redirect(cil)
+  }
+
+  return NextResponse.next()
+}
+
+/**
+ * Nepřihlášenému se u stránky nabídne přihlášení a po něm návrat tam, kam
+ * mířil — jinak by po každém vypršení relace skončil na úvodní obrazovce
+ * a hledal, kde přestal.
+ */
+function odmitnout(request: NextRequest, duvod: string) {
+  const { pathname, search } = request.nextUrl
   if (pathname.startsWith('/api/')) {
-    return NextResponse.json({ error: 'Nepřihlášeno' }, { status: 401 })
+    const odpoved = NextResponse.json({ error: duvod }, { status: 401 })
+    odpoved.headers.append('set-cookie', smazatStarouCookie())
+    return odpoved
   }
 
   const login = request.nextUrl.clone()
   login.pathname = '/login'
-  login.search = ''
-  return NextResponse.redirect(login)
+  login.search = pathname === '/' ? '' : `?dal=${encodeURIComponent(pathname + search)}`
+  const odpoved = NextResponse.redirect(login)
+  odpoved.headers.append('set-cookie', smazatStarouCookie())
+  return odpoved
 }
 
 /**

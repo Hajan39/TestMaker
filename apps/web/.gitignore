@@ -42,3 +42,7 @@ next-env.d.ts
 
 # Vzor konfigurace patří do repozitáře, na rozdíl od skutečných klíčů.
 !.env.example
+
+# Uložené přihlášení pro testy v prohlížeči — vzniká při každém běhu.
+e2e/.auth/
+e2e-login.db

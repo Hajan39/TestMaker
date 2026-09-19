@@ -5,6 +5,7 @@ import { db, questions, templates, testItems, tests } from '@/db'
 import { testConditions } from '@/lib/tests'
 import { TestsTable } from './TestsTable'
 import { TestsFilters } from './TestsFilters'
+import { skola, ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Testy – TestMaker' }
@@ -22,7 +23,8 @@ export default async function TestsPage({
   const templateId = params.templateId ?? ''
   const limit = Math.min(Math.max(Number(params.limit) || PAGE_SIZE, PAGE_SIZE), 500)
 
-  const conditions = testConditions({ search, templateId: templateId || undefined })
+  const ucet = await ucetStranky()
+  const conditions = testConditions(ucet, { search, templateId: templateId || undefined })
   const where = conditions.length > 0 ? and(...conditions) : undefined
 
   const [rows, [totalRow], templateRows] = await Promise.all([
@@ -55,7 +57,11 @@ export default async function TestsPage({
       .from(tests)
       .innerJoin(templates, eq(templates.id, tests.templateId))
       .where(where),
-    db.select({ id: templates.id, name: templates.name }).from(templates).orderBy(asc(templates.name)),
+    db
+      .select({ id: templates.id, name: templates.name })
+      .from(templates)
+      .where(skola(ucet, templates))
+      .orderBy(asc(templates.name)),
   ])
 
   const total = Number(totalRow?.value ?? 0)

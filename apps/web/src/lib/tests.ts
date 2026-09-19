@@ -1,5 +1,5 @@
 import 'server-only'
-import { asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
   resolveTestItemPuzzle,
   resolveTestItemQuestion,
@@ -12,8 +12,15 @@ import {
   type Test,
 } from '@testmaker/core/schema'
 import { db, assets, puzzles, questions, templates, testItems, tests } from '@/db'
+import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
+
+/**
+ * Písemka je soukromá: vidí ji autorka, a pokud ji nasdílí (`visibility`),
+ * i kolegyně ze školy. Cizí písemka se proto tváří jako neexistující —
+ * `null` místo odmítnutí, aby se z odpovědi nedalo vyčíst, že vůbec je.
+ */
 
 export interface TestQuery {
   /** Hledá se v názvu a v popisu testu. */
@@ -34,8 +41,9 @@ export interface TestQuery {
  * Procenta a podtržítka v hledaném textu jsou v `like` zástupné znaky, proto
  * se odzávorkují; jinak by „100 %" vrátilo všechno.
  */
-export function testConditions(query: TestQuery): SQL[] {
-  const conditions: SQL[] = []
+export function testConditions(scope: Scope, query: TestQuery): SQL[] {
+  const viditelne = viditelnyTest(scope, tests)
+  const conditions: SQL[] = viditelne ? [viditelne] : []
   const needle = query.search?.trim()
   if (needle) {
     const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
@@ -49,8 +57,12 @@ export function testConditions(query: TestQuery): SQL[] {
   return conditions
 }
 
-export async function loadTemplates(): Promise<Template[]> {
-  const rows = await db.select().from(templates).orderBy(asc(templates.position), asc(templates.name))
+export async function loadTemplates(scope: Scope): Promise<Template[]> {
+  const rows = await db
+    .select()
+    .from(templates)
+    .where(skola(scope, templates))
+    .orderBy(asc(templates.position), asc(templates.name))
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -60,11 +72,17 @@ export async function loadTemplates(): Promise<Template[]> {
   }))
 }
 
-export async function loadTest(testId: string): Promise<Test | null> {
-  const [row] = await db.select().from(tests).where(eq(tests.id, testId)).limit(1)
+export async function loadTest(scope: Scope, testId: string): Promise<Test | null> {
+  const [row] = await db
+    .select()
+    .from(tests)
+    .where(and(eq(tests.id, testId), viditelnyTest(scope, tests)))
+    .limit(1)
   if (!row) return null
   return {
     id: row.id,
+    ownerId: row.ownerId,
+    visibility: row.visibility,
     title: row.title,
     description: row.description,
     graded: row.graded,
@@ -83,12 +101,16 @@ export async function loadTest(testId: string): Promise<Test | null> {
  * podvrhnout.
  */
 export async function buildQuestionSnapshots(
+  scope: Scope,
   questionIds: string[],
 ): Promise<Map<string, string>> {
   const ids = [...new Set(questionIds)]
   if (ids.length === 0) return new Map()
 
-  const rows = await db.select().from(questions).where(inArray(questions.id, ids))
+  const rows = await db
+    .select()
+    .from(questions)
+    .where(and(skola(scope, questions), inArray(questions.id, ids)))
   const snapshots = new Map<string, string>()
   for (const row of rows) {
     try {
@@ -106,11 +128,19 @@ export async function buildQuestionSnapshots(
  * Snímky hlavolamů pro ukládaný test — týž důvod jako u otázek: co se
  * zařadilo do písemky, nesmí se změnit pozdější úpravou v knihovně.
  */
-export async function buildPuzzleSnapshots(puzzleIds: string[]): Promise<Map<string, string>> {
+export async function buildPuzzleSnapshots(
+  scope: Scope,
+  puzzleIds: string[],
+): Promise<Map<string, string>> {
   const ids = [...new Set(puzzleIds)]
   if (ids.length === 0) return new Map()
 
-  const rows = await db.select().from(puzzles).where(inArray(puzzles.id, ids))
+  // Zmrazit jde jen vlastní hlavolam: bez téhle podmínky by si stačilo
+  // uhodnout cizí id a mít ho ve své písemce i ve svém PDF.
+  const rows = await db
+    .select()
+    .from(puzzles)
+    .where(and(vlastni(scope, puzzles), inArray(puzzles.id, ids)))
   const snapshots = new Map<string, string>()
   for (const row of rows) {
     try {
@@ -130,23 +160,51 @@ export async function buildPuzzleSnapshots(puzzleIds: string[]): Promise<Map<str
  * bere ze snímku pořízeného při uložení testu; živá otázka z banky se použije
  * jen tam, kde snímek chybí (starší testy) nebo je poškozený.
  */
-export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]> {
-  const rows = await db
-    .select()
-    .from(testItems)
-    .where(eq(testItems.testId, testId))
-    .orderBy(asc(testItems.position))
+export async function loadTestItems(
+  scope: Scope,
+  testId: string,
+  options: { ownerId?: string } = {},
+): Promise<ResolvedTestItem[]> {
+  // Položky se čtou přes samotnou písemku, ne jen podle `testId`: kdo na ni
+  // nemá vidět, nedostane ani její obsah, i kdyby id uhodl.
+  const rows = (
+    await db
+      .select({ polozka: testItems })
+      .from(testItems)
+      .innerJoin(tests, eq(tests.id, testItems.testId))
+      .where(and(eq(testItems.testId, testId), viditelnyTest(scope, tests)))
+      .orderBy(asc(testItems.position))
+  ).map((row) => row.polozka)
+
+  // Náhrada za chybějící snímek se u otázky bere z celé školy (banka je
+  // společná), u hlavolamu ale jen od vlastníka písemky: nasdílený test by
+  // jinak ukázal cizí hlavolam v podobě, do jaké ho autorka mezitím upravila.
+  const vlastnikTestu = options.ownerId ?? scope.userId
 
   const questionIds = rows.map((row) => row.questionId).filter((id): id is string => Boolean(id))
   const questionRows =
     questionIds.length > 0
-      ? await db.select().from(questions).where(inArray(questions.id, questionIds))
+      ? await db
+          .select()
+          .from(questions)
+          .where(and(skola(scope, questions), inArray(questions.id, questionIds)))
       : []
   const byId = new Map(questionRows.map((row) => [row.id, toQuestion(row)]))
 
   const puzzleIds = rows.map((row) => row.puzzleId).filter((id): id is string => Boolean(id))
   const puzzleRows =
-    puzzleIds.length > 0 ? await db.select().from(puzzles).where(inArray(puzzles.id, puzzleIds)) : []
+    puzzleIds.length > 0
+      ? await db
+          .select()
+          .from(puzzles)
+          .where(
+            and(
+              skola(scope, puzzles),
+              eq(puzzles.ownerId, vlastnikTestu),
+              inArray(puzzles.id, puzzleIds),
+            ),
+          )
+      : []
   const puzzleById = new Map(puzzleRows.map((row) => [row.id, toPuzzle(row)]))
 
   return rows.map((row) => {
@@ -171,7 +229,7 @@ export async function loadTestItems(testId: string): Promise<ResolvedTestItem[]>
 }
 
 /** Obrázky použité v testu jako data URL — react-pdf je vkládá přímo. */
-async function loadAssets(items: ResolvedTestItem[]): Promise<Record<string, string>> {
+async function loadAssets(scope: Scope, items: ResolvedTestItem[]): Promise<Record<string, string>> {
   const ids = new Set<string>()
   for (const item of items) {
     for (const block of item.question?.blocks ?? []) {
@@ -181,7 +239,10 @@ async function loadAssets(items: ResolvedTestItem[]): Promise<Record<string, str
   }
   if (ids.size === 0) return {}
 
-  const rows = await db.select().from(assets).where(inArray(assets.id, [...ids]))
+  const rows = await db
+    .select()
+    .from(assets)
+    .where(and(skola(scope, assets), inArray(assets.id, [...ids])))
   return Object.fromEntries(
     rows.map((row) => [row.id, `data:${row.mimeType};base64,${Buffer.from(row.data).toString('base64')}`]),
   )
@@ -189,16 +250,21 @@ async function loadAssets(items: ResolvedTestItem[]): Promise<Record<string, str
 
 /** Vše potřebné pro vykreslení testu do PDF. */
 export async function loadRenderableTest(
+  scope: Scope,
   testId: string,
   options: { variant: 'A' | 'B'; withKey: boolean },
 ): Promise<RenderableTest | null> {
-  const test = await loadTest(testId)
+  const test = await loadTest(scope, testId)
   if (!test) return null
 
-  const [templateRow] = await db.select().from(templates).where(eq(templates.id, test.templateId)).limit(1)
+  const [templateRow] = await db
+    .select()
+    .from(templates)
+    .where(and(skola(scope, templates), eq(templates.id, test.templateId)))
+    .limit(1)
   if (!templateRow) return null
 
-  const items = await loadTestItems(testId)
+  const items = await loadTestItems(scope, testId, { ownerId: test.ownerId })
 
   return {
     test,
@@ -212,6 +278,6 @@ export async function loadRenderableTest(
     items,
     variant: options.variant,
     withKey: options.withKey,
-    assets: await loadAssets(items),
+    assets: await loadAssets(scope, items),
   }
 }

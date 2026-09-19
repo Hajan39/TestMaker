@@ -150,11 +150,55 @@ endpoint pouští dovnitř sdílené tajemství `CRON_SECRET`:
 curl -H "Authorization: Bearer $CRON_SECRET" https://<adresa>/api/jobs/run
 ```
 
-Má-li aplikace běžet vystavená (ne jen lokálně), doplň vedle `ANTHROPIC_API_KEY`
-i `APP_PASSWORD` a `AUTH_SECRET` — zapnou přihlášení jedním sdíleným heslem.
-Lokálně (`pnpm dev`) se bez `APP_PASSWORD` běží bez přihlášení; v nasazení na
-Vercelu se ale aplikace bez hesla neotevře nikomu a odpoví 503 s vysvětlením,
-co doplnit, aby se veřejná adresa omylem nespustila dokořán.
+## Účty a role
+
+Aplikaci používá sborovna jedné školy. Knihovna (předměty, ročníky, témata,
+materiály a otázky) je **společná**; **písemky a hlavolamy patří té, kdo je
+vytvořila** — cizí se nezobrazí ani nevytisknou, dokud je autorka nenasdílí.
+
+| Role | Co smí |
+| --- | --- |
+| `ucitelka` | všechno s obsahem: import, generování, kontrola, testy, hlavolamy |
+| `spravce` | navíc účty, zálohy školy, záznam událostí a chyb; jako jediný smí mazat předmět, ročník a téma |
+| `nahled` | jen čte a tiskne |
+
+Přihlašování zapíná proměnná `AUTH_SECRET`. Lokálně (`pnpm dev`) se bez ní
+běží bez přihlášení pod výchozím účtem ze seedu; v nasazení na Vercelu se
+aplikace bez tajemství neotevře nikomu a odpoví 503 s vysvětlením, co doplnit,
+aby se veřejná adresa omylem nespustila dokořán.
+
+Účty zakládá správce v sekci **Správa**. Úplně prvního správce (a kdykoli
+později odemčení účtu, do kterého se nikdo nedostane) vyřídí skript:
+
+```bash
+pnpm --filter @testmaker/web uzivatel -- --email jana@skola.cz --jmeno "Jana" --role spravce
+pnpm --filter @testmaker/web uzivatel -- --vypis
+```
+
+Heslo se nepíše do příkazu, ale zadává se po spuštění; když se nezadá,
+vygeneruje se a vypíše. Nově založený účet si heslo při prvním přihlášení
+změní — to, co správce nadiktoval, zná zbytečně někdo druhý.
+
+### Přihlášení přes Google
+
+Učitelé mívají školní účty Google; přihlášení jde zapnout vedle hesla, ne
+místo něj. Potřebuje proměnné `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`GOOGLE_REDIRECT_URI` a doménu školy (`GOOGLE_HD` nebo sloupec
+`schools.google_domain`). Bez `GOOGLE_CLIENT_ID` se tlačítko na přihlašovací
+stránce vůbec nenabídne.
+
+V Google Cloudu: nový projekt → *OAuth consent screen* typu **Internal**
+(školní Workspace; pak není potřeba ověřování aplikace) → rozsahy jen
+`openid email profile` → *Credentials* → *OAuth client ID* typu **Web
+application** → mezi *Authorized redirect URIs* patří
+`https://<adresa>/api/prihlaseni/google/zpet` a pro vývoj
+`http://localhost:3000/api/prihlaseni/google/zpet`.
+
+Účet z cizí domény se odmítne vždy. Účet ze správné domény, který v aplikaci
+ještě není, se podle nastavení školy buď odmítne s odkazem na správce (výchozí),
+nebo se zaeviduje jako čekající a přihlásí se, až mu správce přidělí roli.
+Náhledová nasazení na Vercelu mají pokaždé jinou adresu a Google vyžaduje
+přesnou shodu — tam se přihlašuje heslem.
 
 ## Uspořádání
 
@@ -182,7 +226,8 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 | `pnpm test` | Testy |
 | `pnpm typecheck` | Kontrola typů |
 | `pnpm db:migrate` | Migrace databáze |
-| `pnpm db:seed` | Vestavěné šablony |
+| `pnpm db:seed` | Vestavěné šablony a vývojový účet |
+| `pnpm --filter @testmaker/web uzivatel` | Založení a odemčení účtu z příkazové řádky |
 | `pnpm db:studio` | Prohlížeč databáze |
 | `pnpm --filter @testmaker/web push:remote` | Přenos knihovny do produkce (viz níž) |
 
@@ -195,8 +240,17 @@ prostředí:
 | --- | --- |
 | `DATABASE_URL` | Turso, `libsql://…` |
 | `DATABASE_AUTH_TOKEN` | token k Tursu |
-| `APP_PASSWORD` | heslo do aplikace; bez něj se nasazení neotevře |
-| `AUTH_SECRET` | podpis přihlašovací cookie, `openssl rand -hex 32` |
+| `AUTH_SECRET` | podpis přihlašovací cookie, `openssl rand -hex 32`; bez něj se nasazení neotevře |
+| `GOOGLE_CLIENT_ID` | volitelně, přihlášení školním účtem Google |
+| `GOOGLE_CLIENT_SECRET` | k témuž |
+| `GOOGLE_REDIRECT_URI` | `https://<adresa>/api/prihlaseni/google/zpet` |
+| `GOOGLE_HD` | doména školních účtů, např. `zsnekde.cz` |
+
+Pořadí při prvním nasazení je závazné, jinak se dovnitř nedostane nikdo:
+migrace (`pnpm db:migrate` proti Tursu) → založení prvního správce skriptem
+`uzivatel` proti téže databázi → nasazení kódu → správce doplní učitelky.
+Proměnnou `APP_PASSWORD` ze starého přihlašování jedním heslem lze po nasazení
+smazat, nic už nedělá.
 
 Generování otázek zatím běží lokálně, proto `ANTHROPIC_API_KEY` v nasazení
 nastavený být nemusí; `CRON_SECRET` taky ne, plánovač na Hobby tarifu neběží.

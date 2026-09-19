@@ -1,7 +1,8 @@
 import 'server-only'
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { Question, QuestionStatus } from '@testmaker/core/schema'
 import { db, grades, questions, subjects, topics } from '@/db'
+import { skola, type Scope } from './uzivatel'
 import { toQuestion } from './questions'
 
 export interface PickerTopic {
@@ -33,6 +34,7 @@ export interface PickerTopic {
  * v písemce tiše ztratily obrázky a poznámky do klíče.
  */
 export async function loadPickerTopics(
+  scope: Scope,
   options: { statuses?: QuestionStatus[] } = {},
 ): Promise<PickerTopic[]> {
   const statuses = options.statuses ?? ['approved']
@@ -49,7 +51,7 @@ export async function loadPickerTopics(
     .innerJoin(topics, eq(topics.id, questions.topicId))
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(inArray(questions.status, statuses))
+    .where(and(skola(scope, questions), inArray(questions.status, statuses)))
     .orderBy(asc(subjects.name), asc(grades.position), asc(topics.name), asc(questions.createdAt))
 
   const byTopic = new Map<string, PickerTopic>()

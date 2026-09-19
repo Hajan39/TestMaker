@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { InlineName } from '@/components/InlineName'
@@ -9,10 +9,12 @@ import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
 import { TopicWorkspace } from './TopicWorkspace'
+import { skola, ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TopicPage({ params }: { params: Promise<{ id: string }> }) {
+  const ucet = await ucetStranky()
   const { id } = await params
 
   const [topic] = await db
@@ -27,7 +29,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(eq(topics.id, id))
+    .where(and(skola(ucet, topics), eq(topics.id, id)))
     .limit(1)
 
   if (!topic) notFound()
@@ -46,13 +48,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         duplicateScore: materials.duplicateScore,
       })
       .from(materials)
-      .where(eq(materials.topicId, id))
+      .where(and(skola(ucet, materials), eq(materials.topicId, id)))
       .orderBy(asc(materials.fileName)),
-    loadQuestions({ topicIds: [id] }),
-    countQuestions({ topicId: id }),
-    countQuestions({ topicId: id, statuses: ['draft'] }),
+    loadQuestions(ucet, { topicIds: [id] }),
+    countQuestions(ucet, { topicId: id }),
+    countQuestions(ucet, { topicId: id, statuses: ['draft'] }),
     // Zamítnuté se do doplňování počtu nepočítají.
-    countQuestions({ topicId: id, statuses: ['draft', 'approved'] }),
+    countQuestions(ucet, { topicId: id, statuses: ['draft', 'approved'] }),
   ])
   // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
   const usable = materialRows.filter((material) => !material.duplicateOfId)

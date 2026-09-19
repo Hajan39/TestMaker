@@ -4,6 +4,7 @@ import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
 import { buildPuzzleSnapshots, buildQuestionSnapshots, testConditions } from '@/lib/tests'
+import { skola, sRozsahem, viditelnyTest, vlastni, type Prihlaseny } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -26,6 +27,8 @@ const itemSchema = z.object({
 
 const testSchema = z.object({
   title: z.string().min(1).max(200),
+  /** Sdílení s kolegyněmi; výchozí je soukromá písemka. */
+  visibility: z.enum(['soukrome', 'skola']).default('soukrome'),
   description: z.string().max(1000).nullable().default(null),
   graded: z.boolean().default(true),
   templateId: z.string().min(1),
@@ -40,8 +43,9 @@ const testSchema = z.object({
  * (`templateId`) — testů přibývá každý rok a projít je očima přestalo stačit.
  */
 export async function GET(request: Request) {
+  return sRozsahem(async (ucet) => {
   const params = new URL(request.url).searchParams
-  const conditions = testConditions({
+  const conditions = testConditions(ucet, {
     search: params.get('q') ?? undefined,
     templateId: params.get('templateId') ?? undefined,
   })
@@ -54,6 +58,9 @@ export async function GET(request: Request) {
       createdAt: tests.createdAt,
       updatedAt: tests.updatedAt,
       templateName: templates.name,
+      /** Vlastní, nebo nasdílená kolegyní — v seznamu to musí být poznat. */
+      mine: sql<boolean>`${tests.ownerId} = ${ucet.userId}`,
+      visibility: tests.visibility,
       itemCount: sql<number>`(select count(*) from ${testItems} where ${testItems.testId} = ${tests.id})`,
     })
     .from(tests)
@@ -61,6 +68,7 @@ export async function GET(request: Request) {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(tests.updatedAt))
   return Response.json({ tests: rows })
+  })
 }
 
 /**
@@ -71,20 +79,28 @@ export async function GET(request: Request) {
  * pořizovaly znovu z banky, dostala by kopie dnešní znění otázek místo toho,
  * co se tehdy tisklo, a k loňské písemce by už nešlo vyrobit stejný klíč.
  */
-async function copyTest(sourceId: string): Promise<Response> {
-  const [source] = await db.select().from(tests).where(eq(tests.id, sourceId)).limit(1)
+async function copyTest(ucet: Prihlaseny, sourceId: string): Promise<Response> {
+  // Kopírovat jde i nasdílená písemka kolegyně; kopie je pak moje a soukromá.
+  const [source] = await db
+    .select()
+    .from(tests)
+    .where(and(eq(tests.id, sourceId), viditelnyTest(ucet, tests)))
+    .limit(1)
   if (!source) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
 
   const items = await db
     .select()
     .from(testItems)
-    .where(eq(testItems.testId, sourceId))
+    .where(and(skola(ucet, testItems), eq(testItems.testId, sourceId)))
     .orderBy(asc(testItems.position))
 
   const id = newId()
   const now = new Date().toISOString()
   await db.insert(tests).values({
     id,
+    schoolId: ucet.schoolId,
+    ownerId: ucet.userId,
+    visibility: 'soukrome',
     title: `${source.title} (kopie)`,
     description: source.description,
     graded: source.graded,
@@ -100,6 +116,7 @@ async function copyTest(sourceId: string): Promise<Response> {
     await db.insert(testItems).values(
       items.map((item) => ({
         id: newId(),
+        schoolId: ucet.schoolId,
         testId: id,
         position: item.position,
         kind: item.kind,
@@ -121,26 +138,34 @@ async function copyTest(sourceId: string): Promise<Response> {
 
 /** Založí test i s položkami; s `?copyOf=<id>` udělá kopii existujícího. */
 export async function POST(request: Request) {
-  const copyOf = new URL(request.url).searchParams.get('copyOf')
-  // Kopie se pozná podle adresy a tělo požadavku nemá — čte se proto až tady,
-  // po odbočce.
-  if (copyOf) return copyTest(copyOf)
+  return sRozsahem(
+    async (ucet) => {
+      const copyOf = new URL(request.url).searchParams.get('copyOf')
+      // Kopie se pozná podle adresy a tělo požadavku nemá — čte se proto až
+      // tady, po odbočce.
+      if (copyOf) return copyTest(ucet, copyOf)
 
-  const parsed = testSchema.safeParse(await request.json())
-  if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
-  }
-  const id = newId()
-  const { items, ...test } = parsed.data
+      const parsed = testSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+      }
+      const id = newId()
+      const { items, ...test } = parsed.data
 
-  await db.insert(tests).values({ id, ...test })
-  await writeItems(id, items)
+      await db.insert(tests).values({ id, schoolId: ucet.schoolId, ownerId: ucet.userId, ...test })
+      const problem = await writeItems(ucet, id, items)
+      if (problem) return problem
 
-  return Response.json({ id })
+      return Response.json({ id })
+    },
+    { zapis: true },
+  )
 }
 
 /** Přepíše test i celý seznam položek. */
 export async function PUT(request: Request) {
+  return sRozsahem(
+    async (ucet) => {
   const schema = testSchema.extend({ id: z.string().min(1) })
   const parsed = schema.safeParse(await request.json())
   if (!parsed.success) {
@@ -148,10 +173,14 @@ export async function PUT(request: Request) {
   }
   const { id, items, ...test } = parsed.data
 
-  await db
+  // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
+  // ne přepsat.
+  const zmeneno = await db
     .update(tests)
     .set({ ...test, updatedAt: new Date().toISOString() })
-    .where(eq(tests.id, id))
+    .where(and(eq(tests.id, id), vlastni(ucet, tests)))
+    .returning({ id: tests.id })
+  if (zmeneno.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
   // Snímky zmizelých otázek se musí načíst dřív, než se staré položky smažou.
   const existing = await db
     .select({
@@ -160,7 +189,7 @@ export async function PUT(request: Request) {
       puzzleSnapshot: testItems.puzzleSnapshot,
     })
     .from(testItems)
-    .where(eq(testItems.testId, id))
+    .where(and(skola(ucet, testItems), eq(testItems.testId, id)))
   const keptSnapshots = new Map(
     existing.filter((row) => row.questionSnapshot).map((row) => [row.id, row.questionSnapshot as string]),
   )
@@ -168,43 +197,67 @@ export async function PUT(request: Request) {
     existing.filter((row) => row.puzzleSnapshot).map((row) => [row.id, row.puzzleSnapshot as string]),
   )
 
-  await db.delete(testItems).where(eq(testItems.testId, id))
-  await writeItems(id, items, keptSnapshots, keptPuzzleSnapshots)
+  await db.delete(testItems).where(and(skola(ucet, testItems), eq(testItems.testId, id)))
+  const problem = await writeItems(ucet, id, items, keptSnapshots, keptPuzzleSnapshots)
+  if (problem) return problem
 
   return Response.json({ id })
+    },
+    { zapis: true },
+  )
 }
 
 export async function DELETE(request: Request) {
-  const id = new URL(request.url).searchParams.get('id')
-  if (!id) return Response.json({ error: 'Chybí id' }, { status: 400 })
-  await db.delete(tests).where(eq(tests.id, id))
-  return Response.json({ ok: true })
+  return sRozsahem(
+    async (ucet) => {
+      const id = new URL(request.url).searchParams.get('id')
+      if (!id) return Response.json({ error: 'Chybí id' }, { status: 400 })
+      await db.delete(tests).where(and(eq(tests.id, id), vlastni(ucet, tests)))
+      return Response.json({ ok: true })
+    },
+    { zapis: true },
+  )
 }
 
+/**
+ * Uloží položky testu. Vrací odpověď, jen když se něco odmítlo — jinak
+ * `null` a volající pokračuje.
+ */
 async function writeItems(
+  ucet: Prihlaseny,
   testId: string,
   items: z.infer<typeof itemSchema>[],
   keptSnapshots: Map<string, string> = new Map(),
   keptPuzzleSnapshots: Map<string, string> = new Map(),
-): Promise<void> {
-  if (items.length === 0) return
+): Promise<Response | null> {
+  if (items.length === 0) return null
 
   // Snímek se pořizuje tady na serveru z aktuálního obsahu banky. Klient ho
   // neposílá — jinak by šlo do hotové písemky podstrčit cokoli.
   const snapshots = await buildQuestionSnapshots(
+    ucet,
     items
       .filter((item) => item.kind === 'question')
       .map((item) => item.questionId)
       .filter((id): id is string => Boolean(id)),
   )
 
-  // Totéž pro hlavolam: co se zařadilo do písemky, drží snímek.
-  const puzzleSnapshots = await buildPuzzleSnapshots(
-    items
-      .filter((item) => item.kind === 'puzzle')
-      .map((item) => item.puzzleId)
-      .filter((id): id is string => Boolean(id)),
+  // Totéž pro hlavolam: co se zařadilo do písemky, drží snímek. Zmrazit jde
+  // ale jen vlastní hlavolam — cizí se sem nedostane ani uhodnutým id.
+  const zadaneHlavolamy = items
+    .filter((item) => item.kind === 'puzzle')
+    .map((item) => item.puzzleId)
+    .filter((id): id is string => Boolean(id))
+  const puzzleSnapshots = await buildPuzzleSnapshots(ucet, zadaneHlavolamy)
+  const cizi = zadaneHlavolamy.filter(
+    (id) => !puzzleSnapshots.has(id) && !keptPuzzleSnapshots.has(id),
   )
+  if (cizi.length > 0) {
+    return Response.json(
+      { error: 'Do písemky jde zařadit jen vlastní hlavolam.' },
+      { status: 403 },
+    )
+  }
 
   await db.insert(testItems).values(
     items.map((item, index) => {
@@ -212,6 +265,7 @@ async function writeItems(
       const puzzleId = item.kind === 'puzzle' ? item.puzzleId : null
       return {
         id: newId(),
+        schoolId: ucet.schoolId,
         testId,
         position: index,
         kind: item.kind,
@@ -233,4 +287,5 @@ async function writeItems(
       }
     }),
   )
+  return null
 }

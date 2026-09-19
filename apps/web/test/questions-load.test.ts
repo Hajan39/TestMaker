@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { AVOID_LIMIT } from '@testmaker/core/ai'
 import { db, questions } from '@/db'
 import { QUESTION_LIST_LIMIT, loadAvoidPrompts, loadQuestions } from '@/lib/questions'
-import { seedQuestion, seedTopic } from './helpers'
+import { seedQuestion, seedTopic, UCET } from './helpers'
 
 /**
  * Načítání otázek pro obrazovku tématu a pro seznam „těmhle se vyhni".
@@ -29,7 +29,7 @@ describe('seznam otázek tématu', () => {
     const { topicId } = await seedTopic()
     await seedSequence(topicId, ['První', 'Druhá'])
 
-    const list = await loadQuestions({ topicIds: [topicId] })
+    const list = await loadQuestions(UCET, { topicIds: [topicId] })
     expect(list.items).toHaveLength(2)
     expect(list.truncated).toBe(false)
     expect(list.limit).toBe(QUESTION_LIST_LIMIT)
@@ -39,7 +39,7 @@ describe('seznam otázek tématu', () => {
     const { topicId } = await seedTopic()
     await seedSequence(topicId, ['První', 'Druhá', 'Třetí'])
 
-    const list = await loadQuestions({ topicIds: [topicId], limit: 2 })
+    const list = await loadQuestions(UCET, { topicIds: [topicId], limit: 2 })
     expect(list.items).toHaveLength(2)
     expect(list.truncated).toBe(true)
     expect(list.limit).toBe(2)
@@ -49,7 +49,7 @@ describe('seznam otázek tématu', () => {
     const { topicId } = await seedTopic()
     await seedSequence(topicId, ['Nejstarší', 'Prostřední', 'Nejnovější'])
 
-    const list = await loadQuestions({ topicIds: [topicId] })
+    const list = await loadQuestions(UCET, { topicIds: [topicId] })
     expect(list.items.map((item) => (item.payload as { prompt: string }).prompt)).toEqual([
       'Nejnovější',
       'Prostřední',
@@ -61,7 +61,7 @@ describe('seznam otázek tématu', () => {
     const { topicId } = await seedTopic()
     await seedSequence(topicId, ['První', 'Druhá'])
 
-    const list = await loadQuestions({ topicIds: [topicId], limit: 2 })
+    const list = await loadQuestions(UCET, { topicIds: [topicId], limit: 2 })
     expect(list.truncated).toBe(false)
   })
 })
@@ -71,7 +71,7 @@ describe('seznam „těmhle otázkám se vyhni"', () => {
     const { topicId } = await seedTopic()
     await seedSequence(topicId, ['Nejstarší', 'Prostřední', 'Nejnovější'])
 
-    const avoid = await loadAvoidPrompts(topicId, 2)
+    const avoid = await loadAvoidPrompts(UCET, topicId, 2)
     expect(avoid).toEqual(['Nejnovější', 'Prostřední'])
   })
 
@@ -82,7 +82,7 @@ describe('seznam „těmhle otázkám se vyhni"', () => {
       Array.from({ length: 5 }, (_, index) => `Otázka ${index}`),
     )
 
-    const avoid = await loadAvoidPrompts(topicId)
+    const avoid = await loadAvoidPrompts(UCET, topicId)
     // Prompt seznam ořezává na `AVOID_LIMIT`; načítat víc nemá smysl, protože
     // o zahozených položkách by rozhodovalo pořadí řádků v databázi.
     expect(avoid.length).toBeLessThanOrEqual(AVOID_LIMIT)
@@ -95,6 +95,6 @@ describe('seznam „těmhle otázkám se vyhni"', () => {
     await seedSequence(topicId, ['Naše'])
     await seedSequence(jine.topicId, ['Cizí'])
 
-    expect(await loadAvoidPrompts(topicId)).toEqual(['Naše'])
+    expect(await loadAvoidPrompts(UCET, topicId)).toEqual(['Naše'])
   })
 })

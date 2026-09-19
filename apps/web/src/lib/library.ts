@@ -2,7 +2,14 @@ import 'server-only'
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { findMatchingTopic, preferredTopicName } from '@testmaker/core/extract'
 import { db, grades, materials, questions, subjects, topics } from '@/db'
+import { skola, type Scope } from './uzivatel'
 import { newId } from './ids'
+
+/**
+ * Knihovna je společná pro celou školu, ale nikdy ne napříč školami. Rozsah
+ * proto chodí jako první parametr každé funkce v tomhle modulu: kdo ho
+ * zapomene předat, neprojde překladem.
+ */
 
 export interface TopicNode {
   id: string
@@ -28,14 +35,27 @@ export interface SubjectNode {
 }
 
 /** Celý strom Předmět → Ročník → Téma s počty materiálů a otázek. */
-export async function loadLibraryTree(): Promise<SubjectNode[]> {
+export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
   const [subjectRows, gradeRows, topicRows, materialCounts, questionCounts] = await Promise.all([
-    db.select().from(subjects).orderBy(asc(subjects.position), asc(subjects.name)),
-    db.select().from(grades).orderBy(asc(grades.position), asc(grades.name)),
-    db.select().from(topics).orderBy(asc(topics.position), asc(topics.name)),
+    db
+      .select()
+      .from(subjects)
+      .where(skola(scope, subjects))
+      .orderBy(asc(subjects.position), asc(subjects.name)),
+    db
+      .select()
+      .from(grades)
+      .where(skola(scope, grades))
+      .orderBy(asc(grades.position), asc(grades.name)),
+    db
+      .select()
+      .from(topics)
+      .where(skola(scope, topics))
+      .orderBy(asc(topics.position), asc(topics.name)),
     db
       .select({ topicId: materials.topicId, value: count() })
       .from(materials)
+      .where(skola(scope, materials))
       .groupBy(materials.topicId),
     db
       .select({
@@ -45,6 +65,7 @@ export async function loadLibraryTree(): Promise<SubjectNode[]> {
         draft: sql<number>`sum(case when ${questions.status} = 'draft' then 1 else 0 end)`,
       })
       .from(questions)
+      .where(skola(scope, questions))
       .groupBy(questions.topicId),
   ])
 
@@ -104,7 +125,7 @@ function foldForSearch(value: string): string {
  * tématu, tak v názvech materiálů: u témat typu „PL - potravní řetězce“ bývá
  * název souboru výmluvnější než název tématu.
  */
-export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {
+export async function searchLibrary(scope: Scope, query: string): Promise<LibrarySearchResult[]> {
   const needle = foldForSearch(query.trim())
   if (needle.length < 2) return []
 
@@ -119,8 +140,12 @@ export async function searchLibrary(query: string): Promise<LibrarySearchResult[
       .from(topics)
       .innerJoin(grades, eq(grades.id, topics.gradeId))
       .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+      .where(skola(scope, topics))
       .orderBy(asc(subjects.position), asc(grades.position), asc(topics.position)),
-    db.select({ topicId: materials.topicId, fileName: materials.fileName }).from(materials),
+    db
+      .select({ topicId: materials.topicId, fileName: materials.fileName })
+      .from(materials)
+      .where(skola(scope, materials)),
   ])
 
   const fileNamesByTopic = new Map<string, string[]>()
@@ -152,28 +177,44 @@ export async function searchLibrary(query: string): Promise<LibrarySearchResult[
  * založit i samotný předmět bez ročníku a tématu. `ensureTopic` je jen skládá
  * dohromady — jiná cesta k založení položky v knihovně neexistuje.
  */
-export async function ensureSubject(name: string): Promise<string> {
+export async function ensureSubject(scope: Scope, name: string): Promise<string> {
   const subjectName = name.trim()
   return upsertReturningId(
-    () => db.select({ id: subjects.id }).from(subjects).where(eq(subjects.name, subjectName)).limit(1),
-    (id) => db.insert(subjects).values({ id, name: subjectName }).onConflictDoNothing(),
+    () =>
+      db
+        .select({ id: subjects.id })
+        .from(subjects)
+        .where(and(skola(scope, subjects), eq(subjects.name, subjectName)))
+        .limit(1),
+    (id) =>
+      db
+        .insert(subjects)
+        .values({ id, schoolId: scope.schoolId, createdBy: scope.userId, name: subjectName })
+        .onConflictDoNothing(),
   )
 }
 
 /** Najde nebo založí ročník daného názvu v předmětu. Prázdný název znamená „bez ročníku“. */
-export async function ensureGradeIn(subjectId: string, name: string): Promise<string> {
+export async function ensureGradeIn(scope: Scope, subjectId: string, name: string): Promise<string> {
   const gradeName = name.trim()
   return upsertReturningId(
     () =>
       db
         .select({ id: grades.id })
         .from(grades)
-        .where(and(eq(grades.subjectId, subjectId), eq(grades.name, gradeName)))
+        .where(and(skola(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, gradeName)))
         .limit(1),
     (id) =>
       db
         .insert(grades)
-        .values({ id, subjectId, name: gradeName, position: gradePosition(gradeName) })
+        .values({
+          id,
+          schoolId: scope.schoolId,
+          createdBy: scope.userId,
+          subjectId,
+          name: gradeName,
+          position: gradePosition(gradeName),
+        })
         .onConflictDoNothing(),
   )
 }
@@ -186,6 +227,7 @@ export async function ensureGradeIn(subjectId: string, name: string): Promise<st
  * zakládání se slučování vypíná: co učitelka napíše, má vzniknout přesně tak.
  */
 export async function ensureTopicIn(
+  scope: Scope,
   gradeId: string,
   name: string,
   options: { group?: boolean } = {},
@@ -195,7 +237,7 @@ export async function ensureTopicIn(
   const [exact] = await db
     .select({ id: topics.id })
     .from(topics)
-    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
+    .where(and(skola(scope, topics), eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
     .limit(1)
   if (exact) return exact.id
 
@@ -203,7 +245,7 @@ export async function ensureTopicIn(
     const siblings = await db
       .select({ id: topics.id, name: topics.name })
       .from(topics)
-      .where(eq(topics.gradeId, gradeId))
+      .where(and(skola(scope, topics), eq(topics.gradeId, gradeId)))
     const match = findMatchingTopic(siblings, topicName)
     if (match) {
       // Stručnější z obou názvů popisuje skupinu lépe.
@@ -220,12 +262,20 @@ export async function ensureTopicIn(
   // `lowContent` to musí říct rovnou, ne až po prvním přepočtu.
   await db
     .insert(topics)
-    .values({ id, gradeId, name: topicName, usableCharCount: 0, lowContent: true })
+    .values({
+      id,
+      schoolId: scope.schoolId,
+      createdBy: scope.userId,
+      gradeId,
+      name: topicName,
+      usableCharCount: 0,
+      lowContent: true,
+    })
     .onConflictDoNothing()
   const [created] = await db
     .select({ id: topics.id })
     .from(topics)
-    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
+    .where(and(skola(scope, topics), eq(topics.gradeId, gradeId), eq(topics.name, topicName)))
     .limit(1)
   return created?.id ?? id
 }
@@ -237,15 +287,18 @@ export async function ensureTopicIn(
  * obsahovým názvem. Jedno téma je skupina materiálů, ze které se pak generuje
  * dohromady.
  */
-export async function ensureTopic(input: {
-  subject: string
-  grade: string | null
-  topic: string
-  group?: boolean
-}): Promise<string> {
-  const subjectId = await ensureSubject(input.subject)
-  const gradeId = await ensureGradeIn(subjectId, input.grade ?? '')
-  return ensureTopicIn(gradeId, input.topic, { group: input.group })
+export async function ensureTopic(
+  scope: Scope,
+  input: {
+    subject: string
+    grade: string | null
+    topic: string
+    group?: boolean
+  },
+): Promise<string> {
+  const subjectId = await ensureSubject(scope, input.subject)
+  const gradeId = await ensureGradeIn(scope, subjectId, input.grade ?? '')
+  return ensureTopicIn(scope, gradeId, input.topic, { group: input.group })
 }
 
 /** Ročník řadíme číselně, prázdný ("bez ročníku") jde první. */
@@ -296,19 +349,22 @@ const KIND_LABEL: Record<LibraryKind, string> = {
  * Ročník bez předmětu ani téma bez ročníku neexistují — chybějící nadřazená
  * položka je odmítnutí s vysvětlením, ne pád.
  */
-export async function createLibraryItem(input: {
-  kind: LibraryKind
-  name: string
-  parentId?: string | null
-}): Promise<LibraryResult> {
+export async function createLibraryItem(
+  scope: Scope,
+  input: {
+    kind: LibraryKind
+    name: string
+    parentId?: string | null
+  },
+): Promise<LibraryResult> {
   const name = input.name.trim()
   if (!name) return { ok: false, status: 400, error: `${KIND_LABEL[input.kind]} se bez názvu založit nedá.` }
 
   if (input.kind === 'subject') {
-    if (await findSubjectByName(name)) {
+    if (await findSubjectByName(scope, name)) {
       return { ok: false, status: 409, error: `Předmět „${name}“ v knihovně už je.` }
     }
-    return { ok: true, id: await ensureSubject(name) }
+    return { ok: true, id: await ensureSubject(scope, name) }
   }
 
   if (input.kind === 'grade') {
@@ -322,15 +378,15 @@ export async function createLibraryItem(input: {
     const [subject] = await db
       .select({ id: subjects.id })
       .from(subjects)
-      .where(eq(subjects.id, input.parentId))
+      .where(and(skola(scope, subjects), eq(subjects.id, input.parentId)))
       .limit(1)
     if (!subject) {
       return { ok: false, status: 404, error: 'Předmět, do kterého měl ročník patřit, v knihovně není.' }
     }
-    if (await findGradeByName(subject.id, name)) {
+    if (await findGradeByName(scope, subject.id, name)) {
       return { ok: false, status: 409, error: `Ročník „${name}“ v tomto předmětu už je.` }
     }
-    return { ok: true, id: await ensureGradeIn(subject.id, name) }
+    return { ok: true, id: await ensureGradeIn(scope, subject.id, name) }
   }
 
   if (!input.parentId) {
@@ -343,15 +399,15 @@ export async function createLibraryItem(input: {
   const [grade] = await db
     .select({ id: grades.id })
     .from(grades)
-    .where(eq(grades.id, input.parentId))
+    .where(and(skola(scope, grades), eq(grades.id, input.parentId)))
     .limit(1)
   if (!grade) {
     return { ok: false, status: 404, error: 'Ročník, do kterého mělo téma patřit, v knihovně není.' }
   }
-  if (await findTopicByName(grade.id, name)) {
+  if (await findTopicByName(scope, grade.id, name)) {
     return { ok: false, status: 409, error: `Téma „${name}“ v tomto ročníku už je.` }
   }
-  return { ok: true, id: await ensureTopicIn(grade.id, name, { group: false }) }
+  return { ok: true, id: await ensureTopicIn(scope, grade.id, name, { group: false }) }
 }
 
 /**
@@ -361,11 +417,14 @@ export async function createLibraryItem(input: {
  * nejsou možné (brání tomu unikátní index) — místo chyby z databáze se vrací
  * odmítnutí s návodem, co s tím.
  */
-export async function renameLibraryItem(input: {
-  kind: LibraryKind
-  id: string
-  name: string
-}): Promise<LibraryResult> {
+export async function renameLibraryItem(
+  scope: Scope,
+  input: {
+    kind: LibraryKind
+    id: string
+    name: string
+  },
+): Promise<LibraryResult> {
   const name = input.name.trim()
   if (!name) return { ok: false, status: 400, error: 'Název nesmí zůstat prázdný.' }
 
@@ -373,12 +432,12 @@ export async function renameLibraryItem(input: {
     const [subject] = await db
       .select({ id: subjects.id, name: subjects.name })
       .from(subjects)
-      .where(eq(subjects.id, input.id))
+      .where(and(skola(scope, subjects), eq(subjects.id, input.id)))
       .limit(1)
     if (!subject) return { ok: false, status: 404, error: 'Předmět v knihovně není.' }
     if (subject.name === name) return { ok: true, id: subject.id }
 
-    const duplicate = await findSubjectByName(name)
+    const duplicate = await findSubjectByName(scope, name)
     if (duplicate && duplicate.id !== subject.id) {
       return {
         ok: false,
@@ -394,12 +453,12 @@ export async function renameLibraryItem(input: {
     const [grade] = await db
       .select({ id: grades.id, name: grades.name, subjectId: grades.subjectId })
       .from(grades)
-      .where(eq(grades.id, input.id))
+      .where(and(skola(scope, grades), eq(grades.id, input.id)))
       .limit(1)
     if (!grade) return { ok: false, status: 404, error: 'Ročník v knihovně není.' }
     if (grade.name === name) return { ok: true, id: grade.id }
 
-    const duplicate = await findGradeByName(grade.subjectId, name)
+    const duplicate = await findGradeByName(scope, grade.subjectId, name)
     if (duplicate && duplicate.id !== grade.id) {
       return {
         ok: false,
@@ -419,12 +478,12 @@ export async function renameLibraryItem(input: {
   const [topic] = await db
     .select({ id: topics.id, name: topics.name, gradeId: topics.gradeId })
     .from(topics)
-    .where(eq(topics.id, input.id))
+    .where(and(skola(scope, topics), eq(topics.id, input.id)))
     .limit(1)
   if (!topic) return { ok: false, status: 404, error: 'Téma v knihovně není.' }
   if (topic.name === name) return { ok: true, id: topic.id }
 
-  const duplicate = await findTopicByName(topic.gradeId, name)
+  const duplicate = await findTopicByName(scope, topic.gradeId, name)
   if (duplicate && duplicate.id !== topic.id) {
     return {
       ok: false,
@@ -436,31 +495,43 @@ export async function renameLibraryItem(input: {
   return { ok: true, id: topic.id }
 }
 
-async function findSubjectByName(name: string): Promise<{ id: string } | undefined> {
-  const [row] = await db.select({ id: subjects.id }).from(subjects).where(eq(subjects.name, name)).limit(1)
-  return row
-}
-
-async function findGradeByName(subjectId: string, name: string): Promise<{ id: string } | undefined> {
+async function findSubjectByName(scope: Scope, name: string): Promise<{ id: string } | undefined> {
   const [row] = await db
-    .select({ id: grades.id })
-    .from(grades)
-    .where(and(eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .select({ id: subjects.id })
+    .from(subjects)
+    .where(and(skola(scope, subjects), eq(subjects.name, name)))
     .limit(1)
   return row
 }
 
-async function findTopicByName(gradeId: string, name: string): Promise<{ id: string } | undefined> {
+async function findGradeByName(
+  scope: Scope,
+  subjectId: string,
+  name: string,
+): Promise<{ id: string } | undefined> {
+  const [row] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(and(skola(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .limit(1)
+  return row
+}
+
+async function findTopicByName(
+  scope: Scope,
+  gradeId: string,
+  name: string,
+): Promise<{ id: string } | undefined> {
   const [row] = await db
     .select({ id: topics.id })
     .from(topics)
-    .where(and(eq(topics.gradeId, gradeId), eq(topics.name, name)))
+    .where(and(skola(scope, topics), eq(topics.gradeId, gradeId), eq(topics.name, name)))
     .limit(1)
   return row
 }
 
 /** Názvy témat pro zobrazení u otázek. */
-export async function topicLabels(topicIds: string[]): Promise<Map<string, string>> {
+export async function topicLabels(scope: Scope, topicIds: string[]): Promise<Map<string, string>> {
   if (topicIds.length === 0) return new Map()
   const rows = await db
     .select({
@@ -472,7 +543,7 @@ export async function topicLabels(topicIds: string[]): Promise<Map<string, strin
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(inArray(topics.id, topicIds))
+    .where(and(skola(scope, topics), inArray(topics.id, topicIds)))
 
   return new Map(
     rows.map((row) => [row.id, [row.subject, row.grade, row.topic].filter(Boolean).join(' · ')]),

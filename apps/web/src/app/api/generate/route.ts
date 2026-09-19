@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
+import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -17,6 +18,7 @@ const bodySchema = z.object({
 
 /** Streamuje průběh generování jako text, aby UI vidělo postup u dlouhých materiálů. */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
     return Response.json({ error: 'AI není nakonfigurovaná — doplň ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN nebo GOOGLE_GENERATIVE_AI_API_KEY' }, { status: 503 })
   }
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
 
   // Rezervace tématu: dvě generování naráz nad týmž tématem by o sobě nevěděla
   // a vyrobila by tytéž otázky dvakrát.
-  const jobId = await claimTopic(parsed.data.topicId)
+  const jobId = await claimTopic(ucet, parsed.data.topicId)
   if (!jobId) {
     return Response.json(
       { error: 'Pro tohle téma už generování běží. Počkej, než doběhne.' },
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
       try {
         send({ type: 'start' })
         const outcome = await generateForTopic(
+          ucet,
           parsed.data.topicId,
           {
             count: parsed.data.count,
@@ -67,6 +70,15 @@ export async function POST(request: Request) {
         // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
         const { message } = describeAiError(error)
         await releaseTopic(jobId, { error: message })
+        await zapsatAudit({
+          schoolId: ucet.schoolId,
+          userId: ucet.userId,
+          action: 'generovani-chyba',
+          entity: 'topic',
+          entityId: parsed.data.topicId,
+          detail: { message },
+          severity: 'chyba',
+        })
         send({ type: 'error', message })
       } finally {
         controller.close()
@@ -77,4 +89,5 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
   })
+  }, { zapis: true })
 }

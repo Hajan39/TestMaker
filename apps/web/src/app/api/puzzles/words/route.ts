@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { PUZZLE_KINDS } from '@testmaker/core/schema'
 import { suggestPuzzleWords } from '@/lib/puzzles'
+import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -19,6 +20,7 @@ const bodySchema = z.object({
  * mřížku skládá kód v prohlížeči i při tisku, model se v ní ztratí.
  */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
     return Response.json(
       {
@@ -35,7 +37,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await suggestPuzzleWords(parsed.data.topicId, {
+    const result = await suggestPuzzleWords(ucet, parsed.data.topicId, {
       kind: parsed.data.kind,
       count: parsed.data.count,
       avoid: parsed.data.avoid,
@@ -47,4 +49,5 @@ export async function POST(request: Request) {
     const { message } = describeAiError(error)
     return Response.json({ error: message }, { status: 502 })
   }
+  }, { zapis: true })
 }

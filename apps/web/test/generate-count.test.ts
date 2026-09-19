@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_GENERATE_PARAMS, resolveCount } from '@/lib/generation'
-import { seedQuestion, seedTopic } from './helpers'
+import { seedQuestion, seedTopic, UCET } from './helpers'
 
 /**
  * Kolik otázek se v běhu vytvoří. Učitelka po kontrole konceptů část zamítne
@@ -12,7 +12,7 @@ describe('počet otázek v jednom běhu', () => {
     const { topicId } = await seedTopic()
     await seedQuestion(topicId)
 
-    const count = await resolveCount(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 8 })
+    const count = await resolveCount(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 8 })
     expect(count).toBe(8)
   })
 
@@ -21,7 +21,7 @@ describe('počet otázek v jednom běhu', () => {
     await seedQuestion(topicId, { status: 'approved' })
     await seedQuestion(topicId, { status: 'draft' })
 
-    const count = await resolveCount(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 10, mode: 'target' })
+    const count = await resolveCount(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 10, mode: 'target' })
     expect(count).toBe(8)
   })
 
@@ -31,7 +31,7 @@ describe('počet otázek v jednom běhu', () => {
     await seedQuestion(topicId, { status: 'rejected' })
     await seedQuestion(topicId, { status: 'rejected' })
 
-    const count = await resolveCount(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 5, mode: 'target' })
+    const count = await resolveCount(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 5, mode: 'target' })
     expect(count).toBe(4)
   })
 
@@ -40,14 +40,14 @@ describe('počet otázek v jednom běhu', () => {
     await seedQuestion(topicId)
     await seedQuestion(topicId)
 
-    const count = await resolveCount(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 2, mode: 'target' })
+    const count = await resolveCount(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 2, mode: 'target' })
     expect(count).toBe(0)
   })
 
   it('prázdné téma doplní celý zadaný počet', async () => {
     const { topicId } = await seedTopic()
 
-    const count = await resolveCount(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 12, mode: 'target' })
+    const count = await resolveCount(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 12, mode: 'target' })
     expect(count).toBe(12)
   })
 })

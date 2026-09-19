@@ -1,7 +1,46 @@
 import { BUILT_IN_TEMPLATES, type QuestionType } from '@testmaker/core/schema'
-import { db, grades, materials, questions, subjects, templates, topics } from '@/db'
+import { db, grades, materials, questions, subjects, templates, topics, users } from '@/db'
 import { newId } from '@/lib/ids'
 import { searchTextFor } from '@/lib/questions'
+import type { Prihlaseny } from '@/lib/uzivatel'
+import { TEST_SKOLA_ID, TEST_UCET_ID } from './setup'
+
+/**
+ * Účet, pod kterým testy volají funkce knihovny. Odpovídá tomu, co aplikace
+ * sama použije, když je přihlašování vypnuté.
+ */
+export const UCET: Prihlaseny = {
+  schoolId: TEST_SKOLA_ID,
+  userId: TEST_UCET_ID,
+  role: 'spravce',
+  jmeno: 'Testovací správce',
+  email: 'test@localhost',
+  skola: 'Testovací škola',
+  sid: 'bez-prihlaseni',
+  mustChangePassword: false,
+}
+
+/** Účet druhé učitelky — pro testy, že cizí obsah není vidět. */
+export async function seedUcet(options: { role?: 'ucitelka' | 'spravce' | 'nahled' } = {}): Promise<Prihlaseny> {
+  const id = newId()
+  await db.insert(users).values({
+    id,
+    schoolId: TEST_SKOLA_ID,
+    email: `${id}@localhost`,
+    name: `Učitelka ${id}`,
+    role: options.role ?? 'ucitelka',
+  })
+  return {
+    schoolId: TEST_SKOLA_ID,
+    userId: id,
+    role: options.role ?? 'ucitelka',
+    jmeno: `Učitelka ${id}`,
+    email: `${id}@localhost`,
+    skola: 'Testovací škola',
+    sid: 'bez-prihlaseni',
+    mustChangePassword: false,
+  }
+}
 
 /** Požadavek na route handler — ty berou obyčejný `Request`. */
 export function req(url: string, init?: RequestInit): Request {
@@ -25,6 +64,7 @@ export async function seedTemplate(slug = 'klasicka'): Promise<string> {
     .insert(templates)
     .values({
       id,
+      schoolId: TEST_SKOLA_ID,
       slug: builtIn.slug,
       name: builtIn.name,
       description: builtIn.description,
@@ -52,9 +92,15 @@ export async function seedTopic(options: {
   const gradeId = newId()
   const topicId = newId()
 
-  await db.insert(subjects).values({ id: subjectId, name: options.subject ?? `Předmět ${subjectId}` })
-  await db.insert(grades).values({ id: gradeId, subjectId, name: options.grade ?? '8. ročník' })
-  await db.insert(topics).values({ id: topicId, gradeId, name: options.topic ?? `Téma ${topicId}` })
+  await db
+    .insert(subjects)
+    .values({ id: subjectId, schoolId: TEST_SKOLA_ID, name: options.subject ?? `Předmět ${subjectId}` })
+  await db
+    .insert(grades)
+    .values({ id: gradeId, schoolId: TEST_SKOLA_ID, subjectId, name: options.grade ?? '8. ročník' })
+  await db
+    .insert(topics)
+    .values({ id: topicId, schoolId: TEST_SKOLA_ID, gradeId, name: options.topic ?? `Téma ${topicId}` })
 
   return { subjectId, gradeId, topicId }
 }
@@ -69,6 +115,7 @@ export async function seedMaterial(
   const text = options.text ?? 'Nějaký text materiálu. '.repeat(10)
   await db.insert(materials).values({
     id,
+    schoolId: TEST_SKOLA_ID,
     topicId,
     fileName,
     relativePath: `Předmět/8. ročník/${fileName}`,
@@ -101,6 +148,8 @@ export async function seedQuestion(
   }
   await db.insert(questions).values({
     id,
+    schoolId: TEST_SKOLA_ID,
+    createdBy: TEST_UCET_ID,
     topicId,
     materialId: null,
     type: options.type ?? 'single_choice',

@@ -4,7 +4,7 @@ import { DELETE, GET, PATCH, POST } from '@/app/api/library/route'
 import { POST as createTest } from '@/app/api/tests/route'
 import { db, grades, materials, questions, subjects, testItems, topics } from '@/db'
 import { loadLibraryTree } from '@/lib/library'
-import { jsonReq, req, seedMaterial, seedQuestion, seedTemplate, seedTopic } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 interface Impact {
   name: string
@@ -39,7 +39,7 @@ describe('náhled dopadu smazání', () => {
   it('u předmětu sečte i ročníky a témata pod ním', async () => {
     const { subjectId, gradeId } = await seedTopic({ subject: 'Zeměpis' })
     const second = `${gradeId}-2`
-    await db.insert(topics).values({ id: second, gradeId, name: 'Druhé téma' })
+    await db.insert(topics).values({ id: second, schoolId: UCET.schoolId, gradeId, name: 'Druhé téma' })
     await seedMaterial(second)
 
     const { body } = await impactOf('subject', subjectId)
@@ -196,7 +196,7 @@ describe('ruční zakládání v knihovně', () => {
     const { gradeId } = await seedTopic({ subject: 'Přehledový předmět' })
     const { body } = await create({ kind: 'topic', name: 'Zatím prázdné', parentId: gradeId })
 
-    const tree = await loadLibraryTree()
+    const tree = await loadLibraryTree(UCET)
     const grade = tree.flatMap((subject) => subject.grades).find((row) => row.id === gradeId)
     const topic = grade?.topics.find((row) => row.id === body.id)
     expect(topic).toMatchObject({
@@ -266,7 +266,7 @@ describe('přejmenování v knihovně', () => {
 
     // A panel je vidí ve správném pořadí: nižší ročník napřed.
     await create({ kind: 'grade', name: '3. ročník', parentId: subjectId })
-    const tree = await loadLibraryTree()
+    const tree = await loadLibraryTree(UCET)
     const subject = tree.find((row2) => row2.id === subjectId)
     expect(subject?.grades.map((grade) => grade.name)).toEqual(['3. ročník', '9. ročník'])
   })

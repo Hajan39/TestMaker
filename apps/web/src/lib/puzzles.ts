@@ -15,7 +15,13 @@ import {
 } from '@testmaker/core/schema'
 import { db, grades, materials, puzzles, subjects, templates, topics } from '@/db'
 import type { PuzzleRow } from '@/db'
+import { skola, vlastni, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
+
+/**
+ * Hlavolam je soukromý stejně jako písemka: vidí ho, upraví a vytiskne jen
+ * ta, kdo ho vyrobila. Témata, ze kterých vzniká, jsou naopak společná.
+ */
 
 /** Řádek databáze na hlavolam podle schématu core. */
 export function toPuzzle(row: PuzzleRow): Puzzle {
@@ -40,7 +46,10 @@ export interface PuzzleListItem {
 }
 
 /** Seznam hlavolamů od nejnovějšího; volitelně jen k jednomu tématu. */
-export async function loadPuzzleList(topicId?: string): Promise<PuzzleListItem[]> {
+export async function loadPuzzleList(
+  scope: Scope,
+  options: { topicId?: string } = {},
+): Promise<PuzzleListItem[]> {
   const rows = await db
     .select({
       id: puzzles.id,
@@ -53,7 +62,7 @@ export async function loadPuzzleList(topicId?: string): Promise<PuzzleListItem[]
     })
     .from(puzzles)
     .leftJoin(topics, eq(topics.id, puzzles.topicId))
-    .where(topicId ? eq(puzzles.topicId, topicId) : undefined)
+    .where(and(vlastni(scope, puzzles), options.topicId ? eq(puzzles.topicId, options.topicId) : undefined))
     .orderBy(desc(puzzles.updatedAt))
 
   return rows.map((row) => ({
@@ -77,7 +86,7 @@ export interface PuzzleTopic {
  * Bez materiálů nemá model z čeho slova vytáhnout a učitelka by vybírala
  * z celé knihovny prázdných témat.
  */
-export async function loadPuzzleTopics(): Promise<PuzzleTopic[]> {
+export async function loadPuzzleTopics(scope: Scope): Promise<PuzzleTopic[]> {
   const rows = await db
     .select({
       id: topics.id,
@@ -88,7 +97,7 @@ export async function loadPuzzleTopics(): Promise<PuzzleTopic[]> {
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(gt(topics.usableCharCount, 0))
+    .where(and(skola(scope, topics), gt(topics.usableCharCount, 0)))
     .orderBy(asc(subjects.name), asc(grades.position), asc(topics.name))
 
   return rows.map((row) => ({
@@ -97,19 +106,26 @@ export async function loadPuzzleTopics(): Promise<PuzzleTopic[]> {
   }))
 }
 
-export async function loadPuzzle(id: string): Promise<Puzzle | null> {
-  const [row] = await db.select().from(puzzles).where(eq(puzzles.id, id)).limit(1)
+export async function loadPuzzle(scope: Scope, id: string): Promise<Puzzle | null> {
+  const [row] = await db
+    .select()
+    .from(puzzles)
+    .where(and(vlastni(scope, puzzles), eq(puzzles.id, id)))
+    .limit(1)
   return row ? toPuzzle(row) : null
 }
 
 /** Uloží nový hlavolam a vrátí ho i s metadaty. */
 export async function insertPuzzle(
+  scope: Scope,
   content: PuzzleContent,
   options: { topicId: string | null; model?: string | null },
 ): Promise<Puzzle> {
   const id = newId()
   await db.insert(puzzles).values({
     id,
+    schoolId: scope.schoolId,
+    ownerId: scope.userId,
     topicId: options.topicId,
     kind: content.kind,
     title: content.title,
@@ -118,18 +134,23 @@ export async function insertPuzzle(
     payload: content.payload,
     model: options.model ?? null,
   })
-  const saved = await loadPuzzle(id)
+  const saved = await loadPuzzle(scope, id)
   if (!saved) throw new Error('Hlavolam se nepodařilo uložit')
   return saved
 }
 
 /** Přepíše hlavolam. Vrací `null`, když už v knihovně není. */
 export async function updatePuzzle(
+  scope: Scope,
   id: string,
   content: PuzzleContent,
   options: { topicId?: string | null } = {},
 ): Promise<Puzzle | null> {
-  const [existing] = await db.select().from(puzzles).where(eq(puzzles.id, id)).limit(1)
+  const [existing] = await db
+    .select()
+    .from(puzzles)
+    .where(and(vlastni(scope, puzzles), eq(puzzles.id, id)))
+    .limit(1)
   if (!existing) return null
 
   await db
@@ -143,14 +164,18 @@ export async function updatePuzzle(
       topicId: options.topicId !== undefined ? options.topicId : existing.topicId,
       updatedAt: new Date().toISOString(),
     })
-    .where(eq(puzzles.id, id))
-  return loadPuzzle(id)
+    .where(and(vlastni(scope, puzzles), eq(puzzles.id, id)))
+  return loadPuzzle(scope, id)
 }
 
-export async function deletePuzzle(id: string): Promise<boolean> {
-  const [existing] = await db.select({ id: puzzles.id }).from(puzzles).where(eq(puzzles.id, id)).limit(1)
+export async function deletePuzzle(scope: Scope, id: string): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: puzzles.id })
+    .from(puzzles)
+    .where(and(vlastni(scope, puzzles), eq(puzzles.id, id)))
+    .limit(1)
   if (!existing) return false
-  await db.delete(puzzles).where(eq(puzzles.id, id))
+  await db.delete(puzzles).where(and(vlastni(scope, puzzles), eq(puzzles.id, id)))
   return true
 }
 
@@ -161,15 +186,25 @@ export async function deletePuzzle(id: string): Promise<boolean> {
  * dřív nebo později rozešel s prvním.
  */
 export async function loadRenderablePuzzle(
+  scope: Scope,
   id: string,
   options: { withKey: boolean; templateId?: string },
 ): Promise<RenderableTest | null> {
-  const puzzle = await loadPuzzle(id)
+  const puzzle = await loadPuzzle(scope, id)
   if (!puzzle) return null
 
   const [templateRow] = options.templateId
-    ? await db.select().from(templates).where(eq(templates.id, options.templateId)).limit(1)
-    : await db.select().from(templates).orderBy(asc(templates.position), asc(templates.name)).limit(1)
+    ? await db
+        .select()
+        .from(templates)
+        .where(and(skola(scope, templates), eq(templates.id, options.templateId)))
+        .limit(1)
+    : await db
+        .select()
+        .from(templates)
+        .where(skola(scope, templates))
+        .orderBy(asc(templates.position), asc(templates.name))
+        .limit(1)
   if (!templateRow) return null
 
   // Metadata (id, téma, časy) do obsahu nepatří — schéma je zahodí.
@@ -191,6 +226,8 @@ export async function loadRenderablePuzzle(
   return {
     test: {
       id: `puzzle-${puzzle.id}`,
+      ownerId: scope.userId,
+      visibility: 'soukrome',
       title: puzzle.title,
       description: puzzleInstructions(puzzle),
       // Hlavolam se neznámkuje: políčko na body ani známku na něm nemá co dělat.
@@ -222,6 +259,7 @@ export async function loadRenderablePuzzle(
  * ne z jednoho souboru.
  */
 export async function suggestPuzzleWords(
+  scope: Scope,
   topicId: string,
   options: {
     kind: PuzzleKind
@@ -237,14 +275,14 @@ export async function suggestPuzzleWords(
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(eq(topics.id, topicId))
+    .where(and(skola(scope, topics), eq(topics.id, topicId)))
     .limit(1)
   if (!meta) throw new Error('Téma nenalezeno')
 
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
     .from(materials)
-    .where(and(eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
     .orderBy(asc(materials.fileName))
 
   const text = rows

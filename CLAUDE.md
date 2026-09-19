@@ -78,6 +78,19 @@ svými materiály. Materiál označený jako duplicitní obsah se vynechává.
 **Bez API klíče se nepadá.** Když generování není nakonfigurované, rozhraní ho
 skryje a vysvětlí proč.
 
+**Každý dotaz má rozsah.** Funkce v `apps/web/src/lib/*` berou jako první
+parametr `Scope` (škola, uživatel, role) z `lib/uzivatel.ts` a doplňují ho do
+podmínky (`skola()`, `vlastni()`, `viditelnyTest()`). Knihovna a banka jsou
+společné pro školu, písemky a hlavolamy patří své autorce. Cizí věc se tváří
+jako neexistující — vrací se `null` a 404, ne 403; z odpovědi nemá být poznat,
+že vůbec je. Kontrola v `proxy.ts` je jen hrubé síto podle role, ne
+bezpečnostní hranice: rozhoduje se vždycky až nad databází.
+
+**Do brány se nesmí databáze.** `src/proxy.ts` běží v Edge runtime a smí
+importovat jedině `lib/session.ts`, který sám nesahá na `@/db` ani na
+`node:crypto`. Hlídá to `test/modul-proxy.test.ts`; hesla patří do
+`lib/heslo.ts`, který běží jen v Node.
+
 ## Ověřování
 
 ```bash

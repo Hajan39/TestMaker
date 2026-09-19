@@ -5,6 +5,11 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { afterAll } from 'vitest'
+import { VYCHOZI_UCET_ID } from '../src/lib/vychozi'
+
+/** Škola a účet, které mají všechna testovací data. */
+export const TEST_SKOLA_ID = 'skola-vyvoj'
+export const TEST_UCET_ID = VYCHOZI_UCET_ID
 
 /**
  * Každý testovací soubor dostane vlastní prázdnou databázi v dočasné složce
@@ -34,6 +39,21 @@ delete (globalThis as { __testmakerDb?: unknown }).__testmakerDb
 const client = createClient({ url: `file:${file}` })
 await migrate(drizzle(client), {
   migrationsFolder: resolve(import.meta.dirname, '..', 'drizzle'),
+})
+
+/*
+ * Škola a účet, pod kterým testy pracují. Přihlašování je v testech vypnuté
+ * (není `AUTH_SECRET`), takže se aplikace chová jako na notebooku a sahá po
+ * výchozím účtu — ten ale musí v databázi opravdu být, jinak nemají cizí
+ * klíče u testů, hlavolamů a fronty na co ukazovat.
+ */
+await client.execute({
+  sql: "insert into schools (id, name, slug) values (?, 'Testovací škola', 'test')",
+  args: [TEST_SKOLA_ID],
+})
+await client.execute({
+  sql: "insert into users (id, school_id, email, name, role) values (?, ?, 'test@localhost', 'Testovací správce', 'spravce')",
+  args: [TEST_UCET_ID, TEST_SKOLA_ID],
 })
 client.close()
 

@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
 import { db, generationJobs, questions } from '@/db'
-import { TOPIC_BUSY_MESSAGE, regenerateQuestion } from '@/lib/generation'
+import { topicBusyMessage, regenerateQuestion } from '@/lib/generation'
 import { newId } from '@/lib/ids'
-import { seedMaterial, seedQuestion, seedTopic } from './helpers'
+import { seedMaterial, seedQuestion, seedTopic, UCET } from './helpers'
 
 /** Materiál musí mít dost textu, jinak se generování odmítne ještě před modelem. */
 const TEXT =
@@ -59,7 +59,7 @@ describe('náhrada jedné otázky modelem', () => {
     await seedMaterial(topicId, { text: TEXT })
     const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
 
-    const replacement = await regenerateQuestion(original, { generate: modelVrati })
+    const replacement = await regenerateQuestion(UCET, original, { generate: modelVrati })
 
     expect(replacement.id).not.toBe(original)
     // Náhrada jde do fronty jako koncept — učitelka ji má vidět, než ji pustí do testu.
@@ -77,7 +77,7 @@ describe('náhrada jedné otázky modelem', () => {
     const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
     const pred = await stavy(topicId)
 
-    await expect(regenerateQuestion(original, { generate: modelSelze })).rejects.toThrow(/quota/)
+    await expect(regenerateQuestion(UCET, original, { generate: modelSelze })).rejects.toThrow(/quota/)
 
     const po = await stavy(topicId)
     expect(po).toEqual(pred)
@@ -90,7 +90,7 @@ describe('náhrada jedné otázky modelem', () => {
     await seedMaterial(topicId, { text: TEXT })
     const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
 
-    await expect(regenerateQuestion(original, { generate: modelVratiNic })).rejects.toThrow(
+    await expect(regenerateQuestion(UCET, original, { generate: modelVratiNic })).rejects.toThrow(
       /Model nevrátil použitelnou náhradu/,
     )
 
@@ -106,12 +106,14 @@ describe('náhrada jedné otázky modelem', () => {
 
     await db.insert(generationJobs).values({
       id: newId(),
+      schoolId: UCET.schoolId,
+      requestedBy: UCET.userId,
       topicId,
       params: { count: 5, types: ['single_choice'], difficulty: 'mix' },
       status: 'running',
     })
 
-    await expect(regenerateQuestion(original, { generate: modelVrati })).rejects.toThrow(TOPIC_BUSY_MESSAGE)
+    await expect(regenerateQuestion(UCET, original, { generate: modelVrati })).rejects.toThrow(topicBusyMessage('Testovací správce'))
 
     // Rezervace zůstala jediná — náhrada si téma nezabrala pro sebe.
     const jobs = await db.select().from(generationJobs).where(eq(generationJobs.topicId, topicId))
@@ -121,6 +123,6 @@ describe('náhrada jedné otázky modelem', () => {
 
   it('otázku bez tématu nahradit nejde — nemá se z čeho generovat', async () => {
     const orphan = await seedQuestion(null, { status: 'draft' })
-    await expect(regenerateQuestion(orphan, { generate: modelVrati })).rejects.toThrow(/téma/)
+    await expect(regenerateQuestion(UCET, orphan, { generate: modelVrati })).rejects.toThrow(/téma/)
   })
 })

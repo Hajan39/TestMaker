@@ -14,6 +14,7 @@ import {
 import { announceGeneration } from '@/components/GenerationStatus'
 import { ReviewPanel } from '@/components/ReviewPanel'
 import { generateQuestionsStream } from '@/lib/generateClient'
+import { useMuzeMenit } from '@/components/Prava'
 
 interface MaterialSummary {
   id: string
@@ -53,6 +54,7 @@ export function TopicWorkspace({
   /** Materiály tématu — vykreslí se mezi hlavní akcí a seznamem otázek. */
   group: React.ReactNode
 }) {
+  const muzeMenit = useMuzeMenit()
   const router = useRouter()
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
   const [generating, setGenerating] = useState(false)
@@ -149,7 +151,9 @@ export function TopicWorkspace({
 
   return (
     <div className="space-y-5">
-      {ai.configured ? (
+      {/* Náhled si téma prohlíží a tiskne, ale negeneruje — karta by mu jen
+          nabízela tlačítko, které skončí odmítnutím. */}
+      {ai.configured && muzeMenit ? (
         <Card className="gap-2 p-3">
           {/* Karta byla nadpis, dva odstavce a teprve pak tlačítko. Podstatné
               je jediné: tlačítko, kolik otázek vznikne a kde se to doladí —

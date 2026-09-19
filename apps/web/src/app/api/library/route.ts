@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
 import { createLibraryItem, renameLibraryItem } from '@/lib/library'
+import { sRozsahem, skola, zapsatAudit, type Scope } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -25,14 +26,16 @@ export interface DeletionImpact {
  * o co přijde.
  */
 export async function GET(request: Request) {
-  const params = new URL(request.url).searchParams
-  const kind = kindSchema.safeParse(params.get('kind'))
-  const id = params.get('id')
-  if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
+  return sRozsahem(async (ucet) => {
+    const params = new URL(request.url).searchParams
+    const kind = kindSchema.safeParse(params.get('kind'))
+    const id = params.get('id')
+    if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
 
-  const impact = await measure(kind.data, id)
-  if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
-  return Response.json(impact)
+    const impact = await measure(ucet, kind.data, id)
+    if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
+    return Response.json(impact)
+  })
 }
 
 const createSchema = z.object({
@@ -53,60 +56,103 @@ const renameSchema = z.object({
  * Učitelka si tak může připravit prázdné téma a napsat si do něj vlastní otázky.
  */
 export async function POST(request: Request) {
-  const parsed = createSchema.safeParse(await request.json().catch(() => null))
-  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  return sRozsahem(
+    async (ucet) => {
+      const parsed = createSchema.safeParse(await request.json().catch(() => null))
+      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
 
-  const result = await createLibraryItem(parsed.data)
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
-  return Response.json({ ok: true, id: result.id })
+      const result = await createLibraryItem(ucet, parsed.data)
+      if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
+      return Response.json({ ok: true, id: result.id })
+    },
+    { zapis: true },
+  )
 }
 
 /** Přejmenuje předmět, ročník nebo téma. */
 export async function PATCH(request: Request) {
-  const parsed = renameSchema.safeParse(await request.json().catch(() => null))
-  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  return sRozsahem(
+    async (ucet) => {
+      const parsed = renameSchema.safeParse(await request.json().catch(() => null))
+      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
 
-  const result = await renameLibraryItem(parsed.data)
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
-  return Response.json({ ok: true, id: result.id })
+      const result = await renameLibraryItem(ucet, parsed.data)
+      if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
+      return Response.json({ ok: true, id: result.id })
+    },
+    { zapis: true },
+  )
 }
 
-/** Smaže předmět, ročník nebo téma i se vším, co pod ním leží. */
+/**
+ * Smaže předmět, ročník nebo téma i se vším, co pod ním leží.
+ *
+ * Knihovna je společná, takže tohle mazání sahá na práci kolegyň — proto ho
+ * smí jedině správce a proto se zapisuje do záznamu událostí.
+ */
 export async function DELETE(request: Request) {
-  const params = new URL(request.url).searchParams
-  const kind = kindSchema.safeParse(params.get('kind'))
-  const id = params.get('id')
-  if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
+  return sRozsahem(
+    async (ucet) => {
+      const params = new URL(request.url).searchParams
+      const kind = kindSchema.safeParse(params.get('kind'))
+      const id = params.get('id')
+      if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
 
-  const impact = await measure(kind.data, id)
-  if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
+      const impact = await measure(ucet, kind.data, id)
+      if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
 
-  // Kaskády v databázi se postarají o vše níž; cizí klíče jsou zapnuté.
-  if (kind.data === 'subject') await db.delete(subjects).where(eq(subjects.id, id))
-  if (kind.data === 'grade') await db.delete(grades).where(eq(grades.id, id))
-  if (kind.data === 'topic') await db.delete(topics).where(eq(topics.id, id))
+      // Kaskády v databázi se postarají o vše níž; cizí klíče jsou zapnuté.
+      if (kind.data === 'subject') {
+        await db.delete(subjects).where(and(skola(ucet, subjects), eq(subjects.id, id)))
+      }
+      if (kind.data === 'grade') {
+        await db.delete(grades).where(and(skola(ucet, grades), eq(grades.id, id)))
+      }
+      if (kind.data === 'topic') {
+        await db.delete(topics).where(and(skola(ucet, topics), eq(topics.id, id)))
+      }
 
-  return Response.json({ ok: true, deleted: impact })
+      await zapsatAudit({
+        schoolId: ucet.schoolId,
+        userId: ucet.userId,
+        action: 'smazani-v-knihovne',
+        entity: kind.data,
+        entityId: id,
+        detail: impact,
+      })
+      return Response.json({ ok: true, deleted: impact })
+    },
+    { role: ['spravce'] },
+  )
 }
 
 /** Spočítá, co pod danou položkou leží, bez mazání. */
-async function measure(kind: Kind, id: string): Promise<DeletionImpact | null> {
+async function measure(scope: Scope, kind: Kind, id: string): Promise<DeletionImpact | null> {
   let name = ''
   let topicIds: string[] = []
   let gradeCount = 0
 
   if (kind === 'subject') {
-    const [row] = await db.select({ name: subjects.name }).from(subjects).where(eq(subjects.id, id)).limit(1)
+    const [row] = await db
+      .select({ name: subjects.name })
+      .from(subjects)
+      .where(and(skola(scope, subjects), eq(subjects.id, id)))
+      .limit(1)
     if (!row) return null
     name = row.name
-    const gradeRows = await db.select({ id: grades.id }).from(grades).where(eq(grades.subjectId, id))
+    const gradeRows = await db
+      .select({ id: grades.id })
+      .from(grades)
+      .where(and(skola(scope, grades), eq(grades.subjectId, id)))
     gradeCount = gradeRows.length
     topicIds = gradeRows.length
       ? (
           await db
             .select({ id: topics.id })
             .from(topics)
-            .where(inArray(topics.gradeId, gradeRows.map((grade) => grade.id)))
+            .where(
+              and(skola(scope, topics), inArray(topics.gradeId, gradeRows.map((grade) => grade.id))),
+            )
         ).map((topic) => topic.id)
       : []
   } else if (kind === 'grade') {
@@ -114,15 +160,22 @@ async function measure(kind: Kind, id: string): Promise<DeletionImpact | null> {
       .select({ name: grades.name, subject: subjects.name })
       .from(grades)
       .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-      .where(eq(grades.id, id))
+      .where(and(skola(scope, grades), eq(grades.id, id)))
       .limit(1)
     if (!row) return null
     name = `${row.subject} · ${row.name || 'Bez ročníku'}`
-    topicIds = (await db.select({ id: topics.id }).from(topics).where(eq(topics.gradeId, id))).map(
-      (topic) => topic.id,
-    )
+    topicIds = (
+      await db
+        .select({ id: topics.id })
+        .from(topics)
+        .where(and(skola(scope, topics), eq(topics.gradeId, id)))
+    ).map((topic) => topic.id)
   } else {
-    const [row] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, id)).limit(1)
+    const [row] = await db
+      .select({ name: topics.name })
+      .from(topics)
+      .where(and(skola(scope, topics), eq(topics.id, id)))
+      .limit(1)
     if (!row) return null
     name = row.name
     topicIds = [id]
@@ -135,12 +188,14 @@ async function measure(kind: Kind, id: string): Promise<DeletionImpact | null> {
   const [materialCount] = await db
     .select({ value: sql<number>`count(*)` })
     .from(materials)
-    .where(inArray(materials.topicId, topicIds))
+    .where(and(skola(scope, materials), inArray(materials.topicId, topicIds)))
 
   const questionRows = await db
     .select({ id: questions.id })
     .from(questions)
-    .where(and(isNotNull(questions.topicId), inArray(questions.topicId, topicIds)))
+    .where(
+      and(skola(scope, questions), isNotNull(questions.topicId), inArray(questions.topicId, topicIds)),
+    )
 
   const affectedTests = questionRows.length
     ? (
@@ -148,7 +203,12 @@ async function measure(kind: Kind, id: string): Promise<DeletionImpact | null> {
           .selectDistinct({ title: tests.title })
           .from(testItems)
           .innerJoin(tests, eq(tests.id, testItems.testId))
-          .where(inArray(testItems.questionId, questionRows.map((question) => question.id)))
+          .where(
+            and(
+              skola(scope, testItems),
+              inArray(testItems.questionId, questionRows.map((question) => question.id)),
+            ),
+          )
       ).map((test) => test.title)
     : []
 

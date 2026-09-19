@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { DELETE, GET, POST, PUT } from '@/app/api/tests/route'
 import { db, questions, testItems } from '@/db'
 import { loadTest, loadTestItems } from '@/lib/tests'
-import { jsonReq, req, seedQuestion, seedTemplate, seedTopic } from './helpers'
+import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 let templateId: string
 let topicId: string
@@ -37,7 +37,7 @@ async function createTest(items: unknown[], overrides: Record<string, unknown> =
 
 /** Položky testu tak, jak je pošle klient při přeuložení (i s id z databáze). */
 async function itemsForSave(testId: string) {
-  return (await loadTestItems(testId)).map((item) => ({
+  return (await loadTestItems(UCET, testId)).map((item) => ({
     id: item.id,
     kind: item.kind,
     questionId: item.questionId,
@@ -59,11 +59,11 @@ describe('ukládání testu', () => {
       { kind: 'question', questionId: second },
     ])
 
-    const test = await loadTest(id)
+    const test = await loadTest(UCET, id)
     expect(test?.title).toBe('Písemka')
     expect(test?.templateId).toBe(templateId)
 
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'question', 'page_break', 'question'])
     expect(items.map((item) => item.order)).toEqual([0, 1, 2, 3])
     expect(items[1]?.questionId).toBe(first)
@@ -74,14 +74,14 @@ describe('ukládání testu', () => {
     const questionId = await seedQuestion(topicId, { prompt: 'Původní znění' })
     const id = await createTest([{ kind: 'question', questionId }])
 
-    const [item] = await loadTestItems(id)
+    const [item] = await loadTestItems(UCET, id)
     expect(item?.questionSnapshot).toBeTruthy()
     expect(item?.question?.payload).toMatchObject({ prompt: 'Původní znění' })
   })
 
   it('u nadpisu ani zalomení se nic nezmrazuje', async () => {
     const id = await createTest([{ kind: 'heading', text: 'Část A' }, { kind: 'page_break' }])
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items.every((item) => item.questionSnapshot === null)).toBe(true)
     expect(items[0]?.text).toBe('Část A')
   })
@@ -154,7 +154,7 @@ describe('přeuložení testu', () => {
 
     await resave(id, await itemsForSave(id))
 
-    const [item] = await loadTestItems(id)
+    const [item] = await loadTestItems(UCET, id)
     expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení' })
     // Rozhraní má o rozdílu vědět, aby ho mohlo učitelce ukázat.
     expect(item?.questionEdited).toBe(true)
@@ -167,7 +167,7 @@ describe('přeuložení testu', () => {
     const second = await seedQuestion(topicId, { prompt: 'Přidaná až teď' })
     await resave(id, [...(await itemsForSave(id)), { kind: 'question', questionId: second }])
 
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items).toHaveLength(2)
     expect(items[1]?.question?.payload).toMatchObject({ prompt: 'Přidaná až teď' })
   })
@@ -183,7 +183,7 @@ describe('přeuložení testu', () => {
     const saved = await itemsForSave(id)
     await resave(id, [saved[1], saved[0]])
 
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items.map((item) => item.questionId)).toEqual([second, first])
     expect(items.map((item) => item.order)).toEqual([0, 1])
   })
@@ -194,14 +194,14 @@ describe('přeuložení testu', () => {
 
     await db.delete(questions).where(eq(questions.id, questionId))
 
-    const afterDelete = await loadTestItems(id)
+    const afterDelete = await loadTestItems(UCET, id)
     expect(afterDelete[0]?.questionMissing).toBe(true)
     expect(afterDelete[0]?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
 
     // Cizí klíč je `set null`, takže po smazání otázky zbyde jen snímek.
     await resave(id, await itemsForSave(id))
 
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items[0]?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
   })
 
@@ -209,7 +209,7 @@ describe('přeuložení testu', () => {
     const id = await createTest([])
     await resave(id, [], { header: { ...emptyHeader, school: 'ZŠ Ukázková', className: '8.A' } })
 
-    const test = await loadTest(id)
+    const test = await loadTest(UCET, id)
     expect(test?.title).toBe('Přejmenovaná písemka')
     expect(test?.header).toMatchObject({ school: 'ZŠ Ukázková', className: '8.A' })
   })
@@ -223,7 +223,7 @@ describe('mazání testu', () => {
     const response = await DELETE(req(`/api/tests?id=${encodeURIComponent(id)}`, { method: 'DELETE' }))
     expect(response.status).toBe(200)
 
-    expect(await loadTest(id)).toBeNull()
+    expect(await loadTest(UCET, id)).toBeNull()
     const rows = await db.select().from(testItems).where(eq(testItems.testId, id))
     expect(rows).toHaveLength(0)
   })

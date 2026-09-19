@@ -1,9 +1,10 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
 import { loadPuzzle } from '@/lib/puzzles'
 import { buildPuzzleSnapshots } from '@/lib/tests'
+import { skola, sRozsahem, vlastni } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -17,30 +18,33 @@ const bodySchema = z.object({ testId: z.string().min(1) })
  * nezměnila už hotová písemka.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return sRozsahem(
+    async (ucet) => {
   const { id } = await params
   const parsed = bodySchema.safeParse(await request.json())
   if (!parsed.success) return Response.json({ error: 'Chybí písemka' }, { status: 400 })
 
-  const puzzle = await loadPuzzle(id)
+  const puzzle = await loadPuzzle(ucet, id)
   if (!puzzle) return Response.json({ error: 'Hlavolam se nenašel' }, { status: 404 })
 
   const [test] = await db
     .select({ id: tests.id, title: tests.title })
     .from(tests)
-    .where(eq(tests.id, parsed.data.testId))
+    .where(and(eq(tests.id, parsed.data.testId), vlastni(ucet, tests)))
     .limit(1)
   if (!test) return Response.json({ error: 'Písemka se nenašla' }, { status: 404 })
 
   const [last] = await db
     .select({ position: testItems.position })
     .from(testItems)
-    .where(eq(testItems.testId, test.id))
+    .where(and(skola(ucet, testItems), eq(testItems.testId, test.id)))
     .orderBy(desc(testItems.position))
     .limit(1)
 
-  const snapshots = await buildPuzzleSnapshots([puzzle.id])
+  const snapshots = await buildPuzzleSnapshots(ucet, [puzzle.id])
   await db.insert(testItems).values({
     id: newId(),
+    schoolId: ucet.schoolId,
     testId: test.id,
     position: (last?.position ?? -1) + 1,
     kind: 'puzzle',
@@ -52,7 +56,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     puzzleId: puzzle.id,
     puzzleSnapshot: snapshots.get(puzzle.id) ?? null,
   })
-  await db.update(tests).set({ updatedAt: new Date().toISOString() }).where(eq(tests.id, test.id))
+  await db
+    .update(tests)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(and(eq(tests.id, test.id), vlastni(ucet, tests)))
 
   return Response.json({ testId: test.id, testTitle: test.title })
+    },
+    { zapis: true },
+  )
 }

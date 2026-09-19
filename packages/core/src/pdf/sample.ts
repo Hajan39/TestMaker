@@ -84,6 +84,9 @@ const SAMPLE_QUESTIONS: Question[] = [
 
 const SAMPLE_TEST: Test = {
   id: 'sample',
+  // Ukázka pro náhled šablony nepatří nikomu; hodnoty jsou jen výplň typu.
+  ownerId: 'sample',
+  visibility: 'soukrome',
   title: 'Dýchací soustava',
   description: null,
   graded: true,

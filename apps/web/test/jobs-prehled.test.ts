@@ -4,7 +4,7 @@ import { DELETE, GET } from '@/app/api/jobs/route'
 import { POST as RETRY } from '@/app/api/jobs/retry/route'
 import { db, generationJobs, type GenerationJobParams } from '@/db'
 import { newId } from '@/lib/ids'
-import { jsonReq, req, seedTopic } from './helpers'
+import { jsonReq, req, seedTopic, UCET } from './helpers'
 
 /**
  * Přehled generování. Učitelka z něj musí poznat, co běží, co čeká a co se
@@ -35,6 +35,8 @@ async function seedJob(
   const jobId = newId()
   await db.insert(generationJobs).values({
     id: jobId,
+    schoolId: UCET.schoolId,
+    requestedBy: UCET.userId,
     topicId,
     params: PARAMS,
     status,

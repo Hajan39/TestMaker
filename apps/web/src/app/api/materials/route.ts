@@ -1,15 +1,17 @@
 import { importBatchSchema } from '@testmaker/core/schema'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { db, materials } from '@/db'
 import { newId } from '@/lib/ids'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
 import { ensureTopic } from '@/lib/library'
+import { skola, sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
 /** Přijme dávku materiálů s už extrahovaným textem (binárky se neposílají). */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   const parsed = importBatchSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
   const existing = await db
     .select({ hash: materials.contentHash, topicId: materials.topicId })
     .from(materials)
-    .where(inArray(materials.contentHash, hashes))
+    .where(and(skola(ucet, materials), inArray(materials.contentHash, hashes)))
   const known = new Set(existing.map((row) => knownKey(row.topicId, row.hash)))
 
   // Podle relativní cesty poznáme opakovaný import téhož souboru. Když se
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
       await db
         .select({ id: materials.id, relativePath: materials.relativePath, contentHash: materials.contentHash, topicId: materials.topicId })
         .from(materials)
-        .where(inArray(materials.relativePath, relativePaths))
+        .where(and(skola(ucet, materials), inArray(materials.relativePath, relativePaths)))
     ).map((row) => [row.relativePath, row]),
   )
 
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
 
     // Téma známe ještě před rozhodnutím o duplicitě: tentýž obsah v jiném
     // tématu je legitimní nový materiál, ne duplicita.
-    const topicId = await ensureTopic({
+    const topicId = await ensureTopic(ucet, {
       subject: material.subject,
       grade: material.grade,
       topic: material.topic,
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
     if (prior) {
       // Soubor na této cestě byl už dřív importovaný, ale s jiným obsahem —
       // nahrazujeme starou verzi, aby v tématu nezůstaly obě.
-      await db.delete(materials).where(eq(materials.id, prior.id))
+      await db.delete(materials).where(and(skola(ucet, materials), eq(materials.id, prior.id)))
       known.delete(knownKey(prior.topicId, prior.contentHash))
       priorByPath.delete(material.relativePath)
       touchedTopics.add(prior.topicId)
@@ -82,6 +84,8 @@ export async function POST(request: Request) {
     const id = newId()
     await db.insert(materials).values({
       id,
+      schoolId: ucet.schoolId,
+      createdBy: ucet.userId,
       topicId,
       fileName: material.fileName,
       relativePath: material.relativePath,
@@ -99,25 +103,35 @@ export async function POST(request: Request) {
 
     // Stejný obsah v jiném formátu (PDF vytištěné z prezentace) označíme,
     // ať se z něj negenerují tytéž otázky podruhé.
-    const link = await linkDuplicates(id)
+    const link = await linkDuplicates(ucet, id)
     if (link.duplicateOfId) sameContent += 1
   }
 
-  for (const topicId of touchedTopics) await recomputeTopicContent(topicId)
+  for (const topicId of touchedTopics) await recomputeTopicContent(ucet, topicId)
 
   return NextResponse.json({ imported, duplicates, sameContent, replaced })
+  }, { zapis: true })
 }
 
 /** Smaže materiál i otázky, které z něj vznikly (cizí klíč je `set null`, proto mažeme ručně). */
 export async function DELETE(request: Request) {
-  const id = new URL(request.url).searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'Chybí id' }, { status: 400 })
-  const [row] = await db.select({ topicId: materials.topicId }).from(materials).where(eq(materials.id, id)).limit(1)
-  await db.delete(materials).where(eq(materials.id, id))
-  // Materiály, které na smazaný ukazovaly jako na duplicitu, řeší cizí klíč
-  // (`set null`) sám — tady jen přepočítáme použitelný objem textu tématu.
-  if (row) await recomputeTopicContent(row.topicId)
-  return NextResponse.json({ ok: true })
+  return sRozsahem(
+    async (ucet) => {
+      const id = new URL(request.url).searchParams.get('id')
+      if (!id) return NextResponse.json({ error: 'Chybí id' }, { status: 400 })
+      const [row] = await db
+        .select({ topicId: materials.topicId })
+        .from(materials)
+        .where(and(skola(ucet, materials), eq(materials.id, id)))
+        .limit(1)
+      await db.delete(materials).where(and(skola(ucet, materials), eq(materials.id, id)))
+      // Materiály, které na smazaný ukazovaly jako na duplicitu, řeší cizí klíč
+      // (`set null`) sám — tady jen přepočítáme použitelný objem textu tématu.
+      if (row) await recomputeTopicContent(ucet, row.topicId)
+      return NextResponse.json({ ok: true })
+    },
+    { zapis: true },
+  )
 }
 
 /** Klíč pro evidenci už známých materiálů: tentýž obsah v témže tématu. */

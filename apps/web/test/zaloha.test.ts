@@ -14,7 +14,7 @@ import {
 import { GET, POST } from '@/app/api/export/route'
 import { PORADI, spocitej, zalohaText } from '@/lib/backup'
 import { obnovZeZalohy, poctyVZaloze, prectiZalohu } from '@/lib/backupClient'
-import { jsonReq, seedMaterial, seedQuestion, seedTemplate, seedTopic } from './helpers'
+import { jsonReq, seedMaterial, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 /**
  * Záloha a obnova. Test jde tam i zpět nad skutečnou (dočasnou) databází:
@@ -40,12 +40,15 @@ async function nasypKnihovnu() {
 
   await db.insert(tests).values({
     id: 'test-zaloha',
+    schoolId: UCET.schoolId,
+    ownerId: UCET.userId,
     title: 'Opakování — dýchací soustava',
     templateId,
     header: { schoolName: '', teacher: '', dateLine: true } as never,
   })
   await db.insert(testItems).values({
     id: 'polozka-zaloha',
+    schoolId: UCET.schoolId,
     testId: 'test-zaloha',
     position: 0,
     kind: 'question',
@@ -90,7 +93,7 @@ async function obnovPresApi(text: string): Promise<Record<string, number>> {
 
 /** Celá záloha ze staženého souboru (`GET /api/export`). */
 async function stahni(): Promise<string> {
-  const odpoved = GET()
+  const odpoved = await GET()
   expect(odpoved.headers.get('content-disposition')).toContain('testmaker-zaloha-')
   return await odpoved.text()
 }
@@ -121,16 +124,16 @@ describe('záloha a obnova', () => {
 
   it('tam a zpět dá tytéž počty i shodnou zmrazenou otázku', async () => {
     const { otazkaId } = await nasypKnihovnu()
-    const pred = await spocitej(db)
+    const pred = await spocitej(db, { schoolId: UCET.schoolId })
     const snapshotPred = (await db.select().from(testItems))[0]!.questionSnapshot
     const text = await stahni()
 
     await vyprazdni()
-    expect((await spocitej(db)).questions).toBe(0)
+    expect((await spocitej(db, { schoolId: UCET.schoolId })).questions).toBe(0)
 
     const navezeno = await obnovPresApi(text)
 
-    expect(await spocitej(db)).toEqual(pred)
+    expect(await spocitej(db, { schoolId: UCET.schoolId })).toEqual(pred)
     expect(navezeno.questions).toBe(pred.questions)
 
     const [polozka] = await db.select().from(testItems)
@@ -151,16 +154,16 @@ describe('záloha a obnova', () => {
 
   it('opakovaná obnova nic nezdvojí', async () => {
     await nasypKnihovnu()
-    const pred = await spocitej(db)
+    const pred = await spocitej(db, { schoolId: UCET.schoolId })
     const text = await stahni()
 
     // Poprvé do knihovny, ve které data pořád jsou — obnova je sloučení, ne
     // druhý import.
     await obnovPresApi(text)
-    expect(await spocitej(db)).toEqual(pred)
+    expect(await spocitej(db, { schoolId: UCET.schoolId })).toEqual(pred)
 
     await obnovPresApi(text)
-    expect(await spocitej(db)).toEqual(pred)
+    expect(await spocitej(db, { schoolId: UCET.schoolId })).toEqual(pred)
   })
 
   it('obnova do knihovny, kde už něco je, jen doplní a nic nesmaže', async () => {
@@ -174,7 +177,7 @@ describe('záloha a obnova', () => {
 
     await obnovPresApi(text)
 
-    const pocty = await spocitej(db)
+    const pocty = await spocitej(db, { schoolId: UCET.schoolId })
     expect(pocty.topics).toBe(2)
     expect(pocty.questions).toBe(2)
   })
@@ -200,7 +203,7 @@ describe('záloha a obnova', () => {
 
     // Kousky chodí průběžně — kdyby se záloha skládala v paměti, přišel by
     // jeden velký kus až na konci.
-    const stream = GET().body!
+    const stream = (await GET()).body!
     const reader = stream.getReader()
     let kousku = 0
     for (;;) {
@@ -210,7 +213,7 @@ describe('záloha a obnova', () => {
     }
     expect(kousku).toBeGreaterThan(1)
 
-    const zaloha = prectiZalohu(await zalohaText(db))
+    const zaloha = prectiZalohu(await zalohaText(db, { schoolId: UCET.schoolId }))
     expect(zaloha.tabulky.questions).toHaveLength(251)
   })
 
@@ -241,6 +244,6 @@ describe('záloha a obnova', () => {
     )
     expect(odpoved.status).toBe(400)
     expect(((await odpoved.json()) as { error: string }).error).toMatch(/nemá id/)
-    expect((await spocitej(db)).subjects).toBe(0)
+    expect((await spocitej(db, { schoolId: UCET.schoolId })).subjects).toBe(0)
   })
 })

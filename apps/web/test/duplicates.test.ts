@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db, materials, MIN_USABLE_TOPIC_CHARS, topics } from '@/db'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
-import { seedMaterial, seedTopic } from './helpers'
+import { seedMaterial, seedTopic, UCET } from './helpers'
 
 /** Text delší než hranice použitelnosti, aby téma nebylo „málo obsahu“. */
 const LONG_TEXT = 'Fotosyntéza probíhá v chloroplastech zelených rostlin. '.repeat(40)
@@ -23,7 +23,7 @@ describe('rozpoznání duplicit', () => {
     const docx = await seedMaterial(topicId, { fileName: 'Fotosyntéza.docx', text: LONG_TEXT })
     const pdf = await seedMaterial(topicId, { fileName: 'Fotosyntéza.pdf', text: LONG_TEXT })
 
-    const link = await linkDuplicates(pdf)
+    const link = await linkDuplicates(UCET, pdf)
 
     // Prezentace a textové dokumenty nesou víc než PDF vytištěné z nich.
     expect(link.duplicateOfId).toBe(docx)
@@ -37,7 +37,7 @@ describe('rozpoznání duplicit', () => {
     const pdf = await seedMaterial(topicId, { fileName: 'Dýchání.pdf', text: LONG_TEXT })
     const docx = await seedMaterial(topicId, { fileName: 'Dýchání.docx', text: LONG_TEXT })
 
-    const link = await linkDuplicates(docx)
+    const link = await linkDuplicates(UCET, docx)
 
     // Nově přidaný materiál duplicitou není — odsunul se ten původní.
     expect(link.duplicateOfId).toBeNull()
@@ -53,7 +53,7 @@ describe('rozpoznání duplicit', () => {
       text: 'Savci jsou teplokrevní obratlovci, kteří kojí mláďata mlékem. '.repeat(40),
     })
 
-    expect(await linkDuplicates(jiny)).toEqual({ duplicateOfId: null, score: null })
+    expect(await linkDuplicates(UCET, jiny)).toEqual({ duplicateOfId: null, score: null })
     expect((await materialRow(jiny))?.duplicateOfId).toBeNull()
   })
 
@@ -63,19 +63,19 @@ describe('rozpoznání duplicit', () => {
     await seedMaterial(prvni.topicId, { fileName: 'Fotosyntéza.docx', text: LONG_TEXT })
     const jinde = await seedMaterial(druhe.topicId, { fileName: 'Fotosyntéza.pdf', text: LONG_TEXT })
 
-    expect((await linkDuplicates(jinde)).duplicateOfId).toBeNull()
+    expect((await linkDuplicates(UCET, jinde)).duplicateOfId).toBeNull()
   })
 
   it('materiály ukazující na odsunutý originál se přepnou na vítěze', async () => {
     const { topicId } = await seedTopic()
     const pdf = await seedMaterial(topicId, { fileName: 'Voda.pdf', text: LONG_TEXT })
     const docx = await seedMaterial(topicId, { fileName: 'Voda.docx', text: LONG_TEXT })
-    await linkDuplicates(docx)
+    await linkDuplicates(UCET, docx)
     expect((await materialRow(pdf))?.duplicateOfId).toBe(docx)
 
     // Přijde prezentace — ta má přednost před vším ostatním.
     const odp = await seedMaterial(topicId, { fileName: 'Voda.odp', text: LONG_TEXT })
-    await linkDuplicates(odp)
+    await linkDuplicates(UCET, odp)
 
     expect((await materialRow(docx))?.duplicateOfId).toBe(odp)
     // Řetěz se nesmí zacyklit přes zrušený originál — PDF teď ukazuje na prezentaci.
@@ -83,7 +83,7 @@ describe('rozpoznání duplicit', () => {
   })
 
   it('neznámý materiál nic nerozbije', async () => {
-    expect(await linkDuplicates('neexistuje')).toEqual({ duplicateOfId: null, score: null })
+    expect(await linkDuplicates(UCET, 'neexistuje')).toEqual({ duplicateOfId: null, score: null })
   })
 })
 
@@ -92,7 +92,7 @@ describe('přepočet stavu tématu', () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'A.docx', text: LONG_TEXT })
 
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
 
     const topic = await topicRow(topicId)
     expect(topic?.usableCharCount).toBe(LONG_TEXT.length)
@@ -104,11 +104,11 @@ describe('přepočet stavu tématu', () => {
     await seedMaterial(topicId, { fileName: 'Fotosyntéza.docx', text: LONG_TEXT })
     const pdf = await seedMaterial(topicId, { fileName: 'Fotosyntéza.pdf', text: LONG_TEXT })
 
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
     expect((await topicRow(topicId))?.usableCharCount).toBe(LONG_TEXT.length * 2)
 
-    await linkDuplicates(pdf)
-    await recomputeTopicContent(topicId)
+    await linkDuplicates(UCET, pdf)
+    await recomputeTopicContent(UCET, topicId)
 
     // Po označení duplicity se stejný text nepočítá dvakrát.
     expect((await topicRow(topicId))?.usableCharCount).toBe(LONG_TEXT.length)
@@ -118,7 +118,7 @@ describe('přepočet stavu tématu', () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'Krátké.txt', text: 'Pár vět, na písemku to nestačí.' })
 
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
 
     const topic = await topicRow(topicId)
     expect(topic!.usableCharCount).toBeLessThan(MIN_USABLE_TOPIC_CHARS)
@@ -127,7 +127,7 @@ describe('přepočet stavu tématu', () => {
 
   it('téma bez materiálů má nulu a je označené', async () => {
     const { topicId } = await seedTopic()
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
 
     const topic = await topicRow(topicId)
     expect(topic?.usableCharCount).toBe(0)
@@ -141,11 +141,11 @@ describe('přepočet stavu tématu', () => {
       fileName: 'B.docx',
       text: 'Savci jsou teplokrevní obratlovci. '.repeat(40),
     })
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
     const before = (await topicRow(topicId))!.usableCharCount
 
     await db.delete(materials).where(eq(materials.id, druhy))
-    await recomputeTopicContent(topicId)
+    await recomputeTopicContent(UCET, topicId)
 
     expect((await topicRow(topicId))!.usableCharCount).toBeLessThan(before)
     expect((await topicRow(topicId))!.usableCharCount).toBe(LONG_TEXT.length)

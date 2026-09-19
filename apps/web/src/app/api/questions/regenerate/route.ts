@@ -1,8 +1,9 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, questions } from '@/db'
-import { TOPIC_BUSY_MESSAGE, isTopicBusy, regenerateQuestion } from '@/lib/generation'
+import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
+import { skola, sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -25,6 +26,7 @@ export function GET() {
  * zkusit znovu.
  */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
     return Response.json(
       {
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
   const [original] = await db
     .select({ id: questions.id, topicId: questions.topicId })
     .from(questions)
-    .where(eq(questions.id, parsed.data.id))
+    .where(and(skola(ucet, questions), eq(questions.id, parsed.data.id)))
     .limit(1)
   if (!original) return Response.json({ error: 'Otázka nenalezena' }, { status: 404 })
   if (!original.topicId) {
@@ -56,16 +58,18 @@ export async function POST(request: Request) {
   // Téma se nerezervuje (`claimTopic`) — kvůli jedné otázce by dávka zablokovala
   // celé téma. Běžící dávkové generování ale přednost má, protože obě volání by
   // jinak pracovala se stejným seznamem „těmhle otázkám se vyhni".
-  if (await isTopicBusy(original.topicId)) {
-    return Response.json({ error: TOPIC_BUSY_MESSAGE }, { status: 409 })
+  const busy = await isTopicBusy(ucet, original.topicId)
+  if (busy) {
+    return Response.json({ error: topicBusyMessage(busy.kdo) }, { status: 409 })
   }
 
   try {
-    const question = await regenerateQuestion(parsed.data.id, { signal: request.signal })
+    const question = await regenerateQuestion(ucet, parsed.data.id, { signal: request.signal })
     return Response.json({ question })
   } catch (error) {
     // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
     const { message } = describeAiError(error)
     return Response.json({ error: message }, { status: 502 })
   }
+  }, { zapis: true })
 }

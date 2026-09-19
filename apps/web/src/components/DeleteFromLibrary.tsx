@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet } from '@testmaker/ui'
+import { useMuzeMenit } from '@/components/Prava'
 
 type Kind = 'subject' | 'grade' | 'topic'
 
@@ -67,7 +68,11 @@ export function DeleteFromLibrary({
   /** Kam odejít po smazání; bez toho se jen obnoví stránka. */
   redirectTo?: string
 }) {
+  // Náhled nemaže: tlačítko se mu vůbec nenabízí. Hlídka je až za hooky,
+  // aby se jich v každém vykreslení volal stejný počet.
+  const muzeMenit = useMuzeMenit()
   const router = useRouter()
+  if (!muzeMenit) return null
 
   return (
     <DeleteButton

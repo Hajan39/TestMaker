@@ -2,6 +2,7 @@ import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
 import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { generateForTopic } from '@/lib/generation'
+import { scopeFromJob, zapsatAudit } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -50,11 +51,21 @@ async function runOne() {
   // Nejdřív posbíráme, co po sobě nechal přerušený běh.
   const revived = await reviveAbandoned()
 
+  /*
+   * Která úloha je na řadě. Nebere se prostě nejstarší z celé fronty: kdo
+   * zařadí celý ročník, měl by ostatní zdržet o jednu úlohu, ne o hodinu.
+   * Přednost má proto zadavatelka, které zrovna nic neběží, a teprve mezi
+   * nimi rozhoduje stáří úlohy.
+   */
   const [job] = await db
     .select()
     .from(generationJobs)
     .where(eq(generationJobs.status, 'queued'))
-    .orderBy(asc(generationJobs.createdAt))
+    .orderBy(
+      sql`(select count(*) from ${generationJobs} bezi
+            where bezi.requested_by = ${generationJobs.requestedBy} and bezi.status = 'running')`,
+      asc(generationJobs.createdAt),
+    )
     .limit(1)
 
   if (!job) return Response.json({ processed: false, remaining: 0, revived })
@@ -69,7 +80,7 @@ async function runOne() {
   if (claimed.length === 0) return Response.json({ processed: false, remaining: await remaining() })
 
   try {
-    const outcome = await generateForTopic(job.topicId, job.params)
+    const outcome = await generateForTopic(scopeFromJob(job), job.topicId, job.params)
     await db
       .update(generationJobs)
       .set({
@@ -91,6 +102,15 @@ async function runOne() {
       .update(generationJobs)
       .set({ status: 'error', error: message, finishedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, job.id))
+    await zapsatAudit({
+      schoolId: job.schoolId,
+      userId: job.requestedBy,
+      action: 'fronta-chyba',
+      entity: 'topic',
+      entityId: job.topicId,
+      detail: { message },
+      severity: 'chyba',
+    })
     return Response.json({
       processed: true,
       jobId: job.id,

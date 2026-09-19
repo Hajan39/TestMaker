@@ -1,12 +1,14 @@
 import { Badge, Card, PageShell } from '@testmaker/ui'
 import { TemplatePreview } from '@/components/TemplatePreview'
 import { loadTemplates } from '@/lib/tests'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Šablony – TestMaker' }
 
 export default async function TemplatesPage() {
-  const templates = await loadTemplates()
+  const ucet = await ucetStranky()
+  const templates = await loadTemplates(ucet)
 
   return (
     <PageShell>

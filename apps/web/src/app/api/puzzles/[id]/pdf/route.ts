@@ -1,5 +1,6 @@
 import { renderTestToBuffer } from '@testmaker/core/pdf/node'
 import { loadRenderablePuzzle } from '@/lib/puzzles'
+import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -12,10 +13,12 @@ export const maxDuration = 120
  * položka testu, jen v takovém testu není nic jiného.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  return sRozsahem(async (ucet) => {
   const { id } = await params
   const withKey = new URL(request.url).searchParams.get('key') === '1'
 
-  const renderable = await loadRenderablePuzzle(id, { withKey })
+  // Bez kontroly vlastníka by stačilo uhodnout id a cizí hlavolam si vytisknout.
+  const renderable = await loadRenderablePuzzle(ucet, id, { withKey })
   if (!renderable) return new Response('Hlavolam nenalezen', { status: 404 })
 
   const buffer = await renderTestToBuffer(renderable)
@@ -28,5 +31,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
       'cache-control': 'no-store',
     },
+  })
   })
 }

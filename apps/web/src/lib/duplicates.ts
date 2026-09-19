@@ -7,6 +7,7 @@ import {
   preferredMaterial,
 } from '@testmaker/core/extract'
 import { db, materials, MIN_USABLE_TOPIC_CHARS, topics } from '@/db'
+import { skola, type Scope } from './uzivatel'
 
 interface Candidate {
   id: string
@@ -21,18 +22,30 @@ interface Candidate {
  * v jiném formátu, označí horší z dvojice jako duplicitu — generování pak
  * neběží dvakrát nad stejným textem.
  */
-export async function linkDuplicates(materialId: string): Promise<{
+export async function linkDuplicates(
+  scope: Scope,
+  materialId: string,
+): Promise<{
   duplicateOfId: string | null
   score: number | null
 }> {
-  const [fresh] = await db.select().from(materials).where(eq(materials.id, materialId)).limit(1)
+  const [fresh] = await db
+    .select()
+    .from(materials)
+    .where(and(skola(scope, materials), eq(materials.id, materialId)))
+    .limit(1)
   if (!fresh) return { duplicateOfId: null, score: null }
 
   const siblings = await db
     .select()
     .from(materials)
     .where(
-      and(eq(materials.topicId, fresh.topicId), ne(materials.id, materialId), isNull(materials.duplicateOfId)),
+      and(
+        skola(scope, materials),
+        eq(materials.topicId, fresh.topicId),
+        ne(materials.id, materialId),
+        isNull(materials.duplicateOfId),
+      ),
     )
 
   const incoming: Candidate = toCandidate(fresh)
@@ -69,17 +82,17 @@ export async function linkDuplicates(materialId: string): Promise<{
  * na která na písemku nevystačí. Volá se po každé změně materiálů tématu —
  * importu, smazání i po označení duplicity, protože ta se do součtu nepočítá.
  */
-export async function recomputeTopicContent(topicId: string): Promise<void> {
+export async function recomputeTopicContent(scope: Scope, topicId: string): Promise<void> {
   const [row] = await db
     .select({ usableCharCount: sum(materials.charCount) })
     .from(materials)
-    .where(and(eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
 
   const usableCharCount = Number(row?.usableCharCount ?? 0)
   await db
     .update(topics)
     .set({ usableCharCount, lowContent: usableCharCount < MIN_USABLE_TOPIC_CHARS })
-    .where(eq(topics.id, topicId))
+    .where(and(skola(scope, topics), eq(topics.id, topicId)))
 }
 
 function toCandidate(row: typeof materials.$inferSelect): Candidate {

@@ -4,7 +4,7 @@ import type { generateQuestions } from '@testmaker/core/ai'
 import type { QuestionContent } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
 import { generateForTopic, DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
-import { seedMaterial, seedTopic } from './helpers'
+import { seedMaterial, seedTopic, UCET } from './helpers'
 
 /**
  * Žebříček modelů pohledem aplikace: co se uložilo do databáze, když prvnímu
@@ -48,7 +48,7 @@ describe('generování tématu se žebříčkem modelů', () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
 
-    const outcome = await generateForTopic(
+    const outcome = await generateForTopic(UCET, 
       topicId,
       { ...DEFAULT_GENERATE_PARAMS, count: 4 },
       { generate: dvaModely },
@@ -79,7 +79,7 @@ describe('generování tématu se žebříčkem modelů', () => {
     }
 
     await expect(
-      generateForTopic(topicId, { ...DEFAULT_GENERATE_PARAMS, count: 4 }, { generate: spadneAzPoPrvniDavce }),
+      generateForTopic(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 4 }, { generate: spadneAzPoPrvniDavce }),
     ).rejects.toThrow(/quota/)
 
     const rows = await db.select({ id: questions.id, model: questions.model }).from(questions).where(eq(questions.topicId, topicId))

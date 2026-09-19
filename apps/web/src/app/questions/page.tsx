@@ -9,6 +9,7 @@ import { Button, EmptyState, PageShell } from '@testmaker/ui'
 import { loadLibraryTree } from '@/lib/library'
 import { QUESTION_PAGE_SIZE, countQuestions, loadQuestionPage } from '@/lib/questions'
 import { QuestionsTable, type BankFilters } from './QuestionsTable'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Banka otázek – TestMaker' }
@@ -64,10 +65,11 @@ export default async function QuestionsPage({
     search: filters.search || undefined,
   }
 
+  const ucet = await ucetStranky()
   const [tree, page, total] = await Promise.all([
-    loadLibraryTree(),
-    loadQuestionPage(query, { limit: BANK_PAGE_SIZE }),
-    countQuestions(query),
+    loadLibraryTree(ucet),
+    loadQuestionPage(ucet, query, { limit: BANK_PAGE_SIZE }),
+    countQuestions(ucet, query),
   ])
 
   const subjects = tree.map((subject) => ({ id: subject.id, name: subject.name }))
@@ -92,7 +94,7 @@ export default async function QuestionsPage({
 
   // Prázdná banka a „filtru nic neodpovídá" jsou dvě různé situace a učitelka
   // potřebuje vědět, která to je. Počítá se jen tehdy, když filtr nic nenašel.
-  const libraryEmpty = total === 0 ? (await countQuestions()) === 0 : false
+  const libraryEmpty = total === 0 ? (await countQuestions(ucet)) === 0 : false
 
   if (libraryEmpty) {
     return (

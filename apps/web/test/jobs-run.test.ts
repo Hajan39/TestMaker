@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
+import { UCET } from './helpers'
 
 /**
  * Běh jedné úlohy z fronty. Model se sem nikdy nesmí zavolat doopravdy —
@@ -57,6 +58,8 @@ async function queueJob(
   const jobId = newId()
   await db.insert(generationJobs).values({
     id: jobId,
+    schoolId: UCET.schoolId,
+    requestedBy: UCET.userId,
     topicId,
     params: PARAMS,
     status: options.status ?? 'queued',

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { db, generationJobs, type GenerationJobParams } from '@/db'
 import { claimTopic, isTopicBusy, releaseTopic } from '@/lib/generation'
 import { newId } from '@/lib/ids'
-import { seedTopic } from './helpers'
+import { seedTopic, UCET } from './helpers'
 
 /**
  * Rezervace tématu pro generování. Dvě generování nad týmž tématem naráz by
@@ -19,20 +19,20 @@ describe('rezervace tématu', () => {
   it('první zabrání projde a založí běžící úlohu', async () => {
     const { topicId } = await seedTopic()
 
-    const jobId = await claimTopic(topicId)
+    const jobId = await claimTopic(UCET, topicId)
 
     expect(jobId).toBeTruthy()
     const [job] = await jobsOf(topicId)
     expect(job).toMatchObject({ id: jobId, status: 'running' })
     expect(job?.startedAt).toBeTruthy()
-    expect(await isTopicBusy(topicId)).toBe(true)
+    expect(await isTopicBusy(UCET, topicId)).toMatchObject({ kdo: expect.any(String) })
   })
 
   it('druhé zabrání téhož tématu neprojde a nic po sobě nenechá', async () => {
     const { topicId } = await seedTopic()
-    await claimTopic(topicId)
+    await claimTopic(UCET, topicId)
 
-    expect(await claimTopic(topicId)).toBeNull()
+    expect(await claimTopic(UCET, topicId)).toBeNull()
     expect(await jobsOf(topicId)).toHaveLength(1)
   })
 
@@ -40,28 +40,28 @@ describe('rezervace tématu', () => {
     const { topicId } = await seedTopic()
     await db
       .insert(generationJobs)
-      .values({ id: newId(), topicId, params: {} as GenerationJobParams, status: 'queued' })
+      .values({ id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' })
 
-    expect(await claimTopic(topicId)).toBeNull()
+    expect(await claimTopic(UCET, topicId)).toBeNull()
   })
 
   it('po uvolnění jde téma zabrat znovu', async () => {
     const { topicId } = await seedTopic()
-    const jobId = await claimTopic(topicId)
+    const jobId = await claimTopic(UCET, topicId)
     await releaseTopic(jobId!, { created: 3 })
 
-    expect(await isTopicBusy(topicId)).toBe(false)
-    expect(await claimTopic(topicId)).toBeTruthy()
+    expect(await isTopicBusy(UCET, topicId)).toBeNull()
+    expect(await claimTopic(UCET, topicId)).toBeTruthy()
   })
 
   it('hotová ani chybná úloha další generování neblokuje', async () => {
     const { topicId } = await seedTopic()
     await db.insert(generationJobs).values([
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'done' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
 
-    expect(await claimTopic(topicId)).toBeTruthy()
+    expect(await claimTopic(UCET, topicId)).toBeTruthy()
   })
 
   it('souběžná zabrání téhož tématu vyhraje právě jedno', async () => {
@@ -69,7 +69,7 @@ describe('rezervace tématu', () => {
 
     // Rezervace je jeden příkaz `insert … where not exists`, takže ani takhle
     // se nemůže stát, že si téma zaberou dva běhy naráz.
-    const vysledky = await Promise.all(Array.from({ length: 5 }, () => claimTopic(topicId)))
+    const vysledky = await Promise.all(Array.from({ length: 5 }, () => claimTopic(UCET, topicId)))
 
     expect(vysledky.filter(Boolean)).toHaveLength(1)
     expect(await jobsOf(topicId)).toHaveLength(1)
@@ -79,7 +79,7 @@ describe('rezervace tématu', () => {
     const prvni = await seedTopic()
     const druhe = await seedTopic()
 
-    expect(await claimTopic(prvni.topicId)).toBeTruthy()
-    expect(await claimTopic(druhe.topicId)).toBeTruthy()
+    expect(await claimTopic(UCET, prvni.topicId)).toBeTruthy()
+    expect(await claimTopic(UCET, druhe.topicId)).toBeTruthy()
   })
 })

@@ -17,24 +17,175 @@ import type {
   TemplateConfig,
   TestHeaderConfig,
 } from '@testmaker/core/schema'
+import type { Role, UserStatus } from '../lib/role'
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
+
+/**
+ * Škola je nejvyšší hranice dat: knihovna, testy i fronta patří právě jedné.
+ * Dnes je řádek jediný — díky téhle tabulce je ale druhá škola vložením
+ * řádku, ne migrací napříč celým modelem.
+ */
+export const schools = sqliteTable(
+  'schools',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    /**
+     * Doména školních účtů Google (`hd` z přihlášení). Prázdné znamená, že se
+     * přes Google přihlásit nedá — jedině účtem s heslem.
+     */
+    googleDomain: text('google_domain'),
+    /**
+     * Co s účtem ze správné domény, který v aplikaci ještě není: buď se
+     * odmítne a správce ho založí ručně (výchozí), nebo vznikne účet ve stavu
+     * `ceka`, který se nepřihlásí, dokud mu správce nepřidělí roli.
+     */
+    googleAutoJoin: integer('google_auto_join', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [uniqueIndex('schools_slug_idx').on(table.slug)],
+)
+
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    schoolId: text('school_id')
+      .notNull()
+      .references(() => schools.id, { onDelete: 'cascade' }),
+    /**
+     * Unikátní napříč všemi školami, vždy malými písmeny. Přihlášení tak
+     * nepotřebuje, aby si učitelka nejdřív vybrala školu.
+     */
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    role: text('role').notNull().default('ucitelka').$type<Role>(),
+    /** Prázdné u účtu, který se přihlašuje jedině Googlem. */
+    passwordHash: text('password_hash'),
+    /** Trvalé id účtu u Googlu (`sub`); prázdné u účtu jen s heslem. */
+    googleSub: text('google_sub'),
+    status: text('status').notNull().default('aktivni').$type<UserStatus>(),
+    /**
+     * Zvýšení čísla zneplatní všechny vydané cookie téhle osoby — tím se
+     * odhlásí ze všech zařízení, aniž by se muselo měnit společné tajemství.
+     */
+    sessionVersion: integer('session_version').notNull().default(1),
+    /** Po resetu hesla správcem: dokud si nezvolí vlastní, nikam jinam nesmí. */
+    mustChangePassword: integer('must_change_password', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    /**
+     * Brzda proti zkoušení hesla. Počítadlo v paměti procesu na serverless
+     * nestačí — každá instance funkce má svoje, takže se počítá i tady.
+     */
+    failedLogins: integer('failed_logins').notNull().default(0),
+    lockedUntil: text('locked_until'),
+    lastLoginAt: text('last_login_at'),
+    createdAt: text('created_at').notNull().default(now),
+    createdBy: text('created_by').references((): AnySQLiteColumn => users.id, {
+      onDelete: 'set null',
+    }),
+  },
+  (table) => [
+    uniqueIndex('users_email_idx').on(table.email),
+    uniqueIndex('users_google_sub_idx').on(table.googleSub),
+    index('users_school_status_idx').on(table.schoolId, table.status),
+  ],
+)
+
+/**
+ * Vydané relace. Cookie sama o sobě jde odvolat jedině vypršením, proto se
+ * vedle ní vede řádek: odhlášení jednoho zařízení je pak `revoked_at`, ne
+ * změna společného tajemství. Podpis cookie ověří `proxy.ts` bez databáze,
+ * tenhle řádek se čte až na serveru.
+ */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull().default(now),
+    /** Absolutní strop platnosti; cookie sama má kratší klouzavou platnost. */
+    expiresAt: text('expires_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull().default(now),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    revokedAt: text('revoked_at'),
+  },
+  (table) => [
+    index('sessions_user_idx').on(table.userId),
+    index('sessions_expires_idx').on(table.expiresAt),
+  ],
+)
+
+/**
+ * Záznam událostí pro správce: kdo se přihlásil, kdo co smazal, co spadlo
+ * při generování. Je to jediné místo, kde se dá zpětně zjistit „kam se ta
+ * témata poděla“ — proto se sem píše i z míst, která jinak mlčí.
+ */
+export const auditLog = sqliteTable(
+  'audit_log',
+  {
+    id: text('id').primaryKey(),
+    at: text('at').notNull().default(now),
+    schoolId: text('school_id').references(() => schools.id, { onDelete: 'cascade' }),
+    /** Prázdné u událostí bez přihlášení (neúspěšný pokus, běh z plánovače). */
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    /** Čeho se událost týká (`topic`, `question`, `test`, `user`…). */
+    entity: text('entity'),
+    entityId: text('entity_id'),
+    detail: text('detail', { mode: 'json' }),
+    severity: text('severity').notNull().default('info').$type<'info' | 'chyba'>(),
+    ip: text('ip'),
+  },
+  (table) => [
+    index('audit_school_at_idx').on(table.schoolId, table.at, table.id),
+    index('audit_user_idx').on(table.userId, table.at),
+  ],
+)
+
+/**
+ * Sloupec školy má každá tabulka s obsahem, i když by šla odvodit přes
+ * rodiče. Dědění vypadá levněji, ale znamenalo by do každého dotazu nad
+ * listem přidat dva joiny — a právě zapomenutý join je ta chyba, kvůli které
+ * by jedna učitelka viděla cizí data.
+ */
+function schoolId() {
+  return text('school_id')
+    .notNull()
+    .references(() => schools.id, { onDelete: 'cascade' })
+}
+
+/** Kdo záznam založil. Jen evidence; nikdy se podle toho nefiltruje. */
+function createdBy() {
+  return text('created_by').references(() => users.id, { onDelete: 'set null' })
+}
 
 export const subjects = sqliteTable(
   'subjects',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    createdBy: createdBy(),
     name: text('name').notNull(),
     position: integer('position').notNull().default(0),
     createdAt: text('created_at').notNull().default(now),
   },
-  (table) => [uniqueIndex('subjects_name_idx').on(table.name)],
+  /** Dvě školy smějí mít každá svůj „PŘÍRODOPIS"; jedna škola dvakrát ne. */
+  (table) => [uniqueIndex('subjects_school_name_idx').on(table.schoolId, table.name)],
 )
 
 export const grades = sqliteTable(
   'grades',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    createdBy: createdBy(),
     subjectId: text('subject_id')
       .notNull()
       .references(() => subjects.id, { onDelete: 'cascade' }),
@@ -52,6 +203,8 @@ export const topics = sqliteTable(
   'topics',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    createdBy: createdBy(),
     gradeId: text('grade_id')
       .notNull()
       .references(() => grades.id, { onDelete: 'cascade' }),
@@ -67,13 +220,19 @@ export const topics = sqliteTable(
     lowContent: integer('low_content', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
   },
-  (table) => [uniqueIndex('topics_grade_name_idx').on(table.gradeId, table.name)],
+  (table) => [
+    uniqueIndex('topics_grade_name_idx').on(table.gradeId, table.name),
+    index('topics_school_idx').on(table.schoolId),
+  ],
 )
 
 export const materials = sqliteTable(
   'materials',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Kdo materiál nahrál; knihovna je společná, tohle je jen evidence. */
+    createdBy: createdBy(),
     topicId: text('topic_id')
       .notNull()
       .references(() => topics.id, { onDelete: 'cascade' }),
@@ -117,12 +276,13 @@ export const materials = sqliteTable(
      * použít nejde a import každého souboru četl celou tabulku materiálů
      * i s texty.
      */
-    index('materials_content_hash_idx').on(table.contentHash),
+    index('materials_school_hash_idx').on(table.schoolId, table.contentHash),
   ],
 )
 
 export const assets = sqliteTable('assets', {
   id: text('id').primaryKey(),
+  schoolId: schoolId(),
   mimeType: text('mime_type').notNull(),
   data: blob('data', { mode: 'buffer' }).notNull(),
   sizeBytes: integer('size_bytes').notNull(),
@@ -133,6 +293,12 @@ export const questions = sqliteTable(
   'questions',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Kdo otázku vytvořil nebo nechal vygenerovat. Banka je společná. */
+    createdBy: createdBy(),
+    /** Kdo ji naposled schválil nebo zamítl — aby bylo vidět, čí to bylo rozhodnutí. */
+    reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: text('reviewed_at'),
     topicId: text('topic_id').references(() => topics.id, { onDelete: 'cascade' }),
     materialId: text('material_id').references(() => materials.id, { onDelete: 'set null' }),
     type: text('type').notNull().$type<QuestionContent['type']>(),
@@ -175,13 +341,14 @@ export const questions = sqliteTable(
      */
     index('questions_topic_status_idx').on(table.topicId, table.status),
     index('questions_material_idx').on(table.materialId),
-    index('questions_status_idx').on(table.status),
+    index('questions_school_status_idx').on(table.schoolId, table.status),
+    index('questions_school_created_by_idx').on(table.schoolId, table.createdBy),
     /**
      * Řazení seznamů a stránkování kurzorem jde vždycky podle dvojice
      * (`created_at`, `id`) — bez indexu se kvůli každé stránce řadila celá
      * banka.
      */
-    index('questions_created_idx').on(table.createdAt, table.id),
+    index('questions_school_created_idx').on(table.schoolId, table.createdAt, table.id),
   ],
 )
 
@@ -195,6 +362,11 @@ export const puzzles = sqliteTable(
   'puzzles',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Hlavolam je soukromý: vidí ho a tiskne jen ta, kdo ho vyrobila. */
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     /** Hlavolam vzniká z materiálů tématu; bez tématu zůstane po jeho smazání. */
     topicId: text('topic_id').references(() => topics.id, { onDelete: 'set null' }),
     kind: text('kind').notNull().$type<PuzzleContent['kind']>(),
@@ -211,8 +383,8 @@ export const puzzles = sqliteTable(
   },
   (table) => [
     index('puzzles_topic_idx').on(table.topicId),
-    /** Seznam hlavolamů se řadí od nejnovějšího. */
-    index('puzzles_created_idx').on(table.createdAt, table.id),
+    /** Seznam hlavolamů je vždycky „moje, od naposled upravených". */
+    index('puzzles_owner_idx').on(table.schoolId, table.ownerId, table.updatedAt),
   ],
 )
 
@@ -220,6 +392,15 @@ export const generationJobs = sqliteTable(
   'generation_jobs',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /**
+     * Kdo úlohu zadal. Fronta podle toho rozděluje pořadí mezi učitelky a
+     * běh z plánovače podle toho ví, za koho otázky zapisuje — sezení tam
+     * žádné není.
+     */
+    requestedBy: text('requested_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     /** Generuje se vždy z celé skupiny materiálů, tedy z tématu. */
     topicId: text('topic_id')
       .notNull()
@@ -233,7 +414,9 @@ export const generationJobs = sqliteTable(
     finishedAt: text('finished_at'),
   },
   (table) => [
-    index('generation_jobs_status_idx').on(table.status),
+    index('generation_jobs_school_status_idx').on(table.schoolId, table.status, table.createdAt),
+    /** Kolik úloh té které učitelce zrovna běží — podle toho se vybírá další. */
+    index('generation_jobs_requester_status_idx').on(table.requestedBy, table.status),
     /**
      * Rezervace tématu (`claimTopic`, `isTopicBusy`) i zařazování do fronty
      * se ptají na dvojici tématu a stavu. Index jen podle stavu na to nestačí:
@@ -255,6 +438,7 @@ export const templates = sqliteTable(
   'templates',
   {
     id: text('id').primaryKey(),
+    schoolId: schoolId(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
@@ -262,29 +446,54 @@ export const templates = sqliteTable(
     builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
     position: integer('position').notNull().default(0),
   },
-  (table) => [uniqueIndex('templates_slug_idx').on(table.slug)],
+  /**
+   * Vestavěné šablony se každé škole zkopírují, nenechávají se bez školy:
+   * SQLite bere v unikátním indexu každé NULL jako jiné, takže by u nich
+   * dvojice (škola, slug) nehlídala nic.
+   */
+  (table) => [uniqueIndex('templates_school_slug_idx').on(table.schoolId, table.slug)],
 )
 
-export const tests = sqliteTable('tests', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  description: text('description'),
-  /** Test na známky — bez toho se netisknou body ani políčko na známku. */
-  graded: integer('graded', { mode: 'boolean' }).notNull().default(true),
-  templateId: text('template_id')
-    .notNull()
-    .references(() => templates.id),
-  header: text('header', { mode: 'json' }).notNull().$type<TestHeaderConfig>(),
-  variants: integer('variants').notNull().default(1),
-  showKey: integer('show_key', { mode: 'boolean' }).notNull().default(true),
-  createdAt: text('created_at').notNull().default(now),
-  updatedAt: text('updated_at').notNull().default(now),
-})
+export const tests = sqliteTable(
+  'tests',
+  {
+    id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Písemka patří té, kdo ji složila; cizí se nezobrazí ani nevytiskne. */
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * `soukrome` vidí jen autorka, `skola` i kolegyně — když někdo onemocní,
+     * musí jít jeho písemku vytisknout, aniž by se skládala znovu.
+     */
+    visibility: text('visibility').notNull().default('soukrome').$type<'soukrome' | 'skola'>(),
+    title: text('title').notNull(),
+    description: text('description'),
+    /** Test na známky — bez toho se netisknou body ani políčko na známku. */
+    graded: integer('graded', { mode: 'boolean' }).notNull().default(true),
+    templateId: text('template_id')
+      .notNull()
+      .references(() => templates.id),
+    header: text('header', { mode: 'json' }).notNull().$type<TestHeaderConfig>(),
+    variants: integer('variants').notNull().default(1),
+    showKey: integer('show_key', { mode: 'boolean' }).notNull().default(true),
+    createdAt: text('created_at').notNull().default(now),
+    updatedAt: text('updated_at').notNull().default(now),
+  },
+  (table) => [index('tests_owner_idx').on(table.schoolId, table.ownerId, table.updatedAt)],
+)
 
 export const testItems = sqliteTable(
   'test_items',
   {
     id: text('id').primaryKey(),
+    /**
+     * Škola i u položky testu: úklid nepoužitých příloh musí projít zmrazené
+     * snímky celé školy (jinak by smazání otázky vzalo obrázek cizí už
+     * vytištěné písemce) a nesmí kvůli tomu číst tabulku napříč školami.
+     */
+    schoolId: schoolId(),
     testId: text('test_id')
       .notNull()
       .references(() => tests.id, { onDelete: 'cascade' }),
@@ -332,6 +541,7 @@ export const testItems = sqliteTable(
     index('test_items_question_idx').on(table.questionId),
     /** Týž důvod jako u otázek: `set null` musí najít položky bez čtení celé tabulky. */
     index('test_items_puzzle_idx').on(table.puzzleId),
+    index('test_items_school_idx').on(table.schoolId),
   ],
 )
 
@@ -345,3 +555,7 @@ export type TestRow = typeof tests.$inferSelect
 export type TestItemRow = typeof testItems.$inferSelect
 export type GenerationJobRow = typeof generationJobs.$inferSelect
 export type PuzzleRow = typeof puzzles.$inferSelect
+export type SchoolRow = typeof schools.$inferSelect
+export type UserRow = typeof users.$inferSelect
+export type SessionRow = typeof sessions.$inferSelect
+export type AuditRow = typeof auditLog.$inferSelect

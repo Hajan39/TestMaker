@@ -2,6 +2,7 @@ import { PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { countJobs, loadJobs } from '@/lib/jobs'
 import { QueueScreen } from './QueueScreen'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Průběh generování – TestMaker' }
@@ -16,7 +17,8 @@ export const metadata = { title: 'Průběh generování – TestMaker' }
  * děje.
  */
 export default async function QueuePage() {
-  const [jobs, counts] = await Promise.all([loadJobs(), countJobs()])
+  const ucet = await ucetStranky()
+  const [jobs, counts] = await Promise.all([loadJobs(ucet), countJobs(ucet)])
 
   return (
     <PageShell>

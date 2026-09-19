@@ -89,8 +89,9 @@ při tisících ne. *Několik dní.*
 **Hromadné generování běží z otevřeného okna.** Pro velké dávky se hodí
 naplánovaná úloha na serveru. *Několik dní.*
 
-**Přihlášení a více učitelek.** Nic v datech nemá vlastníka, takže to nebude
-přidání sloupce, ale migrace napříč modelem. *Týden.*
+**Víc škol.** Model to unese — každá tabulka s obsahem má `school_id` a druhá
+škola je vložení řádku, ne migrace. Chybí k tomu obrazovky: zakládání školy,
+přepínání mezi školami u správce a doména pro přihlášení Googlem. *Několik dní.*
 
 ## 5. Nápady na dál
 
@@ -141,3 +142,9 @@ v knihovně, tmavý režim, hromadný výběr a dvouřádkové dlaždice témat.
 
 **Provoz.** GitHub Actions kontrolují každý push (typecheck, testy, build)
 a po mergi do `main` spustí migrace nad produkční databází.
+
+**Účty a role.** Přihlašování účtem s heslem i školním účtem Google, role
+učitelka / správce / náhled, správcovská sekce s účty, událostmi a provozem.
+Knihovna je společná pro celou školu, písemky a hlavolamy patří své autorce —
+cizí se nezobrazí ani nevytisknou. Migrace 0011 doplnila školu a vlastnictví
+napříč modelem.

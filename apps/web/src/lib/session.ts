@@ -1,14 +1,76 @@
 /**
- * Přihlášení jedním sdíleným heslem. Cookie nese HMAC-SHA256 z hesla
- * klíčem `AUTH_SECRET` — v cookie tedy heslo samotné není a bez tajemství
- * ji nikdo nevyrobí. Používá Web Crypto, protože `node:crypto` v Edge
- * runtime middlewaru není k dispozici.
+ * Relace: podepsaná cookie plus řádek v tabulce `sessions`.
+ *
+ * Cookie nese `base64url(JSON).hex(HMAC-SHA256)` — kdo zná `AUTH_SECRET`, umí
+ * ji vyrobit, nikdo jiný ne. Podpis i platnost se dají ověřit bez databáze,
+ * což je nutné: tenhle modul čte `proxy.ts`, který běží v Edge runtime.
+ * Proto tu není jediný import z `@/db` ani z `node:crypto` — hlídá to test
+ * `test/modul-proxy.test.ts`.
+ *
+ * Co cookie sama neumí, je odvolání: dokud nevyprší, platí. Proto k ní patří
+ * řádek v `sessions` (odhlášení jednoho zařízení) a číslo `sessionVersion`
+ * u účtu (odhlášení ze všech). Obojí se kontroluje až na serveru
+ * v `lib/uzivatel.ts`.
  */
-export const SESSION_COOKIE = 'tm_session'
+import type { Role } from './role'
+
+export type { Role } from './role'
+
+export const SESSION_COOKIE = 'tm_relace'
+
+/**
+ * Cookie ze starého přihlašování jedním heslem. Nový kód ji nečte, jen ji
+ * v odpovědi maže, aby v prohlížeči nestrašila.
+ */
+export const STARA_COOKIE = 'tm_session'
+
+/** Cookie s `state` a `code_verifier` po dobu přesměrování na Google. */
+export const OAUTH_COOKIE = 'tm_oauth'
+
+/** Klouzavá platnost cookie: po polovině se vydá čerstvá. */
+export const RELACE_TTL_MS = 12 * 60 * 60 * 1000
+
+/** Nejzazší platnost relace bez ohledu na to, jak se používá. */
+export const RELACE_MAX_MS = 30 * 24 * 60 * 60 * 1000
+
+export interface Relace {
+  v: 1
+  /** Uživatel. */
+  uid: string
+  /** Škola — aby proxy nemusela do databáze kvůli rozhodnutí o cestě. */
+  sch: string
+  /** Řádek v `sessions`; podle něj jde relaci odvolat. */
+  sid: string
+  role: Role
+  /** `users.sessionVersion` v době vydání. */
+  sv: number
+  /** Konec platnosti v milisekundách. */
+  exp: number
+  /** Účet po resetu hesla smí jen na `/zmena-hesla`. */
+  zh?: boolean
+}
 
 const encoder = new TextEncoder()
 
-export async function sessionToken(password: string, secret: string): Promise<string> {
+function base64urlEncode(text: string): string {
+  const bytes = encoder.encode(text)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function base64urlDecode(value: string): string | null {
+  try {
+    const doplneno = value.replace(/-/g, '+').replace(/_/g, '/')
+    const binary = atob(doplneno.padEnd(Math.ceil(doplneno.length / 4) * 4, '='))
+    const bytes = Uint8Array.from(binary, (znak) => znak.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+async function podpis(data: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     encoder.encode(secret),
@@ -16,54 +78,127 @@ export async function sessionToken(password: string, secret: string): Promise<st
     false,
     ['sign'],
   )
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(password))
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data))
   return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export async function isValidSession(
-  value: string | undefined,
-  password: string,
+export async function podepsatRelaci(relace: Omit<Relace, 'v'>, secret: string): Promise<string> {
+  const obsah = base64urlEncode(JSON.stringify({ v: 1, ...relace }))
+  return `${obsah}.${await podpis(obsah, secret)}`
+}
+
+/** Vrátí obsah cookie, jen když sedí podpis i platnost. Jinak `null`. */
+export async function overitRelaci(
+  hodnota: string | undefined,
   secret: string,
-): Promise<boolean> {
-  if (!value) return false
-  return equalConstantTime(value, await sessionToken(password, secret))
+  now: number = Date.now(),
+): Promise<Relace | null> {
+  if (!hodnota || !secret) return null
+  const tecka = hodnota.lastIndexOf('.')
+  if (tecka <= 0) return null
+
+  const obsah = hodnota.slice(0, tecka)
+  const dodany = hodnota.slice(tecka + 1)
+  if (!equalConstantTime(dodany, await podpis(obsah, secret))) return null
+
+  const json = base64urlDecode(obsah)
+  if (!json) return null
+
+  let relace: Relace
+  try {
+    relace = JSON.parse(json) as Relace
+  } catch {
+    return null
+  }
+
+  if (relace.v !== 1) return null
+  if (typeof relace.uid !== 'string' || typeof relace.sid !== 'string') return null
+  if (typeof relace.exp !== 'number' || relace.exp <= now) return null
+  return relace
+}
+
+/** Hlavička `Set-Cookie`; `null` místo tokenu cookie smaže. */
+export function relaceCookie(
+  token: string | null,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const secure = env.NODE_ENV === 'production' ? '; Secure' : ''
+  if (token === null) {
+    return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
+  }
+  const maxAge = Math.floor(RELACE_TTL_MS / 1000)
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`
+}
+
+/** Hlavička, která zahodí cookie starého přihlašování jedním heslem. */
+export function smazatStarouCookie(env: Record<string, string | undefined> = process.env): string {
+  const secure = env.NODE_ENV === 'production' ? '; Secure' : ''
+  return `${STARA_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
 }
 
 /**
  * Tři stavy přihlašování:
  *
- * - `zapnuto` — je heslo i tajemství, aplikace se chrání,
- * - `vypnuto` — není heslo a neběžíme v nasazení; tak se aplikace používá
+ * - `zapnuto` — je `AUTH_SECRET`, aplikace se chrání účty,
+ * - `vypnuto` — tajemství není a neběžíme v nasazení; tak se aplikace používá
  *   lokálně (`next dev`) i v testech v prohlížeči, kde by přihlašování jen
- *   překáželo,
- * - `chybne-nastaveno` — nastavení nedává smysl a mlčky otevřít aplikaci by
- *   bylo nebezpečné: buď běžíme na Vercelu (veřejná adresa) bez hesla, nebo
- *   je heslo bez tajemství, takže by se nedalo přihlásit. V obou případech
- *   aplikace odpoví 503 a řekne, co doplnit.
+ *   překáželo. Zapisuje se přitom pod výchozím účtem, viz `lib/uzivatel.ts`.
+ * - `chybne-nastaveno` — běžíme na veřejné adrese bez tajemství. Mlčky otevřít
+ *   aplikaci komukoli by bylo nebezpečné, proto 503 a vysvětlení.
  */
 export type AuthMode = 'zapnuto' | 'vypnuto' | 'chybne-nastaveno'
 
-/** Hláška k `chybne-nastaveno` — vysvětluje majitelce, co ve Vercelu doplnit. */
 export const AUTH_MISCONFIGURED_MESSAGE =
-  'Přihlašování není nastavené. Doplňte proměnné prostředí APP_PASSWORD (heslo do aplikace) ' +
-  'a AUTH_SECRET (náhodný řetězec, např. z `openssl rand -hex 32`) a nasazení spusťte znovu. ' +
-  'Bez nich by byla aplikace veřejně přístupná komukoli, proto zůstává zavřená.'
+  'Přihlašování není nastavené. Doplňte proměnnou prostředí AUTH_SECRET (náhodný řetězec, ' +
+  'např. z `openssl rand -hex 32`) a nasazení spusťte znovu. Účty se zakládají skriptem ' +
+  '`pnpm --filter @testmaker/web uzivatel`. Bez tajemství by byla aplikace veřejně přístupná ' +
+  'komukoli, proto zůstává zavřená.'
 
 export function authMode(env: Record<string, string | undefined> = process.env): AuthMode {
-  const password = env.APP_PASSWORD
-  const secret = env.AUTH_SECRET
-  if (password && secret) return 'zapnuto'
-  // Heslo bez tajemství: přihlásit se nedá, tichý běh bez ochrany by byl past.
-  if (password && !secret) return 'chybne-nastaveno'
+  if (env.AUTH_SECRET) return 'zapnuto'
   // `VERCEL` nastavuje Vercel sám ve všech svých prostředích. Je to jediné
   // rozlišení mezi „běží to na veřejné adrese“ a „běží to na notebooku“.
   if (env.VERCEL) return 'chybne-nastaveno'
   return 'vypnuto'
 }
 
-/** Bez nastaveného hesla aplikace běží nechráněná — tak ji používáme lokálně. */
+/** Bez tajemství aplikace běží nechráněná — tak ji používáme lokálně. */
 export function isAuthDisabled(env?: Record<string, string | undefined>): boolean {
   return authMode(env) === 'vypnuto'
+}
+
+/** Cesty, na které se dostane i nepřihlášený. */
+export function jeVolnaCesta(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/api/login' ||
+    pathname === '/api/logout' ||
+    pathname.startsWith('/api/prihlaseni/google')
+  )
+}
+
+/**
+ * Hrubé rozhodnutí podle role, které zvládne i proxy bez databáze:
+ *
+ * - do správy smí jedině správce,
+ * - náhled smí číst a tisknout (tisk je `GET`), ale nic nemění,
+ * - kdo má vynucenou změnu hesla, nesmí zatím nikam jinam.
+ *
+ * Jemné rozhodování („je tohle moje písemka?“) sem nepatří — to dělají
+ * serverové funkce, které mají po ruce databázi. Proxy je pohodlí, ne
+ * bezpečnostní hranice.
+ */
+export function maPravo(relace: Relace, pathname: string, method: string): boolean {
+  const cteni = method === 'GET' || method === 'HEAD'
+
+  if (relace.zh) {
+    return pathname === '/zmena-hesla' || pathname === '/api/zmena-hesla' || pathname === '/api/logout'
+  }
+  if (pathname === '/sprava' || pathname.startsWith('/sprava/') || pathname.startsWith('/api/sprava/')) {
+    return relace.role === 'spravce'
+  }
+  if (relace.role === 'nahled') return cteni
+  return true
 }
 
 /** Porovnání nezávislé na délce shodné předpony, ať se podpis nedá uhodnout po znacích. */
@@ -75,10 +210,13 @@ export function equalConstantTime(a: string, b: string): boolean {
 }
 
 /**
- * Omezení pokusů o přihlášení. Heslo je jedno jediné a krátké, takže bez
- * počítadla by ho šlo z venku zkoušet donekonečna. Počítá se v paměti procesu:
- * pro jednu uživatelku to stačí, po restartu (nebo na jiné instanci funkce)
- * se počítadlo vynuluje — proti hrubé síle z jedné adresy to pořád zabere.
+ * Omezení pokusů o přihlášení v paměti procesu. Je to jen první brzda proti
+ * zkoušení hesla z jedné adresy; trvalé počítadlo má každý účet v databázi
+ * (`users.failedLogins`, `lockedUntil`), protože na serverless má každá
+ * instance funkce vlastní paměť.
+ *
+ * Klíč je dvojice účtu a adresy, ne samotná adresa: ve sborovně chodí všichni
+ * z jedné IP a jinak by se zamykali navzájem.
  */
 export const LOGIN_MAX_ATTEMPTS = 10
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000
@@ -98,7 +236,7 @@ export interface LoginAttemptResult {
   remaining: number
 }
 
-/** Zaznamená pokus o přihlášení z dané adresy a řekne, jestli se má vyřídit. */
+/** Zaznamená pokus o přihlášení a řekne, jestli se má vyřídit. */
 export function recordLoginAttempt(key: string, now: number = Date.now()): LoginAttemptResult {
   const record = attempts.get(key)
   if (!record || now - record.startedAt >= LOGIN_WINDOW_MS) {

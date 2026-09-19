@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
-import { DELETE, GET, PATCH, PUT } from '@/app/api/questions/route'
+import { DELETE, GET, PATCH, POST, PUT } from '@/app/api/questions/route'
 import { db, questions } from '@/db'
-import { jsonReq, req, seedQuestion, seedTopic } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTopic } from './helpers'
 
 /**
  * Banka otázek: hledání a filtry se vyřizují na serveru a stránkuje se
@@ -211,5 +211,50 @@ describe('hromadné akce v bance', () => {
     const zbyle = new Set((await db.select({ id: questions.id }).from(questions)).map((row) => row.id))
     expect(zbyle.has(smazana)).toBe(false)
     expect(zbyle.has(zustava)).toBe(true)
+  })
+})
+
+describe('původ otázky', () => {
+  /** Založí otázku s dokladem původu a vrátí její řádek z databáze. */
+  async function createWithEvidence(topicId: string, fileName: string) {
+    const response = await POST(
+      jsonReq('/api/questions', 'POST', {
+        topicId,
+        question: {
+          type: 'short_answer',
+          difficulty: 1,
+          points: 1,
+          blocks: [],
+          payload: { prompt: 'Čím krmí savci mláďata?', answer: 'mateřským mlékem' },
+          evidence: { fileName, quote: 'mláďata krmí mateřským mlékem' },
+        },
+      }),
+    )
+    expect(response.status).toBe(200)
+    const { id } = (await response.json()) as { id: string }
+    const [row] = await db.select().from(questions).where(eq(questions.id, id)).limit(1)
+    return row
+  }
+
+  it('podle názvu souboru v dokladu se dohledá materiál, ze kterého otázka vznikla', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId, { fileName: 'Savci.pdf' })
+
+    expect((await createWithEvidence(topicId, 'Savci.pdf'))?.materialId).toBe(materialId)
+  })
+
+  it('název, který v tématu není, vazbu nevymyslí', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'Savci.pdf' })
+
+    expect((await createWithEvidence(topicId, 'Ptáci.pdf'))?.materialId).toBeNull()
+  })
+
+  it('u dvou materiálů téhož jména zůstane vazba prázdná, místo aby se hádalo', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'Savci.pdf' })
+    await seedMaterial(topicId, { fileName: 'Savci.pdf' })
+
+    expect((await createWithEvidence(topicId, 'Savci.pdf'))?.materialId).toBeNull()
   })
 })

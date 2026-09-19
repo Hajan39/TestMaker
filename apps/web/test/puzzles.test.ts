@@ -9,7 +9,7 @@ import { POST as createTest } from '@/app/api/tests/route'
 import { POST as addToTest } from '@/app/api/puzzles/[id]/to-test/route'
 import { loadTestItems } from '@/lib/tests'
 import { insertPuzzle, loadRenderablePuzzle, suggestPuzzleWords } from '@/lib/puzzles'
-import { jsonReq, req, seedMaterial, seedTemplate, seedTopic } from './helpers'
+import { jsonReq, req, seedMaterial, seedTemplate, seedTopic, UCET } from './helpers'
 
 /** Materiál musí mít dost textu, jinak se vytažení slov odmítne ještě před modelem. */
 const TEXT =
@@ -91,12 +91,12 @@ describe('hlavolamy v knihovně', () => {
   it('hlavolam k tisku se skládá z jediné položky druhu puzzle', async () => {
     await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(
+    const saved = await insertPuzzle(UCET, 
       { ...OSMISMERKA, kind: 'cryptogram', payload: { phrase: 'les', seed: 'a' } },
       { topicId },
     )
 
-    const renderable = await loadRenderablePuzzle(saved.id, { withKey: true })
+    const renderable = await loadRenderablePuzzle(UCET, saved.id, { withKey: true })
     expect(renderable?.items).toHaveLength(1)
     expect(renderable?.items[0]?.kind).toBe('puzzle')
     // Hlavolam se neznámkuje — políčko na body a známku na papíře nemá co dělat.
@@ -114,7 +114,7 @@ describe('hlavolam jako pátý druh položky testu', () => {
   it('zařadí se do písemky a nese si zmrazený snímek', async () => {
     const templateId = await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(OSMISMERKA, { topicId })
+    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId })
 
     const response = await createTest(
       jsonReq('/api/tests', 'POST', {
@@ -127,7 +127,7 @@ describe('hlavolam jako pátý druh položky testu', () => {
     expect(response.status).toBe(200)
     const { id } = (await response.json()) as { id: string }
 
-    const items = await loadTestItems(id)
+    const items = await loadTestItems(UCET, id)
     expect(items).toHaveLength(1)
     expect(items[0]?.kind).toBe('puzzle')
     expect(items[0]?.puzzle?.title).toBe('Části rostliny')
@@ -136,7 +136,7 @@ describe('hlavolam jako pátý druh položky testu', () => {
 
     // Úprava hlavolamu v knihovně nesmí změnit už zařazenou písemku.
     await db.update(puzzles).set({ title: 'Úplně jiný hlavolam' }).where(eq(puzzles.id, saved.id))
-    const after = await loadTestItems(id)
+    const after = await loadTestItems(UCET, id)
     expect(after[0]?.puzzle?.title).toBe('Části rostliny')
   })
 })
@@ -145,7 +145,7 @@ describe('zařazení hlavolamu do hotové písemky', () => {
   it('přibude na konci písemky i se snímkem', async () => {
     const templateId = await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(OSMISMERKA, { topicId })
+    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId })
 
     const created = await createTest(
       jsonReq('/api/tests', 'POST', {
@@ -162,14 +162,14 @@ describe('zařazení hlavolamu do hotové písemky', () => {
     })
     expect(response.status).toBe(200)
 
-    const items = await loadTestItems(testId)
+    const items = await loadTestItems(UCET, testId)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'puzzle'])
     expect(items[1]?.puzzle?.title).toBe('Části rostliny')
     expect(items[1]?.puzzleSnapshot).toBeTruthy()
   })
 
   it('do neexistující písemky se hlavolam nezařadí', async () => {
-    const saved = await insertPuzzle(OSMISMERKA, { topicId: null })
+    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId: null })
     const response = await addToTest(
       jsonReq(`/api/puzzles/${saved.id}/to-test`, 'POST', { testId: 'neexistuje' }),
       { params: Promise.resolve({ id: saved.id }) },
@@ -183,7 +183,7 @@ describe('slova od modelu', () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
 
-    const result = await suggestPuzzleWords(topicId, {
+    const result = await suggestPuzzleWords(UCET, topicId, {
       kind: 'wordsearch',
       count: 2,
       generate: modelVratiSlova,
@@ -195,7 +195,7 @@ describe('slova od modelu', () => {
   it('téma bez materiálů se odmítne dřív, než se model vůbec zavolá', async () => {
     const { topicId } = await seedTopic()
     await expect(
-      suggestPuzzleWords(topicId, {
+      suggestPuzzleWords(UCET, topicId, {
         kind: 'wordsearch',
         count: 5,
         generate: async () => {
@@ -209,7 +209,7 @@ describe('slova od modelu', () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
     await expect(
-      suggestPuzzleWords(topicId, { kind: 'cryptogram', count: 5, generate: modelSelze }),
+      suggestPuzzleWords(UCET, topicId, { kind: 'cryptogram', count: 5, generate: modelSelze }),
     ).rejects.toThrow(/quota/)
   })
 })

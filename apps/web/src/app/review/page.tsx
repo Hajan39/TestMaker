@@ -2,6 +2,7 @@ import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
 import { countQuestions } from '@/lib/questions'
 import { ReviewScreen, type ReviewScope } from './ReviewScreen'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Kontrola konceptů – TestMaker' }
@@ -22,8 +23,12 @@ export default async function ReviewPage({
 }: {
   searchParams: Promise<{ topicId?: string; gradeId?: string; subjectId?: string }>
 }) {
+  const ucet = await ucetStranky()
   const scope = await searchParams
-  const [tree, pending] = await Promise.all([loadLibraryTree(), countQuestions({ statuses: ['draft'] })])
+  const [tree, pending] = await Promise.all([
+    loadLibraryTree(ucet),
+    countQuestions(ucet, { statuses: ['draft'] }),
+  ])
 
   const subjects = tree.map((subject) => ({ id: subject.id, name: subject.name }))
   const grades = tree.flatMap((subject) =>

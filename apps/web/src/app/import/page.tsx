@@ -1,6 +1,7 @@
 import { PageShell } from '@testmaker/ui'
 import { loadLibraryTree } from '@/lib/library'
 import { ImportClient } from './ImportClient'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const metadata = { title: 'Import materiálů – TestMaker' }
 
@@ -8,7 +9,8 @@ export const metadata = { title: 'Import materiálů – TestMaker' }
 export const dynamic = 'force-dynamic'
 
 export default async function ImportPage() {
-  const tree = await loadLibraryTree()
+  const ucet = await ucetStranky()
+  const tree = await loadLibraryTree(ucet)
   // Předměty i ročníky z knihovny se v náhledu našeptávají, aby vedle
   // „Přírodopisu“ nevznikl druhý „PŘÍRODOPIS“ jen kvůli velikosti písmen.
   const library = tree.map((subject) => ({

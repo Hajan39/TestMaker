@@ -19,6 +19,10 @@
  * `--models` je žebříček (totéž co proměnná `AI_MODELS`): když prvnímu modelu
  * dojde denní limit, běh pokračuje dalším a nespadne celý ročník. Placený
  * model se do žebříčku dostane jen tím, že ho tam napíšeš.
+ *
+ * `--ucet <e-mail>` říká, za koho se generuje: otázky dostanou jeho školu
+ * a jeho jako autora. Bez něj se vezme první správce v databázi — na
+ * jednoškolní instalaci je to právě ten, kdo skript spouští.
  */
 import { existsSync, readFileSync } from 'node:fs'
 
@@ -31,6 +35,8 @@ interface Options {
   model?: string
   models?: string
   force: boolean
+  /** E-mail účtu, za který se generuje. */
+  ucet?: string
 }
 
 function parseArgs(argv: string[]): Options {
@@ -38,7 +44,8 @@ function parseArgs(argv: string[]): Options {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     const next = argv[i + 1]
-    if (arg === '--grade') options.gradeId = next
+    if (arg === '--ucet') options.ucet = next
+    else if (arg === '--grade') options.gradeId = next
     else if (arg === '--subject') options.subjectId = next
     else if (arg === '--all') options.all = true
     else if (arg === '--count') options.count = Number(next)
@@ -77,10 +84,27 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  const { db, grades, questions, topics } = await import('../src/db/index')
+  const { db, grades, questions, topics, users } = await import('../src/db/index')
   const { and, eq, ne, sql } = await import('drizzle-orm')
   const { DEFAULT_GENERATE_PARAMS, generateForTopic, resolveCount } = await import('../src/lib/generation')
   const { describeAiConfig, isAiConfigured, readAiLadder } = await import('@testmaker/core/ai')
+  const { asc } = await import('drizzle-orm')
+
+  // Za koho se generuje. Bez identity by otázky neměly školu ani autora —
+  // a sloupce jsou povinné, takže by zápis rovnou spadl.
+  const [ucet] = options.ucet
+    ? await db.select().from(users).where(eq(users.email, options.ucet.toLowerCase())).limit(1)
+    : await db.select().from(users).where(eq(users.role, 'spravce')).orderBy(asc(users.createdAt)).limit(1)
+  if (!ucet) {
+    console.error(
+      options.ucet
+        ? `Účet ${options.ucet} v databázi není.`
+        : 'V databázi není žádný správce — založ ho skriptem `pnpm --filter @testmaker/web uzivatel`.',
+    )
+    process.exit(1)
+  }
+  const scopeUcet = { schoolId: ucet.schoolId, userId: ucet.id, role: ucet.role }
+  console.log(`generuje se za účet ${ucet.email} (${ucet.name})`)
 
   if (!isAiConfigured()) {
     console.error('Chybí klíč k modelu — doplň ho do apps/web/.env.local.')
@@ -98,7 +122,7 @@ async function main(): Promise<void> {
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     // Téma bez použitelného textu by jen spadlo na chybu.
-    .where(and(scope, eq(topics.lowContent, false)))
+    .where(and(eq(topics.schoolId, ucet.schoolId), scope, eq(topics.lowContent, false)))
     .orderBy(topics.name)
 
   const ladder = readAiLadder()
@@ -116,7 +140,11 @@ async function main(): Promise<void> {
   for (const [index, topic] of rows.entries()) {
     const label = `${index + 1}/${rows.length} ${topic.grade ? `${topic.grade} · ` : ''}${topic.name}`
 
-    const wanted = await resolveCount(topic.id, { ...DEFAULT_GENERATE_PARAMS, count: options.count, mode: options.mode })
+    const wanted = await resolveCount(scopeUcet, topic.id, {
+      ...DEFAULT_GENERATE_PARAMS,
+      count: options.count,
+      mode: options.mode,
+    })
     if (options.mode === 'target' && wanted === 0) {
       console.log(`${label}: přeskočeno, počet je naplněný`)
       continue
@@ -125,7 +153,13 @@ async function main(): Promise<void> {
       const [existing] = await db
         .select({ value: sql<number>`count(*)` })
         .from(questions)
-        .where(and(eq(questions.topicId, topic.id), ne(questions.status, 'rejected')))
+        .where(
+          and(
+            eq(questions.schoolId, ucet.schoolId),
+            eq(questions.topicId, topic.id),
+            ne(questions.status, 'rejected'),
+          ),
+        )
       if (Number(existing?.value ?? 0) > 0) {
         console.log(`${label}: přeskočeno, otázky už má (--force je vygeneruje i tak)`)
         continue
@@ -134,7 +168,7 @@ async function main(): Promise<void> {
 
     const started = Date.now()
     try {
-      const outcome = await generateForTopic(topic.id, {
+      const outcome = await generateForTopic(scopeUcet, topic.id, {
         ...DEFAULT_GENERATE_PARAMS,
         count: options.count,
         mode: options.mode,

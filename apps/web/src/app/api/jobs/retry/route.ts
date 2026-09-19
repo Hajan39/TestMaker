@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { retryFailedJobs } from '@/lib/jobs'
+import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,7 @@ const bodySchema = z.object({
  * odznova.
  */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   // Tělo je nepovinné: „zkusit znovu všechno“ se posílá bez něj.
   const raw = (await request.text()).trim()
   let body: unknown = {}
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
 
-  const requeued = await retryFailedJobs(parsed.data.ids)
+  const requeued = await retryFailedJobs(ucet, parsed.data.ids)
   return Response.json({ ok: true, requeued })
+  }, { zapis: true })
 }

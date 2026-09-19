@@ -17,6 +17,7 @@ import {
   Label,
 } from '@testmaker/ui'
 import type { LibraryKind } from '@/lib/library'
+import { useMuzeMenit } from '@/components/Prava'
 
 /**
  * Zakládání a přejmenování v knihovně.
@@ -159,8 +160,12 @@ export function NewLibraryItem({
   size?: ComponentProps<typeof Button>['size']
   variant?: ComponentProps<typeof Button>['variant']
 }) {
+  // Náhled knihovnu nemění, takže ani nezakládá a nepřejmenovává. Hlídka je
+  // až za hooky, aby se jich v každém vykreslení volal stejný počet.
+  const muzeMenit = useMuzeMenit()
   const router = useRouter()
   const popisek = label ?? NAZVY[kind].novy
+  if (!muzeMenit) return null
 
   return (
     <NameDialog
@@ -223,8 +228,11 @@ export function RenameLibraryItem({
   size?: ComponentProps<typeof Button>['size']
   variant?: ComponentProps<typeof Button>['variant']
 }) {
+  // Totéž co u zakládání: náhled jen čte.
+  const muzeMenit = useMuzeMenit()
   const router = useRouter()
   const popisek = label ?? NAZVY[kind].prejmenovat
+  if (!muzeMenit) return null
 
   return (
     <NameDialog

@@ -19,6 +19,7 @@ import { NewLibraryItem, RenameLibraryItem } from '@/components/LibraryItemDialo
 import { TopicTile } from '@/components/TopicTile'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree, type GradeNode, type SubjectNode } from '@/lib/library'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,8 +28,9 @@ export default async function LibraryPage({
 }: {
   searchParams: Promise<{ grade?: string }>
 }) {
+  const ucet = await ucetStranky()
   const { grade: gradeId } = await searchParams
-  const tree = await loadLibraryTree()
+  const tree = await loadLibraryTree(ucet)
   const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   if (tree.length === 0) {

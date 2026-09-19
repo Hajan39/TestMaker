@@ -16,6 +16,10 @@
  *
  * Fronta generování (`generation_jobs`) se nepřenáší — je to pracovní stav
  * jednoho počítače, ne obsah knihovny.
+ *
+ * Škola se musí uvést (`--skola <id>`) a platí pro čtení i pro zápis: bez ní
+ * by šlo omylem slít obsah dvou škol do jedné a zpátky by to nikdo nerozebral.
+ * Vlastník, který v cíli neexistuje, připadne účtu z `--ucet`.
  */
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
@@ -38,6 +42,15 @@ import { popisTabulky } from '../src/lib/backupClient'
 const zapsat = process.argv.includes('--zapsat')
 const dryRun = !zapsat || process.argv.includes('--dry-run')
 
+/** Hodnota přepínače `--jmeno hodnota`. */
+function prepinac(jmeno: string): string | null {
+  const index = process.argv.indexOf(`--${jmeno}`)
+  return index >= 0 ? (process.argv[index + 1] ?? null) : null
+}
+
+const skolaId = prepinac('skola')
+const ucetId = prepinac('ucet')
+
 /**
  * Cíl se schválně nebere z `DATABASE_URL`. Ta míří na zdroj (lokální soubor)
  * a kdyby se z ní bral i cíl, stačilo by zapomenout na jednu proměnnou
@@ -53,6 +66,13 @@ function konec(zprava: string): never {
 }
 
 async function main() {
+  if (!skolaId || !ucetId) {
+    konec(
+      'Chybí --skola <id> a --ucet <id>. Škola určuje, co se přenáší a kam se to ' +
+        'zapíše; účet dostane obsah, jehož původní vlastník v cíli není. ' +
+        'Id najdeš v tabulkách `schools` a `users`.',
+    )
+  }
   if (!cilUrl) {
     konec(
       'Chybí TARGET_DATABASE_URL — adresa databáze, do které se má přenášet ' +
@@ -75,8 +95,8 @@ async function main() {
 
   await overSchema(cil)
 
-  const pred = await spocitej(cil)
-  const zdrojovePocty = await spocitej(zdroj)
+  const pred = await spocitej(cil, { schoolId: skolaId })
+  const zdrojovePocty = await spocitej(zdroj, { schoolId: skolaId })
 
   if (dryRun) {
     console.log('Nanečisto (--dry-run): nic se nezapisuje.\n')
@@ -98,8 +118,8 @@ async function main() {
     }
     const odkazy: OdkazDuplicity[] = []
     let hotovo = 0
-    for await (const davka of citejTabulku(zdroj, nazev)) {
-      const vysledek = await zapisRadky(cil, nazev, davka)
+    for await (const davka of citejTabulku(zdroj, nazev, { schoolId: skolaId })) {
+      const vysledek = await zapisRadky(cil, nazev, davka, { schoolId: skolaId, userId: ucetId })
       odkazy.push(...vysledek.odkazy)
       hotovo += vysledek.zapsano
       if (zdrojovePocty[nazev] > 0) prubeh(`${nazev}: ${hotovo}/${zdrojovePocty[nazev]}`)
@@ -116,7 +136,7 @@ async function main() {
   }
 
   console.log('')
-  const po = await spocitej(cil)
+  const po = await spocitej(cil, { schoolId: skolaId })
   vypisTabulku(zdrojovePocty, po, preneseno)
 
   const chybi = PORADI.filter((nazev) => po[nazev] < zdrojovePocty[nazev])

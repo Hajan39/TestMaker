@@ -4,63 +4,104 @@ import {
   LOGIN_WINDOW_MS,
   authMode,
   clearLoginAttempts,
-  isValidSession,
+  maPravo,
+  overitRelaci,
+  podepsatRelaci,
   recordLoginAttempt,
-  sessionToken,
+  type Relace,
 } from '@/lib/session'
 
-describe('podpis přihlašovací cookie', () => {
-  it('ze stejného hesla a tajemství vyrobí stejnou hodnotu', async () => {
-    const a = await sessionToken('tajneheslo', 'secret')
-    const b = await sessionToken('tajneheslo', 'secret')
-    expect(a).toBe(b)
-    expect(a).toMatch(/^[0-9a-f]{64}$/)
+const SECRET = 'tajemstvi-na-podpis'
+
+function relace(zmeny: Partial<Relace> = {}): Omit<Relace, 'v'> {
+  return {
+    uid: 'ucet-1',
+    sch: 'skola-1',
+    sid: 'relace-1',
+    role: 'ucitelka',
+    sv: 1,
+    exp: Date.now() + 60_000,
+    ...zmeny,
+  }
+}
+
+describe('podepsaná cookie relace', () => {
+  it('co se podepsalo, to se dá přečíst zpátky', async () => {
+    const token = await podepsatRelaci(relace(), SECRET)
+    const precteno = await overitRelaci(token, SECRET)
+    expect(precteno?.uid).toBe('ucet-1')
+    expect(precteno?.sid).toBe('relace-1')
+    expect(precteno?.role).toBe('ucitelka')
   })
 
-  it('jiné tajemství dá jinou hodnotu', async () => {
-    const a = await sessionToken('tajneheslo', 'secret')
-    const b = await sessionToken('tajneheslo', 'jine-secret')
-    expect(a).not.toBe(b)
+  it('odmítne podvržený obsah', async () => {
+    const token = await podepsatRelaci(relace(), SECRET)
+    const [obsah, podpis] = token.split('.')
+    const podvrh = `${Buffer.from(
+      JSON.stringify({ ...JSON.parse(Buffer.from(obsah!, 'base64url').toString()), role: 'spravce' }),
+    ).toString('base64url')}.${podpis}`
+    await expect(overitRelaci(podvrh, SECRET)).resolves.toBeNull()
   })
 
-  it('přijme vlastní podpis', async () => {
-    const value = await sessionToken('tajneheslo', 'secret')
-    await expect(isValidSession(value, 'tajneheslo', 'secret')).resolves.toBe(true)
+  it('odmítne cizí tajemství, nesmysl i chybějící cookie', async () => {
+    const token = await podepsatRelaci(relace(), SECRET)
+    await expect(overitRelaci(token, 'jine-tajemstvi')).resolves.toBeNull()
+    await expect(overitRelaci('nesmysl', SECRET)).resolves.toBeNull()
+    await expect(overitRelaci(undefined, SECRET)).resolves.toBeNull()
+    await expect(overitRelaci(token, '')).resolves.toBeNull()
   })
 
-  it('odmítne cizí hodnotu, prázdnou hodnotu i chybějící cookie', async () => {
-    await expect(isValidSession('podvrh', 'tajneheslo', 'secret')).resolves.toBe(false)
-    await expect(isValidSession('', 'tajneheslo', 'secret')).resolves.toBe(false)
-    await expect(isValidSession(undefined, 'tajneheslo', 'secret')).resolves.toBe(false)
+  it('vypršelou relaci nepustí, i když je podpis v pořádku', async () => {
+    const token = await podepsatRelaci(relace({ exp: Date.now() - 1 }), SECRET)
+    await expect(overitRelaci(token, SECRET)).resolves.toBeNull()
+  })
+})
+
+describe('co která role smí', () => {
+  const ucitelka = { ...relace(), v: 1 } as Relace
+  const spravce = { ...relace({ role: 'spravce' }), v: 1 } as Relace
+  const nahled = { ...relace({ role: 'nahled' }), v: 1 } as Relace
+
+  it('do správy pustí jen správce', () => {
+    expect(maPravo(spravce, '/sprava/uzivatele', 'GET')).toBe(true)
+    expect(maPravo(ucitelka, '/sprava/uzivatele', 'GET')).toBe(false)
+    expect(maPravo(ucitelka, '/api/sprava/uzivatele', 'POST')).toBe(false)
   })
 
-  it('odmítne podpis vyrobený jiným heslem', async () => {
-    const value = await sessionToken('stareheslo', 'secret')
-    await expect(isValidSession(value, 'noveheslo', 'secret')).resolves.toBe(false)
+  it('náhled smí číst a tisknout, ale nic měnit', () => {
+    expect(maPravo(nahled, '/api/tests/abc/pdf', 'GET')).toBe(true)
+    expect(maPravo(nahled, '/questions', 'GET')).toBe(true)
+    expect(maPravo(nahled, '/api/questions', 'POST')).toBe(false)
+    expect(maPravo(nahled, '/api/library', 'DELETE')).toBe(false)
+  })
+
+  it('učitelka smí pracovat s obsahem', () => {
+    expect(maPravo(ucitelka, '/api/questions', 'POST')).toBe(true)
+    expect(maPravo(ucitelka, '/api/generate', 'POST')).toBe(true)
+  })
+
+  it('kdo má vynucenou změnu hesla, nedostane se nikam jinam', () => {
+    const musi = { ...relace({ zh: true }), v: 1 } as Relace
+    expect(maPravo(musi, '/zmena-hesla', 'GET')).toBe(true)
+    expect(maPravo(musi, '/api/zmena-hesla', 'POST')).toBe(true)
+    expect(maPravo(musi, '/api/logout', 'POST')).toBe(true)
+    expect(maPravo(musi, '/questions', 'GET')).toBe(false)
   })
 })
 
 describe('rozhodnutí, jestli se přihlašuje', () => {
-  it('s heslem i tajemstvím je přihlašování zapnuté', () => {
-    expect(authMode({ APP_PASSWORD: 'tajneheslo', AUTH_SECRET: 'secret' })).toBe('zapnuto')
-    // Ani na Vercelu na tom nic nemění — je nastaveno, co má být.
-    expect(authMode({ APP_PASSWORD: 'tajneheslo', AUTH_SECRET: 'secret', VERCEL: '1' })).toBe(
-      'zapnuto',
-    )
+  it('s tajemstvím je přihlašování zapnuté', () => {
+    expect(authMode({ AUTH_SECRET: 'secret' })).toBe('zapnuto')
+    expect(authMode({ AUTH_SECRET: 'secret', VERCEL: '1' })).toBe('zapnuto')
   })
 
-  it('bez hesla mimo nasazení běží aplikace nechráněná (lokální vývoj a testy)', () => {
+  it('bez tajemství mimo nasazení běží aplikace nechráněná (lokální vývoj a testy)', () => {
     expect(authMode({})).toBe('vypnuto')
-    expect(authMode({ APP_PASSWORD: '', AUTH_SECRET: '' })).toBe('vypnuto')
+    expect(authMode({ AUTH_SECRET: '' })).toBe('vypnuto')
   })
 
-  it('bez hesla v nasazení je to chyba nastavení, ne tichý běh dokořán', () => {
+  it('bez tajemství v nasazení je to chyba nastavení, ne tichý běh dokořán', () => {
     expect(authMode({ VERCEL: '1' })).toBe('chybne-nastaveno')
-    expect(authMode({ VERCEL: '1', AUTH_SECRET: 'secret' })).toBe('chybne-nastaveno')
-  })
-
-  it('heslo bez tajemství je chyba nastavení všude — přihlásit by se nešlo', () => {
-    expect(authMode({ APP_PASSWORD: 'tajneheslo' })).toBe('chybne-nastaveno')
   })
 })
 
@@ -77,7 +118,7 @@ describe('omezení pokusů o přihlášení', () => {
     expect(blocked.retryAfterSeconds).toBeLessThanOrEqual(LOGIN_WINDOW_MS / 1000)
   })
 
-  it('počítá každé adrese zvlášť', () => {
+  it('počítá každému účtu a adrese zvlášť', () => {
     const start = Date.now()
     for (let i = 0; i < LOGIN_MAX_ATTEMPTS + 1; i += 1) recordLoginAttempt('1.2.3.4', start)
     expect(recordLoginAttempt('5.6.7.8', start).allowed).toBe(true)

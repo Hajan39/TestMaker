@@ -26,6 +26,8 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 import { nanoid } from 'nanoid'
 import { BUILT_IN_TEMPLATES } from '@testmaker/core/schema'
 import * as schema from '../src/db/schema'
+import { zahesovat } from '../src/lib/heslo'
+import { VYCHOZI_UCET_ID } from '../src/lib/vychozi'
 import { MIN_USABLE_TOPIC_CHARS } from '../src/db/schema'
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -249,6 +251,45 @@ const SUBJECTS: SeedSubject[] = [
   },
 ]
 
+/** Škola, do které patří všechna zkušební data. */
+const SKOLA_ID = 'skola-vyvoj'
+
+/**
+ * Účty pro testy. Hesla jsou stejná jako v `playwright.login.config.ts`;
+ * testovací databáze se kdykoli zahodí, takže tady nic tajného není.
+ */
+export const E2E_HESLO = 'e2e-tajne-heslo'
+const UCTY = [
+  {
+    id: VYCHOZI_UCET_ID,
+    email: 'spravce@localhost',
+    name: 'Vývojový správce',
+    role: 'spravce' as const,
+    heslo: E2E_HESLO,
+  },
+  {
+    id: 'e2e-ucitelka-a',
+    email: 'ucitelka.a@localhost',
+    name: 'Učitelka A',
+    role: 'ucitelka' as const,
+    heslo: E2E_HESLO,
+  },
+  {
+    id: 'e2e-ucitelka-b',
+    email: 'ucitelka.b@localhost',
+    name: 'Učitelka B',
+    role: 'ucitelka' as const,
+    heslo: E2E_HESLO,
+  },
+  {
+    id: 'e2e-nahled',
+    email: 'nahled@localhost',
+    name: 'Náhled',
+    role: 'nahled' as const,
+    heslo: E2E_HESLO,
+  },
+]
+
 async function main() {
   if (onlyIfMissing && existsSync(dbFile)) {
     console.log(`Testovací databáze ${dbFile} už je, nechávám ji být.`)
@@ -261,10 +302,29 @@ async function main() {
   const db = drizzle(client, { schema })
   await migrate(db, { migrationsFolder: resolve(webRoot, 'drizzle') })
 
+  /*
+   * Škola a účty. Hlavní běh testů jede s vypnutým přihlašováním a pracuje pod
+   * výchozím správcem; ostatní účty jsou tu pro běh s přihlášením, kde se
+   * ověřuje, že učitelka nevidí cizí písemku a náhled nesmí nic měnit.
+   * Hesla jsou schválně v kódu — je to zahoditelná testovací databáze.
+   */
+  await db.insert(schema.schools).values({ id: SKOLA_ID, name: 'Vývoj', slug: 'vyvoj' })
+  for (const ucet of UCTY) {
+    await db.insert(schema.users).values({
+      id: ucet.id,
+      schoolId: SKOLA_ID,
+      email: ucet.email,
+      name: ucet.name,
+      role: ucet.role,
+      passwordHash: ucet.heslo ? await zahesovat(ucet.heslo) : null,
+    })
+  }
+
   // Vestavěné šablony — na `builtin-klasicka` stojí tisk testu i náhledy.
   for (const [index, template] of BUILT_IN_TEMPLATES.entries()) {
     await db.insert(schema.templates).values({
       id: `builtin-${template.slug}`,
+      schoolId: SKOLA_ID,
       slug: template.slug,
       name: template.name,
       description: template.description,
@@ -283,14 +343,20 @@ async function main() {
     const subjectId = newId()
     await db
       .insert(schema.subjects)
-      .values({ id: subjectId, name: subject.name, position: subjectPosition++ })
+      .values({ id: subjectId, schoolId: SKOLA_ID, name: subject.name, position: subjectPosition++ })
 
     let gradePosition = 0
     for (const grade of subject.grades) {
       const gradeId = newId()
       await db
         .insert(schema.grades)
-        .values({ id: gradeId, subjectId, name: grade.name, position: gradePosition++ })
+        .values({
+          id: gradeId,
+          schoolId: SKOLA_ID,
+          subjectId,
+          name: grade.name,
+          position: gradePosition++,
+        })
 
       let topicPosition = 0
       for (const topic of grade.topics) {
@@ -298,6 +364,7 @@ async function main() {
         const body = text(topic.name, topic.sentence)
         await db.insert(schema.topics).values({
           id: topicId,
+          schoolId: SKOLA_ID,
           gradeId,
           name: topic.name,
           position: topicPosition++,
@@ -309,6 +376,7 @@ async function main() {
         const fileName = topic.fileName ?? `${topic.name}.txt`
         await db.insert(schema.materials).values({
           id: newId(),
+          schoolId: SKOLA_ID,
           topicId,
           fileName,
           relativePath: `${subject.name}/${grade.name}/${fileName}`,
@@ -326,6 +394,8 @@ async function main() {
         for (const question of questionSet(topic.name)) {
           await db.insert(schema.questions).values({
             id: newId(),
+            schoolId: SKOLA_ID,
+            createdBy: VYCHOZI_UCET_ID,
             topicId,
             materialId: null,
             type: question.type,

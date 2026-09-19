@@ -134,6 +134,10 @@ export function snapshotDiffersFromQuestion(
 
 export interface Test {
   id: string
+  /** Kdo písemku složil. Cizí se v aplikaci nezobrazí ani nevytiskne. */
+  ownerId: string
+  /** `soukrome` vidí jen autorka, `skola` i kolegyně ze sborovny. */
+  visibility: 'soukrome' | 'skola'
   title: string
   description: string | null
   /** Test na známky — bez toho se nevykreslují body ani políčko na známku. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadPickerTopics } from '@/lib/questionPicker'
-import { seedQuestion, seedTopic } from './helpers'
+import { seedQuestion, seedTopic, UCET } from './helpers'
 
 /**
  * Do písemky smí jen schválená otázka. Dokud se stav nečetl, šlo do testu
@@ -14,7 +14,7 @@ describe('výběr otázek do testu', () => {
     await seedQuestion(topicId, { prompt: 'Koncept', status: 'draft' })
     await seedQuestion(topicId, { prompt: 'Zamítnutá', status: 'rejected' })
 
-    const topics = await loadPickerTopics()
+    const topics = await loadPickerTopics(UCET)
     const picked = topics.flatMap((topic) => topic.questions)
 
     expect(picked.map((question) => question.id)).toEqual([approved])
@@ -25,7 +25,7 @@ describe('výběr otázek do testu', () => {
     const { topicId } = await seedTopic({ topic: 'Jen koncepty' })
     await seedQuestion(topicId, { status: 'draft' })
 
-    const topics = await loadPickerTopics()
+    const topics = await loadPickerTopics(UCET)
     expect(topics.find((topic) => topic.id === topicId)).toBeUndefined()
   })
 
@@ -35,7 +35,7 @@ describe('výběr otázek do testu', () => {
     await seedQuestion(topicId, { status: 'draft' })
     await seedQuestion(topicId, { status: 'rejected' })
 
-    const topics = await loadPickerTopics({ statuses: ['draft', 'approved', 'rejected'] })
+    const topics = await loadPickerTopics(UCET, { statuses: ['draft', 'approved', 'rejected'] })
     const topic = topics.find((entry) => entry.id === topicId)
     expect(topic?.questions).toHaveLength(3)
   })

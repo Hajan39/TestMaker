@@ -136,6 +136,8 @@ export const sampleQuestions: Question[] = [
 export function makeTest(overrides: Partial<Test> = {}): Test {
   return {
     id: 'test-1',
+    ownerId: 'ucitelka-1',
+    visibility: 'soukrome',
     title: 'Dýchací soustava',
     description: null,
     graded: true,

@@ -1,4 +1,4 @@
-import { inArray } from 'drizzle-orm'
+import { and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   QUESTION_STATUSES,
@@ -17,6 +17,7 @@ import {
   setStatusForTopic,
   type QuestionQuery,
 } from '@/lib/questions'
+import { skola, sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -69,6 +70,7 @@ const listSchema = z.object({
  * Vrací i `total`, aby šlo nad frontou ukázat, kolik práce ještě zbývá.
  */
 export async function GET(request: Request) {
+  return sRozsahem(async (ucet) => {
   const params = new URL(request.url).searchParams
   const parsed = listSchema.safeParse({
     statuses: params.getAll('status').length > 0 ? params.getAll('status') : undefined,
@@ -94,15 +96,17 @@ export async function GET(request: Request) {
   }
 
   const [page, total] = await Promise.all([
-    loadQuestionPage(query, { limit: parsed.data.limit, cursor: parsed.data.cursor }),
-    countQuestions(query),
+    loadQuestionPage(ucet, query, { limit: parsed.data.limit, cursor: parsed.data.cursor }),
+    countQuestions(ucet, query),
   ])
 
   return Response.json({ items: page.items, nextCursor: page.nextCursor, total })
+  })
 }
 
 /** Vlastní otázka učitele. */
 export async function POST(request: Request) {
+  return sRozsahem(async (ucet) => {
   const parsed = createSchema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
@@ -110,23 +114,30 @@ export async function POST(request: Request) {
   const problems = validateQuestionContent(parsed.data.question)
   if (problems.length > 0) return Response.json({ error: problems.join('; ') }, { status: 400 })
 
-  const [id] = await insertQuestions([parsed.data.question], {
+  const [id] = await insertQuestions(ucet, [parsed.data.question], {
     topicId: parsed.data.topicId,
     source: 'manual',
     status: 'approved',
   })
   return Response.json({ id })
+  }, { zapis: true })
 }
 
 /** Úprava obsahu nebo stavu jedné otázky. */
 export async function PATCH(request: Request) {
+  return sRozsahem(async (ucet) => {
   const parsed = updateSchema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
 
   const update: Record<string, unknown> = {}
-  if (parsed.data.status) update.status = parsed.data.status
+  if (parsed.data.status) {
+    update.status = parsed.data.status
+    // U schválení a zamítnutí je vidět, kdo rozhodl — banka je společná.
+    update.reviewedBy = ucet.userId
+    update.reviewedAt = new Date().toISOString()
+  }
   if (parsed.data.question) {
     const problems = validateQuestionContent(parsed.data.question)
     if (problems.length > 0) return Response.json({ error: problems.join('; ') }, { status: 400 })
@@ -141,8 +152,12 @@ export async function PATCH(request: Request) {
     update.searchText = searchTextFor(parsed.data.question)
   }
 
-  await db.update(questions).set(update).where(inArray(questions.id, [parsed.data.id]))
+  await db
+    .update(questions)
+    .set(update)
+    .where(and(skola(ucet, questions), inArray(questions.id, [parsed.data.id])))
   return Response.json({ ok: true })
+  }, { zapis: true })
 }
 
 /**
@@ -151,6 +166,7 @@ export async function PATCH(request: Request) {
  * přesně: co bylo schválené už předtím, se zpátky na koncept měnit nesmí.
  */
 export async function PUT(request: Request) {
+  return sRozsahem(async (ucet) => {
   const body = await request.json()
 
   if (body && typeof body === 'object' && 'topicId' in body) {
@@ -158,7 +174,7 @@ export async function PUT(request: Request) {
     if (!parsed.success) {
       return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
     }
-    const ids = await setStatusForTopic(parsed.data.topicId, parsed.data.from, parsed.data.status)
+    const ids = await setStatusForTopic(ucet, parsed.data.topicId, parsed.data.from, parsed.data.status)
     return Response.json({ updated: ids.length, ids })
   }
 
@@ -166,13 +182,23 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
-  await db.update(questions).set({ status: parsed.data.status }).where(inArray(questions.id, parsed.data.ids))
+  await db
+    .update(questions)
+    .set({
+      status: parsed.data.status,
+      reviewedBy: ucet.userId,
+      reviewedAt: new Date().toISOString(),
+    })
+    .where(and(skola(ucet, questions), inArray(questions.id, parsed.data.ids)))
   return Response.json({ updated: parsed.data.ids.length })
+  }, { zapis: true })
 }
 
 export async function DELETE(request: Request) {
-  const ids = new URL(request.url).searchParams.getAll('id')
-  if (ids.length === 0) return Response.json({ error: 'Chybí id' }, { status: 400 })
-  await deleteQuestionsWithAssets(ids)
-  return Response.json({ deleted: ids.length })
+  return sRozsahem(async (ucet) => {
+    const ids = new URL(request.url).searchParams.getAll('id')
+    if (ids.length === 0) return Response.json({ error: 'Chybí id' }, { status: 400 })
+    await deleteQuestionsWithAssets(ucet, ids)
+    return Response.json({ deleted: ids.length })
+  }, { zapis: true })
 }

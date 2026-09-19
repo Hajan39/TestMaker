@@ -12,7 +12,7 @@
  * přes `tsx`, kde se alias `@/` nerozřeší, a hlavně si musí umět sáhnout na
  * libovolnou databázi, ne jen na tu, nad kterou běží aplikace.
  */
-import { asc, getTableColumns, gt, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, getTableColumns, gt, sql, type SQL } from 'drizzle-orm'
 import type { AnySQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import * as schema from '../db/schema'
@@ -29,6 +29,18 @@ export type Radek = Record<string, unknown>
  * je to pracovní stav jednoho počítače, ne obsah knihovny, a na druhé straně
  * by jen strašila záznamy o bězích, které se tam nikdy nekonaly.
  */
+/**
+ * Rozsah zálohy a obnovy: vždy jedna škola. Filtrovat po učitelkách nemá
+ * smysl — částečný soubor by po obnově zanechal otázky bez témat. Obnova
+ * navíc souboru nevěří: školu i vlastníky si přepíše podle toho, kdo obnovuje
+ * (viz `zapisRadky`), jinak by nahraný soubor uměl zapsat řádky do cizí školy.
+ */
+export interface RozsahZalohy {
+  schoolId: string
+  /** Komu připadne obsah, jehož původní vlastník v cíli neexistuje. */
+  userId: string
+}
+
 export const TABULKY = {
   subjects: schema.subjects,
   grades: schema.grades,
@@ -196,14 +208,37 @@ export async function zapisRadky(
   db: BackupDb,
   nazev: NazevTabulky,
   rows: Radek[],
+  rozsah: RozsahZalohy,
 ): Promise<VysledekZapisu> {
   if (rows.length === 0) return { zapsano: 0, odkazy: [] }
+
+  // Účty, které v cíli opravdu jsou. Co v souboru ukazuje jinam (jiná škola,
+  // dávno smazaná kolegyně), připadne tomu, kdo obnovu spustil — jinak by
+  // obnova spadla na cizím klíči, nebo hůř, zapsala data pod cizí identitu.
+  const znameUcty = new Set(
+    (
+      await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.schoolId, rozsah.schoolId))
+    ).map((row) => row.id),
+  )
+  const kdo = (hodnota: unknown): string =>
+    typeof hodnota === 'string' && znameUcty.has(hodnota) ? hodnota : rozsah.userId
 
   const odkazy: OdkazDuplicity[] = []
   const pripravene = rows.map((row) => {
     const hodnoty = zJson(nazev, row)
     if (typeof hodnoty.id !== 'string' || hodnoty.id.length === 0) {
       throw new Error(`Řádek tabulky ${nazev} nemá id — soubor nejspíš není záloha TestMakeru.`)
+    }
+    // Škola se přebírá z toho, kdo obnovuje, ne ze souboru.
+    hodnoty.schoolId = rozsah.schoolId
+    for (const sloupec of ['ownerId', 'requestedBy'] as const) {
+      if (sloupec in hodnoty) hodnoty[sloupec] = kdo(hodnoty[sloupec])
+    }
+    for (const sloupec of ['createdBy', 'reviewedBy'] as const) {
+      if (hodnoty[sloupec] != null) hodnoty[sloupec] = kdo(hodnoty[sloupec])
     }
     if (nazev === 'materials' && typeof hodnoty.duplicateOfId === 'string') {
       odkazy.push({
@@ -313,9 +348,11 @@ export async function zapisOdkazyDuplicit(db: BackupDb, odkazy: OdkazDuplicity[]
 export async function* citejTabulku(
   db: BackupDb,
   nazev: NazevTabulky,
+  rozsah: { schoolId: string },
   davka = DAVKA,
 ): AsyncGenerator<Radek[]> {
   const table = tabulka(nazev)
+  const skola = eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, rozsah.schoolId)
   const vyber = await vyberSloupcu(db, nazev)
   // Prázdný výběr = na sloupce se zeptat nedalo; pak se čte celý řádek podle schématu.
   const uplny = Object.keys(vyber).length === 0
@@ -323,7 +360,9 @@ export async function* citejTabulku(
   for (;;) {
     const zaklad = uplny ? db.select() : db.select(vyber as never)
     const query = zaklad.from(table).orderBy(asc(table.id)).limit(davka)
-    const rows = (await (posledni === null ? query : query.where(gt(table.id, posledni)))) as Radek[]
+    const rows = (await (posledni === null
+      ? query.where(skola)
+      : query.where(and(skola, gt(table.id, posledni))))) as Radek[]
     if (rows.length === 0) return
     yield rows
     posledni = rows[rows.length - 1]!.id as string
@@ -368,14 +407,16 @@ async function vyberSloupcu(db: BackupDb, nazev: NazevTabulky): Promise<Record<s
 export type Pocty = Record<NazevTabulky, number>
 
 /** Kolik čeho v databázi je. Slouží k porovnání obou stran přenosu. */
-export async function spocitej(db: BackupDb): Promise<Pocty> {
+export async function spocitej(db: BackupDb, rozsah: { schoolId: string }): Promise<Pocty> {
   const jsou = await existujiciTabulky(db)
   const pocty = prazdnePocty()
   for (const nazev of PORADI) {
     if (!jsou.has(nazev)) continue
+    const table = tabulka(nazev)
     const [row] = await db
       .select({ value: sql<number>`count(*)` })
-      .from(tabulka(nazev))
+      .from(table)
+      .where(eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, rozsah.schoolId))
     pocty[nazev] = Number(row?.value ?? 0)
   }
   return pocty
@@ -393,7 +434,10 @@ export function prazdnePocty(): Pocty {
  * a poroste) nemá smysl držet v paměti jen proto, aby se z něj udělal jeden
  * řetězec — odpověď tak může odtékat průběžně.
  */
-export async function* zalohaKousky(db: BackupDb): AsyncGenerator<string> {
+export async function* zalohaKousky(
+  db: BackupDb,
+  rozsah: { schoolId: string },
+): AsyncGenerator<string> {
   yield `{"format":${JSON.stringify(FORMAT)},"verze":${VERZE},"vytvoreno":${JSON.stringify(
     new Date().toISOString(),
   )},"tabulky":{`
@@ -405,7 +449,7 @@ export async function* zalohaKousky(db: BackupDb): AsyncGenerator<string> {
     yield `${prvniTabulka ? '' : ','}${JSON.stringify(nazev)}:[`
     prvniTabulka = false
     let prvniRadek = true
-    for await (const rows of citejTabulku(db, nazev)) {
+    for await (const rows of citejTabulku(db, nazev, rozsah)) {
       const text = rows.map((row) => JSON.stringify(doJson(nazev, row))).join(',')
       yield prvniRadek ? text : `,${text}`
       prvniRadek = false
@@ -417,9 +461,9 @@ export async function* zalohaKousky(db: BackupDb): AsyncGenerator<string> {
 }
 
 /** Celá záloha jako jeden řetězec — pro testy a pro skript, ne pro odpověď. */
-export async function zalohaText(db: BackupDb): Promise<string> {
+export async function zalohaText(db: BackupDb, rozsah: { schoolId: string }): Promise<string> {
   let text = ''
-  for await (const kousek of zalohaKousky(db)) text += kousek
+  for await (const kousek of zalohaKousky(db, rozsah)) text += kousek
   return text
 }
 

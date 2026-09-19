@@ -3,6 +3,7 @@ import { aiStatus } from '@/lib/ai'
 import { loadPuzzleList, loadPuzzleTopics } from '@/lib/puzzles'
 import { loadTemplates } from '@/lib/tests'
 import { PuzzleWorkshop } from './PuzzleWorkshop'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Hlavolamy – TestMaker' }
@@ -12,10 +13,11 @@ export const metadata = { title: 'Hlavolamy – TestMaker' }
  * hotové se dají vytisknout na papír vedle písemky i zařadit do ní.
  */
 export default async function PuzzlesPage() {
+  const ucet = await ucetStranky()
   const [topics, puzzles, templates] = await Promise.all([
-    loadPuzzleTopics(),
-    loadPuzzleList(),
-    loadTemplates(),
+    loadPuzzleTopics(ucet),
+    loadPuzzleList(ucet),
+    loadTemplates(ucet),
   ])
 
   return (

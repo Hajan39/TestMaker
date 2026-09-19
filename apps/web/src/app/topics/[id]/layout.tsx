@@ -2,6 +2,7 @@ import { ThreePane } from '@testmaker/ui'
 import { LibrarySidebar } from '@/components/LibrarySidebar'
 import { TopicList } from '@/components/TopicList'
 import { loadLibraryTree } from '@/lib/library'
+import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,9 @@ export default async function TopicLayout({
   children: React.ReactNode
   params: Promise<{ id: string }>
 }) {
+  const ucet = await ucetStranky()
   const { id } = await params
-  const tree = await loadLibraryTree()
+  const tree = await loadLibraryTree(ucet)
   const grade = tree.flatMap((s) => s.grades).find((g) => g.topics.some((t) => t.id === id)) ?? null
 
   return (

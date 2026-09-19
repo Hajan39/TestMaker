@@ -5,6 +5,7 @@ import { db, generationJobs, grades, materials, questions, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
 import { clearJobs, countJobs, loadJobs } from '@/lib/jobs'
+import { skola, sRozsahem, type Scope } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -28,28 +29,34 @@ const enqueueSchema = z.object({
  * přibude i výpis jednotlivých témat pro přehled generování.
  */
 export async function GET(request: Request) {
-  const detail = new URL(request.url).searchParams.get('vypis') === '1'
-  const counts = await countJobs()
-  if (!detail) return Response.json(counts)
-  return Response.json({ ...counts, jobs: await loadJobs() })
+  return sRozsahem(async (ucet) => {
+    const detail = new URL(request.url).searchParams.get('vypis') === '1'
+    const counts = await countJobs(ucet)
+    if (!detail) return Response.json(counts)
+    return Response.json({ ...counts, jobs: await loadJobs(ucet) })
+  })
 }
 
 /** Zařadí materiály do fronty hromadného generování. */
 export async function POST(request: Request) {
+  return sRozsahem(
+    async (ucet) => {
   const parsed = enqueueSchema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
   const input = parsed.data
 
-  const scope = await resolveTopicIds(input)
-  if (scope.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
+  const vybrana = await resolveTopicIds(ucet, input)
+  if (vybrana.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
 
   // Témata bez použitelného textu nemá smysl zařazovat.
   const withText = await db
     .selectDistinct({ id: materials.topicId })
     .from(materials)
-    .where(and(inArray(materials.topicId, scope), isNull(materials.duplicateOfId)))
+    .where(
+      and(skola(ucet, materials), inArray(materials.topicId, vybrana), isNull(materials.duplicateOfId)),
+    )
   const topicIds = withText.map((row) => row.id)
 
   // Témata, která už otázky mají nebo čekají ve frontě, znovu nezařazujeme.
@@ -60,7 +67,9 @@ export async function POST(request: Request) {
     const withQuestions = await db
       .selectDistinct({ id: questions.topicId })
       .from(questions)
-      .where(and(isNotNull(questions.topicId), inArray(questions.topicId, topicIds)))
+      .where(
+        and(skola(ucet, questions), isNotNull(questions.topicId), inArray(questions.topicId, topicIds)),
+      )
     for (const row of withQuestions) if (row.id) busy.add(row.id)
   }
   const pending = await db
@@ -68,6 +77,7 @@ export async function POST(request: Request) {
     .from(generationJobs)
     .where(
       and(
+        skola(ucet, generationJobs),
         inArray(generationJobs.topicId, topicIds),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
@@ -79,6 +89,8 @@ export async function POST(request: Request) {
     await db.insert(generationJobs).values(
       toEnqueue.map((topicId) => ({
         id: newId(),
+        schoolId: ucet.schoolId,
+        requestedBy: ucet.userId,
         topicId,
         params: { count: input.count, types: input.types, difficulty: input.difficulty, mode: input.mode },
       })),
@@ -86,6 +98,9 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ enqueued: toEnqueue.length, skipped: topicIds.length - toEnqueue.length })
+    },
+    { zapis: true },
+  )
 }
 
 /**
@@ -94,15 +109,33 @@ export async function POST(request: Request) {
  * S `?rozsah=vse` zmizí i výpis hotových, když si ho chce učitelka uklidit.
  */
 export async function DELETE(request: Request) {
-  const scope = new URL(request.url).searchParams.get('rozsah') === 'vse' ? 'vse' : 'cekajici'
-  const removed = await clearJobs(scope)
-  return Response.json({ ok: true, removed })
+  return sRozsahem(
+    async (ucet) => {
+      const co = new URL(request.url).searchParams.get('rozsah') === 'vse' ? 'vse' : 'cekajici'
+      const removed = await clearJobs(ucet, co)
+      return Response.json({ ok: true, removed })
+    },
+    { zapis: true },
+  )
 }
 
-async function resolveTopicIds(input: z.infer<typeof enqueueSchema>): Promise<string[]> {
-  if (input.topicIds?.length) return input.topicIds
+async function resolveTopicIds(
+  scope: Scope,
+  input: z.infer<typeof enqueueSchema>,
+): Promise<string[]> {
+  // I výčet témat od prohlížeče se prožene školou: id se dá napsat jakékoli.
+  if (input.topicIds?.length) {
+    const rows = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(skola(scope, topics), inArray(topics.id, input.topicIds)))
+    return rows.map((row) => row.id)
+  }
   if (input.gradeId) {
-    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.gradeId, input.gradeId))
+    const rows = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(skola(scope, topics), eq(topics.gradeId, input.gradeId)))
     return rows.map((row) => row.id)
   }
   if (input.subjectId) {
@@ -110,7 +143,7 @@ async function resolveTopicIds(input: z.infer<typeof enqueueSchema>): Promise<st
       .select({ id: topics.id })
       .from(topics)
       .innerJoin(grades, eq(grades.id, topics.gradeId))
-      .where(eq(grades.subjectId, input.subjectId))
+      .where(and(skola(scope, topics), eq(grades.subjectId, input.subjectId)))
     return rows.map((row) => row.id)
   }
   return []

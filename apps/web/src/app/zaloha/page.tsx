@@ -1,6 +1,7 @@
 import { PageShell } from '@testmaker/ui'
 import { db } from '@/db'
 import { spocitej } from '@/lib/backup'
+import { ucetStranky } from '@/lib/uzivatel'
 import { ZalohaScreen } from './ZalohaScreen'
 
 export const metadata = { title: 'Záloha – TestMaker' }
@@ -10,7 +11,9 @@ export const metadata = { title: 'Záloha – TestMaker' }
 export const dynamic = 'force-dynamic'
 
 export default async function ZalohaPage() {
-  const pocty = await spocitej(db)
+  // Záloha je celá škola — proto ji vidí jen správce.
+  const ucet = await ucetStranky()
+  const pocty = await spocitej(db, { schoolId: ucet.schoolId })
 
   return (
     <PageShell>

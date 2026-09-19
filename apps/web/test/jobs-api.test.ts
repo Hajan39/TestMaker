@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { DELETE, GET, POST } from '@/app/api/jobs/route'
 import { db, generationJobs, materials, type GenerationJobParams } from '@/db'
 import { newId } from '@/lib/ids'
-import { jsonReq, req, seedMaterial, seedQuestion, seedTopic } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, UCET } from './helpers'
 
 /**
  * Fronta hromadného generování. Zařazuje se z celé knihovny naráz, takže se tu
@@ -118,10 +118,10 @@ describe('stav a vyprázdnění fronty', () => {
     // Soubor testů sdílí jednu databázi — počítá se to, co je ve frontě teď.
     await db.delete(generationJobs)
     await db.insert(generationJobs).values([
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'queued' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'running' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'done' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
 
     const body = (await (await GET(req('/api/jobs'))).json()) as Record<string, number>
@@ -132,10 +132,10 @@ describe('stav a vyprázdnění fronty', () => {
     const { topicId } = await seedTopic()
     await db.delete(generationJobs)
     await db.insert(generationJobs).values([
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'queued' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'running' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'error' },
-      { id: newId(), topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
     ])
 
     const body = (await (await DELETE(req('/api/jobs'))).json()) as { removed: number }

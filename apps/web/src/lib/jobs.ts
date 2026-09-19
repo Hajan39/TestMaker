@@ -1,6 +1,7 @@
 import 'server-only'
 import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm'
-import { db, generationJobs, grades, subjects, topics } from '@/db'
+import { db, generationJobs, grades, subjects, topics, users } from '@/db'
+import { muzeSpravovat, skola, type Scope } from './uzivatel'
 
 /**
  * Fronta generování pro přehled. Obrazovka i ukazatel v liště čtou totéž:
@@ -28,6 +29,10 @@ export interface QueueJob {
   /** Kolik otázek zadání chtělo — u čekajících je to jediné, co se dá říct. */
   wanted: number | null
   createdCount: number
+  /** Jméno té, kdo úlohu zadala. */
+  requestedByName: string
+  /** Je úloha moje? Podle toho se v přehledu nabízí opakování a mazání. */
+  mine: boolean
   error: string | null
   createdAt: string
   startedAt: string | null
@@ -38,10 +43,11 @@ export interface QueueJob {
 export const DONE_LIMIT = 20
 
 /** Počty podle stavu — levný dotaz pro ukazatel v liště. */
-export async function countJobs(): Promise<QueueCounts> {
+export async function countJobs(scope: Scope): Promise<QueueCounts> {
   const rows = await db
     .select({ status: generationJobs.status, value: count() })
     .from(generationJobs)
+    .where(skola(scope, generationJobs))
     .groupBy(generationJobs.status)
 
   const byStatus = Object.fromEntries(rows.map((row) => [row.status, row.value]))
@@ -57,7 +63,7 @@ export async function countJobs(): Promise<QueueCounts> {
  * Úlohy pro přehled: všechno nedokončené a k tomu posledních pár hotových.
  * Řadí se tak, jak se to čte — co běží, co čeká, co spadlo, co je hotové.
  */
-export async function loadJobs(): Promise<QueueJob[]> {
+export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
   const rows = await db
     .select({
       id: generationJobs.id,
@@ -65,6 +71,9 @@ export async function loadJobs(): Promise<QueueJob[]> {
       topicName: topics.name,
       gradeName: grades.name,
       subjectName: subjects.name,
+      /** Kdo úlohu zadal — jinak není poznat, kdo drží zablokované téma. */
+      requestedByName: users.name,
+      requestedBy: generationJobs.requestedBy,
       status: generationJobs.status,
       params: generationJobs.params,
       producedCount: generationJobs.producedCount,
@@ -77,7 +86,10 @@ export async function loadJobs(): Promise<QueueJob[]> {
     .innerJoin(topics, eq(topics.id, generationJobs.topicId))
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+    .innerJoin(users, eq(users.id, generationJobs.requestedBy))
     .where(
+      and(
+      skola(scope, generationJobs),
       or(
         inArray(generationJobs.status, ['queued', 'running', 'error']),
         // Hotové jen posledních pár: po hromadném generování jich jsou stovky
@@ -88,6 +100,7 @@ export async function loadJobs(): Promise<QueueJob[]> {
           order by coalesce(finished_at, created_at) desc
           limit ${DONE_LIMIT}
         )`,
+      ),
       ),
     )
     .orderBy(
@@ -101,6 +114,8 @@ export async function loadJobs(): Promise<QueueJob[]> {
     topicId: row.topicId,
     topicName: row.topicName,
     place: [row.subjectName, row.gradeName].filter(Boolean).join(' · '),
+    requestedByName: row.requestedByName,
+    mine: row.requestedBy === scope.userId,
     status: row.status,
     wanted: typeof row.params?.count === 'number' ? row.params.count : null,
     createdCount: row.producedCount,
@@ -116,8 +131,13 @@ export async function loadJobs(): Promise<QueueJob[]> {
  * limitu modelu zbývalo jediné: zařadit celý rozsah znovu a generovat i to,
  * co už hotové je.
  */
-export async function retryFailedJobs(ids?: string[]): Promise<number> {
+/**
+ * Opakovat jde jen vlastní úlohy; správce navíc i cizí, aby po někom uklidil.
+ */
+export async function retryFailedJobs(scope: Scope, ids?: string[]): Promise<number> {
   const target = and(
+    skola(scope, generationJobs),
+    muzeSpravovat(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
     eq(generationJobs.status, 'error'),
     ids?.length ? inArray(generationJobs.id, ids) : undefined,
   )
@@ -135,6 +155,7 @@ export async function retryFailedJobs(ids?: string[]): Promise<number> {
     .from(generationJobs)
     .where(
       and(
+        skola(scope, generationJobs),
         inArray(generationJobs.topicId, failed.map((row) => row.topicId)),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
@@ -157,10 +178,20 @@ export async function retryFailedJobs(ids?: string[]): Promise<number> {
  * viset a jejich téma by šlo odblokovat jedině zásahem do databáze.
  * `vse` k tomu smaže i výpis hotových, když si ho učitelka chce uklidit.
  */
-export async function clearJobs(scope: 'cekajici' | 'vse' = 'cekajici'): Promise<number> {
+export async function clearJobs(
+  scope: Scope,
+  co: 'cekajici' | 'vse' = 'cekajici',
+): Promise<number> {
   const removed = await db
     .delete(generationJobs)
-    .where(scope === 'vse' ? undefined : inArray(generationJobs.status, ['queued', 'error', 'running']))
+    .where(
+      and(
+        skola(scope, generationJobs),
+        // Uklízet cizí frontu smí jedině správce.
+        muzeSpravovat(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
+        co === 'vse' ? undefined : inArray(generationJobs.status, ['queued', 'error', 'running']),
+      ),
+    )
     .returning({ id: generationJobs.id })
   return removed.length
 }

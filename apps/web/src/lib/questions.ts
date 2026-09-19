@@ -9,8 +9,15 @@ import {
   type QuestionStatus,
   type QuestionType,
 } from '@testmaker/core/schema'
-import { assets, db, grades, questions, testItems, topics, type QuestionRow } from '@/db'
+import { assets, db, grades, materials, questions, testItems, topics, type QuestionRow } from '@/db'
+import { skola, type Scope } from './uzivatel'
 import { newId } from './ids'
+
+/**
+ * Banka je společná pro celou školu: schvaluje a opravuje kdokoli, kdo smí
+ * měnit obsah. Co společné není, je škola sama — rozsah proto chodí jako
+ * první parametr a bez něj se dotaz nedá napsat.
+ */
 
 /** Řádek z databáze na doménovou otázku. */
 export function toQuestion(row: QuestionRow): Question {
@@ -55,9 +62,9 @@ export interface QuestionList {
   limit: number
 }
 
-export async function loadQuestions(filter: QuestionFilter = {}): Promise<QuestionList> {
+export async function loadQuestions(scope: Scope, filter: QuestionFilter = {}): Promise<QuestionList> {
   const limit = filter.limit ?? QUESTION_LIST_LIMIT
-  const conditions: SQL[] = []
+  const conditions: SQL[] = [skola(scope, questions)]
   if (filter.topicIds?.length) conditions.push(inArray(questions.topicId, filter.topicIds))
   if (filter.types?.length) conditions.push(inArray(questions.type, filter.types))
   if (filter.statuses?.length) conditions.push(inArray(questions.status, filter.statuses))
@@ -67,7 +74,7 @@ export async function loadQuestions(filter: QuestionFilter = {}): Promise<Questi
   const rows = await db
     .select()
     .from(questions)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(questions.createdAt), asc(questions.id))
     .limit(limit + 1)
 
@@ -125,27 +132,72 @@ export function questionPrompt(question: { payload: unknown }): string {
  * o výběru rozhodovalo pořadí řádků v databázi, a prompt pak seznam ořezával
  * podruhé.
  */
-export async function loadAvoidPrompts(topicId: string, limit = AVOID_LIMIT): Promise<string[]> {
+export async function loadAvoidPrompts(
+  scope: Scope,
+  topicId: string,
+  limit = AVOID_LIMIT,
+): Promise<string[]> {
   const rows = await db
     .select({ payload: questions.payload })
     .from(questions)
-    .where(eq(questions.topicId, topicId))
+    .where(and(skola(scope, questions), eq(questions.topicId, topicId)))
     .orderBy(desc(questions.createdAt), desc(questions.id))
     .limit(limit)
   return rows.map((row) => questionPrompt(row))
 }
 
+/**
+ * Materiály tématu podle názvu souboru, pro dohledání původu otázky.
+ *
+ * Generování běží nad celým tématem, takže volající materiál nezná — jediné,
+ * co o původu otázky víme, je název souboru z dokladu (`evidence.fileName`,
+ * záhlaví `=== … ===` ve zdrojovém textu). Vazba je přitom potřeba: když se
+ * materiál přesune do jiného tématu, mají s ním odejít i jeho otázky.
+ *
+ * Název souboru se smí v tématu opakovat (tentýž název na jiné cestě). Takový
+ * název se do mapy nedostane vůbec: přiřadit otázku k jednomu ze dvou stejně
+ * pojmenovaných materiálů by byla hádanka, a přesunout ji podle špatného
+ * tipu je horší, než ji nechat být.
+ */
+async function materialsByFileName(
+  scope: Scope,
+  topicId: string,
+): Promise<Map<string, string | null>> {
+  const rows = await db
+    .select({ id: materials.id, fileName: materials.fileName })
+    .from(materials)
+    .where(and(skola(scope, materials), eq(materials.topicId, topicId)))
+
+  const byName = new Map<string, string | null>()
+  for (const row of rows) byName.set(row.fileName, byName.has(row.fileName) ? null : row.id)
+  return byName
+}
+
 export async function insertQuestions(
+  scope: Scope,
   items: QuestionContent[],
   context: { topicId: string; materialId?: string | null; source?: 'ai' | 'manual'; status?: QuestionStatus },
 ): Promise<string[]> {
   if (items.length === 0) return []
+  // Materiál od volajícího má přednost; jinak se hledá podle dokladu původu.
+  const byName =
+    context.materialId === undefined && items.some((item) => item.evidence)
+      ? await materialsByFileName(scope, context.topicId)
+      : new Map<string, string | null>()
+
   const rows = items.map((item) => {
     const evidence = normalizeEvidence(item.evidence)
     return {
       id: newId(),
+      schoolId: scope.schoolId,
+      // Kdo otázku nechal vzniknout. U běhu z fronty je to zadavatelka úlohy,
+      // ne ten, kdo zrovna otevřel okno.
+      createdBy: scope.userId,
       topicId: context.topicId,
-      materialId: context.materialId ?? null,
+      // Podle `item.evidence`, ne podle `evidence`: bez citace se doklad
+      // normalizuje na null, ale název souboru v něm pořád je a na dohledání
+      // materiálu stačí.
+      materialId: context.materialId ?? (item.evidence ? (byName.get(item.evidence.fileName) ?? null) : null),
       type: item.type,
       payload: item.payload,
       blocks: item.blocks ?? [],
@@ -191,31 +243,44 @@ function referencedAssetIds(row: {
  * odkazované ze zmrazených snímků, ne jen z živých otázek — jinak by smazání
  * otázky z banky vzalo obrázek i testu, který si ji zamrazil.
  */
-export async function deleteQuestionsWithAssets(ids: string[]): Promise<void> {
+export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Promise<void> {
   if (ids.length === 0) return
 
   const targets = await db
     .select({ id: questions.id, type: questions.type, payload: questions.payload, blocks: questions.blocks })
     .from(questions)
-    .where(inArray(questions.id, ids))
+    .where(and(skola(scope, questions), inArray(questions.id, ids)))
 
   const candidateAssetIds = new Set<string>()
   for (const row of targets) {
     for (const assetId of referencedAssetIds(row)) candidateAssetIds.add(assetId)
   }
 
-  await db.delete(questions).where(inArray(questions.id, ids))
+  // Maže se jen to, co skutečně patří téhle škole — cizí id se tiše přeskočí.
+  const mazane = targets.map((row) => row.id)
+  if (mazane.length === 0) return
+  await db.delete(questions).where(inArray(questions.id, mazane))
 
   if (candidateAssetIds.size === 0) return
 
   const remaining = await db
     .select({ type: questions.type, payload: questions.payload, blocks: questions.blocks })
     .from(questions)
+    .where(skola(scope, questions))
   for (const row of remaining) {
     for (const assetId of referencedAssetIds(row)) candidateAssetIds.delete(assetId)
   }
 
-  const snapshotRows = await db.select({ questionSnapshot: testItems.questionSnapshot }).from(testItems)
+  /*
+   * Zmrazené snímky se čtou napříč všemi učitelkami školy, ne jen svoje:
+   * kdyby se obrázek smazal jen proto, že ho drží cizí už vytištěná písemka,
+   * zmizel by jí ze zadání. Je to jediné místo, kde se do cizích testů sahá,
+   * a nevychází z něj nic než identifikátory příloh.
+   */
+  const snapshotRows = await db
+    .select({ questionSnapshot: testItems.questionSnapshot })
+    .from(testItems)
+    .where(skola(scope, testItems))
   for (const row of snapshotRows) {
     const snapshot = parseQuestionSnapshot(row.questionSnapshot)
     if (!snapshot) continue
@@ -269,14 +334,20 @@ export function decodeCursor(value: string | null | undefined): QuestionCursor |
 }
 
 /** Podmínky filtru; patro knihovny nad tématem se řeší poddotazem nad `topics`. */
-function queryConditions(query: QuestionQuery): SQL[] {
-  const conditions: SQL[] = []
+function queryConditions(scope: Scope, query: QuestionQuery): SQL[] {
+  const conditions: SQL[] = [skola(scope, questions)]
   if (query.statuses?.length) conditions.push(inArray(questions.status, query.statuses))
   if (query.types?.length) conditions.push(inArray(questions.type, query.types))
   if (query.topicId) conditions.push(eq(questions.topicId, query.topicId))
   if (query.gradeId) {
     conditions.push(
-      inArray(questions.topicId, db.select({ id: topics.id }).from(topics).where(eq(topics.gradeId, query.gradeId))),
+      inArray(
+        questions.topicId,
+        db
+          .select({ id: topics.id })
+          .from(topics)
+          .where(and(skola(scope, topics), eq(topics.gradeId, query.gradeId))),
+      ),
     )
   }
   if (query.subjectId) {
@@ -287,7 +358,7 @@ function queryConditions(query: QuestionQuery): SQL[] {
           .select({ id: topics.id })
           .from(topics)
           .innerJoin(grades, eq(grades.id, topics.gradeId))
-          .where(eq(grades.subjectId, query.subjectId)),
+          .where(and(skola(scope, topics), eq(grades.subjectId, query.subjectId))),
       ),
     )
   }
@@ -299,12 +370,12 @@ function queryConditions(query: QuestionQuery): SQL[] {
 }
 
 /** Kolik otázek filtru odpovídá — číslo „zbývá" nad frontou. */
-export async function countQuestions(query: QuestionQuery = {}): Promise<number> {
-  const conditions = queryConditions(query)
+export async function countQuestions(scope: Scope, query: QuestionQuery = {}): Promise<number> {
+  const conditions = queryConditions(scope, query)
   const [row] = await db
     .select({ value: sql<number>`count(*)` })
     .from(questions)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
   return Number(row?.value ?? 0)
 }
 
@@ -314,11 +385,12 @@ export async function countQuestions(query: QuestionQuery = {}): Promise<number>
  * se při posunu kurzorem žádná otázka nezopakuje ani nevynechá.
  */
 export async function loadQuestionPage(
+  scope: Scope,
   query: QuestionQuery = {},
   options: { limit?: number; cursor?: string | null } = {},
 ): Promise<{ items: Question[]; nextCursor: string | null }> {
   const limit = Math.min(Math.max(options.limit ?? QUESTION_PAGE_SIZE, 1), 200)
-  const conditions = queryConditions(query)
+  const conditions = queryConditions(scope, query)
 
   const cursor = decodeCursor(options.cursor)
   if (cursor) {
@@ -333,7 +405,7 @@ export async function loadQuestionPage(
   const rows = await db
     .select()
     .from(questions)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(asc(questions.createdAt), asc(questions.id))
     .limit(limit + 1)
 
@@ -352,13 +424,21 @@ export async function loadQuestionPage(
  * otázky, které v cílovém stavu byly už předtím, se vracet nesmějí.
  */
 export async function setStatusForTopic(
+  scope: Scope,
   topicId: string,
   from: QuestionStatus,
   to: QuestionStatus,
 ): Promise<string[]> {
-  const where = and(eq(questions.topicId, topicId), eq(questions.status, from))
+  const where = and(
+    skola(scope, questions),
+    eq(questions.topicId, topicId),
+    eq(questions.status, from),
+  )
   const rows = await db.select({ id: questions.id }).from(questions).where(where)
   if (rows.length === 0) return []
-  await db.update(questions).set({ status: to }).where(where)
+  await db
+    .update(questions)
+    .set({ status: to, reviewedBy: scope.userId, reviewedAt: new Date().toISOString() })
+    .where(where)
   return rows.map((row) => row.id)
 }

@@ -24,6 +24,7 @@ import {
 import { announceGeneration } from '@/components/GenerationStatus'
 import { drainQueue } from '@/lib/generateClient'
 import { shrnutiBehu } from '@/lib/queueSummary'
+import { useMuzeMenit } from '@/components/Prava'
 
 export interface BulkScope {
   label: string
@@ -42,6 +43,8 @@ export function BulkGenerate({
   scopes: BulkScope[]
   ai: { configured: boolean; provider: string; model: string }
 }) {
+  // Generovat smí jen ten, kdo smí měnit obsah.
+  const muzeMenit = useMuzeMenit()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
@@ -50,6 +53,9 @@ export function BulkGenerate({
   const [status, setStatus] = useState<string | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const stopRef = useRef(false)
+
+  // Hlídka až za hooky: pořadí volání hooků musí být v každém vykreslení stejné.
+  if (!muzeMenit) return null
 
   async function start(scope: BulkScope) {
     setErrors([])

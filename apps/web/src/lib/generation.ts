@@ -2,7 +2,8 @@ import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
-import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
+import { db, generationJobs, grades, materials, questions, subjects, topics, users } from '@/db'
+import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
 
@@ -31,12 +32,18 @@ export const DEFAULT_GENERATE_PARAMS: GenerateParams = {
  * jen otázky, které v tématu zůstaly použitelné — zamítnuté se do počtu
  * nepočítají, jinak by doplnění nikdy nic nevytvořilo.
  */
-export async function resolveCount(topicId: string, params: GenerateParams): Promise<number> {
+export async function resolveCount(
+  scope: Scope,
+  topicId: string,
+  params: GenerateParams,
+): Promise<number> {
   if (params.mode !== 'target') return params.count
   const [row] = await db
     .select({ value: sql<number>`count(*)` })
     .from(questions)
-    .where(and(eq(questions.topicId, topicId), ne(questions.status, 'rejected')))
+    .where(
+      and(skola(scope, questions), eq(questions.topicId, topicId), ne(questions.status, 'rejected')),
+    )
   return Math.max(0, params.count - Number(row?.value ?? 0))
 }
 
@@ -64,7 +71,11 @@ export interface GenerateOutcome {
  *
  * Vrací id rezervace, nebo `null`, když už téma někdo zpracovává.
  */
-export async function claimTopic(topicId: string): Promise<string | null> {
+/**
+ * Zámek je na téma, ne na učitelku: knihovna je společná a dvě generování nad
+ * týmž tématem naráz by do ní nasypala tytéž otázky.
+ */
+export async function claimTopic(scope: Scope, topicId: string): Promise<string | null> {
   const id = newId()
   const startedAt = new Date().toISOString()
 
@@ -73,8 +84,9 @@ export async function claimTopic(topicId: string): Promise<string | null> {
   // druhé generování a obě si téma zaberou. Jeden příkaz zapisuje pod zámkem
   // databáze, takže podmínku vyhodnotí právě jeden z nich.
   const claimed = await db.all<{ id: string }>(sql`
-    insert into ${generationJobs} (id, topic_id, params, status, started_at)
-    select ${id}, ${topicId}, ${JSON.stringify(DEFAULT_GENERATE_PARAMS)}, 'running', ${startedAt}
+    insert into ${generationJobs} (id, school_id, requested_by, topic_id, params, status, started_at)
+    select ${id}, ${scope.schoolId}, ${scope.userId}, ${topicId},
+           ${JSON.stringify(DEFAULT_GENERATE_PARAMS)}, 'running', ${startedAt}
     where not exists (
       select 1 from ${generationJobs}
       where topic_id = ${topicId} and status in ('queued', 'running')
@@ -102,7 +114,10 @@ export async function releaseTopic(
 }
 
 /** Text celé skupiny materiálů jednoho tématu, s hlavičkami podle souborů. */
-export async function loadTopicSource(topicId: string): Promise<{
+export async function loadTopicSource(
+  scope: Scope,
+  topicId: string,
+): Promise<{
   text: string
   topicName: string
   gradeName: string
@@ -114,7 +129,7 @@ export async function loadTopicSource(topicId: string): Promise<{
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(eq(topics.id, topicId))
+    .where(and(skola(scope, topics), eq(topics.id, topicId)))
     .limit(1)
   if (!meta) return null
 
@@ -122,7 +137,7 @@ export async function loadTopicSource(topicId: string): Promise<{
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
     .from(materials)
-    .where(and(eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
     .orderBy(asc(materials.fileName))
 
   const text = rows
@@ -139,6 +154,7 @@ export async function loadTopicSource(topicId: string): Promise<{
  * k opakujícím se otázkám, proto je vstupem vždy celé téma.
  */
 export async function generateForTopic(
+  scope: Scope,
   topicId: string,
   params: GenerateParams,
   options: {
@@ -154,18 +170,18 @@ export async function generateForTopic(
     generate?: typeof generateQuestions
   } = {},
 ): Promise<GenerateOutcome> {
-  const wanted = await resolveCount(topicId, params)
+  const wanted = await resolveCount(scope, topicId, params)
   if (wanted <= 0) {
     return { created: 0, rejected: 0, failedCalls: 0, topicId, sources: 0, models: [] }
   }
 
-  const source = await loadTopicSource(topicId)
+  const source = await loadTopicSource(scope, topicId)
   if (!source) throw new Error('Téma nenalezeno')
   if (source.text.trim().length < 200) {
     throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
   }
 
-  const avoid = await loadAvoidPrompts(topicId)
+  const avoid = await loadAvoidPrompts(scope, topicId)
 
   // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
   let created = 0
@@ -185,7 +201,7 @@ export async function generateForTopic(
       signal: options.signal,
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
-        const ids = await insertQuestions(batch, { topicId, source: 'ai', status: 'draft' })
+        const ids = await insertQuestions(scope, batch, { topicId, source: 'ai', status: 'draft' })
         // Který model otázku vyrobil, se ukládá jen do databáze pro pozdější
         // porovnání kvality — v rozhraní se nikde nezobrazuje. Zapisuje se
         // zvlášť, aby `insertQuestions` zůstalo o obsahu otázky, ne o tom,
@@ -196,7 +212,10 @@ export async function generateForTopic(
         // Hotové otázky ven ještě za běhu — ale jen když o ně někdo stojí,
         // aby se ve frontě (kde je nikdo nečte) nedělal dotaz navíc.
         if (options.onSaved && ids.length > 0) {
-          const rows = await db.select().from(questions).where(inArray(questions.id, ids))
+          const rows = await db
+            .select()
+            .from(questions)
+            .where(and(skola(scope, questions), inArray(questions.id, ids)))
           // Pořadí z databáze není zaručené; vracíme dávku tak, jak vznikla.
           const byId = new Map(rows.map((row) => [row.id, toQuestion(row)]))
           await options.onSaved({
@@ -227,17 +246,29 @@ export async function generateForTopic(
  * několik minut. Čte ale rezervaci cizí: kdyby se náhrada trefila doprostřed
  * dávky, obě volání by pracovala se stejným seznamem „těmhle se vyhni".
  */
-export async function isTopicBusy(topicId: string): Promise<boolean> {
-  const running = await db
-    .select({ id: generationJobs.id })
+export async function isTopicBusy(scope: Scope, topicId: string): Promise<{ kdo: string } | null> {
+  const [running] = await db
+    .select({ id: generationJobs.id, kdo: users.name })
     .from(generationJobs)
-    .where(and(eq(generationJobs.topicId, topicId), inArray(generationJobs.status, ['queued', 'running'])))
+    .innerJoin(users, eq(users.id, generationJobs.requestedBy))
+    .where(
+      and(
+        skola(scope, generationJobs),
+        eq(generationJobs.topicId, topicId),
+        inArray(generationJobs.status, ['queued', 'running']),
+      ),
+    )
     .limit(1)
-  return running.length > 0
+  return running ? { kdo: running.kdo } : null
 }
 
 export const TOPIC_BUSY_MESSAGE =
   'Nad tímhle tématem právě běží generování. Počkej, než doběhne, a zkus to znovu.'
+
+/** Hláška i se jménem — bez něj vypadá zablokované téma jako porucha. */
+export function topicBusyMessage(kdo: string): string {
+  return `Nad tímhle tématem právě generuje ${kdo}. Počkej, než to doběhne, a zkus to znovu.`
+}
 
 /**
  * Nahradí jednu otázku novou od modelu.
@@ -251,22 +282,28 @@ export const TOPIC_BUSY_MESSAGE =
  * `generate` se dá podstrčit v testech; v aplikaci se nepředává.
  */
 export async function regenerateQuestion(
+  scope: Scope,
   questionId: string,
   options: { signal?: AbortSignal; generate?: typeof generateQuestions } = {},
 ): Promise<Question> {
-  const [original] = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1)
+  const [original] = await db
+    .select()
+    .from(questions)
+    .where(and(skola(scope, questions), eq(questions.id, questionId)))
+    .limit(1)
   if (!original) throw new Error('Otázka nenalezena')
   if (!original.topicId) throw new Error('Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada')
 
   const topicId = original.topicId
-  if (await isTopicBusy(topicId)) throw new Error(TOPIC_BUSY_MESSAGE)
+  const busy = await isTopicBusy(scope, topicId)
+  if (busy) throw new Error(topicBusyMessage(busy.kdo))
 
   const type = original.type
   if (!AI_QUESTION_TYPES.includes(type as (typeof AI_QUESTION_TYPES)[number])) {
     throw new Error('Tenhle typ otázky model generovat neumí, uprav ji prosím ručně')
   }
 
-  const source = await loadTopicSource(topicId)
+  const source = await loadTopicSource(scope, topicId)
   if (!source) throw new Error('Téma nenalezeno')
   if (source.text.trim().length < 200) {
     throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
@@ -274,7 +311,7 @@ export async function regenerateQuestion(
 
   // Nahrazovaná otázka je v seznamu „vyhni se" taky — jinak by model klidně
   // vrátil tutéž otázku, kterou učitelka právě zavrhla.
-  const avoid = await loadAvoidPrompts(topicId)
+  const avoid = await loadAvoidPrompts(scope, topicId)
 
   const generate = options.generate ?? generateQuestions
   const result = await generate(
@@ -297,13 +334,20 @@ export async function regenerateQuestion(
   }
 
   // Až teď — náhrada je na světě, původní otázka může odejít.
-  const [newId] = await insertQuestions([replacement], { topicId, source: 'ai', status: 'draft' })
+  const [newId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai', status: 'draft' })
   // Model jen do databáze, stejně jako u dávkového generování (v rozhraní nikde).
   const usedModel = result.models[0]
   if (newId && usedModel) await db.update(questions).set({ model: usedModel }).where(eq(questions.id, newId))
-  await db.update(questions).set({ status: 'rejected' }).where(eq(questions.id, questionId))
+  await db
+    .update(questions)
+    .set({ status: 'rejected', reviewedBy: scope.userId, reviewedAt: new Date().toISOString() })
+    .where(and(skola(scope, questions), eq(questions.id, questionId)))
 
-  const [row] = await db.select().from(questions).where(eq(questions.id, newId!)).limit(1)
+  const [row] = await db
+    .select()
+    .from(questions)
+    .where(and(skola(scope, questions), eq(questions.id, newId!)))
+    .limit(1)
   if (!row) throw new Error('Náhradu se nepodařilo uložit')
   return toQuestion(row)
 }
