@@ -49,6 +49,9 @@ export function TestBuilder({
     // Klíč se už nenastavuje u testu, ale volí se až při tisku („Zadání pro
     // žáky" / „Klíč pro mě"). Sloupec v databázi zůstává, jen ho nic nemění.
     showKey: test?.showKey ?? true,
+    // Písemka je ve výchozím stavu soukromá; nasdílí se, až když si to
+    // autorka řekne.
+    visibility: test?.visibility ?? 'soukrome',
   }))
   const [draft, setDraft] = useState<DraftItem[]>(() =>
     items.map((item) => ({
@@ -248,6 +251,7 @@ export function TestBuilder({
       header: settings.header,
       variants: settings.variants,
       showKey: settings.showKey,
+      visibility: settings.visibility,
       items: draft.map((item) => ({
         id: item.id,
         kind: item.kind,

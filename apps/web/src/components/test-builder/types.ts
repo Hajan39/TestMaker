@@ -42,6 +42,8 @@ export interface TestSettingsValue {
   header: TestHeaderConfig
   variants: 1 | 2
   showKey: boolean
+  /** `soukrome` vidí jen autorka, `skola` i kolegyně ze sborovny. */
+  visibility: 'soukrome' | 'skola'
 }
 
 /** `key` je stabilní jen v paměti prohlížeče, proto stačí čítač na modul. */

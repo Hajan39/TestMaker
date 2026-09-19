@@ -11,8 +11,18 @@ export const metadata = { title: 'Záloha – TestMaker' }
 export const dynamic = 'force-dynamic'
 
 export default async function ZalohaPage() {
-  // Záloha je celá škola — proto ji vidí jen správce.
+  // Záloha je celá škola včetně cizích písemek — proto ji vidí jen správce.
   const ucet = await ucetStranky()
+  if (ucet.role !== 'spravce') {
+    return (
+      <PageShell>
+        <p className="text-sm text-fg-soft">
+          Zálohu školy stahuje a obnovuje správce. Vlastní písemky si vytiskneš v Testech.
+        </p>
+      </PageShell>
+    )
+  }
+
   const pocty = await spocitej(db, { schoolId: ucet.schoolId })
 
   return (

@@ -57,3 +57,52 @@ test('cizí písemka není v seznamu, na adrese ani v PDF', async ({ browser, ba
     await kontextB.close()
   }
 })
+
+test('nasdílenou písemku kolegyně otevře, ale neuloží', async ({ browser, baseURL }) => {
+  const kontextA = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+  const kontextB = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaB.json', baseURL })
+
+  try {
+    const nazev = `Sdílená písemka ${Date.now()}`
+    const zalozeni = await kontextA.request.post('/api/tests', {
+      data: {
+        title: nazev,
+        description: null,
+        graded: true,
+        templateId: 'builtin-klasicka',
+        header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+        variants: 1,
+        showKey: true,
+        visibility: 'skola',
+        items: [],
+      },
+    })
+    const { id } = (await zalozeni.json()) as { id: string }
+
+    // Kolegyně ji vidí i vytiskne.
+    const strankaB = await kontextB.newPage()
+    await strankaB.goto('/tests')
+    await expect(strankaB.getByText(nazev)).toBeVisible()
+    expect((await kontextB.request.get(`/api/tests/${id}/pdf`)).status()).toBe(200)
+
+    // Přepsat ji ale nesmí — sdílení je ke čtení, ne ke spoluautorství.
+    const prepis = await kontextB.request.put('/api/tests', {
+      data: {
+        id,
+        title: 'Přepsáno kolegyní',
+        description: null,
+        graded: true,
+        templateId: 'builtin-klasicka',
+        header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+        variants: 1,
+        showKey: true,
+        visibility: 'skola',
+        items: [],
+      },
+    })
+    expect(prepis.status()).toBe(404)
+  } finally {
+    await kontextA.close()
+    await kontextB.close()
+  }
+})

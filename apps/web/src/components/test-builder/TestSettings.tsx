@@ -144,6 +144,21 @@ export function TestSettings({
               />
               Test na známky (tiskne body a políčko na známku)
             </label>
+            {/* Písemka je jinak vidět jen své autorce. Sdílení se hodí, když
+                někdo onemocní a kolegyně za něj jde učit — pak si ji aspoň
+                vytiskne, místo aby ji skládala znovu. */}
+            <label className="flex items-center gap-2 text-sm text-fg-soft">
+              <Checkbox
+                checked={value.visibility === 'skola'}
+                onCheckedChange={() =>
+                  onChange({
+                    ...value,
+                    visibility: value.visibility === 'skola' ? 'soukrome' : 'skola',
+                  })
+                }
+              />
+              Sdílet s kolegyněmi ze školy (uvidí ji a vytisknou, měnit ji nemohou)
+            </label>
           </div>
         </div>
       </SheetContent>
