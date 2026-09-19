@@ -56,7 +56,27 @@ function truncateAvoidItem(text: string): string {
   return text.length > AVOID_ITEM_MAX_LEN ? `${text.slice(0, AVOID_ITEM_MAX_LEN)}…` : text
 }
 
-export function buildSystemPrompt(): string {
+/**
+ * Pro koho se otázky píšou. Materiály od učitelky bývají odbornější než to,
+ * co má žák umět (vysokoškolská skripta, odborné články), a model bez tohohle
+ * vodítka jede po náročnosti textu, ne po ročníku — pak z přírodopisu v šestce
+ * vyleze otázka na buněčné dýchání pojmy z vysoké školy.
+ *
+ * Věk se odvozuje z čísla na začátku názvu ročníku (`8. ročník`), stejně jako
+ * pořadí ročníků v knihovně. Bez čísla i bez ročníku zůstává obecný žák
+ * základní školy: to je nejhorší odhad, se kterým se nic nepokazí, protože
+ * pořád drží model pod úrovní střední školy.
+ */
+export function describeGradeAudience(gradeName: string | null | undefined): string {
+  const match = gradeName ? /^\s*(\d+)/.exec(gradeName) : null
+  const grade = match ? Number(match[1]) : null
+  if (grade === null || grade < 1 || grade > 9) return 'žák základní školy'
+  // První ročník nastupuje v šesti letech, každý další o rok výš.
+  return `žák ${grade}. ročníku základní školy (${grade + 5}–${grade + 6} let)`
+}
+
+export function buildSystemPrompt(gradeName?: string | null): string {
+  const audience = describeGradeAudience(gradeName)
   return [
     'Jsi zkušený učitel na české základní škole a tvoříš otázky do písemek.',
     '',
@@ -72,11 +92,22 @@ export function buildSystemPrompt(): string {
     '9. Nepoužívej odkazy na "obrázek na slidu" ani na číslování stránek zdroje.',
     '10. Ke každé otázce vyplň evidence: název souboru ze záhlaví === … === a doslovnou větu z materiálu, o kterou se správná odpověď opírá.',
     '11. Drž se zadaného typu otázky. Možnosti k výběru patří jedině do pole `options`; do textu zadání je nikdy nevypisuj jako "a) … b) … c) …". Když má otázka nabízet možnosti, musí mít typ s výběrem.',
+    '',
+    'Pro koho píšeš:',
+    `- Otázky řeší ${audience}. Podle toho vol slovní zásobu i délku vět.`,
+    '- Náročnost otázky se řídí ročníkem, ne odborností materiálu. Materiál bývá podrobnější, než co má žák umět; z odborného výkladu udělej otázku na jeho podstatu.',
+    '- Nikdy netvoř otázku na úrovni střední nebo vysoké školy: žádné definice z vyšších stupňů, odvozování, výpočty ani rozbory, na které ročník nemá.',
+    '- Odborný pojem použij jen tehdy, když ho materiál vysvětluje, a ve významu, ve kterém ho vysvětluje. Pojmy odjinud nepřidávej.',
+    '- Zadání piš jednou krátkou větou. Dlouhé souvětí rozděl.',
   ].join('\n')
 }
 
 export function buildUserPrompt(request: GenerationRequest): string {
-  const gradeLine = request.gradeName ? `Ročník: ${request.gradeName}` : 'Ročník: neurčen'
+  // Ročník se opakuje i tady, ne jen v systémovém promptu: u dlouhých materiálů
+  // je systémová část daleko a náročnost je to jediné, co se nesmí ztratit.
+  const gradeLine = request.gradeName
+    ? `Ročník: ${request.gradeName} — ${describeGradeAudience(request.gradeName)}`
+    : `Ročník: neurčen — ${describeGradeAudience(null)}`
   const difficultyLine =
     request.difficulty === 'mix'
       ? 'Obtížnost: promíchej lehké, střední i těžké otázky (zhruba 1/3 každé).'

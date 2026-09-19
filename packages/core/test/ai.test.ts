@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import { chunkText, distributeTypes, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
-import { buildSystemPrompt, buildUserPrompt } from '../src/ai/prompt'
+import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompt'
 import { readAiConfig, isAiConfigured } from '../src/ai/provider'
 import { describeAiError } from '../src/ai/errors'
 import {
@@ -515,5 +515,50 @@ describe('možnosti vypsané v zadání', () => {
       difficulty: 2,
     })
     expect(chyby).toEqual([])
+  })
+})
+
+describe('ročník řídí náročnost otázek', () => {
+  it('z názvu ročníku vytáhne věk žáků', () => {
+    expect(describeGradeAudience('8. ročník')).toContain('13–14 let')
+    expect(describeGradeAudience('1. ročník')).toContain('6–7 let')
+    expect(describeGradeAudience('9.')).toContain('14–15 let')
+  })
+
+  it('bez ročníku počítá se základní školou, ne s vyšším stupněm', () => {
+    const audience = describeGradeAudience(null)
+    expect(audience).toContain('základní škol')
+    expect(audience).not.toContain('let')
+  })
+
+  it('název bez čísla nespadne a zůstane u základní školy', () => {
+    expect(describeGradeAudience('prima')).toContain('základní škol')
+  })
+
+  it('systémový prompt zakazuje úroveň střední a vysoké školy', () => {
+    const prompt = buildSystemPrompt('8. ročník')
+    expect(prompt).toContain('13–14 let')
+    expect(prompt).toContain('vysoké školy')
+    expect(prompt).toContain('odborností materiálu')
+  })
+
+  it('systémový prompt bez ročníku drží úroveň základní školy', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('základní škol')
+    expect(prompt).toContain('vysoké školy')
+  })
+
+  it('uživatelský prompt uvádí u ročníku i věk', () => {
+    const prompt = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: '6. ročník',
+      count: 1,
+      types: ['open'],
+      difficulty: 2,
+    })
+    expect(prompt).toContain('6. ročník')
+    expect(prompt).toContain('11–12 let')
   })
 })

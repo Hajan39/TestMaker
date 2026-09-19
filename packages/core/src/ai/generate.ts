@@ -249,7 +249,7 @@ export async function generateQuestions(
       let produced: QuestionContent[] = []
       let batchModel = describeAiConfig(ladder[0] as AiConfig)
       try {
-        const result = await runBatch(buildSystemPrompt(), prompt)
+        const result = await runBatch(buildSystemPrompt(request.gradeName), prompt)
         produced = result.questions
         batchModel = result.model
       } catch (error) {
