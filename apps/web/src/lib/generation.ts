@@ -329,7 +329,7 @@ export async function regenerateQuestion(
       difficulty: (original.difficulty as 1 | 2 | 3) ?? 2,
       avoid,
     },
-    { signal: options.signal },
+    { signal: options.signal, workers: readOllamaWorkers() },
   )
 
   const replacement = result.questions[0]
