@@ -136,6 +136,8 @@ export async function generateQuestions(
     config?: AiConfig
     /** Konkrétní worker; při jeho zadání se nepoužívá fallback žebříček. */
     worker?: AiConfig
+    /** Paralelní Ollama workeři; každá dávka dostane právě jednoho workeru. */
+    workers?: AiConfig[]
     /** Žebříček modelů; přebíjí `config`. Bez obojího se čte z prostředí. */
     configs?: AiConfig[]
     signal?: AbortSignal
@@ -151,7 +153,9 @@ export async function generateQuestions(
   } = {},
 ): Promise<GenerationResult> {
   const ladder =
-    options.worker
+    options.workers && options.workers.length > 0
+      ? options.workers
+      : options.worker
       ? [options.worker]
       : options.configs && options.configs.length > 0
       ? options.configs
@@ -228,6 +232,86 @@ export async function generateQuestions(
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []
   const failedCalls: GenerationResult['failedCalls'] = []
+
+  if (options.workers && options.workers.length > 0) {
+    const tasks: { chunk: string; batchSize: number; types: QuestionType[]; worker: AiConfig }[] = []
+    const concurrency = Math.max(
+      1,
+      Math.min(options.workers.length, Number(process.env.OLLAMA_CONCURRENCY) || options.workers.length),
+    )
+    const activeWorkers = options.workers.slice(0, concurrency)
+    let workerIndex = 0
+    for (const chunk of chunks) {
+      const chunkBatches = splitIntoBatches(Math.min(perChunk, request.count))
+      for (const batchSize of chunkBatches) {
+        const batchTypes = typeSchedule.slice(tasks.length * MAX_PER_CALL, tasks.length * MAX_PER_CALL + batchSize)
+        tasks.push({
+          chunk,
+          batchSize,
+          types: batchTypes.length > 0 ? batchTypes : request.types,
+          worker: activeWorkers[workerIndex++ % activeWorkers.length] as AiConfig,
+        })
+      }
+    }
+
+    type WorkerResult = Awaited<ReturnType<typeof callModel>> & { task: (typeof tasks)[number] }
+    const results: WorkerResult[] = []
+    const failures: { task: (typeof tasks)[number]; error: unknown }[] = []
+    let nextTask = 0
+    await Promise.all(
+      activeWorkers.map(async (worker) => {
+        while (true) {
+          const task = tasks[nextTask++]
+          if (!task) return
+          const prompt = buildUserPrompt({
+            ...request,
+            text: task.chunk,
+            count: task.batchSize,
+            types: task.types,
+            avoid: request.avoid,
+          })
+          try {
+            const result = await callModel({ config: worker, system: buildSystemPrompt(request.gradeName), prompt, signal: options.signal })
+            results.push({ ...result, task })
+          } catch (error) {
+            if (options.signal?.aborted || (error as { name?: string })?.name === 'AbortError') throw error
+            failures.push({ task, error })
+          }
+        }
+      }),
+    )
+
+    const completed = [
+      ...results.map((result) => ({ task: result.task, result })),
+      ...failures.map((failure) => ({ task: failure.task, error: failure.error })),
+    ]
+    const seenPrompts = new Set(request.avoid ?? [])
+    for (const [index, item] of completed.entries()) {
+      if ('error' in item) {
+        failedCalls.push({ reason: item.error instanceof Error ? item.error.message : String(item.error) })
+        continue
+      }
+      const batch: QuestionContent[] = []
+      for (const [offset, question] of item.result.questions.entries()) {
+        const errors = validateQuestionContent(question)
+        if (errors.length > 0) {
+          rejected.push({ index: accepted.length + offset, errors })
+          continue
+        }
+        const normalized = withDefaultPoints(normalizeOrderingPayload(question))
+        const promptKey = promptOf(normalized)
+        if (seenPrompts.has(promptKey)) continue
+        seenPrompts.add(promptKey)
+        batch.push(normalized)
+      }
+      accepted.push(...batch)
+      if (batch.length > 0) await options.onBatch?.(batch, { model: describeAiConfig(item.task.worker) })
+      if ((index + 1) % Math.max(1, tasks.length / chunks.length) === 0) {
+        options.onChunk?.(Math.ceil((index + 1) / Math.max(1, tasks.length / chunks.length)), chunks.length)
+      }
+    }
+    return { questions: accepted.slice(0, request.count), rejected, chunks: chunks.length, failedCalls, models: [...new Set(tasks.map((task) => describeAiConfig(task.worker)))] }
+  }
 
   for (const [index, chunk] of chunks.entries()) {
     const remaining = request.count - accepted.length

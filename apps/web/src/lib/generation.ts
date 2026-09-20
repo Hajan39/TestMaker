@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
-import { generateQuestions, type AiConfig } from '@testmaker/core/ai'
+import { generateQuestions, readOllamaWorkers, type AiConfig } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, subjects, topics, users } from '@/db'
 import { skola, type Scope } from '@/lib/uzivatel'
@@ -202,6 +202,7 @@ export async function generateForTopic(
     {
       signal: options.signal,
       worker: options.worker,
+      workers: options.worker ? undefined : readOllamaWorkers(),
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
         const ids = await insertQuestions(scope, batch, { topicId, source: 'ai', status: 'draft' })
