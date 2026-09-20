@@ -370,7 +370,17 @@ export function PuzzleWorkshop({
                 <Label htmlFor="puzzle-topic">Téma</Label>
                 <Select
                   value={draft.topicId ?? 'none'}
-                  onValueChange={(value) => update({ topicId: value === 'none' ? null : value })}
+                  onValueChange={(value) => {
+                    const topicId = value === 'none' ? null : value
+                    update({ topicId })
+                    if (topicId && draft.entries.length === 0) {
+                      void fetch(`/api/puzzles/words?topicId=${encodeURIComponent(topicId)}&kind=${draft.kind}`)
+                        .then((response) => (response.ok ? response.json() : { entries: [] }))
+                        .then((data: { entries?: PuzzleEntry[] }) => {
+                          if (data.entries?.length) update({ entries: data.entries })
+                        })
+                    }
+                  }}
                 >
                   <SelectTrigger id="puzzle-topic">
                     <SelectValue placeholder="Bez tématu" />

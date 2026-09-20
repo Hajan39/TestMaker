@@ -111,6 +111,31 @@ export function PuzzleBody({
 
   return (
     <View style={{ marginTop: 6 }}>
+      <View style={{ marginBottom: 8 }}>
+        <Text style={{ fontSize: 9, marginBottom: 3 }}>Tajenka:</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {result.phraseWords.map((word, w) => (
+            <View key={w} style={{ flexDirection: 'row', marginRight: 8 }}>
+              {word.map((letter, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: boxSize,
+                    height: boxSize,
+                    border: CELL_BORDER,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: boxSize * 0.58, lineHeight: 1 }}>{solved ? letter : ' '}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <Text style={{ fontSize: 9, marginBottom: 3 }}>Otázky:</Text>
       {result.rows.map((row, rowIndex) => (
         <View key={row.number} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
           <Text style={{ width: 16, fontSize: 9 }}>{row.number}.</Text>
@@ -137,27 +162,6 @@ export function PuzzleBody({
         </View>
       ))}
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
-        <Text style={{ fontSize: 9, marginRight: 6 }}>Tajenka:</Text>
-        {result.phraseWords.map((word, w) => (
-          <View key={w} style={{ flexDirection: 'row', marginRight: 8 }}>
-            {word.map((letter, i) => (
-              <View
-                key={i}
-                style={{
-                  width: boxSize,
-                  height: boxSize,
-                  border: CELL_BORDER,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ fontSize: boxSize * 0.58, lineHeight: 1 }}>{solved ? letter : ' '}</Text>
-              </View>
-            ))}
-          </View>
-        ))}
-      </View>
     </View>
   )
 }

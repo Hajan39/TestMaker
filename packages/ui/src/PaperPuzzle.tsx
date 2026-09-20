@@ -129,6 +129,26 @@ function CryptogramView({
 
   return (
     <div style={{ marginTop: pt(6) }} data-slot="puzzle-rows">
+      <div style={{ marginBottom: pt(8) }}>
+        <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Tajenka:</div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {result.phraseWords.map((word, w) => (
+            <span key={w} className="flex">
+              {word.map((letter, i) => (
+                <span
+                  key={i}
+                  className="flex items-center justify-center border border-paper-line"
+                  style={{ width: pt(box), height: pt(box), fontSize: pt(box * 0.58) }}
+                >
+                  {solved ? letter : ''}
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Otázky:</div>
       {result.rows.map((row, rowIndex) => (
         <div key={row.number} className="flex items-center gap-2" style={{ marginBottom: pt(3) }}>
           <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
@@ -154,22 +174,6 @@ function CryptogramView({
         </div>
       ))}
 
-      <div className="flex flex-wrap items-center gap-2" style={{ marginTop: pt(6) }}>
-        <span style={{ fontSize: pt(9) }}>Tajenka:</span>
-        {result.phraseWords.map((word, w) => (
-          <span key={w} className="flex">
-            {word.map((letter, i) => (
-              <span
-                key={i}
-                className="flex items-center justify-center border border-paper-line"
-                style={{ width: pt(box), height: pt(box), fontSize: pt(box * 0.58) }}
-              >
-                {solved ? letter : ''}
-              </span>
-            ))}
-          </span>
-        ))}
-      </div>
     </div>
   )
 }

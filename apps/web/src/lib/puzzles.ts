@@ -9,11 +9,12 @@ import {
   toPuzzleSnapshot,
   type Puzzle,
   type PuzzleContent,
+  type PuzzleEntry,
   type PuzzleKind,
   type RenderableTest,
   type ResolvedTestItem,
 } from '@testmaker/core/schema'
-import { db, grades, materials, puzzles, subjects, templates, topics } from '@/db'
+import { db, grades, materials, puzzleWordDrafts, puzzles, subjects, templates, topics } from '@/db'
 import type { PuzzleRow } from '@/db'
 import { skola, vlastni, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
@@ -79,6 +80,36 @@ export async function loadPuzzleList(
 export interface PuzzleTopic {
   id: string
   label: string
+}
+
+export async function loadPuzzleWordDraft(
+  scope: Scope,
+  topicId: string,
+  kind: PuzzleKind,
+): Promise<PuzzleEntry[]> {
+  const [row] = await db
+    .select({ entries: puzzleWordDrafts.entries })
+    .from(puzzleWordDrafts)
+    .where(and(vlastni(scope, puzzleWordDrafts), eq(puzzleWordDrafts.topicId, topicId), eq(puzzleWordDrafts.kind, kind)))
+    .limit(1)
+  return row?.entries ?? []
+}
+
+export async function savePuzzleWordDraft(
+  scope: Scope,
+  topicId: string,
+  kind: PuzzleKind,
+  entries: PuzzleEntry[],
+  model?: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  await db
+    .insert(puzzleWordDrafts)
+    .values({ id: newId(), schoolId: scope.schoolId, ownerId: scope.userId, topicId, kind, entries, model: model ?? null, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [puzzleWordDrafts.schoolId, puzzleWordDrafts.ownerId, puzzleWordDrafts.topicId, puzzleWordDrafts.kind],
+      set: { entries, model: model ?? null, updatedAt: now },
+    })
 }
 
 /**

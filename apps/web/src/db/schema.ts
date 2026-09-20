@@ -388,6 +388,24 @@ export const puzzles = sqliteTable(
   ],
 )
 
+/** Rozpracovaná slovní zásoba podle tématu, aby se nemusela znovu generovat. */
+export const puzzleWordDrafts = sqliteTable(
+  'puzzle_word_drafts',
+  {
+    id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    topicId: text('topic_id').notNull().references(() => topics.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull().$type<PuzzleContent['kind']>(),
+    entries: text('entries', { mode: 'json' }).notNull().$type<PuzzleEntry[]>(),
+    model: text('model'),
+    updatedAt: text('updated_at').notNull().default(now),
+  },
+  (table) => [
+    uniqueIndex('puzzle_word_drafts_owner_topic_kind_idx').on(table.schoolId, table.ownerId, table.topicId, table.kind),
+  ],
+)
+
 export const generationJobs = sqliteTable(
   'generation_jobs',
   {

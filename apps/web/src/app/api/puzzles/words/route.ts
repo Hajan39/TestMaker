@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { PUZZLE_KINDS } from '@testmaker/core/schema'
-import { suggestPuzzleWords } from '@/lib/puzzles'
+import { loadPuzzleWordDraft, savePuzzleWordDraft, suggestPuzzleWords } from '@/lib/puzzles'
 import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -19,6 +19,18 @@ const bodySchema = z.object({
  * Slovní zásoba k tématu od modelu. Vrací jen dvojice slovo + nápověda;
  * mřížku skládá kód v prohlížeči i při tisku, model se v ní ztratí.
  */
+export async function GET(request: Request) {
+  return sRozsahem(async (ucet) => {
+    const url = new URL(request.url)
+    const topicId = url.searchParams.get('topicId')
+    const kind = url.searchParams.get('kind')
+    if (!topicId || (kind !== 'wordsearch' && kind !== 'cryptogram')) {
+      return Response.json({ error: 'Chybí téma nebo druh hlavolamu.' }, { status: 400 })
+    }
+    return Response.json({ entries: await loadPuzzleWordDraft(ucet, topicId, kind) })
+  })
+}
+
 export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
@@ -43,6 +55,7 @@ export async function POST(request: Request) {
       avoid: parsed.data.avoid,
       signal: request.signal,
     })
+    await savePuzzleWordDraft(ucet, parsed.data.topicId, parsed.data.kind, result.entries, result.models.at(-1))
     return Response.json(result)
   } catch (error) {
     // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
