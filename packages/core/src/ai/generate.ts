@@ -134,6 +134,8 @@ export async function generateQuestions(
   options: {
     /** Jediný model — kdo si vybírá sám, žebříček nepotřebuje. */
     config?: AiConfig
+    /** Konkrétní worker; při jeho zadání se nepoužívá fallback žebříček. */
+    worker?: AiConfig
     /** Žebříček modelů; přebíjí `config`. Bez obojího se čte z prostředí. */
     configs?: AiConfig[]
     signal?: AbortSignal
@@ -149,7 +151,9 @@ export async function generateQuestions(
   } = {},
 ): Promise<GenerationResult> {
   const ladder =
-    options.configs && options.configs.length > 0
+    options.worker
+      ? [options.worker]
+      : options.configs && options.configs.length > 0
       ? options.configs
       : options.config
         ? [options.config]

@@ -14,6 +14,8 @@ export type AiProviderName = 'anthropic' | 'google' | 'ollama' | OpenAiCompatibl
 export interface AiConfig {
   provider: AiProviderName
   model: string
+  /** Endpoint konkrétního workeru; staré konfigurace ho nemají. */
+  baseURL?: string
 }
 
 export interface OpenAiCompatibleService {
@@ -219,7 +221,7 @@ export async function getModel(config: AiConfig = readAiConfig(), options: Model
   if (config.provider === 'ollama') {
     const { createOllama } = await import('ollama-ai-provider-v2')
     const ollama = createOllama({
-      baseURL: env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/api',
+      baseURL: config.baseURL || env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/api',
       ...(fetch ? { fetch } : {}),
     })
     return ollama(config.model)
@@ -299,18 +301,21 @@ function parseLadderItem(item: string, fallback: AiProviderName): AiConfig | nul
  * ať se chyba o chybějícím klíči objeví normálně.
  */
 export function readAiLadder(env: Record<string, string | undefined> = process.env): AiConfig[] {
-  const raw = env.AI_MODELS?.trim()
-  if (!raw) return [readAiConfig(env)]
+  const fallback = readAiConfig(env)
+  if (fallback.provider === 'ollama') return [fallback]
 
-  const fallback = readAiConfig(env).provider
+  const raw = env.AI_MODELS?.trim()
+  if (!raw) return [fallback]
+
   const parsed: AiConfig[] = []
   for (const item of raw.split(',')) {
-    const config = parseLadderItem(item, fallback)
+    const config = parseLadderItem(item, fallback.provider)
     if (!config) continue
+    if (config.provider === 'ollama') continue
     if (parsed.some((other) => other.provider === config.provider && other.model === config.model)) continue
     parsed.push(config)
   }
-  if (parsed.length === 0) return [readAiConfig(env)]
+  if (parsed.length === 0) return [fallback]
 
   const usable = parsed.filter((config) => hasCredentials(config.provider, env))
   return usable.length > 0 ? usable : parsed
@@ -318,5 +323,28 @@ export function readAiLadder(env: Record<string, string | undefined> = process.e
 
 /** Popis modelu do logu a do hlášky: `google:gemini-flash-latest`. */
 export function describeAiConfig(config: AiConfig): string {
-  return `${config.provider}:${config.model}`
+  return config.baseURL ? `${config.provider}@${config.baseURL}:${config.model}` : `${config.provider}:${config.model}`
+}
+
+/**
+ * Načte lokální Ollama workery ve tvaru `endpoint|model`, oddělené čárkami.
+ * Neplatné položky se vynechají; pokud nezbyde žádná, použije se staré
+ * `OLLAMA_BASE_URL` + `AI_MODEL` nastavení.
+ */
+export function readOllamaWorkers(env: Record<string, string | undefined> = process.env): AiConfig[] {
+  if (env.AI_PROVIDER?.trim() !== 'ollama') return []
+  const raw = env.OLLAMA_WORKERS?.trim()
+  if (!raw) return []
+
+  const workers: AiConfig[] = []
+  for (const item of raw.split(',')) {
+    const separator = item.indexOf('|')
+    if (separator <= 0) continue
+    const baseURL = item.slice(0, separator).trim()
+    const model = item.slice(separator + 1).trim()
+    if (!baseURL || !model) continue
+    if (workers.some((worker) => worker.baseURL === baseURL && worker.model === model)) continue
+    workers.push({ provider: 'ollama', model, baseURL })
+  }
+  return workers
 }

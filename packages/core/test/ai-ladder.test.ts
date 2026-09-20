@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { generateQuestions, type ModelCall } from '../src/ai/generate'
-import { describeAiConfig, isAiConfigured, readAiLadder } from '../src/ai/provider'
+import { describeAiConfig, isAiConfigured, readAiLadder, readOllamaWorkers } from '../src/ai/provider'
 import type { QuestionContent } from '../src/schema/question'
 
 /**
@@ -83,12 +83,29 @@ describe('žebříček modelů z prostředí', () => {
     expect(readAiLadder(env).map((c) => c.model)).toEqual(['gemini-flash-latest', 'gemini-flash-lite-latest'])
   })
 
-  it('dvojtečka v názvu modelu Ollamy se nebere jako poskytovatel', () => {
+  it('u Ollamy se AI_MODELS nepoužívá jako fallback seznam', () => {
     const env = { AI_PROVIDER: 'ollama', AI_MODELS: 'qwen3:14b,ollama:llama3.1' }
-    expect(readAiLadder(env)).toEqual([
-      { provider: 'ollama', model: 'qwen3:14b' },
-      { provider: 'ollama', model: 'llama3.1' },
+    expect(readAiLadder(env)).toEqual([{ provider: 'ollama', model: 'qwen3:14b' }])
+  })
+
+  it('načte Ollama workery s vlastním endpointem a modelem', () => {
+    const env = {
+      AI_PROVIDER: 'ollama',
+      OLLAMA_WORKERS:
+        'http://192.168.20.101:11434/api|qwen3:14b,http://192.168.20.109:11434/api|qwen3:8b',
+    }
+    expect(readOllamaWorkers(env)).toEqual([
+      { provider: 'ollama', baseURL: 'http://192.168.20.101:11434/api', model: 'qwen3:14b' },
+      { provider: 'ollama', baseURL: 'http://192.168.20.109:11434/api', model: 'qwen3:8b' },
     ])
+  })
+
+  it('neplatné nebo duplicitní worker položky přeskočí', () => {
+    const env = {
+      AI_PROVIDER: 'ollama',
+      OLLAMA_WORKERS: 'bad,http://server/api|qwen3:8b,http://server/api|qwen3:8b',
+    }
+    expect(readOllamaWorkers(env)).toEqual([{ provider: 'ollama', baseURL: 'http://server/api', model: 'qwen3:8b' }])
   })
 
   it('placený poskytovatel se sám nepřidá — v žebříčku je jen to, co majitel napsal', () => {

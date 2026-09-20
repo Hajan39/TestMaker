@@ -87,9 +87,9 @@ describe('žebříček napříč službami s rozhraním OpenAI', () => {
     ])
   })
 
-  it('položka Ollamy s dvojtečkou v názvu modelu prochází dál stejně jako dřív', () => {
+  it('Ollama používá starou jedinou konfiguraci mimo worker režim', () => {
     const env = { AI_PROVIDER: 'ollama', AI_MODELS: 'ollama:qwen3:14b,qwen3:14b-instruct' }
-    expect(readAiLadder(env).map(describeAiConfig)).toEqual(['ollama:qwen3:14b', 'ollama:qwen3:14b-instruct'])
+    expect(readAiLadder(env).map(describeAiConfig)).toEqual(['ollama:qwen3:14b'])
   })
 
   it('položka služby bez klíče se ze žebříčku vynechá', () => {
