@@ -148,28 +148,37 @@ function CryptogramView({
         </div>
       </div>
 
+      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Doplňovačka:</div>
+      <div className="flex flex-col items-center" style={{ marginBottom: pt(8) }}>
+        {result.rows.map((row, rowIndex) => (
+          <div key={row.number} className="flex items-center" style={{ marginBottom: pt(3) }}>
+            <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
+            <span className="flex">
+              <span style={{ width: pt((offsets[rowIndex] ?? 0) * box) }} />
+              {row.letters.map((letter, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    'flex items-center justify-center border border-paper-line',
+                    i === row.markedIndex && 'border-2 border-paper-fg',
+                  )}
+                  style={{ width: pt(box), height: pt(box), fontSize: pt(box * 0.58) }}
+                >
+                  {solved ? letter : ''}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+
       <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Otázky:</div>
-      {result.rows.map((row, rowIndex) => (
+      {result.rows.map((row) => (
         <div key={row.number} className="flex items-center gap-2" style={{ marginBottom: pt(3) }}>
           <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
           {/* Pevná šířka nápovědy: jinak by se vyznačený sloupec rozpadl. */}
           <span className="truncate" style={{ width: '42%', fontSize: pt(9) }}>
             {row.clue}
-          </span>
-          <span className="flex shrink-0">
-            <span style={{ width: pt((offsets[rowIndex] ?? 0) * box) }} />
-            {row.letters.map((letter, i) => (
-              <span
-                key={i}
-                className={cn(
-                  'flex items-center justify-center border border-paper-line',
-                  i === row.markedIndex && 'border-2 border-paper-fg',
-                )}
-                style={{ width: pt(box), height: pt(box), fontSize: pt(box * 0.58) }}
-              >
-                {solved ? letter : ''}
-              </span>
-            ))}
           </span>
         </div>
       ))}

@@ -135,30 +135,37 @@ export function PuzzleBody({
         </View>
       </View>
 
+      <Text style={{ fontSize: 9, marginBottom: 3 }}>Doplňovačka:</Text>
+      <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        {result.rows.map((row, rowIndex) => (
+          <View key={row.number} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+            <Text style={{ width: 16, fontSize: 9 }}>{row.number}.</Text>
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ width: (offsets[rowIndex] ?? 0) * boxSize }} />
+              {row.letters.map((letter, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: boxSize,
+                    height: boxSize,
+                    border: i === row.markedIndex ? MARKED_BORDER : CELL_BORDER,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: boxSize * 0.58, lineHeight: 1 }}>{solved ? letter : ' '}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
+      </View>
+
       <Text style={{ fontSize: 9, marginBottom: 3 }}>Otázky:</Text>
-      {result.rows.map((row, rowIndex) => (
+      {result.rows.map((row) => (
         <View key={row.number} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
           <Text style={{ width: 16, fontSize: 9 }}>{row.number}.</Text>
-          {/* Pevná šířka nápovědy: jinak by každý řádek začínal políčka jinde
-              a vyznačený sloupec by se rozpadl. */}
-          <Text style={{ width: '42%', fontSize: 9, paddingRight: 6 }}>{sanitizeText(row.clue)}</Text>
-          <View style={{ flexDirection: 'row' }}>
-            <View style={{ width: (offsets[rowIndex] ?? 0) * boxSize }} />
-            {row.letters.map((letter, i) => (
-              <View
-                key={i}
-                style={{
-                  width: boxSize,
-                  height: boxSize,
-                  border: i === row.markedIndex ? MARKED_BORDER : CELL_BORDER,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ fontSize: boxSize * 0.58, lineHeight: 1 }}>{solved ? letter : ' '}</Text>
-              </View>
-            ))}
-          </View>
+          <Text style={{ width: '100%', fontSize: 9, paddingRight: 6 }}>{sanitizeText(row.clue)}</Text>
         </View>
       ))}
 
