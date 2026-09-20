@@ -112,13 +112,16 @@ export async function generatePuzzleWords(
   options: {
     config?: AiConfig
     configs?: AiConfig[]
+    workers?: AiConfig[]
     signal?: AbortSignal
     /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
     callModel?: PuzzleWordsCall
   } = {},
 ): Promise<PuzzleWordsResult> {
   const ladder =
-    options.configs && options.configs.length > 0
+    options.workers && options.workers.length > 0
+      ? [options.workers[0] as AiConfig]
+      : options.configs && options.configs.length > 0
       ? options.configs
       : options.config
         ? [options.config]
