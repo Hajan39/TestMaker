@@ -84,14 +84,22 @@ export function buildSystemPrompt(gradeName?: string | null): string {
     '1. Vycházej výhradně z dodaného materiálu. Nikdy nepřidávej fakta, která v něm nejsou.',
     '2. Pokud materiál něco zmiňuje jen okrajově, otázku na to netvoř.',
     '3. Každá otázka má jednu jednoznačně správnou odpověď doloženou v materiálu.',
+    '   Nehádej, nedoplňuj znalosti zvenčí a nepoužívej odpověď, kterou z dodané citace nejde ověřit.',
     '4. Piš spisovnou češtinou, kterou žák daného ročníku bez potíží přečte.',
     '5. Formuluj zadání stručně a konkrétně. Vyhýbej se vatě typu "Popiš vlastními slovy vše, co víš o…".',
     '6. Otázky se nesmějí obsahově překrývat ani opakovat totéž jinými slovy.',
-    '7. Do `explanation` napiš krátké zdůvodnění pro klíč učitele (jedna věta).',
-    '8. Rozlož otázky po celém materiálu, ne jen po jeho začátku.',
-    '9. Nepoužívej odkazy na "obrázek na slidu" ani na číslování stránek zdroje.',
-    '10. Ke každé otázce vyplň evidence: název souboru ze záhlaví === … === a doslovnou větu z materiálu, o kterou se správná odpověď opírá.',
-    '11. Drž se zadaného typu otázky. Možnosti k výběru patří jedině do pole `options`; do textu zadání je nikdy nevypisuj jako "a) … b) … c) …". Když má otázka nabízet možnosti, musí mít typ s výběrem.',
+    '7. Do `explanation` napiš krátké zdůvodnění pro klíč učitele (jedna věta); neopakuj jen odpověď.',
+    '8. Rozlož otázky po celém materiálu, ne jen po jeho začátku, a neklaď dvě otázky na stejnou větu.',
+    '9. Otázka musí být samostatná: neodkazuj na materiály, zdrojový text, soubory, slidy, stránky ani na to, co je "uvedeno v materiálu".',
+    '   Nepiš formulace jako "podle materiálu", "jak je uvedeno výše", "v těchto materiálech" nebo "na obrázku".',
+    '10. Nepoužívej odkazy na číslování stránek zdroje ani na jiné části zadání.',
+    '11. Ke každé otázce vyplň `evidence`: přesný název souboru ze záhlaví `=== … ===` a doslovnou větu z materiálu, o kterou se správná odpověď opírá.',
+    '12. Evidence musí odpověď skutečně dokazovat; nevymýšlej citaci ani název souboru.',
+    '13. Evidence je pouze pro klíč učitele a nesmí být odkazována v textu otázky.',
+    '14. Drž se zadaného typu otázky a vyplň všechna jeho povinná pole.',
+    '15. Možnosti k výběru patří jedině do pole `options`; do textu zadání je nevypisuj jako "a) … b) … c) …".',
+    '16. U výběrových otázek nesmí být správná odpověď poznat podle délky, gramatiky nebo nápadně odlišné formulace.',
+    '17. U pravda/nepravda tvoř krátká samostatná tvrzení; každé musí být rozhodnutelné pouze z materiálu.',
     '',
     'Pro koho píšeš:',
     `- Otázky řeší ${audience}. Podle toho vol slovní zásobu i délku vět.`,
@@ -99,6 +107,7 @@ export function buildSystemPrompt(gradeName?: string | null): string {
     '- Nikdy netvoř otázku na úrovni střední nebo vysoké školy: žádné definice z vyšších stupňů, odvozování, výpočty ani rozbory, na které ročník nemá.',
     '- Odborný pojem použij jen tehdy, když ho materiál vysvětluje, a ve významu, ve kterém ho vysvětluje. Pojmy odjinud nepřidávej.',
     '- Zadání piš jednou krátkou větou. Dlouhé souvětí rozděl.',
+    '- U lehké otázky ověř základní pochopení, u střední vztah nebo rozdíl a u těžké použití více částí materiálu; těžká neznamená znalost mimo materiál.',
   ].join('\n')
 }
 
@@ -132,6 +141,8 @@ export function buildUserPrompt(request: GenerationRequest): string {
     ...typeLines,
     '',
     difficultyLine,
+    '',
+    'Před odevzdáním zkontroluj každou otázku: odpovídá požadovanému typu, má platnou strukturu, jde vyřešit z materiálu a její evidence odpověď přímo dokládá.',
   ]
 
   if (request.avoid?.length) {

@@ -52,6 +52,13 @@ describe('prompty', () => {
     expect(buildSystemPrompt()).toContain('výhradně z dodaného materiálu')
   })
 
+  it('zakazuje odkazy na zdrojové materiály přímo v otázce', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('Otázka musí být samostatná')
+    expect(prompt).toContain('podle materiálu')
+    expect(prompt).toContain('uvedeno výše')
+  })
+
   it('pokryje všechny typy, které smí AI generovat', () => {
     const prompt = buildUserPrompt({
       text: 'x',

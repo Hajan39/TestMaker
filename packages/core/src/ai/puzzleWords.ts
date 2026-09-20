@@ -75,8 +75,11 @@ export function buildPuzzleWordsSystemPrompt(): string {
     '   Nikdy neuváděj sousloví ani více slov. Slovo nesmí obsahovat mezery, pomlčky, spojovníky ani číslice.',
     `3. Slovo má ${MIN_LETTERS} až ${MAX_LETTERS} písmen. Diakritiku piš normálně (list, kořen, chloroplast).`,
     '4. Nápověda je jedna krátká školní věta nebo opis, ze kterého žák slovo uhodne. Nikdy v ní slovo samo neuveď.',
-    '5. Nápověda má nejvýš 60 znaků a nepoužívá odkazy na obrázky ani na strany materiálu.',
-    '6. Slova se neopakují a neliší se jen tvarem téhož pojmu.',
+    '5. Nápověda má nejvýš 60 znaků, je samostatná a nepoužívá odkazy na obrázky ani na strany materiálu.',
+    '6. Nápověda musí vést k jedinému slovu ze seznamu; nepoužívej obecné definice, na které by odpovídalo více slov.',
+    '7. Slovo musí být doložitelné v dodaném materiálu a nápověda musí odpovídat jeho významu v tomto materiálu.',
+    '8. Slova se neopakují a neliší se jen tvarem téhož pojmu.',
+    '9. Nevymýšlej vlastní názvy, zkratky, čísla ani odpovědi, které v materiálu nejsou.',
   ].join('\n')
 }
 
@@ -92,6 +95,7 @@ export function buildPuzzleWordsPrompt(request: PuzzleWordsRequest): string {
   if (request.kind === 'cryptogram') {
     sections.push(
       'U tajenky se slova píšou do políček podle nápovědy, proto musí být nápověda jednoznačná — na otázku smí sedět jediné slovo.',
+      'Nápověda nesmí obsahovat hledané slovo ani jeho část a musí fungovat samostatně bez znalosti pořadí v seznamu.',
     )
   }
   if (request.avoid?.length) {
