@@ -108,6 +108,7 @@ export function PuzzleBody({
   const boxSize = 14
   // Odsazení řádků, aby vyznačená políčka stála pod sebou v jednom sloupci.
   const offsets = markedOffsets(result.rows)
+  const gridWidth = Math.max(...result.rows.map((row, i) => (offsets[i] ?? 0) + row.letters.length), 1) * boxSize
 
   return (
     <View style={{ marginTop: 6 }}>
@@ -138,7 +139,10 @@ export function PuzzleBody({
       <Text style={{ fontSize: 9, marginBottom: 3 }}>Doplňovačka:</Text>
       <View style={{ alignItems: 'center', marginBottom: 8 }}>
         {result.rows.map((row, rowIndex) => (
-          <View key={row.number} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+          <View
+            key={row.number}
+            style={{ width: gridWidth + 16, flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}
+          >
             <Text style={{ width: 16, fontSize: 9 }}>{row.number}.</Text>
             <View style={{ flexDirection: 'row' }}>
               <View style={{ width: (offsets[rowIndex] ?? 0) * boxSize }} />

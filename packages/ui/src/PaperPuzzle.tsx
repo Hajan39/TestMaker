@@ -126,6 +126,7 @@ function CryptogramView({
   const box = 14
   // Odsazení řádků, aby vyznačená políčka stála pod sebou — stejně jako na papíře.
   const offsets = markedOffsets(result.rows)
+  const gridWidth = Math.max(...result.rows.map((row, i) => (offsets[i] ?? 0) + row.letters.length), 1) * box
 
   return (
     <div style={{ marginTop: pt(6) }} data-slot="puzzle-rows">
@@ -151,7 +152,11 @@ function CryptogramView({
       <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Doplňovačka:</div>
       <div className="flex flex-col items-center" style={{ marginBottom: pt(8) }}>
         {result.rows.map((row, rowIndex) => (
-          <div key={row.number} className="flex items-center" style={{ marginBottom: pt(3) }}>
+          <div
+            key={row.number}
+            className="flex items-center"
+            style={{ width: pt(gridWidth + 16), marginBottom: pt(3) }}
+          >
             <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
             <span className="flex">
               <span style={{ width: pt((offsets[rowIndex] ?? 0) * box) }} />
