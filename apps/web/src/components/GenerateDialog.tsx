@@ -156,10 +156,9 @@ export function GenerateSettingsForm({
 export function AiUnavailable({ provider }: { provider: string }) {
   return (
     <Card className="border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
-      Generování je vypnuté: pro poskytovatele <strong>{provider}</strong> chybí přístupový klíč.
-      Doplň do <code>.env.local</code> podle poskytovatele buď <code>ANTHROPIC_API_KEY</code>
-      (případně <code>ANTHROPIC_AUTH_TOKEN</code> z přihlášení přes <code>ant auth login</code>),
-      nebo <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, a restartuj aplikaci.
+      Generování je vypnuté: chybí klíč k modelu. Doplň do <code>.env.local</code> žebříček{' '}
+      <code>AI_MODELS</code> a k němu klíč, třeba <code>GOOGLE_GENERATIVE_AI_API_KEY</code>
+      nebo <code>ANTHROPIC_API_KEY</code>, a restartuj aplikaci.
     </Card>
   )
 }

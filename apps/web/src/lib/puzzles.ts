@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
-import { generatePuzzleWords, readOllamaWorkers } from '@testmaker/core/ai'
+import { generatePuzzleWords } from '@testmaker/core/ai'
 import {
   puzzleContentSchema,
   puzzleInstructions,
@@ -335,6 +335,6 @@ export async function suggestPuzzleWords(
       kind: options.kind,
       avoid: options.avoid,
     },
-    { signal: options.signal, workers: readOllamaWorkers() },
+    { signal: options.signal },
   )
 }

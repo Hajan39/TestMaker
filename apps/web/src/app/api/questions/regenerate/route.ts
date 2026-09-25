@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          'AI není nakonfigurovaná — doplň ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN nebo GOOGLE_GENERATIVE_AI_API_KEY',
+          'AI není nakonfigurovaná — doplň GOOGLE_GENERATIVE_AI_API_KEY nebo ANTHROPIC_API_KEY do AI_MODELS',
       },
       { status: 503 },
     )

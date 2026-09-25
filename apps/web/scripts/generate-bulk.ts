@@ -7,7 +7,6 @@
  * Příklady:
  *   pnpm --filter @testmaker/web generate:bulk -- --grade <id> --count 10
  *   pnpm --filter @testmaker/web generate:bulk -- --subject <id> --target 12
- *   pnpm --filter @testmaker/web generate:bulk -- --all --target 10 --model gemini-flash-lite-latest
  *   pnpm --filter @testmaker/web generate:bulk -- --all --models google:gemini-flash-latest,google:gemini-flash-lite-latest
  *
  * `--count` vytvoří tolik nových otázek, `--target` doplní téma na tenhle
@@ -30,7 +29,6 @@ interface Options {
   all: boolean
   count: number
   mode: 'add' | 'target'
-  model?: string
   models?: string
   force: boolean
   /** E-mail účtu, za který se generuje. */
@@ -50,8 +48,7 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--target') {
       options.count = Number(next)
       options.mode = 'target'
-    } else if (arg === '--model') options.model = next
-    else if (arg === '--models') options.models = next
+    } else if (arg === '--models') options.models = next
     else if (arg === '--force') options.force = true
   }
   return options
@@ -71,7 +68,6 @@ function loadEnv(): void {
 async function main(): Promise<void> {
   loadEnv()
   const options = parseArgs(process.argv.slice(2))
-  if (options.model) process.env.AI_MODEL = options.model
   if (options.models) process.env.AI_MODELS = options.models
   if (!options.gradeId && !options.subjectId && !options.all) {
     console.error('Chybí rozsah: --grade <id>, --subject <id>, nebo --all.')

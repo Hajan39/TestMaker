@@ -1,8 +1,12 @@
 import 'server-only'
-import { isAiConfigured, readAiConfig } from '@testmaker/core/ai'
+import { AI_PROVIDERS, readAiLadder } from '@testmaker/core/ai'
 
-/** Stav AI pro UI — bez klíče se generování schová místo pádu za běhu. */
+/** Stav AI pro UI — bez modelu se generování schová místo pádu za běhu. Ukazuje první model žebříčku. */
 export function aiStatus(): { configured: boolean; provider: string; model: string } {
-  const config = readAiConfig()
-  return { configured: isAiConfigured(), provider: config.provider, model: config.model }
+  const first = readAiLadder()[0]
+  return {
+    configured: Boolean(first),
+    provider: first ? AI_PROVIDERS[first.provider].label : '',
+    model: first?.model ?? '',
+  }
 }

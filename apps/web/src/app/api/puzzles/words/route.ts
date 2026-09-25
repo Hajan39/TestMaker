@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          'Generování slov není nastavené — doplň ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN nebo GOOGLE_GENERATIVE_AI_API_KEY. Slova můžeš zatím napsat ručně.',
+          'Generování slov není nastavené — doplň GOOGLE_GENERATIVE_AI_API_KEY nebo ANTHROPIC_API_KEY do AI_MODELS. Slova můžeš zatím napsat ručně.',
       },
       { status: 503 },
     )

@@ -5,15 +5,17 @@ import { jsonReq } from './helpers'
 
 /** Prostředí bez jakéhokoli klíče k modelu. */
 function withoutKeys(): void {
-  vi.stubEnv('AI_PROVIDER', '')
+  vi.stubEnv('AI_MODELS', '')
   vi.stubEnv('ANTHROPIC_API_KEY', '')
   vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '')
   vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '')
+  vi.stubEnv('OPENROUTER_API_KEY', '')
 }
 
 /** Prostředí s klíčem — samotné volání modelu testy nespouštějí. */
 function withKey(): void {
   withoutKeys()
+  vi.stubEnv('AI_MODELS', 'anthropic:claude-opus-5')
   vi.stubEnv('ANTHROPIC_API_KEY', 'test-key')
 }
 
@@ -47,7 +49,7 @@ describe('generování bez klíče k modelu', () => {
     withKey()
     const status = aiStatus()
     expect(status.configured).toBe(true)
-    expect(status.provider).toBe('anthropic')
+    expect(status.provider).toBe('Anthropic')
     expect(status.model).toBeTruthy()
   })
 })

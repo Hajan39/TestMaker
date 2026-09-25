@@ -1,6 +1,7 @@
+import { generateText } from 'ai'
 import { describe, expect, it } from 'vitest'
 import { generateQuestions, type ModelCall } from '../src/ai/generate'
-import { describeAiConfig, isAiConfigured, readAiLadder, readOllamaWorkers } from '../src/ai/provider'
+import { describeAiConfig, getModel, isAiConfigured, readAiLadder } from '../src/ai/provider'
 import type { QuestionContent } from '../src/schema/question'
 
 /**
@@ -54,80 +55,6 @@ function podvrzenyModel(chovani: Record<string, 'odpovi' | string>): {
 
 const PRVNI = { provider: 'google', model: 'a' } as const
 const DRUHY = { provider: 'google', model: 'b' } as const
-
-describe('žebříček modelů z prostředí', () => {
-  it('bez AI_MODELS se chová jako dřív — jediný model podle AI_PROVIDER a AI_MODEL', () => {
-    expect(readAiLadder({ GOOGLE_GENERATIVE_AI_API_KEY: 'gk' })).toEqual([
-      { provider: 'google', model: 'gemini-flash-latest' },
-    ])
-    expect(readAiLadder({ AI_PROVIDER: 'ollama', AI_MODEL: 'qwen3:14b' })).toEqual([
-      { provider: 'ollama', model: 'qwen3:14b' },
-    ])
-  })
-
-  it('položka smí určit poskytovatele, takže jde míchat Gemini a Claude', () => {
-    const env = {
-      AI_MODELS: 'google:gemini-flash-latest, anthropic:claude-opus-5',
-      GOOGLE_GENERATIVE_AI_API_KEY: 'gk',
-      ANTHROPIC_API_KEY: 'sk',
-    }
-    expect(readAiLadder(env)).toEqual([
-      { provider: 'google', model: 'gemini-flash-latest' },
-      { provider: 'anthropic', model: 'claude-opus-5' },
-    ])
-  })
-
-  it('položka bez poskytovatele patří tomu, který by se použil i bez žebříčku', () => {
-    const env = { AI_MODELS: 'gemini-flash-latest,gemini-flash-lite-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'gk' }
-    expect(readAiLadder(env).map((c) => c.provider)).toEqual(['google', 'google'])
-    expect(readAiLadder(env).map((c) => c.model)).toEqual(['gemini-flash-latest', 'gemini-flash-lite-latest'])
-  })
-
-  it('u Ollamy se AI_MODELS nepoužívá jako fallback seznam', () => {
-    const env = { AI_PROVIDER: 'ollama', AI_MODELS: 'qwen3:14b,ollama:llama3.1' }
-    expect(readAiLadder(env)).toEqual([{ provider: 'ollama', model: 'qwen3:14b' }])
-  })
-
-  it('načte Ollama workery s vlastním endpointem a modelem', () => {
-    const env = {
-      AI_PROVIDER: 'ollama',
-      OLLAMA_WORKERS:
-        'http://192.168.20.101:11434/api|qwen3:14b,http://192.168.20.109:11434/api|qwen3:8b',
-    }
-    expect(readOllamaWorkers(env)).toEqual([
-      { provider: 'ollama', baseURL: 'http://192.168.20.101:11434/api', model: 'qwen3:14b' },
-      { provider: 'ollama', baseURL: 'http://192.168.20.109:11434/api', model: 'qwen3:8b' },
-    ])
-  })
-
-  it('neplatné nebo duplicitní worker položky přeskočí', () => {
-    const env = {
-      AI_PROVIDER: 'ollama',
-      OLLAMA_WORKERS: 'bad,http://server/api|qwen3:8b,http://server/api|qwen3:8b',
-    }
-    expect(readOllamaWorkers(env)).toEqual([{ provider: 'ollama', baseURL: 'http://server/api', model: 'qwen3:8b' }])
-  })
-
-  it('placený poskytovatel se sám nepřidá — v žebříčku je jen to, co majitel napsal', () => {
-    const env = { AI_MODELS: 'google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'gk', ANTHROPIC_API_KEY: 'sk' }
-    expect(readAiLadder(env)).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
-  })
-
-  it('model poskytovatele bez klíče se přeskočí, ať na něm žebříček nezhasne', () => {
-    const env = { AI_MODELS: 'anthropic:claude-opus-5,google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'gk' }
-    expect(readAiLadder(env)).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
-    expect(isAiConfigured(env)).toBe(true)
-  })
-
-  it('žebříček bez jediného klíče generování nezapíná', () => {
-    expect(isAiConfigured({ AI_MODELS: 'google:gemini-flash-latest,anthropic:claude-opus-5' })).toBe(false)
-  })
-
-  it('opakovanou položku bere jen jednou', () => {
-    const env = { AI_MODELS: 'google:a,google:a,google:b', GOOGLE_GENERATIVE_AI_API_KEY: 'gk' }
-    expect(readAiLadder(env).map(describeAiConfig)).toEqual(['google:a', 'google:b'])
-  })
-})
 
 describe('přepnutí na další model při vyčerpaném limitu', () => {
   it('hotové dávky zůstanou a zbytek dogeneruje další model', async () => {
@@ -221,5 +148,65 @@ describe('žebříček bez modelů', () => {
     await expect(
       generateQuestions({ ...ZADANI, count: 1, types: [...ZADANI.types] }, { models: [] }),
     ).rejects.toThrow(/Žádný model/)
+  })
+})
+
+describe('žebříček modelů z prostředí', () => {
+  it('bez AI_MODELS použije výchozí Gemini, když je klíč', () => {
+    expect(readAiLadder({ GOOGLE_GENERATIVE_AI_API_KEY: 'g' })).toEqual([
+      { provider: 'google', model: 'gemini-flash-latest' },
+    ])
+  })
+
+  it('bez jediného klíče je generování vypnuté a nic nespadne', () => {
+    expect(readAiLadder({})).toEqual([])
+    expect(isAiConfigured({})).toBe(false)
+  })
+
+  it('drží pořadí z AI_MODELS a přeskočí poskytovatele bez klíče', () => {
+    const env = {
+      AI_MODELS: 'anthropic:claude-haiku-4-5, google:gemini-flash-latest, openrouter:deepseek/deepseek-chat',
+      GOOGLE_GENERATIVE_AI_API_KEY: 'g',
+      OPENROUTER_API_KEY: 'o',
+    }
+    expect(readAiLadder(env).map(describeAiConfig)).toEqual([
+      'google:gemini-flash-latest',
+      'openrouter:deepseek/deepseek-chat',
+    ])
+  })
+
+  it('dvojtečku v názvu modelu nerozdělí', () => {
+    expect(readAiLadder({ AI_MODELS: 'openrouter:vendor/model:free', OPENROUTER_API_KEY: 'o' })).toEqual([
+      { provider: 'openrouter', model: 'vendor/model:free' },
+    ])
+  })
+
+  it('neznámého poskytovatele a položku bez předpony vynechá, zbytek funguje', () => {
+    const env = {
+      AI_MODELS: 'ollama:qwen3:14b, gemini-flash-latest, google:gemini-flash-lite-latest',
+      GOOGLE_GENERATIVE_AI_API_KEY: 'g',
+    }
+    expect(readAiLadder(env)).toEqual([{ provider: 'google', model: 'gemini-flash-lite-latest' }])
+  })
+
+  it('stejný model zařadí jen jednou', () => {
+    const env = { AI_MODELS: 'google:a, google:a', GOOGLE_GENERATIVE_AI_API_KEY: 'g' }
+    expect(readAiLadder(env)).toHaveLength(1)
+  })
+})
+
+describe('sestavení modelu', () => {
+  it('OpenRouter míří na openrouter.ai s klíčem z prostředí', async () => {
+    let url = ''
+    let auth = ''
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      url = String(input)
+      auth = new Headers(init?.headers).get('authorization') ?? ''
+      return new Response(JSON.stringify({ error: { message: 'x' } }), { status: 400 })
+    }) as typeof globalThis.fetch
+    const model = await getModel({ provider: 'openrouter', model: 'm' }, { env: { OPENROUTER_API_KEY: 'o' }, fetch })
+    await generateText({ model, prompt: 'ahoj', maxRetries: 0 }).catch(() => {})
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(auth).toBe('Bearer o')
   })
 })

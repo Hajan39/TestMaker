@@ -78,6 +78,15 @@ svými materiály. Materiál označený jako duplicitní obsah se vynechává.
 **Bez API klíče se nepadá.** Když generování není nakonfigurované, rozhraní ho
 skryje a vysvětlí proč.
 
+**Nastavení AI na jednom místě.** Model a pořadí modelů určuje jen `AI_MODELS`
+v `.env.local` (`poskytovatel:model`, čárkou; poskytovatelé `google`,
+`openrouter`, `anthropic`), klíče mají vlastní proměnné. Čísla generování
+(velikost úseku, otázek na volání, limity) jsou v `packages/core/src/ai/settings.ts`,
+texty pro model v `packages/core/src/ai/prompts/`, volání modelu se žebříčkem
+v `packages/core/src/ai/ladder.ts`. Nová konstanta nebo prompt jinam nepatří.
+Předplatné Claude Max se v aplikaci použít nedá; otázky přes něj vznikají
+v Claude Code příkazem `/otazky` a nahrávají se do tématu jako soubor.
+
 **Každý dotaz má rozsah.** Funkce v `apps/web/src/lib/*` berou jako první
 parametr `Scope` (škola, uživatel, role) z `lib/uzivatel.ts` a doplňují ho do
 podmínky (`skola()`, `vlastni()`, `viditelnyTest()`). Knihovna a banka jsou

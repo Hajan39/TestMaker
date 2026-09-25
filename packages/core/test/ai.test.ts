@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import { chunkText, distributeTypes, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompt'
-import { readAiConfig, isAiConfigured } from '../src/ai/provider'
 import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
@@ -150,54 +149,6 @@ describe('normalizace dokladu při ukládání', () => {
     expect(result?.quote.length).toBeLessThanOrEqual(401)
     expect(result?.quote.endsWith('…')).toBe(true)
     expect(result?.quote.startsWith('a'.repeat(400))).toBe(true)
-  })
-})
-
-describe('konfigurace providera', () => {
-  it('výchozí je Anthropic a bez klíče je generování vypnuté', () => {
-    expect(readAiConfig({}).provider).toBe('anthropic')
-    expect(readAiConfig({}).model).toBe('claude-opus-5')
-    expect(isAiConfigured({})).toBe(false)
-    expect(isAiConfigured({ ANTHROPIC_API_KEY: 'sk-test' })).toBe(true)
-  })
-
-  it('OAuth token z `ant auth login` nahrazuje klíč', () => {
-    expect(isAiConfigured({ ANTHROPIC_AUTH_TOKEN: 'oauth-token' })).toBe(true)
-  })
-
-  it('Ollama nepotřebuje klíč', () => {
-    expect(readAiConfig({ AI_PROVIDER: 'ollama' }).model).toBe('qwen3:14b')
-    expect(isAiConfigured({ AI_PROVIDER: 'ollama' })).toBe(true)
-  })
-
-  it('bez AI_PROVIDER se pozná Google podle jeho klíče', () => {
-    const env = { GOOGLE_GENERATIVE_AI_API_KEY: 'gk-test' }
-    expect(readAiConfig(env).provider).toBe('google')
-    expect(readAiConfig(env).model).toBe('gemini-flash-latest')
-    expect(isAiConfigured(env)).toBe(true)
-  })
-
-  it('bez jakéhokoli klíče zůstává výchozí Anthropic, ale je nakonfigurovaný jako false', () => {
-    expect(readAiConfig({}).provider).toBe('anthropic')
-    expect(isAiConfigured({})).toBe(false)
-  })
-
-  it('má-li prostředí klíče pro víc poskytovatelů, bez AI_PROVIDER vyhraje Anthropic', () => {
-    const env = { ANTHROPIC_API_KEY: 'sk-test', GOOGLE_GENERATIVE_AI_API_KEY: 'gk-test' }
-    expect(readAiConfig(env).provider).toBe('anthropic')
-  })
-
-  it('AI_PROVIDER přebije automatickou volbu podle klíčů', () => {
-    const env = { AI_PROVIDER: 'google', ANTHROPIC_API_KEY: 'sk-test', GOOGLE_GENERATIVE_AI_API_KEY: 'gk-test' }
-    expect(readAiConfig(env).provider).toBe('google')
-  })
-
-  it('Google bez klíče v prostředí není nakonfigurovaný, i když je vybraný výslovně', () => {
-    expect(isAiConfigured({ AI_PROVIDER: 'google' })).toBe(false)
-  })
-
-  it('AI_MODEL přebije výchozí model i u Google', () => {
-    expect(readAiConfig({ AI_PROVIDER: 'google', AI_MODEL: 'gemini-2.5-flash' }).model).toBe('gemini-2.5-flash')
   })
 })
 

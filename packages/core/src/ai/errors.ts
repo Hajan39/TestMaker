@@ -28,15 +28,14 @@ export function describeAiError(error: unknown): AiFailure {
   if (lower.includes('exceeded your current quota') || lower.includes('free_tier') || lower.includes('rate limit')) {
     return {
       message:
-        'Vyčerpaný limit modelu. U bezplatných tarifů (Gemini, OpenRouter a spol.) se počítá na den — ' +
-        'zkus to znovu zítra, dopiš do .env.local další model do žebříčku (AI_MODELS), přepni na jiný ' +
-        'model (AI_MODEL), nebo použij klíč k placenému tarifu.',
+        'Vyčerpaný limit modelu. U bezplatného tarifu Gemini se počítá na den — zkus to znovu zítra, ' +
+        'nebo dopiš do .env.local (AI_MODELS) další model, třeba placený přes OpenRouter.',
       retryable: true,
     }
   }
   if (lower.includes('experiencing high demand') || lower.includes('overloaded') || lower.includes('503')) {
     return {
-      message: 'Model je právě přetížený. Za chvíli to zkus znovu, nebo přepni na jiný model (AI_MODEL).',
+      message: 'Model je právě přetížený. Za chvíli to zkus znovu, nebo dopiš do AI_MODELS další model.',
       retryable: true,
     }
   }
@@ -48,7 +47,7 @@ export function describeAiError(error: unknown): AiFailure {
   }
   if (lower.includes('no longer available')) {
     return {
-      message: 'Zvolený model už poskytovatel nenabízí. Vyber jiný v .env.local (AI_MODEL).',
+      message: 'Zvolený model už poskytovatel nenabízí. Oprav jeho název v AI_MODELS v .env.local.',
       retryable: false,
     }
   }

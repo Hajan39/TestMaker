@@ -27,7 +27,6 @@
     "@react-pdf/renderer": "^4.9.0",
     "ai": "^7.0.99",
     "jszip": "^3.10.1",
-    "ollama-ai-provider-v2": "^4.0.1",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "zod": "^4.6.5"
