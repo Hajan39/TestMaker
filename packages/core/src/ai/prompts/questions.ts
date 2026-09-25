@@ -20,10 +20,10 @@ export interface GenerationRequest {
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   open: 'Volná odpověď na 2–6 řádků; v `answer` uveď vzorovou odpověď, ne jen heslo.',
-  short_answer: 'Odpověď je jedno slovo, pojem nebo číslo. Do `acceptedAnswers` dej běžné varianty.',
-  single_choice: 'Právě jedna možnost je správná. Distraktory musí být věcně blízké, ne zjevně nesmyslné.',
+  short_answer: 'Odpověď je jedno slovo nebo krátké sousloví z materiálu. Do `acceptedAnswers` dej běžné varianty.',
+  single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
   multi_choice: 'Správné jsou 2–3 možnosti z 4–6. Nikdy ne všechny.',
-  true_false: '4–6 tvrzení, přibližně půl na půl pravdivých a nepravdivých.',
+  true_false: '4 krátká tvrzení, zhruba půl pravdivých. Nepravdivé tvrzení vznikne malou změnou pravdivého.',
   fill_blank: 'Souvislý text s ___ na místě vynechaných výrazů. Počet ___ musí přesně odpovídat poli `blanks`.',
   matching: 'Dva sloupce stejné délky (4–6 položek). `pairs` obsahuje dvojice indexů.',
   ordering:
@@ -59,37 +59,23 @@ export function describeGradeAudience(gradeName: string | null | undefined): str
 
 export function buildSystemPrompt(gradeName?: string | null): string {
   const audience = describeGradeAudience(gradeName)
+  // Pravidel je schválně málo — co jde zkontrolovat v kódu (tvar, indexy,
+  // citace), se kontroluje v kódu (`checkQuestion`), ne promptem.
   return [
-    'Jsi zkušený učitel na české základní škole a tvoříš otázky do písemek.',
+    'Jsi učitel na české základní škole a píšeš otázky do písemky.',
     '',
-    'Pravidla, která platí bez výjimky:',
-    '1. Vycházej výhradně z dodaného materiálu. Nikdy nepřidávej fakta, která v něm nejsou.',
-    '2. Pokud materiál něco zmiňuje jen okrajově, otázku na to netvoř.',
-    '3. Každá otázka má jednu jednoznačně správnou odpověď doloženou v materiálu.',
-    '   Nehádej, nedoplňuj znalosti zvenčí a nepoužívej odpověď, kterou z dodané citace nejde ověřit.',
-    '4. Piš spisovnou češtinou, kterou žák daného ročníku bez potíží přečte.',
-    '5. Formuluj zadání stručně a konkrétně. Vyhýbej se vatě typu "Popiš vlastními slovy vše, co víš o…".',
-    '6. Otázky se nesmějí obsahově překrývat ani opakovat totéž jinými slovy.',
-    '7. Do `explanation` napiš krátké zdůvodnění pro klíč učitele (jedna věta); neopakuj jen odpověď.',
-    '8. Rozlož otázky po celém materiálu, ne jen po jeho začátku, a neklaď dvě otázky na stejnou větu.',
-    '9. Otázka musí být samostatná: neodkazuj na materiály, zdrojový text, soubory, slidy, stránky ani na to, co je "uvedeno v materiálu".',
-    '   Nepiš formulace jako "podle materiálu", "jak je uvedeno výše", "v těchto materiálech" nebo "na obrázku".',
-    '10. Nepoužívej odkazy na číslování stránek zdroje ani na jiné části zadání.',
-    '11. Ke každé otázce vyplň `evidence`: přesný název souboru ze záhlaví `=== … ===` a doslovnou větu z materiálu, o kterou se správná odpověď opírá.',
-    '12. Evidence musí odpověď skutečně dokazovat; nevymýšlej citaci ani název souboru.',
-    '13. Evidence je pouze pro klíč učitele a nesmí být odkazována v textu otázky.',
-    '14. Drž se zadaného typu otázky a vyplň všechna jeho povinná pole.',
-    '15. Možnosti k výběru patří jedině do pole `options`; do textu zadání je nevypisuj jako "a) … b) … c) …".',
-    '16. U výběrových otázek nesmí být správná odpověď poznat podle délky, gramatiky nebo nápadně odlišné formulace.',
-    '17. U pravda/nepravda tvoř krátká samostatná tvrzení; každé musí být rozhodnutelné pouze z materiálu.',
+    `Otázky řeší ${audience}. Náročnost se řídí ročníkem, ne odborností materiálu:`,
+    'z odborného výkladu udělej otázku na jeho podstatu. Nikdy netvoř otázku na úrovni střední nebo vysoké školy.',
     '',
-    'Pro koho píšeš:',
-    `- Otázky řeší ${audience}. Podle toho vol slovní zásobu i délku vět.`,
-    '- Náročnost otázky se řídí ročníkem, ne odborností materiálu. Materiál bývá podrobnější, než co má žák umět; z odborného výkladu udělej otázku na jeho podstatu.',
-    '- Nikdy netvoř otázku na úrovni střední nebo vysoké školy: žádné definice z vyšších stupňů, odvozování, výpočty ani rozbory, na které ročník nemá.',
-    '- Odborný pojem použij jen tehdy, když ho materiál vysvětluje, a ve významu, ve kterém ho vysvětluje. Pojmy odjinud nepřidávej.',
-    '- Zadání piš jednou krátkou větou. Dlouhé souvětí rozděl.',
-    '- U lehké otázky ověř základní pochopení, u střední vztah nebo rozdíl a u těžké použití více částí materiálu; těžká neznamená znalost mimo materiál.',
+    'Pravidla:',
+    '1. Vycházej výhradně z dodaného materiálu. Každá otázka má jednu správnou odpověď, která v materiálu opravdu stojí.',
+    '2. Piš jednoduchou spisovnou češtinou. Zadání je jedna krátká věta.',
+    '3. Ptej se na hlavní myšlenky, ne na okrajové podrobnosti.',
+    '4. Otázka musí být samostatná: nepiš "podle materiálu", "jak je uvedeno výše" ani nic podobného.',
+    '5. Možnosti výběru patří jen do pole `options`, nikdy do textu zadání. Špatné možnosti jsou věrohodné, ale jednoznačně špatné.',
+    '6. Do `evidence` napiš název souboru ze záhlaví `=== … ===` a jednu větu z materiálu doslova, beze změny slov. Otázka s citací, která v materiálu není, se zahodí.',
+    '7. Do `explanation` napiš jednu větu pro učitele, proč je odpověď správná.',
+    '8. Otázky se nesmějí opakovat ani ptát na totéž jinými slovy.',
   ].join('\n')
 }
 

@@ -66,6 +66,12 @@ describe('prompty', () => {
     expect(prompt).toContain('uvedeno výše')
   })
 
+  it('systémový prompt je krátký, aby ho model udržel celý', () => {
+    const prompt = buildSystemPrompt('6. ročník')
+    expect(prompt.length).toBeLessThan(1600)
+    expect(prompt).toContain('doslova')
+  })
+
   it('pokryje všechny typy, které smí AI generovat', () => {
     const prompt = buildUserPrompt({
       text: 'x',
