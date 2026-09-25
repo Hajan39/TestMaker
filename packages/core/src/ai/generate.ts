@@ -83,8 +83,14 @@ function splitLong(text: string, maxChars: number): string[] {
 
 /**
  * Rozdělí dlouhý text na části na hranicích odstavců. Záhlaví `=== soubor ===`
- * se přenáší do každé další části téhož souboru — model podle něj vyplňuje
- * `evidence.fileName`.
+ * se z odstavce vždy nejdřív vyjme a řeší se zvlášť od zbytku (`body`): dělí
+ * se jen `body`, do rozpočtu zmenšeného o délku záhlaví a oddělovače za ním,
+ * a záhlaví se pak výslovně připojí před každou takto vzniklou část — model
+ * podle něj vyplňuje `evidence.fileName`. Díky tomuhle rozdělení `splitLong`
+ * záhlaví nikdy neuvidí jako běžný řádek textu k rozdělení, takže žádná
+ * část nemůže limit přesáhnout jinak než jedinou dovolenou výjimkou: slovo
+ * bez mezer delší než rozpočet samo o sobě (dovnitř slova se neřeže, i kdyby
+ * s připojeným záhlavím limit společně přesáhlo).
  */
 export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsPerCall): string[] {
   if (text.length <= maxChars) return [text]
@@ -92,26 +98,33 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
   let current = ''
   let header: string | null = null
 
+  const flush = () => {
+    if (current.trim() && current.trim() !== header) parts.push(current.trim())
+    current = header ? `${header}${PIECE_SEPARATOR}` : ''
+  }
+
   for (const paragraph of text.split(/\n\n+/)) {
-    if (FILE_HEADER.test(firstLine(paragraph))) header = firstLine(paragraph)
+    const first = firstLine(paragraph)
+    let body = paragraph
+    if (FILE_HEADER.test(first)) {
+      header = first
+      const afterHeader = paragraph.indexOf('\n')
+      body = afterHeader === -1 ? '' : paragraph.slice(afterHeader + 1)
+      // Nové záhlaví vždy začíná novou část, i kdyby se dosavadní obsah do
+      // limitu ještě vešel — jinak by jedna část patřila dvěma souborům.
+      flush()
+    }
+    if (!body) continue
 
-    // Kus se může ocitnout hned po záhlaví — ať už po výslovném resetu, nebo
-    // protože ho tak vrátí sám `splitLong` (záhlaví je z pohledu dělení jen
-    // další řádek odstavce). Rozpočet se proto zmenší o záhlaví i stejný
-    // oddělovač, jaký se za ně opravdu připojí, ať se s ním kus do maxChars
-    // vejde v obou případech.
     const budget = header ? Math.max(maxChars - header.length - PIECE_SEPARATOR.length, 1) : maxChars
-
-    for (const piece of splitLong(paragraph, budget)) {
-      const onlyHeader = current.trim() === '' || current.trim() === header
-      if (!onlyHeader && current.length + piece.length + PIECE_SEPARATOR.length > maxChars) {
-        parts.push(current.trim())
-        current = header && !FILE_HEADER.test(firstLine(piece)) ? `${header}${PIECE_SEPARATOR}` : ''
+    for (const piece of splitLong(body, budget)) {
+      if (current.trim() !== (header ?? '') && current.length + piece.length + PIECE_SEPARATOR.length > maxChars) {
+        flush()
       }
       current += `${piece}${PIECE_SEPARATOR}`
     }
   }
-  if (current.trim()) parts.push(current.trim())
+  if (current.trim() && current.trim() !== header) parts.push(current.trim())
   return parts
 }
 

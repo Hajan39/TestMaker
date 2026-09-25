@@ -149,6 +149,73 @@ describe('dělení dlouhých materiálů', () => {
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
     for (const chunk of chunks) expect(chunk).toMatch(/^=== .+\.pdf ===/)
   })
+
+  describe('deterministický sled kombinací záhlaví a délek', () => {
+    const MAX_CHARS = 1000
+    // Stejný oddělovač jako `PIECE_SEPARATOR` v generate.ts — délka záhlaví
+    // v rozpočtu i tady odečítá stejné dva znaky (`\n\n`).
+    const SEPARATOR_LENGTH = 2
+    const HEADER_LINE = /^=== .+ ===$/
+
+    function headerOf(chunk: string): string | null {
+      const first = chunk.split('\n', 1)[0] ?? ''
+      return HEADER_LINE.test(first) ? first : null
+    }
+
+    /** Rozpočet na obsah kusu, stejně jako v `chunkText`. */
+    function budgetOf(chunk: string): number {
+      const header = headerOf(chunk)
+      return header ? Math.max(MAX_CHARS - header.length - SEPARATOR_LENGTH, 1) : MAX_CHARS
+    }
+
+    /** Obsahuje kus jediné slovo (bez mezer) delší než jeho vlastní rozpočet? */
+    function hasOversizedToken(chunk: string): boolean {
+      const header = headerOf(chunk)
+      const body = header ? chunk.slice(header.length) : chunk
+      const budget = budgetOf(chunk)
+      return body.split(/\s+/).some((word) => word.length > budget)
+    }
+
+    /** Bez záhlaví a bez bílých znaků — pro porovnání, že se nic neztratilo. */
+    function withoutHeadersAndSpace(text: string): string {
+      return text
+        .split('\n')
+        .filter((line) => !HEADER_LINE.test(line.trim()))
+        .join('')
+        .replace(/\s+/g, '')
+    }
+
+    const headerLengths = [5, 10, 15, 20, 25, 30, 35, 40]
+    const prvniLengths = [900, 910, 920, 930, 940, 950, 960, 970, 980, 990, 1000]
+    const druhaSlova = [1, 10, 100, 490, 500]
+
+    const texty: { popis: string; text: string }[] = []
+    for (const nazevLen of headerLengths) {
+      for (const bLen of prvniLengths) {
+        for (const n of druhaSlova) {
+          const header = `=== ${'h'.repeat(nazevLen)}.pdf ===`
+          const prvni = `=== a.pdf ===\n${'b'.repeat(bLen)}`
+          const text = `${prvni}\n\n${header}\n${'a '.repeat(n)}`
+          texty.push({ popis: `hlavička ${nazevLen}, první ${bLen}, druhá ${n}×"a "`, text })
+        }
+      }
+    }
+    // Repro z round 3: záhlaví vede vlastní odstavec s jediným dlouhým slovem.
+    texty.push({ popis: 'round 3 repro', text: '=== dokument.pdf ===\n' + 'a'.repeat(990) })
+
+    it(`${texty.length} kombinací nepřekročí limit (mimo výjimku s jedním dlouhým slovem), nic neztratí a nevytvoří prázdný úsek`, () => {
+      for (const { popis, text } of texty) {
+        const chunks = chunkText(text, MAX_CHARS)
+        for (const chunk of chunks) {
+          expect(chunk.length, popis).toBeGreaterThan(0)
+          if (chunk.length > MAX_CHARS) {
+            expect(hasOversizedToken(chunk), `${popis}: ${chunk.slice(0, 60)}…`).toBe(true)
+          }
+        }
+        expect(withoutHeadersAndSpace(chunks.join('\n')), popis).toBe(withoutHeadersAndSpace(text))
+      }
+    })
+  })
 })
 
 describe('výběr úseků', () => {
