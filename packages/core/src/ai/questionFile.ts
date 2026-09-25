@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { normalizeOrderingPayload, questionContentSchema, type QuestionContent } from '../schema/question'
-import { checkQuestion, dedupeKey, promptOf, withDefaultPoints } from './generate'
+import { checkQuestion, duplicateCheck, withDefaultPoints } from './generate'
 import { buildSystemPrompt, QUESTION_TYPE_HINTS } from './prompts/questions'
 
 /**
@@ -45,6 +45,20 @@ export function existingPromptsFromSource(source: string): string[] {
     prompts.push(line.slice(4))
   }
   return prompts
+}
+
+/**
+ * Materiály ze staženého souboru bez hlavičky `# …`. Při nahrání se citace
+ * kontrolují proti samotným materiálům tématu, ne proti hlavičce — tady
+ * musí být haystack tentýž, jinak by kontrola mimo aplikaci pustila citaci
+ * z hlavičky, kterou pak nahrání odmítne. Soubor bez hlavičky se vrací celý.
+ */
+export function materialFromSource(source: string): string {
+  const lines = source.split('\n')
+  if (!lines[0]?.startsWith('# Předmět:')) return source
+  let i = 0
+  while (lines[i]?.startsWith('# ')) i++
+  return lines.slice(lines[i] === '' ? i + 1 : i).join('\n')
 }
 
 /** Pravidla pro psaní otázek: týž systémový prompt jako v aplikaci, typy a přesný tvar (JSON Schema). */
@@ -102,7 +116,7 @@ export function readQuestionFile(
       : null
   if (!list) throw new QuestionFileError('V souboru chybí seznam otázek („questions").')
 
-  const seen = new Set(existing.map(dedupeKey))
+  const isDuplicate = duplicateCheck(existing)
   const questions: QuestionContent[] = []
   const rejected: { index: number; errors: string[] }[] = []
 
@@ -122,12 +136,10 @@ export function readQuestionFile(
       return
     }
     const question = withDefaultPoints(normalizeOrderingPayload(parsed.data))
-    const key = dedupeKey(promptOf(question))
-    if (seen.has(key)) {
+    if (isDuplicate(question)) {
       rejected.push({ index, errors: ['stejná otázka už v tématu nebo v souboru je'] })
       return
     }
-    seen.add(key)
     questions.push(question)
   })
 

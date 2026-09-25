@@ -1,7 +1,14 @@
 import { generateText } from 'ai'
 import { describe, expect, it } from 'vitest'
 import { generateQuestions, type ModelCall } from '../src/ai/generate'
-import { describeAiConfig, getModel, isAiConfigured, readAiLadder } from '../src/ai/provider'
+import {
+  AI_NOT_CONFIGURED_MESSAGE,
+  describeAiConfig,
+  describeAiSetup,
+  getModel,
+  isAiConfigured,
+  readAiLadder,
+} from '../src/ai/provider'
 import type { QuestionContent } from '../src/schema/question'
 
 /**
@@ -279,5 +286,161 @@ describe('duplicity', () => {
       { models: [PRVNI], callModel: call },
     )
     expect(vysledek.questions).toHaveLength(0)
+  })
+})
+
+/**
+ * Téma o `pocet` souborech; každý soubor je vlastní úsek (nové záhlaví vždy
+ * začíná nový úsek), takže se dá z promptu poznat, který úsek model dostal.
+ */
+function temaOSouborech(pocet: number): string {
+  return Array.from(
+    { length: pocet },
+    (_, i) => `=== soubor${i}.txt ===\n${`Kapitola číslo ${i} vypráví o vodě a jejím koloběhu v přírodě. `.repeat(25)}`,
+  ).join('\n\n')
+}
+
+/** Které soubory (úseky) se v promptech objevily. */
+function souboryVPromptech(prompty: string[]): number[] {
+  return [...new Set(prompty.flatMap((p) => [...p.matchAll(/=== soubor(\d+)\.txt ===/g)].map((m) => Number(m[1]))))].sort(
+    (a, b) => a - b,
+  )
+}
+
+function zaznamovyModel(): { call: ModelCall; prompty: string[] } {
+  const prompty: string[] = []
+  let poradi = 0
+  const call: ModelCall = async ({ prompt }) => {
+    prompty.push(prompt)
+    // Vrátí přesně tolik otázek, kolik si prompt řekl — jako poslušný model.
+    const pocet = Number(/Vytvoř přesně (\d+) otázek/.exec(prompt)?.[1] ?? 0)
+    return { questions: Array.from({ length: pocet }, () => otazka(++poradi)) }
+  }
+  return { call, prompty }
+}
+
+describe('výběr úseků při generování', () => {
+  it('deset otázek z třiceti úseků stojí jen dvě volání modelu', async () => {
+    const { call, prompty } = zaznamovyModel()
+    const vysledek = await generateQuestions(
+      { ...ZADANI, text: temaOSouborech(30), count: 10, types: [...ZADANI.types] },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(prompty).toHaveLength(2)
+    expect(vysledek.questions).toHaveLength(10)
+    // Dvě volání, ale ze dvou různých míst materiálu.
+    expect(souboryVPromptech(prompty)).toHaveLength(2)
+  })
+
+  it('náhrada s citací ze třetího úseku dostane právě třetí úsek', async () => {
+    const { call, prompty } = zaznamovyModel()
+    await generateQuestions(
+      {
+        ...ZADANI,
+        text: temaOSouborech(10),
+        count: 1,
+        types: [...ZADANI.types],
+        focus: 'Kapitola číslo 2 vypráví o vodě',
+      },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(souboryVPromptech(prompty)).toEqual([2])
+  })
+
+  it('náhrada s citací, která v materiálu není, dostane úsek podle posunu', async () => {
+    const { call, prompty } = zaznamovyModel()
+    await generateQuestions(
+      {
+        ...ZADANI,
+        text: temaOSouborech(10),
+        count: 1,
+        types: [...ZADANI.types],
+        focus: 'Tahle věta v materiálu vůbec není.',
+        avoid: ['a', 'b', 'c'],
+      },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(souboryVPromptech(prompty)).toEqual([3])
+  })
+
+  it('dvě doplnění s jinou délkou seznamu „vyhni se" berou jiné úseky', async () => {
+    const prvni = zaznamovyModel()
+    await generateQuestions(
+      { ...ZADANI, text: temaOSouborech(30), count: 10, types: [...ZADANI.types] },
+      { models: [PRVNI], callModel: prvni.call },
+    )
+    const druhy = zaznamovyModel()
+    await generateQuestions(
+      {
+        ...ZADANI,
+        text: temaOSouborech(30),
+        count: 10,
+        types: [...ZADANI.types],
+        avoid: Array.from({ length: 10 }, (_, i) => `Existující otázka ${i}?`),
+      },
+      { models: [PRVNI], callModel: druhy.call },
+    )
+    const a = souboryVPromptech(prvni.prompty)
+    const b = souboryVPromptech(druhy.prompty)
+    expect(a).not.toEqual(b)
+  })
+})
+
+describe('popis nastavení modelů', () => {
+  it('funkční nastavení nemá žádné problémy', () => {
+    const setup = describeAiSetup({ AI_MODELS: 'google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
+    expect(setup.ladder).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
+    expect(setup.problems).toEqual([])
+  })
+
+  it('staré proměnné pojmenuje a pošle do AI_MODELS', () => {
+    const setup = describeAiSetup({ AI_PROVIDER: 'ollama', OLLAMA_BASE_URL: 'http://x', ANTHROPIC_AUTH_TOKEN: '' })
+    expect(setup.ladder).toEqual([])
+    expect(setup.problems).toContain(
+      'Proměnná AI_PROVIDER už se nepoužívá — model nastav v AI_MODELS (viz .env.example).',
+    )
+    expect(setup.problems).toContain(
+      'Proměnná OLLAMA_BASE_URL už se nepoužívá — model nastav v AI_MODELS (viz .env.example).',
+    )
+    // Prázdná proměnná se nepočítá — nic nenastavuje.
+    expect(setup.problems.join('\n')).not.toContain('ANTHROPIC_AUTH_TOKEN')
+  })
+
+  it('položku s neznámým poskytovatelem nebo bez předpony ukáže', () => {
+    const setup = describeAiSetup({ AI_MODELS: 'ollama:qwen3:14b, gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
+    expect(setup.problems).toEqual([
+      'Položka „ollama:qwen3:14b" v AI_MODELS nemá známého poskytovatele (google, openrouter, anthropic).',
+      'Položka „gemini-flash-latest" v AI_MODELS nemá známého poskytovatele (google, openrouter, anthropic).',
+    ])
+  })
+
+  it('položku bez klíče ukáže i s názvem proměnné pro klíč', () => {
+    const setup = describeAiSetup({ AI_MODELS: 'anthropic:claude-haiku-4-5, google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
+    expect(setup.ladder).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
+    expect(setup.problems).toEqual(['K položce „anthropic:claude-haiku-4-5" chybí klíč ANTHROPIC_API_KEY.'])
+  })
+
+  it('bez AI_MODELS i bez klíče řekne, že chybí klíč k výchozímu modelu', () => {
+    expect(describeAiSetup({}).problems).toEqual([
+      'K položce „google:gemini-flash-latest" chybí klíč GOOGLE_GENERATIVE_AI_API_KEY.',
+    ])
+  })
+
+  it('AI_MODELS jen s oddělovači ohlásí, že v něm nic není', () => {
+    const setup = describeAiSetup({ AI_MODELS: ' , ', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
+    expect(setup.ladder).toEqual([])
+    expect(setup.problems).toEqual(['V AI_MODELS není žádná položka poskytovatel:model.'])
+  })
+
+  it('žebříček je týž jako z readAiLadder', () => {
+    const env = { AI_MODELS: 'google:a, google:a, openrouter:b', GOOGLE_GENERATIVE_AI_API_KEY: 'g', OPENROUTER_API_KEY: 'o' }
+    expect(describeAiSetup(env).ladder).toEqual(readAiLadder(env))
+  })
+
+  it('hláška pro nenastavené generování říká, co doplnit', () => {
+    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('AI_MODELS')
+    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('GOOGLE_GENERATIVE_AI_API_KEY')
+    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('OPENROUTER_API_KEY')
+    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('ANTHROPIC_API_KEY')
   })
 })

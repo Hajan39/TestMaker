@@ -6,6 +6,7 @@ import {
   evidenceMatches,
   pickChunks,
   promptOf,
+  questionKey,
   salvageQuestions,
   splitIntoBatches,
 } from '../src/ai/generate'
@@ -231,6 +232,22 @@ describe('výběr úseků', () => {
     expect(Number(picked.at(-1)!.slice(1))).toBeGreaterThanOrEqual(20)
     expect(new Set(picked).size).toBe(10)
   })
+
+  it('posun otočí rozložení, výběr zůstane bez opakování a v rozsahu', () => {
+    const chunks = Array.from({ length: 30 }, (_, i) => `u${i}`)
+    for (const offset of [0, 1, 7, 10, 29, 30, 95]) {
+      const picked = pickChunks(chunks, 4, offset)
+      expect(picked, `posun ${offset}`).toHaveLength(4)
+      expect(new Set(picked).size, `posun ${offset}`).toBe(4)
+      for (const chunk of picked) expect(chunks, `posun ${offset}`).toContain(chunk)
+    }
+    expect(pickChunks(chunks, 4, 7)).not.toEqual(pickChunks(chunks, 4, 0))
+  })
+
+  it('bez posunu vybírá jako dřív', () => {
+    const chunks = Array.from({ length: 25 }, (_, i) => `u${i}`)
+    expect(pickChunks(chunks, 10, 0)).toEqual(pickChunks(chunks, 10))
+  })
 })
 
 describe('doklad původu otázky', () => {
@@ -424,6 +441,29 @@ describe('rozpoznání duplicit u obecně formulovaných typů', () => {
     expect(promptOf(q)).toContain('Praha')
     expect(promptOf(q)).toContain('hlavní město')
   })
+
+  it('výběr z možností se stejným obecným zadáním a jinými možnostmi nejsou duplicity', () => {
+    const vyber = (options: string[]): QuestionContent =>
+      questionContentSchema.parse({
+        type: 'single_choice',
+        payload: { prompt: 'Vyber správnou možnost.', options, correctIndex: 0 },
+      })
+    const multi = (options: string[]): QuestionContent =>
+      questionContentSchema.parse({
+        type: 'multi_choice',
+        payload: { prompt: 'Vyber správné možnosti.', options, correctIndices: [0, 1] },
+      })
+    expect(questionKey(vyber(['Slunce', 'Měsíc', 'Mars', 'Venuše']))).not.toBe(
+      questionKey(vyber(['voda', 'led', 'pára', 'sníh'])),
+    )
+    expect(questionKey(multi(['a1', 'b1', 'c1', 'd1']))).not.toBe(questionKey(multi(['a2', 'b2', 'c2', 'd2'])))
+    // Tatáž otázka jen s jinou interpunkcí je pořád táž.
+    expect(questionKey(vyber(['Slunce', 'Měsíc', 'Mars', 'Venuše']))).toBe(
+      questionKey(vyber(['slunce.', 'Měsíc', 'Mars', 'Venuše'])),
+    )
+    // Zobrazení zadání se nemění.
+    expect(promptOf(vyber(['Slunce', 'Měsíc', 'Mars', 'Venuše']))).toBe('Vyber správnou možnost.')
+  })
 })
 
 describe('řazení: oddělení správného pořadí od zadaného', () => {
@@ -558,8 +598,14 @@ describe('vysvětlení chyb od modelu', () => {
       new Error('You exceeded your current quota, please check your plan and billing details.'),
     )
     expect(failure.message).toContain('limit')
-    expect(failure.message).toContain('AI_MODEL')
+    expect(failure.message).toContain('AI_MODELS')
     expect(failure.retryable).toBe(true)
+  })
+
+  it('hláška o limitu nemluví jen o jednom poskytovateli', () => {
+    const failure = describeAiError(new Error('Rate limit exceeded: free-models-per-day'))
+    expect(failure.message).not.toContain('Gemini')
+    expect(failure.message).toContain('bezplatných tarifů')
   })
 
   it('přetížený model pozná podle hlášky poskytovatele', () => {
@@ -693,6 +739,19 @@ describe('kontrola citace', () => {
 
   it('vymyšlenou citaci odmítne', () => {
     expect(evidenceMatches(s('Voda se vypařuje při teplotě 100 stupňů.'), usek)).toBe(false)
+  })
+
+  it('snese dělení slova na konci řádku a měkký spojovník', () => {
+    const rozdelene = '=== houby.pdf ===\nZelené rostliny obsahují chloro-\nfyl, houby ne.'
+    const q = (quote: string) =>
+      questionContentSchema.parse({
+        type: 'short_answer',
+        payload: { prompt: 'Co houbám chybí?', answer: 'chlorofyl' },
+        evidence: { fileName: 'houby.pdf', quote },
+      })
+    expect(evidenceMatches(q('Zelené rostliny obsahují chlorofyl'), rozdelene)).toBe(true)
+    expect(evidenceMatches(q('Zelené rostliny obsahují chloro\u00ADfyl'), usek + '\nZelené rostliny obsahují chlorofyl.')).toBe(true)
+    expect(evidenceMatches(q('obsahují chlorofyl'), 'Zelené rostliny obsa\u00ADhují chlorofyl.')).toBe(true)
   })
 
   it('otázka bez citace projde', () => {

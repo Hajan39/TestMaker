@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { QuestionFileError, buildTopicSourceFile, existingPromptsFromSource, readQuestionFile } from '../src/ai/questionFile'
+import {
+  QuestionFileError,
+  buildTopicSourceFile,
+  existingPromptsFromSource,
+  materialFromSource,
+  readQuestionFile,
+} from '../src/ai/questionFile'
 
 const ZDROJ = buildTopicSourceFile({
   subjectName: 'Přírodopis',
@@ -59,5 +65,37 @@ describe('soubor s otázkami z Claude Code', () => {
     expect(ZDROJ).toContain('# Ročník: 6. ročník')
     expect(ZDROJ).toContain('=== houby.pdf ===')
     expect(existingPromptsFromSource(ZDROJ)).toEqual(['Co je podhoubí?'])
+  })
+})
+
+describe('materiál ze staženého souboru', () => {
+  it('odřízne hlavičku a nechá přesně text materiálů', () => {
+    expect(materialFromSource(ZDROJ)).toBe('=== houby.pdf ===\nHouby nemají chlorofyl.\nPlodnice hřibu roste nad zemí.')
+  })
+
+  it('soubor bez hlavičky nechá beze změny', () => {
+    const text = '=== voda.pdf ===\nVoda se v přírodě pohybuje.'
+    expect(materialFromSource(text)).toBe(text)
+  })
+
+  it('citace z hlavičky neprojde — kontrola vidí jen materiál jako při nahrání', () => {
+    const zHlavicky = otazka('Kterému tématu otázka patří?', 'Předmět: Přírodopis')
+    const { rejected } = readQuestionFile(JSON.stringify([zHlavicky]), materialFromSource(ZDROJ))
+    expect(rejected).toHaveLength(1)
+  })
+})
+
+describe('duplicity výběru z možností v souboru', () => {
+  it('dvě otázky se stejným obecným zadáním a jinými možnostmi ponechá obě', () => {
+    const vyber = (options: string[]) => ({
+      type: 'single_choice',
+      payload: { prompt: 'Vyber správnou možnost.', options, correctIndex: 0 },
+    })
+    const { questions, rejected } = readQuestionFile(
+      JSON.stringify([vyber(['hřib', 'muchomůrka', 'bedla', 'liška']), vyber(['podhoubí', 'plodnice', 'výtrus', 'klobouk'])]),
+      ZDROJ,
+    )
+    expect(rejected).toEqual([])
+    expect(questions).toHaveLength(2)
   })
 })

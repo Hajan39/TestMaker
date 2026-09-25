@@ -48,22 +48,75 @@ function apiKeyOf(provider: AiProviderName, env: Env): string | undefined {
 }
 
 /**
- * Žebříček modelů: `AI_MODELS`, bez něj `AI_SETTINGS.defaultModels`. Když
- * modelu dojde limit, pokračuje se dalším (viz `startLadder`). Položky bez
- * klíče nebo s překlepem se vynechávají; placený model se tak nikdy nezapne
- * sám — jen tím, že ho majitel do žebříčku napíše a dá k němu klíč.
+ * Hláška, když generování není nastavené — všude stejná (API i rozhraní),
+ * ať majitel dostane jeden návod, ne čtyři různé.
  */
-export function readAiLadder(env: Env = process.env): AiConfig[] {
+export const AI_NOT_CONFIGURED_MESSAGE =
+  'Generování není nastavené. Do .env.local přidej do AI_MODELS položku poskytovatel:model a k ní klíč ' +
+  '(GOOGLE_GENERATIVE_AI_API_KEY, OPENROUTER_API_KEY nebo ANTHROPIC_API_KEY).'
+
+/**
+ * Proměnné z dřívějšího nastavení (Ollama, `AI_PROVIDER`…). Aplikace je už
+ * nečte; kdo je v `.env.local` má, přišel by o generování bez vysvětlení.
+ */
+const LEGACY_AI_VARIABLES = [
+  'AI_PROVIDER',
+  'AI_MODEL',
+  'ANTHROPIC_AUTH_TOKEN',
+  'OLLAMA_WORKERS',
+  'OLLAMA_BASE_URL',
+  'OLLAMA_CONCURRENCY',
+] as const
+
+/** Poskytovatelé v pořadí pro hlášky: napřed ti se zdarma. */
+const PROVIDER_LIST = (['google', 'openrouter', 'anthropic'] as const satisfies readonly AiProviderName[]).join(', ')
+
+/**
+ * Žebříček modelů i to, proč v něm něco chybí. `problems` jsou české věty
+ * pro majitele (co v `.env.local` opravit): staré proměnné, položka bez
+ * známého poskytovatele, položka bez klíče. Žebříček sám je týž jako
+ * z `readAiLadder`.
+ */
+export function describeAiSetup(env: Env = process.env): { ladder: AiConfig[]; problems: string[] } {
+  const problems: string[] = []
+  for (const name of LEGACY_AI_VARIABLES) {
+    if (env[name]?.trim()) {
+      problems.push(`Proměnná ${name} už se nepoužívá — model nastav v AI_MODELS (viz .env.example).`)
+    }
+  }
+
   const raw = env.AI_MODELS?.trim()
-  const items = raw ? raw.split(',') : [...AI_SETTINGS.defaultModels]
+  const items = (raw ? raw.split(',') : [...AI_SETTINGS.defaultModels]).map((item) => item.trim()).filter(Boolean)
   const ladder: AiConfig[] = []
   for (const item of items) {
     const config = parseModel(item)
-    if (!config || !apiKeyOf(config.provider, env)) continue
+    if (!config) {
+      problems.push(`Položka „${item}" v AI_MODELS nemá známého poskytovatele (${PROVIDER_LIST}).`)
+      continue
+    }
+    if (!apiKeyOf(config.provider, env)) {
+      problems.push(`K položce „${item}" chybí klíč ${AI_PROVIDERS[config.provider].keyEnv}.`)
+      continue
+    }
     if (ladder.some((other) => other.provider === config.provider && other.model === config.model)) continue
     ladder.push(config)
   }
-  return ladder
+  // Jen oddělovače (`AI_MODELS=,`): nic se nevynechalo, a přesto nic není.
+  if (ladder.length === 0 && problems.length === 0) {
+    problems.push('V AI_MODELS není žádná položka poskytovatel:model.')
+  }
+  return { ladder, problems }
+}
+
+/**
+ * Žebříček modelů: `AI_MODELS`, bez něj `AI_SETTINGS.defaultModels`. Když
+ * modelu dojde limit, pokračuje se dalším (viz `startLadder`). Položky bez
+ * klíče nebo s překlepem se vynechávají (proč, říká `describeAiSetup`);
+ * placený model se tak nikdy nezapne sám — jen tím, že ho majitel do
+ * žebříčku napíše a dá k němu klíč.
+ */
+export function readAiLadder(env: Env = process.env): AiConfig[] {
+  return describeAiSetup(env).ladder
 }
 
 /** Je generování k dispozici? Bez něj ho rozhraní skryje a vysvětlí proč. */

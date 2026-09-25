@@ -129,12 +129,23 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
 }
 
 /**
- * Když je úseků víc než otázek, vybere je rovnoměrně po celém materiálu —
- * jinak by u dlouhého tématu a pár otázek padly všechny na první kapitoly.
+ * Když je úseků víc, než kolik se jich použije, vybere je rovnoměrně po celém
+ * materiálu — jinak by u dlouhého tématu a pár otázek padly všechny na první
+ * kapitoly.
+ *
+ * `offset` celé rozložení pootočí (s přetečením na začátek). Bez něj by každé
+ * dogenerování i každá náhrada vybraly tytéž úseky a zbytek tématu by model
+ * nikdy neviděl; generování proto posouvá podle počtu otázek, které už
+ * v tématu jsou. Výběr zůstává bez opakování, protože se všechny indexy
+ * posouvají o totéž.
  */
-export function pickChunks(chunks: string[], count: number): string[] {
-  if (chunks.length <= count) return chunks
-  return Array.from({ length: count }, (_, i) => chunks[Math.floor((i * chunks.length) / count)] as string)
+export function pickChunks(chunks: string[], count: number, offset: number = 0): string[] {
+  const n = chunks.length
+  if (n === 0) return []
+  const shift = ((Math.trunc(offset) % n) + n) % n
+  const at = (index: number) => chunks[(index + shift) % n] as string
+  if (n <= count) return chunks.map((_, i) => at(i))
+  return Array.from({ length: count }, (_, i) => at(Math.floor((i * n) / count)))
 }
 
 /** Rozdělí požadovaný počet otázek na dávky, které se vejdou do jednoho volání. */
@@ -198,29 +209,61 @@ export const EVIDENCE_NOT_FOUND = 'citace v evidence se v materiálu nenašla'
  * se otázka zahodit nesmí.
  */
 function normalizeForMatch(text: string): string {
-  return text
-    .normalize('NFC')
-    .toLowerCase()
-    .replace(/[„“”"'‚‘’«»]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    text
+      .normalize('NFC')
+      // Měkký spojovník z PDF v textu není vidět, model ho do citace nepřepíše.
+      .replace(/\u00AD/g, '')
+      // Slovo rozdělené na konci řádku („chloro-⏎fyl") model cituje vcelku.
+      .replace(/-[ \t]*\r?\n\s*(?=\p{L})/gu, '')
+      .toLowerCase()
+      .replace(/[„“”"'‚‘’«»]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 /**
- * Stojí citace z `evidence` opravdu v materiálu? Citace se dělí na vypuštění
- * („…", „...") a každý kus musí v textu být. Otázka bez citace projde —
- * chybějící doklad je slabší prohřešek než vymyšlený.
+ * Kusy citace k hledání v materiálu: citace se dělí na vypuštění („…",
+ * „...") a kusy kratší než `minEvidencePart` se vynechají — našly by se
+ * kdekoli. Prázdný výsledek znamená, že v citaci není co hledat.
  */
-export function evidenceMatches(question: QuestionContent, source: string): boolean {
-  const quote = question.evidence?.quote?.trim()
-  if (!quote) return true
-  const haystack = normalizeForMatch(source)
-  const parts = quote
+function quoteParts(quote: string | undefined): string[] {
+  if (!quote?.trim()) return []
+  return quote
     .split(/…|\.\.\./)
     .map((part) => normalizeForMatch(part).replace(/[.,;:!?]+$/, '').trim())
     .filter((part) => part.length >= AI_SETTINGS.minEvidencePart)
-  if (parts.length === 0) return true
+}
+
+function quoteFoundIn(parts: string[], source: string): boolean {
+  const haystack = normalizeForMatch(source)
   return parts.every((part) => haystack.includes(part))
+}
+
+/**
+ * Stojí citace z `evidence` opravdu v materiálu? Každý kus citace (viz
+ * `quoteParts`) musí v textu být. Otázka bez citace projde — chybějící doklad
+ * je slabší prohřešek než vymyšlený.
+ */
+export function evidenceMatches(question: QuestionContent, source: string): boolean {
+  const parts = quoteParts(question.evidence?.quote)
+  if (parts.length === 0) return true
+  return quoteFoundIn(parts, source)
+}
+
+/**
+ * Úseky, ze kterých se bude generovat. Když má požadavek `focus` (citaci
+ * nahrazované otázky), jde první úsek, ve kterém ta citace stojí — náhrada
+ * pak vzniká z téže pasáže, ne vždy z prvního úseku tématu. Zbytek (nebo
+ * všechno, když se citace nenajde) se vybere rovnoměrně s posunem `offset`.
+ */
+export function selectChunks(chunks: string[], count: number, offset: number, focus?: string): string[] {
+  const parts = quoteParts(focus)
+  const hit = parts.length > 0 ? chunks.find((chunk) => quoteFoundIn(parts, chunk)) : undefined
+  if (hit === undefined) return pickChunks(chunks, count, offset)
+  if (count <= 1) return [hit]
+  return [hit, ...pickChunks(chunks.filter((chunk) => chunk !== hit), count - 1, offset)]
 }
 
 /** Všechny důvody, proč otázku nepustit do banky: tvar i doklad. */
@@ -271,7 +314,15 @@ export async function generateQuestions(
     })()
   const system = buildSystemPrompt(request.gradeName)
 
-  const chunks = pickChunks(chunkText(request.text), request.count)
+  // Úseků jen tolik, kolik je potřeba plných dávek (viz `questionsPerCall`),
+  // a posun podle toho, kolik otázek už v tématu je — další dogenerování tak
+  // sáhne po jiných částech materiálu než to předchozí.
+  const chunks = selectChunks(
+    chunkText(request.text),
+    Math.ceil(request.count / AI_SETTINGS.questionsPerCall),
+    request.avoid?.length ?? 0,
+    request.focus,
+  )
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
   // Rozvrh typů pro celé generování — každá dávka si vezme svůj úsek.
   const typeSchedule = distributeTypes(request.types, request.count)
@@ -279,7 +330,7 @@ export async function generateQuestions(
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []
   const failedCalls: GenerationResult['failedCalls'] = []
-  const seen = new Set((request.avoid ?? []).map(dedupeKey))
+  const isDuplicate = duplicateCheck(request.avoid ?? [])
 
   for (const [index, chunk] of chunks.entries()) {
     const remaining = request.count - accepted.length
@@ -327,9 +378,7 @@ export async function generateQuestions(
           continue
         }
         const normalized = withDefaultPoints(normalizeOrderingPayload(question))
-        const key = dedupeKey(promptOf(normalized))
-        if (seen.has(key)) continue
-        seen.add(key)
+        if (isDuplicate(normalized)) continue
         batch.push(normalized)
       }
 
@@ -382,5 +431,35 @@ export function promptOf(question: QuestionContent): string {
       if (typeof payload.text === 'string') return payload.text.slice(0, 120)
       return question.type
     }
+  }
+}
+
+/**
+ * Otisk otázky pro rozpoznání duplicit. U výběru z možností bývá zadání
+ * obecné („Vyber správnou možnost.") a otázky se liší až možnostmi, proto
+ * se k zadání přidají. Ostatní typy mají obsah už v `promptOf`.
+ */
+export function questionKey(question: QuestionContent): string {
+  const prompt = promptOf(question)
+  if (question.type === 'single_choice' || question.type === 'multi_choice') {
+    return dedupeKey(`${prompt} ${question.payload.options.join(' / ')}`)
+  }
+  return dedupeKey(prompt)
+}
+
+/**
+ * Kontrola duplicit pro jeden běh (generování nebo nahrání souboru). Otázky
+ * z běhu se porovnávají celým otiskem (`questionKey`). Existující otázky
+ * tématu jsou k dispozici jen jako zadání (`existing`), takže se s nimi
+ * porovnává zadání. Vrací `true` pro duplicitu; jinak si otázku zapamatuje.
+ */
+export function duplicateCheck(existing: string[]): (question: QuestionContent) => boolean {
+  const existingKeys = new Set(existing.map(dedupeKey))
+  const seen = new Set<string>()
+  return (question) => {
+    const key = questionKey(question)
+    if (seen.has(key) || existingKeys.has(dedupeKey(promptOf(question)))) return true
+    seen.add(key)
+    return false
   }
 }

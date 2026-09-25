@@ -16,6 +16,13 @@ export const AI_SETTINGS = {
   /**
    * Otázek v jednom volání. Model vrací dávku jako jeden objekt — čím větší,
    * tím víc práce padne, když se u jedné otázky netrefí do tvaru.
+   *
+   * Určuje i počet úseků materiálu: generování jich vybere jen tolik, kolik
+   * je potřeba plných dávek (10 otázek = 2 úseky = 2 volání). Víc úseků po
+   * jedné otázce by pokrylo víc látky, ale stálo by až pětkrát víc volání —
+   * a bezplatné tarify mají denní limit na počet volání, ne na otázky. Že se
+   * témata nepokrývají pořád od začátku, zajišťuje posun výběru při každém
+   * dalším dogenerování (`pickChunks`).
    */
   questionsPerCall: 5,
   /**

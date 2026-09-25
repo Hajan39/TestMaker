@@ -16,6 +16,11 @@ export interface GenerationRequest {
   styleSample?: string
   /** Zadání, kterým se má generování vyhnout (už existující otázky). */
   avoid?: string[]
+  /**
+   * Citace (`evidence.quote`) nahrazované otázky. Když je, generuje se
+   * z úseku, ve kterém ta citace stojí — náhrada má být ze stejné látky.
+   */
+  focus?: string
 }
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
