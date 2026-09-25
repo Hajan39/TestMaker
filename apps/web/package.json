@@ -21,6 +21,7 @@
     "e2e": "playwright test",
     "e2e:db": "tsx --conditions=react-server scripts/seed-e2e.ts",
     "e2e:ui": "playwright test --ui",
+    "generate:try": "tsx scripts/zkouska-generovani.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
