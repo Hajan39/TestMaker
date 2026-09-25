@@ -12,6 +12,7 @@ import {
   type GenerateSettings,
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
+import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
 import { ReviewPanel } from '@/components/ReviewPanel'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { useMuzeMenit } from '@/components/Prava'
@@ -215,6 +216,8 @@ export function TopicWorkspace({
           {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
       ) : null}
+
+      {muzeMenit ? <ClaudeCodeImport topicId={topicId} /> : null}
 
       {group}
 
