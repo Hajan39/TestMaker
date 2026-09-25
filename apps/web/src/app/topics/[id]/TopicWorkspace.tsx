@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { Question } from '@testmaker/core/schema'
 import { Button, Card, OTAZKY, pocet, toast } from '@testmaker/ui'
 import {
+  AiUnavailable,
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
   ProgressLine,
@@ -51,7 +52,7 @@ export function TopicWorkspace({
   keptCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
   lowContent: boolean
-  ai: { configured: boolean; provider: string; model: string }
+  ai: { configured: boolean; provider: string; model: string; problems: string[] }
   /** Materiály tématu — vykreslí se mezi hlavní akcí a seznamem otázek. */
   group: React.ReactNode
 }) {
@@ -215,6 +216,8 @@ export function TopicWorkspace({
           ) : null}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
+      ) : muzeMenit ? (
+        <AiUnavailable problems={ai.problems} />
       ) : null}
 
       {muzeMenit ? <ClaudeCodeImport topicId={topicId} /> : null}

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { PUZZLE_KINDS } from '@testmaker/core/schema'
 import { loadPuzzleWordDraft, savePuzzleWordDraft, suggestPuzzleWords } from '@/lib/puzzles'
 import { sRozsahem } from '@/lib/uzivatel'
@@ -35,10 +35,7 @@ export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
     return Response.json(
-      {
-        error:
-          'Generování slov není nastavené — doplň GOOGLE_GENERATIVE_AI_API_KEY nebo ANTHROPIC_API_KEY do AI_MODELS. Slova můžeš zatím napsat ručně.',
-      },
+      { error: `${AI_NOT_CONFIGURED_MESSAGE} Slova můžeš zatím napsat ručně.` },
       { status: 503 },
     )
   }

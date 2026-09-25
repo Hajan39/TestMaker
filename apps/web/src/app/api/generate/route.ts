@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
-import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
 import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
 
@@ -20,7 +20,7 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
-    return Response.json({ error: 'AI není nakonfigurovaná — doplň GOOGLE_GENERATIVE_AI_API_KEY nebo ANTHROPIC_API_KEY do AI_MODELS' }, { status: 503 })
+    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
   }
 
   const parsed = bodySchema.safeParse(await request.json())

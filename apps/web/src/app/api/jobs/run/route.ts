@@ -1,5 +1,5 @@
 import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
-import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { generateForTopic } from '@/lib/generation'
 import { scopeFromJob, zapsatAudit } from '@/lib/uzivatel'
@@ -45,7 +45,7 @@ export async function GET() {
 
 async function runOne() {
   if (!isAiConfigured()) {
-    return Response.json({ error: 'AI není nakonfigurovaná' }, { status: 503 })
+    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
   }
 
   // Nejdřív posbíráme, co po sobě nechal přerušený běh.

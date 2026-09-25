@@ -1,3 +1,4 @@
+import 'server-only'
 import { inArray } from 'drizzle-orm'
 import { buildTopicSourceFile, CLAUDE_CODE_MODEL, readQuestionFile } from '@testmaker/core/ai'
 import { db, questions } from '@/db'

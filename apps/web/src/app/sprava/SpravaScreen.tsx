@@ -59,6 +59,7 @@ export function SpravaScreen({
   udalosti,
   fronta,
   aiConfigured,
+  aiProblems,
   prihlasovani,
 }: {
   ja: string
@@ -68,6 +69,8 @@ export function SpravaScreen({
   udalosti: UdalostRadek[]
   fronta: { queued: number; running: number; done: number; error: number }
   aiConfigured: boolean
+  /** Proč v žebříčku modelů něco chybí (`describeAiSetup`) — pro majitele. */
+  aiProblems: string[]
   prihlasovani: 'zapnuto' | 'vypnuto' | 'chybne-nastaveno'
 }) {
   const router = useRouter()
@@ -299,7 +302,14 @@ export function SpravaScreen({
               Fronta generování: běží {fronta.running}, čeká {fronta.queued}, hotovo {fronta.done},
               chyb {fronta.error}.
             </p>
-            <p>Generování otázek: {aiConfigured ? 'nastavené' : 'bez klíče k modelu'}.</p>
+            <p>Generování otázek: {aiConfigured ? 'nastavené' : 'není nastavené'}.</p>
+            {aiProblems.length > 0 ? (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs text-fg-soft">
+                {aiProblems.map((problem) => (
+                  <li key={problem}>{problem}</li>
+                ))}
+              </ul>
+            ) : null}
             <p>
               Přihlašování: {prihlasovani}
               {googleDomain ? `, Google pro doménu ${googleDomain}` : ', bez přihlášení přes Google'}.

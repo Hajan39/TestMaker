@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, questions } from '@/db'
 import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
 import { skola, sRozsahem } from '@/lib/uzivatel'
@@ -28,13 +28,7 @@ export function GET() {
 export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   if (!isAiConfigured()) {
-    return Response.json(
-      {
-        error:
-          'AI není nakonfigurovaná — doplň GOOGLE_GENERATIVE_AI_API_KEY nebo ANTHROPIC_API_KEY do AI_MODELS',
-      },
-      { status: 503 },
-    )
+    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
   }
 
   const parsed = bodySchema.safeParse(await request.json())

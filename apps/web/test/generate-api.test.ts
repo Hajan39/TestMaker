@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POST } from '@/app/api/generate/route'
+import { AI_NOT_CONFIGURED_MESSAGE } from '@testmaker/core/ai'
 import { aiStatus } from '@/lib/ai'
 import { jsonReq } from './helpers'
 
@@ -10,6 +11,9 @@ function withoutKeys(): void {
   vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '')
   vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '')
   vi.stubEnv('OPENROUTER_API_KEY', '')
+  for (const legacy of ['AI_PROVIDER', 'AI_MODEL', 'OLLAMA_WORKERS', 'OLLAMA_BASE_URL', 'OLLAMA_CONCURRENCY']) {
+    vi.stubEnv(legacy, '')
+  }
 }
 
 /** Prostředí s klíčem — samotné volání modelu testy nespouštějí. */
@@ -31,7 +35,7 @@ describe('generování bez klíče k modelu', () => {
     expect(response.status).toBe(503)
     const body = (await response.json()) as { error: string }
     // Hláška je pro učitelku, ne pro vývojáře — musí říct, co s tím.
-    expect(body.error).toContain('ANTHROPIC_API_KEY')
+    expect(body.error).toBe(AI_NOT_CONFIGURED_MESSAGE)
   })
 
   it('503 má přednost před kontrolou dat — bez klíče se negeneruje tak jako tak', async () => {
@@ -43,6 +47,16 @@ describe('generování bez klíče k modelu', () => {
   it('stav pro rozhraní hlásí, že nakonfigurováno není', () => {
     withoutKeys()
     expect(aiStatus().configured).toBe(false)
+  })
+
+  it('stav pro rozhraní vysvětlí, proč nastavené není', () => {
+    withoutKeys()
+    vi.stubEnv('AI_PROVIDER', 'ollama')
+    vi.stubEnv('AI_MODELS', 'anthropic:claude-haiku-4-5')
+    expect(aiStatus().problems).toEqual([
+      'Proměnná AI_PROVIDER už se nepoužívá — model nastav v AI_MODELS (viz .env.example).',
+      'K položce „anthropic:claude-haiku-4-5" chybí klíč ANTHROPIC_API_KEY.',
+    ])
   })
 
   it('s klíčem se stav hlásí jako nakonfigurovaný a je vidět model', () => {

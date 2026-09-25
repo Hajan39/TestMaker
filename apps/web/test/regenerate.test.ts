@@ -54,6 +54,40 @@ async function stavy(topicId: string): Promise<Map<string, string>> {
 }
 
 describe('náhrada jedné otázky modelem', () => {
+  it('předá modelu citaci nahrazované otázky, ať náhrada vznikne ze stejné pasáže', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
+    await db
+      .update(questions)
+      .set({ sourceFile: 'voda.pdf', sourceQuote: 'srážky a odtok vody zpět do moří' })
+      .where(eq(questions.id, original))
+
+    let focus: string | undefined = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      generate: async (request, options) => {
+        focus = request.focus
+        return modelVrati(request, options)
+      },
+    })
+    expect(focus).toBe('srážky a odtok vody zpět do moří')
+  })
+
+  it('bez citace u původní otázky se focus nepředává', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
+
+    let focus: string | undefined = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      generate: async (request, options) => {
+        focus = request.focus
+        return modelVrati(request, options)
+      },
+    })
+    expect(focus).toBeUndefined()
+  })
+
   it('nejdřív vznikne náhrada, teprve pak se původní zamítne', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })

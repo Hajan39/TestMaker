@@ -324,6 +324,9 @@ export async function regenerateQuestion(
       types: [type as (typeof AI_QUESTION_TYPES)[number]],
       difficulty: (original.difficulty as 1 | 2 | 3) ?? 2,
       avoid,
+      // Náhrada vzniká z pasáže, o kterou se opírala původní otázka — jinak
+      // by model dostal vždy první úsek tématu, ať šlo o cokoli.
+      ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
     },
     { signal: options.signal },
   )

@@ -153,12 +153,21 @@ export function GenerateSettingsForm({
   )
 }
 
-export function AiUnavailable({ provider }: { provider: string }) {
+/**
+ * Proč generování nejde. Učitelce stačí první věta; seznam pod ní je pro
+ * majitele, který nastavení v `.env.local` opravuje (`describeAiSetup`).
+ */
+export function AiUnavailable({ problems }: { problems: string[] }) {
   return (
-    <Card className="border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
-      Generování je vypnuté: chybí klíč k modelu. Doplň do <code>.env.local</code> žebříček{' '}
-      <code>AI_MODELS</code> a k němu klíč, třeba <code>GOOGLE_GENERATIVE_AI_API_KEY</code>
-      nebo <code>ANTHROPIC_API_KEY</code>, a restartuj aplikaci.
+    <Card className="gap-1 border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
+      <p>Generování není nastavené.</p>
+      {problems.length > 0 ? (
+        <ul className="list-disc space-y-0.5 pl-5 text-xs">
+          {problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      ) : null}
     </Card>
   )
 }

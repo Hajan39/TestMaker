@@ -66,6 +66,7 @@ export default async function SpravaPage() {
       .limit(1),
     countJobs(ucet),
   ])
+  const ai = aiStatus()
 
   return (
     <PageShell>
@@ -87,7 +88,8 @@ export default async function SpravaPage() {
         }))}
         udalosti={udalosti}
         fronta={fronta}
-        aiConfigured={aiStatus().configured}
+        aiConfigured={ai.configured}
+        aiProblems={ai.problems}
         prihlasovani={authMode()}
       />
     </PageShell>
