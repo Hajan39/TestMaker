@@ -8,8 +8,11 @@ export const AI_SETTINGS = {
   defaultModels: ['google:gemini-flash-latest'],
   /** Kolikrát AI SDK samo zopakuje neúspěšné volání jednoho modelu. */
   maxRetries: 2,
-  /** Nejdelší úsek materiálu v jednom volání (znaky). */
-  maxCharsPerCall: 120_000,
+  /**
+   * Nejdelší úsek materiálu v jednom volání (znaky). S úsekem o pár stranách
+   * model pracuje přesně; se stovkou stran se ztratí a začne vymýšlet.
+   */
+  maxCharsPerCall: 8_000,
   /**
    * Otázek v jednom volání. Model vrací dávku jako jeden objekt — čím větší,
    * tím víc práce padne, když se u jedné otázky netrefí do tvaru.

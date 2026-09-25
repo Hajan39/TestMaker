@@ -41,20 +41,68 @@ export type ModelCall = (input: {
   signal?: AbortSignal
 }) => Promise<{ questions: QuestionContent[] }>
 
-/** Rozdělí dlouhý text na části na hranicích odstavců. */
+const FILE_HEADER = /^=== .+ ===$/
+
+function firstLine(text: string): string {
+  return (text.split('\n', 1)[0] ?? '').trim()
+}
+
+/**
+ * Rozdělí příliš dlouhý kus textu na části do `maxChars`: po řádcích,
+ * a když je i řádek moc dlouhý (text z PDF bývá jeden nekonečný řádek), po
+ * větách. Věta delší než limit zůstane celá.
+ */
+function splitLong(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text]
+  const pieces = text.includes('\n') ? text.split('\n') : text.split(/(?<=[.!?])\s+/)
+  if (pieces.length === 1) return pieces
+  const parts: string[] = []
+  let current = ''
+  for (const piece of pieces.flatMap((p) => splitLong(p, maxChars))) {
+    if (current && current.length + piece.length + 1 > maxChars) {
+      parts.push(current)
+      current = ''
+    }
+    current = current ? `${current} ${piece}` : piece
+  }
+  if (current) parts.push(current)
+  return parts
+}
+
+/**
+ * Rozdělí dlouhý text na části na hranicích odstavců. Záhlaví `=== soubor ===`
+ * se přenáší do každé další části téhož souboru — model podle něj vyplňuje
+ * `evidence.fileName`.
+ */
 export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsPerCall): string[] {
   if (text.length <= maxChars) return [text]
   const parts: string[] = []
   let current = ''
+  let header: string | null = null
+
   for (const paragraph of text.split(/\n\n+/)) {
-    if (current.length + paragraph.length + 2 > maxChars && current) {
-      parts.push(current.trim())
-      current = ''
+    if (FILE_HEADER.test(firstLine(paragraph))) header = firstLine(paragraph)
+
+    for (const piece of splitLong(paragraph, maxChars)) {
+      const onlyHeader = current.trim() === '' || current.trim() === header
+      if (!onlyHeader && current.length + piece.length + 2 > maxChars) {
+        parts.push(current.trim())
+        current = header && !FILE_HEADER.test(firstLine(piece)) ? `${header}\n` : ''
+      }
+      current += `${piece}\n\n`
     }
-    current += `${paragraph}\n\n`
   }
   if (current.trim()) parts.push(current.trim())
   return parts
+}
+
+/**
+ * Když je úseků víc než otázek, vybere je rovnoměrně po celém materiálu —
+ * jinak by u dlouhého tématu a pár otázek padly všechny na první kapitoly.
+ */
+export function pickChunks(chunks: string[], count: number): string[] {
+  if (chunks.length <= count) return chunks
+  return Array.from({ length: count }, (_, i) => chunks[Math.floor((i * chunks.length) / count)] as string)
 }
 
 /** Rozdělí požadovaný počet otázek na dávky, které se vejdou do jednoho volání. */
@@ -151,7 +199,7 @@ export async function generateQuestions(
     })()
   const system = buildSystemPrompt(request.gradeName)
 
-  const chunks = chunkText(request.text)
+  const chunks = pickChunks(chunkText(request.text), request.count)
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
   // Rozvrh typů pro celé generování — každá dávka si vezme svůj úsek.
   const typeSchedule = distributeTypes(request.types, request.count)

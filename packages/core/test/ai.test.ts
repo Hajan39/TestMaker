@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
-import { chunkText, distributeTypes, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
+import { chunkText, distributeTypes, pickChunks, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompts/questions'
 import { describeAiError } from '../src/ai/errors'
 import {
@@ -82,6 +82,43 @@ describe('dělení dlouhých materiálů', () => {
     const chunks = chunkText(paragraph.repeat(10), 1000)
     expect(chunks.length).toBeGreaterThan(1)
     expect(chunks.join('').replace(/\s/g, '')).toBe(paragraph.repeat(10).replace(/\s/g, ''))
+  })
+
+  it('výchozí úsek má nejvýš 8 000 znaků', () => {
+    const text = `${'Věta o vodě. '.repeat(50)}\n\n`.repeat(40)
+    for (const chunk of chunkText(text)) expect(chunk.length).toBeLessThanOrEqual(8_000)
+  })
+
+  it('text bez prázdných řádků rozdělí po větách', () => {
+    const text = 'Voda se vypařuje z hladiny moří. '.repeat(300)
+    const chunks = chunkText(text, 1000)
+    expect(chunks.length).toBeGreaterThan(1)
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
+    expect(chunks.join(' ').replace(/\s/g, '')).toBe(text.replace(/\s/g, ''))
+  })
+
+  it('záhlaví souboru přenese do každého dalšího úseku', () => {
+    const odstavec = `${'b'.repeat(400)}\n\n`
+    const text = `=== voda.pdf ===\n${odstavec.repeat(5)}=== vzduch.pdf ===\n${odstavec.repeat(5)}`
+    const chunks = chunkText(text, 1000)
+    expect(chunks.length).toBeGreaterThan(2)
+    for (const chunk of chunks) expect(chunk).toMatch(/^=== (voda|vzduch)\.pdf ===/)
+    expect(chunks.at(-1)).toMatch(/^=== vzduch\.pdf ===/)
+  })
+})
+
+describe('výběr úseků', () => {
+  it('při dostatku otázek bere všechny úseky', () => {
+    expect(pickChunks(['a', 'b', 'c'], 10)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('při málo otázkách rozloží výběr po celém materiálu', () => {
+    const chunks = Array.from({ length: 25 }, (_, i) => `u${i}`)
+    const picked = pickChunks(chunks, 10)
+    expect(picked).toHaveLength(10)
+    expect(picked[0]).toBe('u0')
+    expect(Number(picked.at(-1)!.slice(1))).toBeGreaterThanOrEqual(20)
+    expect(new Set(picked).size).toBe(10)
   })
 })
 
