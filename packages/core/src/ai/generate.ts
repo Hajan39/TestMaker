@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  AI_QUESTION_TYPES,
   DEFAULT_POINTS,
   normalizeOrderingPayload,
   questionContentSchema,
@@ -110,6 +111,16 @@ export function withDefaultPoints(question: QuestionContent): QuestionContent {
 }
 
 /**
+ * Požadované typy zúžené na ty, které smí AI generovat. Ve frontě můžou čekat
+ * úlohy založené dřív, s typy, které už model nedostává; ty se tiše vynechají.
+ * Když nezbude nic, generuje se ze všech povolených.
+ */
+export function onlyAiTypes(types: QuestionType[]): QuestionType[] {
+  const allowed = types.filter((t) => (AI_QUESTION_TYPES as readonly QuestionType[]).includes(t))
+  return allowed.length > 0 ? allowed : [...AI_QUESTION_TYPES]
+}
+
+/**
  * Vygeneruje otázky k materiálu.
  *
  * Nevalidní otázky zahodí a vrátí v `rejected`. Když schéma odmítne celou
@@ -130,6 +141,7 @@ export async function generateQuestions(
     callModel?: ModelCall
   } = {},
 ): Promise<GenerationResult> {
+  request = { ...request, types: onlyAiTypes(request.types) }
   const ladder = startLadder(options.models ?? readAiLadder(), options.signal)
   const callModel: ModelCall =
     options.callModel ??

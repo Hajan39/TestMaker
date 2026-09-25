@@ -210,3 +210,27 @@ describe('sestavení modelu', () => {
     expect(auth).toBe('Bearer o')
   })
 })
+
+describe('typy otázek pro AI', () => {
+  it('úloha se starým typem z fronty generuje jen povolené typy', async () => {
+    const prompty: string[] = []
+    const call: ModelCall = async ({ prompt }) => {
+      prompty.push(prompt)
+      return { questions: [otazka(prompty.length)] }
+    }
+    await generateQuestions({ ...ZADANI, count: 2, types: ['matching', 'short_answer'] }, { models: [PRVNI], callModel: call })
+    expect(prompty.join('\n')).not.toContain('matching')
+    expect(prompty.join('\n')).toContain('short_answer')
+  })
+
+  it('bez jediného povoleného typu použije všechny povolené', async () => {
+    const prompty: string[] = []
+    const call: ModelCall = async ({ prompt }) => {
+      prompty.push(prompt)
+      return { questions: [otazka(prompty.length)] }
+    }
+    await generateQuestions({ ...ZADANI, count: 3, types: ['matching'] }, { models: [PRVNI], callModel: call })
+    expect(prompty.join('\n')).not.toContain('matching')
+    expect(prompty.join('\n')).toContain('single_choice')
+  })
+})

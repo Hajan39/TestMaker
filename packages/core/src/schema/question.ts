@@ -30,8 +30,15 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   label_image: 'Popis obrázku',
 }
 
-/** Typy, které umí generovat AI ve fázi 1 (label_image potřebuje obrázky = fáze 2). */
-export const AI_QUESTION_TYPES = QUESTION_TYPES.filter((t) => t !== 'label_image')
+/**
+ * Typy, které generuje AI v aplikaci. Jen jednoduché: u přiřazování, řazení,
+ * tabulek a doplňování se menší modely pletou v indexech a počtech a vzniká
+ * klíč, který nedává smysl. Ostatní typy zůstávají pro ruční tvorbu a pro
+ * otázky z Claude Code (`/otazky`).
+ */
+export const AI_QUESTION_TYPES = ['single_choice', 'true_false', 'short_answer'] as const satisfies readonly QuestionType[]
+
+export type AiQuestionType = (typeof AI_QUESTION_TYPES)[number]
 
 /* ------------------------------------------------------------------ payloady */
 
