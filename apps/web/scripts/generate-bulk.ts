@@ -21,7 +21,7 @@
  * a jeho jako autora. Bez něj se vezme první správce v databázi — na
  * jednoškolní instalaci je to právě ten, kdo skript spouští.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { loadEnv } from './env'
 
 interface Options {
   gradeId?: string
@@ -52,17 +52,6 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--force') options.force = true
   }
   return options
-}
-
-/** `.env.local` čte jen Next.js; skript spouštěný přes tsx si ho musí načíst sám. */
-function loadEnv(): void {
-  if (!existsSync('.env.local')) return
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/)
-    if (match && match[1] && match[2] && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].trim()
-    }
-  }
 }
 
 async function main(): Promise<void> {
