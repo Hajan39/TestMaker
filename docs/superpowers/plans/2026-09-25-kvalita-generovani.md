@@ -668,8 +668,10 @@ GOOGLE_GENERATIVE_AI_API_KEY=
 - přidat nad klíče blok:
 
 ```
-# AI: žebříček modelů (viz .env.example)
-AI_MODELS=google:gemini-flash-latest
+# AI: žebříček modelů (viz .env.example). Když modelu dojde limit, pokračuje se
+# dalším; flash-lite má na bezplatném tarifu vlastní limit. Placený OpenRouter
+# se dopíše na konec, až bude vybraný model a klíč OPENROUTER_API_KEY.
+AI_MODELS=google:gemini-flash-latest,google:gemini-flash-lite-latest
 ```
 
 Kontrola: `sed -E 's/=.*/=…/' apps/web/.env.local` — ukáže jen názvy.
