@@ -6,11 +6,22 @@
  *   pnpm --filter @testmaker/web generate:try <soubor.txt> "<ročník>" "<předmět>" "<téma>" [počet]
  *
  * Soubor stáhni v tématu tlačítkem „Stáhnout materiály" (nebo ulož text se
- * záhlavím `=== název ===`).
+ * záhlavím `=== název ===`). Cestu k souboru piš absolutní: `pnpm --filter`
+ * spouští skript ve složce apps/web, relativní cesta by se hledala tam.
+ *
+ * Hlavička staženého souboru (`# Předmět…`) se z materiálu odřízne a otázky,
+ * které v ní jsou vypsané jako existující, dostane model jako seznam
+ * „vyhni se" — tak jako při generování v aplikaci.
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { AI_QUESTION_TYPES, type QuestionContent } from '@testmaker/core/schema'
-import { describeAiConfig, generateQuestions, readAiLadder } from '@testmaker/core/ai'
+import {
+  describeAiConfig,
+  existingPromptsFromSource,
+  generateQuestions,
+  materialFromSource,
+  readAiLadder,
+} from '@testmaker/core/ai'
 import { loadEnv } from './env'
 
 function popis(q: QuestionContent): string {
@@ -37,17 +48,18 @@ async function main() {
   }
   const ladder = readAiLadder()
   console.log(`žebříček: ${ladder.map(describeAiConfig).join(' → ') || '— (chybí klíč nebo AI_MODELS)'}`)
-  const text = await readFile(soubor, 'utf8')
+  const zdroj = await readFile(soubor, 'utf8')
   const start = Date.now()
   const vysledek = await generateQuestions(
     {
-      text,
+      text: materialFromSource(zdroj),
       topicName: tema,
       subjectName: predmet,
       gradeName: rocnik,
       count: Number(pocet) || 10,
       types: [...AI_QUESTION_TYPES],
       difficulty: 'mix',
+      avoid: existingPromptsFromSource(zdroj),
     },
     { models: ladder },
   )

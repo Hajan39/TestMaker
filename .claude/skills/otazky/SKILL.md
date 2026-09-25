@@ -9,6 +9,11 @@ Vstupem je textový soubor z tématu (tlačítko „Stáhnout materiály" na str
 tématu). Hlavička souboru (`# Předmět`, `# Ročník`, `# Téma`, případně
 `# Otázky, které už v tématu jsou`) říká, pro koho píšeš a co už existuje.
 
+Skripty `otazky:pravidla` a `otazky:over` běží přes `pnpm --filter @testmaker/web …`,
+tedy ve složce `apps/web`. Cesty k souborům jim proto předávej vždy
+**absolutní** — relativní by se hledala v `apps/web`, ne vedle souboru
+od majitele.
+
 1. Zeptej se na cestu k souboru, pokud ji majitel nedal. Přečti ho celý.
 2. Zeptej se, kolik otázek a jakou obtížnost chce, pokud to neřekl
    (výchozí 10 otázek, promíchaná obtížnost 1–3).
@@ -23,7 +28,7 @@ tématu). Hlavička souboru (`# Předmět`, `# Ročník`, `# Téma`, případně
    odpověď jen jedna a stojí v materiálu? Co neprojde, přepiš.
 6. Zapiš `<název zdroje>.otazky.json` vedle zdrojového souboru
    ve tvaru `{ "questions": [ … ] }`.
-7. Spusť `pnpm --filter @testmaker/web otazky:over <zdroj.txt> <otazky.json>`.
+7. Spusť `pnpm --filter @testmaker/web otazky:over </absolutní/cesta/zdroj.txt> </absolutní/cesta/otazky.json>`.
    Odmítnuté otázky oprav (nejčastěji citace, která v textu doslova není)
    a kontrolu opakuj, dokud neskončí `odmítnuto: 0`.
 8. Řekni majiteli, kde soubor je, a že ho nahraje na stránce tématu tlačítkem

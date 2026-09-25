@@ -3,9 +3,13 @@
  * nahrání. Bez databáze — existující otázky bere z hlavičky zdrojového souboru.
  *
  *   pnpm --filter @testmaker/web otazky:over <zdroj.txt> <otazky.json>
+ *
+ * Cesty piš absolutní: `pnpm --filter` spouští skript ve složce apps/web,
+ * relativní cesta by se hledala tam. Citace se kontrolují jen proti
+ * materiálům bez hlavičky `# …` — stejně jako při nahrání v aplikaci.
  */
 import { readFileSync } from 'node:fs'
-import { existingPromptsFromSource, readQuestionFile } from '@testmaker/core/ai'
+import { existingPromptsFromSource, materialFromSource, readQuestionFile } from '@testmaker/core/ai'
 
 const [zdrojCesta, otazkyCesta] = process.argv.slice(2)
 if (!zdrojCesta || !otazkyCesta) {
@@ -14,7 +18,11 @@ if (!zdrojCesta || !otazkyCesta) {
 }
 const zdroj = readFileSync(zdrojCesta, 'utf8')
 try {
-  const { questions, rejected } = readQuestionFile(readFileSync(otazkyCesta, 'utf8'), zdroj, existingPromptsFromSource(zdroj))
+  const { questions, rejected } = readQuestionFile(
+    readFileSync(otazkyCesta, 'utf8'),
+    materialFromSource(zdroj),
+    existingPromptsFromSource(zdroj),
+  )
   console.log(`V pořádku: ${questions.length}, odmítnuto: ${rejected.length}`)
   for (const r of rejected) console.log(`- otázka #${r.index}: ${r.errors.join('; ')}`)
   process.exit(rejected.length > 0 ? 1 : 0)
