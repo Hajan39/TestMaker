@@ -48,13 +48,17 @@ function firstLine(text: string): string {
 }
 
 /**
- * Rozdělí příliš dlouhý kus textu na části do `maxChars`: po řádcích,
- * a když je i řádek moc dlouhý (text z PDF bývá jeden nekonečný řádek), po
- * větách. Věta delší než limit zůstane celá.
+ * Rozdělí příliš dlouhý kus textu na části do `maxChars`: po řádcích, a když
+ * je i řádek moc dlouhý (text z PDF bývá jeden nekonečný řádek), po větách.
+ * Když v textu nejsou ani řádky, ani konce vět (souvislý text bez tečky),
+ * poslední záchrana je dělení po slovech — věta delší než limit se tak
+ * rozpadne mezi slova a vcelku zůstane jen jediné slovo delší než limit samo
+ * o sobě (dovnitř slova se neřeže).
  */
 function splitLong(text: string, maxChars: number): string[] {
   if (text.length <= maxChars) return [text]
-  const pieces = text.includes('\n') ? text.split('\n') : text.split(/(?<=[.!?])\s+/)
+  const bySentence = text.includes('\n') ? text.split('\n') : text.split(/(?<=[.!?])\s+/)
+  const pieces = bySentence.length > 1 ? bySentence : text.split(/\s+/)
   if (pieces.length === 1) return pieces
   const parts: string[] = []
   let current = ''
@@ -83,7 +87,11 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
   for (const paragraph of text.split(/\n\n+/)) {
     if (FILE_HEADER.test(firstLine(paragraph))) header = firstLine(paragraph)
 
-    for (const piece of splitLong(paragraph, maxChars)) {
+    // Kus se může ocitnout hned po resetu `current` na holé záhlaví — bez
+    // zmenšení rozpočtu o délku záhlaví by pak spolu s ním limit přesáhl.
+    const budget = header ? Math.max(maxChars - header.length - 1, 1) : maxChars
+
+    for (const piece of splitLong(paragraph, budget)) {
       const onlyHeader = current.trim() === '' || current.trim() === header
       if (!onlyHeader && current.length + piece.length + 2 > maxChars) {
         parts.push(current.trim())

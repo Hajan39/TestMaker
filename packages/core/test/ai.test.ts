@@ -119,6 +119,27 @@ describe('dělení dlouhých materiálů', () => {
     for (const chunk of chunks) expect(chunk).toMatch(/^=== (voda|vzduch)\.pdf ===/)
     expect(chunks.at(-1)).toMatch(/^=== vzduch\.pdf ===/)
   })
+
+  it('souvislá slova bez interpunkce a bez řádkování rozdělí po slovech', () => {
+    const text = 'slovo '.repeat(1000)
+    const chunks = chunkText(text, 1000)
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
+    expect(chunks.join(' ').replace(/\s/g, '')).toBe(text.replace(/\s/g, ''))
+  })
+
+  it('jediný token delší než limit zůstane vcelku', () => {
+    const token = 'a'.repeat(2000)
+    expect(chunkText(token, 1000)).toEqual([token])
+  })
+
+  it('záhlaví se do limitu započítá, i když je jen za ním jeden dlouhý odstavec', () => {
+    const header = '=== dokument.pdf ==='
+    const paragraph = 'slovo '.repeat(175).trim()
+    const text = `${header}\n${paragraph}`
+    const chunks = chunkText(text, 1000)
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
+    for (const chunk of chunks) expect(chunk).toMatch(/^=== dokument\.pdf ===/)
+  })
 })
 
 describe('výběr úseků', () => {
