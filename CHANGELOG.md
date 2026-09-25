@@ -6,6 +6,16 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Otázky z Claude Code.** Na stránce tématu jde **stáhnout materiály** jako
+  jeden textový soubor (s ročníkem a otázkami, které už v tématu jsou),
+  v Claude Code z nich příkazem `/otazky` nechat napsat otázky a soubor
+  **nahrát zpátky** do tématu. Nahrání kontroluje totéž co generování
+  v aplikaci a co neprojde, vypíše s důvodem.
+- **Zkušební generování** (`generate:try`) ze staženého souboru bez databáze —
+  výsledek se zapíše do Markdownu k ručnímu hodnocení a srovnání modelů.
+- **Kontrola citace.** Každá vygenerovaná otázka musí doslova citovat větu
+  z materiálu; otázka s citací, která v materiálu není, se zahodí.
+
 - **Předmět, ročník i téma jde založit a přejmenovat ručně**, bez importu
   materiálů. Do prázdného tématu si tak jde rovnou psát vlastní otázky a název
   převzatý z názvu složky se dá opravit.
@@ -129,6 +139,21 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   lišta se na úzké obrazovce zalomí, takže jsou všechny části dosažitelné.
 
 ### Změněno
+
+- **Nastavení modelů jedinou proměnnou `AI_MODELS`** (žebříček
+  `poskytovatel:model`, viz `apps/web/.env.example`). **Nezpětně
+  kompatibilní:** proměnné `AI_PROVIDER`, `AI_MODEL`, `ANTHROPIC_AUTH_TOKEN`
+  a `OLLAMA_*` se už nečtou — kdo je má v `.env.local`, musí model přepsat do
+  `AI_MODELS`. Správa staré proměnné pojmenuje.
+- **Odebrána Ollama, Groq, Mistral, DeepInfra, Together i vlastní adresa
+  (`custom`).** Zůstali tři poskytovatelé: Google Gemini, OpenRouter
+  a Anthropic (jen s API klíčem).
+- **Model generuje jen tři typy otázek** — výběr jedné možnosti,
+  pravda/nepravda a krátkou odpověď. Ostatní typy psal nespolehlivě; dají se
+  dál psát ručně nebo přes `/otazky`.
+- **Model dostává materiál po úsecích do 8 000 znaků** místo celého tématu
+  naráz; úseky se vybírají rovnoměrně po tématu, další dogenerování bere jiné
+  části a náhrada otázky vzniká z téže pasáže jako původní.
 
 - **Skládání testu se vykresluje jen jednou.** Dřív byla v stránce zároveň
   úzká i široká podoba a jedna se schovávala, čímž vznikala zdvojená `id`

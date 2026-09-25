@@ -36,7 +36,7 @@ Postup je vždy stejný: naimportuj složku s materiály → nech si vygenerovat
 
 ```bash
 pnpm install
-cp apps/web/.env.example apps/web/.env.local   # doplň ANTHROPIC_API_KEY
+cp apps/web/.env.example apps/web/.env.local   # doplň klíč k modelu (viz níž)
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
@@ -49,31 +49,50 @@ Aplikace běží na http://localhost:3000. Materiály naimportuj na stránce
 pnpm --filter @testmaker/web import:local ../../sources
 ```
 
-Bez `ANTHROPIC_API_KEY` aplikace funguje dál, jen se skryje generování otázek.
+Bez klíče k modelu aplikace funguje dál, jen se generování otázek skryje
+a stránka tématu i **Správa** vysvětlí, co v `.env.local` chybí.
 
-### Víc modelů pro generování
+### Model pro generování
 
-Bezplatným tarifům dochází denní limit — a když se to stane uprostřed
-generování celého ročníku, nemá smysl, aby zbytek spadl. Do `.env.local` proto
-jde napsat žebříček modelů: seznam oddělený čárkami, ve kterém se pokračuje,
-když modelu dojde limit nebo je přetížený.
+Model se nastavuje jedinou proměnnou `AI_MODELS` v `apps/web/.env.local`
+(vzor je v `apps/web/.env.example`): žebříček položek `poskytovatel:model`
+oddělených čárkou, v pořadí, v jakém se zkoušejí. Bez `AI_MODELS` se použije
+`google:gemini-flash-latest`.
+
+| Poskytovatel | Předpona | Klíč | Kde ho vzít |
+| --- | --- | --- | --- |
+| Google Gemini | `google:` | `GOOGLE_GENERATIVE_AI_API_KEY` | Google AI Studio → API keys |
+| OpenRouter | `openrouter:` | `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
+| Anthropic | `anthropic:` | `ANTHROPIC_API_KEY` | Anthropic Console (API klíč) |
+
+Položka, ke které chybí klíč, se přeskočí; bez jediné použitelné položky se
+generování v rozhraní skryje. Doporučené nastavení zdarma — Gemini a jako
+záloha jeho lehčí varianta, která má vlastní denní limit:
 
 ```bash
+GOOGLE_GENERATIVE_AI_API_KEY=…
 AI_MODELS=google:gemini-flash-latest,google:gemini-flash-lite-latest
 ```
 
-Položka může určit i poskytovatele (`google:`, `anthropic:`, `ollama:`
-a služby s rozhraním OpenAI níž), takže jde míchat Gemini a Claude; bez
-dvojtečky patří model poskytovateli podle `AI_PROVIDER`. Bez `AI_MODELS` se
-použije jediný model podle `AI_PROVIDER` a `AI_MODEL` — přesně jako dřív. Placený model se zapojí jedině tím, že ho do
-žebříčku sám napíšeš; nic se na placeného poskytovatele nepřepne samo.
+Bezplatným tarifům dochází denní limit. Když se to stane uprostřed generování,
+pokračuje se dalším modelem v žebříčku. Přepíná se po dávce, ne po tématu:
+otázky, které už jsou uložené, zůstávají a zbytek dogeneruje další model.
+Vyčerpaný model se do konce běhu přeskakuje. U chyby, která není na opakování
+(chybný klíč, zrušený model), se další model nezkouší. Když dojde celý
+žebříček, generování skončí českou hláškou a to, co vzniklo, zůstává v tématu.
 
-Přepíná se po dávce, ne po tématu: otázky, které už jsou uložené, zůstávají
-a zbytek tématu dogeneruje další model v pořadí. Vyčerpaný model se do konce
-běhu přeskakuje, aby se na něj nenaráželo u každé další dávky. U chyby, která
-není na opakování (chybný klíč, zrušený model), se další model nezkouší.
-Když dojde celý žebříček, generování skončí českou hláškou od posledního
-modelu a to, co do té chvíle vzniklo, zůstává v tématu.
+Placený model se zapojí jedině tím, že ho na konec žebříčku sám napíšeš
+a dáš k němu klíč — nic se na placeného poskytovatele nepřepne samo. U
+OpenRouteru poznáš modely zdarma podle `:free` na konci názvu (dvojtečka
+v názvu modelu nevadí, za poskytovatele se bere jen první slovo); nabídka se
+mění, aktuální je na https://openrouter.ai/models?q=free.
+
+Anthropic funguje jen s API klíčem z Console. Předplatné Claude Max mimo
+Claude Code nefunguje — otázky přes předplatné se píšou v Claude Code (viz
+níž).
+
+Staré proměnné `AI_PROVIDER`, `AI_MODEL`, `ANTHROPIC_AUTH_TOKEN` a `OLLAMA_*`
+aplikace už nečte; když je v `.env.local` najde, řekne to ve Správě.
 
 Kvalita se mezi modely liší, proto je v hlášce po doběhnutí vidět, když se
 v jednom tématu modely míchaly. Hromadné generování bere žebříček z prostředí,
@@ -84,55 +103,51 @@ pnpm --filter @testmaker/web generate:bulk -- --all --target 10 \
   --models google:gemini-flash-latest,google:gemini-flash-lite-latest
 ```
 
-### Jeden klíč na víc modelů
+### Jak generování s materiálem pracuje
 
-Každý další poskytovatel v žebříčku obvykle znamená další registraci a další
-klíč. Služby s rozhraním OpenAI („OpenAI-compatible") to obcházejí: u jedné
-z nich si založíš účet jednou a její klíč otevře modely od různých výrobců —
-žebříček se pak dá složit z nich. Nejširší nabídku (a nejvíc modelů zdarma) má
-OpenRouter.
+Model nedostává celé téma naráz: materiály se dělí na úseky do 8 000 znaků
+(pár stran) a z každého úseku vznikne dávka otázek. Úseků se bere jen tolik,
+kolik je potřeba dávek, rovnoměrně po celém tématu, a každé další
+dogenerování sáhne po jiných částech. Náhrada jedné otázky vzniká z téže
+pasáže, ze které byla původní otázka.
 
-| Služba | Předpona v `AI_MODELS` | Klíč | Kde ho vzít |
-| --- | --- | --- | --- |
-| OpenRouter | `openrouter:` | `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
-| Groq | `groq:` | `GROQ_API_KEY` | https://console.groq.com/keys |
-| Mistral | `mistral:` | `MISTRAL_API_KEY` | https://console.mistral.ai |
-| DeepInfra | `deepinfra:` | `DEEPINFRA_API_KEY` | https://deepinfra.com/dash/api_keys |
-| Together | `together:` | `TOGETHER_API_KEY` | https://api.together.ai/settings/api-keys |
+Každá otázka musí doslova citovat větu z materiálu (`evidence`). Otázka, jejíž
+citace se v materiálu nenajde, se zahodí — model si ji nejspíš vymyslel.
+Model generuje jen typy, které zvládá spolehlivě: výběr jedné možnosti,
+pravda/nepravda a krátkou odpověď. Ostatní typy zůstávají na ručním psaní
+nebo na Claude Code.
 
-Adresu služby psát nemusíš, ke každé je zabudovaná; přebít ji jde proměnnou
-`OPENROUTER_BASE_URL` (a obdobně u ostatních). Do `.env.local` tedy stačí klíč
-a žebříček — doporučené nastavení pro toho, kdo chce vystačit s jedním klíčem:
+Velikost úseků, počet otázek na volání a další čísla jsou na jednom místě
+v `packages/core/src/ai/settings.ts`.
 
-```bash
-OPENROUTER_API_KEY=sk-or-…
-# Modely si vyber v seznamu níž — nabídka bezplatných se u OpenRouteru mění,
-# takže tenhle řádek ber jako tvar, ne jako doporučení konkrétních jmen.
-AI_MODELS=openrouter:nvidia/nemotron-3.5-lightning:free,openrouter:dots-studio/dots-3-note-preview:free
-```
+### Otázky z Claude Code (`/otazky`)
 
-Modely zdarma poznáš podle `:free` na konci názvu. Jejich nabídka se u
-OpenRouteru mění (model, který je dnes zdarma, může za měsíc zmizet), takže
-než žebříček napíšeš, projdi aktuální seznam na
-https://openrouter.ai/models?q=free. Dvojtečka uvnitř názvu modelu ničemu
-nevadí — za poskytovatele se bere jen první slovo před dvojtečkou, a jen když
-je to název známé služby (stejně jako u `ollama:qwen3:14b`).
+S předplatným Claude jde otázky napsat v Claude Code:
 
-Když limit dojde i u posledního modelu žebříčku, generování skončí českou
-hláškou o vyčerpaném limitu; otázky, které do té chvíle vznikly, zůstanou
-v tématu uložené a druhý den se dá jen spustit generování znovu. Kdyby se
-čekat nechtělo, dopiš na konec žebříčku placený model — přepne se na něj jedině
-proto, že tam je.
+1. Na stránce tématu klikni na **Stáhnout materiály** — stáhne se text
+   všech materiálů s hlavičkou (předmět, ročník, otázky, které už v tématu
+   jsou).
+2. V Claude Code spusť `/otazky` a dej mu cestu k souboru. Claude si vypíše
+   táž pravidla, podle kterých generuje aplikace
+   (`pnpm --filter @testmaker/web otazky:pravidla "<ročník>"`), napíše otázky
+   do `<soubor>.otazky.json` a zkontroluje je stejně jako aplikace
+   (`otazky:over`).
+3. Soubor nahraj na stránce tématu tlačítkem **Nahrát otázky**. Co neprojde
+   kontrolou (tvar, citace, duplicita), aplikace vypíše s důvodem.
 
-Stejnou cestou jde oslovit i vlastní adresu: model běžící na jiném počítači,
-v LM Studiu nebo za vlastní proxy. Klíč je u ní nepovinný, adresa povinná
-a model musíš napsat vždycky:
+Skriptům předávej absolutní cesty — `pnpm --filter` je spouští ve složce
+`apps/web`.
+
+### Zkušební generování (`generate:try`)
+
+Na srovnání modelů nebo změn v generování bez databáze:
 
 ```bash
-AI_PROVIDER=custom
-AI_MODEL=qwen3-14b
-CUSTOM_BASE_URL=http://127.0.0.1:1234/v1
+pnpm --filter @testmaker/web generate:try /absolutní/cesta/tema.txt "6. ročník" "Přírodopis" "Houby" 10
 ```
+
+Vstupem je soubor z tlačítka **Stáhnout materiály**; výsledek se zapíše vedle
+něj jako `tema.otazky.md` se zaškrtávátky k ručnímu hodnocení.
 
 Generování otázek běží v pozadí — fronta se zpracuje, dokud je aplikace otevřená
 v prohlížeči. Plánovač na Vercelu nepoužíváme: bezplatný tarif (Hobby) pouští cron
@@ -214,8 +229,8 @@ agent nebo CLI.
 ## Technologie
 
 Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
-(lokálně soubor, v provozu Turso), Vercel AI SDK s vyměnitelným poskytovatelem
-(Claude, případně lokální Ollama), `@react-pdf/renderer` pro PDF.
+(lokálně soubor, v provozu Turso), Vercel AI SDK se žebříčkem modelů
+(Google Gemini, OpenRouter, Anthropic), `@react-pdf/renderer` pro PDF.
 
 ## Příkazy
 
@@ -230,6 +245,8 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 | `pnpm --filter @testmaker/web uzivatel` | Založení a odemčení účtu z příkazové řádky |
 | `pnpm db:studio` | Prohlížeč databáze |
 | `pnpm --filter @testmaker/web push:remote` | Přenos knihovny do produkce (viz níž) |
+| `pnpm --filter @testmaker/web generate:try` | Zkušební generování ze souboru bez databáze |
+| `pnpm --filter @testmaker/web otazky:over` | Kontrola souboru s otázkami z Claude Code |
 
 ## Nasazení
 
@@ -252,8 +269,8 @@ migrace (`pnpm db:migrate` proti Tursu) → založení prvního správce skripte
 Proměnnou `APP_PASSWORD` ze starého přihlašování jedním heslem lze po nasazení
 smazat, nic už nedělá.
 
-Generování otázek zatím běží lokálně, proto `ANTHROPIC_API_KEY` v nasazení
-nastavený být nemusí; `CRON_SECRET` taky ne, plánovač na Hobby tarifu neběží.
+Generování otázek zatím běží lokálně, proto `AI_MODELS` ani klíče k modelům
+v nasazení nastavené být nemusí; `CRON_SECRET` taky ne, plánovač na Hobby tarifu neběží.
 
 Schéma databáze i vestavěné šablony vyřídí po každém pushi do `main` workflow
 [`.github/workflows/migrate.yml`](.github/workflows/migrate.yml) (migrace
