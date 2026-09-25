@@ -1,4 +1,3 @@
-import { generateObject, NoObjectGeneratedError, type LanguageModel } from 'ai'
 import { z } from 'zod'
 import {
   DEFAULT_POINTS,
@@ -8,20 +7,10 @@ import {
   type QuestionContent,
   type QuestionType,
 } from '../schema/question'
-import { describeAiError } from './errors'
+import { objectCall, rawTextOf, startLadder } from './ladder'
 import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt'
-import { describeAiConfig, getModel, readAiLadder, type AiConfig } from './provider'
-
-/** Maximální délka materiálu v jednom volání; delší se dělí na části. */
-const MAX_CHARS_PER_CALL = 120_000
-
-/**
- * Kolik otázek se žádá v jednom volání. Model vrací celou dávku jako jeden
- * objekt, takže čím je dávka větší, tím víc práce padne, když se u jedné otázky
- * netrefí do tvaru. Menší dávky ztrátu ohraničí a zároveň dovolí modelu držet
- * se u každé z nich zadaného typu.
- */
-const MAX_PER_CALL = 5
+import { readAiLadder, type AiConfig } from './provider'
+import { AI_SETTINGS } from './settings'
 
 const responseSchema = z.object({
   questions: z.array(questionContentSchema).min(1),
@@ -52,7 +41,7 @@ export type ModelCall = (input: {
 }) => Promise<{ questions: QuestionContent[] }>
 
 /** Rozdělí dlouhý text na části na hranicích odstavců. */
-export function chunkText(text: string, maxChars = MAX_CHARS_PER_CALL): string[] {
+export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsPerCall): string[] {
   if (text.length <= maxChars) return [text]
   const parts: string[] = []
   let current = ''
@@ -68,7 +57,7 @@ export function chunkText(text: string, maxChars = MAX_CHARS_PER_CALL): string[]
 }
 
 /** Rozdělí požadovaný počet otázek na dávky, které se vejdou do jednoho volání. */
-export function splitIntoBatches(count: number, perCall = MAX_PER_CALL): number[] {
+export function splitIntoBatches(count: number, perCall: number = AI_SETTINGS.questionsPerCall): number[] {
   const batches: number[] = []
   let left = count
   while (left > 0) {
@@ -109,209 +98,55 @@ export function salvageQuestions(raw: unknown): QuestionContent[] {
   return usable
 }
 
-/** Vytáhne z chyby surovou odpověď modelu, pokud ji nese. */
-function rawTextOf(error: unknown): string | null {
-  if (!NoObjectGeneratedError.isInstance(error)) return null
-  const text = (error as { text?: unknown }).text
-  return typeof text === 'string' ? text : null
+/**
+ * Body doplní podle typu, pokud model vrátil výchozí 1 nebo nesmyslně vysokou
+ * hodnotu. Gemini u přiřazovacích otázek nabízelo i 25 bodů — na písemce pro
+ * druhý stupeň to jednu otázku postaví nad zbytek testu. Učitelka si body může
+ * kdykoli přepsat ručně, schéma proto širší rozsah dál připouští.
+ */
+export function withDefaultPoints(question: QuestionContent): QuestionContent {
+  if (question.points > 1 && question.points <= AI_SETTINGS.maxAiPoints) return question
+  return { ...question, points: DEFAULT_POINTS[question.type] }
 }
 
 /**
  * Vygeneruje otázky k materiálu.
  *
- * Nevalidní otázky zahodí a vrátí je v `rejected`. Když schéma odmítne celou
- * odpověď, pokusí se z ní vytáhnout aspoň otázky, které v pořádku jsou, aby
- * jedna špatně tvarovaná nezahodila práci ostatních.
- *
- * Modelů může být víc (žebříček z `AI_MODELS`). Přepíná se po dávce, ne po
- * celém tématu: když prvnímu modelu dojde uprostřed generování denní limit,
- * dogeneruje zbytek další model ze žebříčku a dávky, které už jsou hotové,
- * zůstávají (ukládá je `onBatch` průběžně). U chyby, která není na opakování
- * — chybný klíč, zrušený model — se nic dalšího nezkouší.
+ * Nevalidní otázky zahodí a vrátí v `rejected`. Když schéma odmítne celou
+ * odpověď, zachrání z ní otázky, které v pořádku jsou. Modelů může být víc
+ * (žebříček `AI_MODELS`); přepíná se po dávce, takže hotové dávky zůstávají
+ * uložené (`onBatch`), i když prvnímu modelu uprostřed dojde limit.
  */
 export async function generateQuestions(
   request: GenerationRequest,
   options: {
-    /** Jediný model — kdo si vybírá sám, žebříček nepotřebuje. */
-    config?: AiConfig
-    /** Konkrétní worker; při jeho zadání se nepoužívá fallback žebříček. */
-    worker?: AiConfig
-    /** Paralelní Ollama workeři; každá dávka dostane právě jednoho workeru. */
-    workers?: AiConfig[]
-    /** Žebříček modelů; přebíjí `config`. Bez obojího se čte z prostředí. */
-    configs?: AiConfig[]
+    /** Žebříček modelů; bez něj se čte z prostředí (`AI_MODELS`). */
+    models?: AiConfig[]
     signal?: AbortSignal
     onChunk?: (done: number, total: number) => void
-    /**
-     * Zavolá se po každé dokončené dávce, ať se dá ukládat průběžně. Dostane
-     * i model, který dávku vyrobil — při přepnutí v žebříčku má každá dávka
-     * jiný.
-     */
+    /** Po každé dávce, ať se dá ukládat průběžně; dostane i model, který dávku vyrobil. */
     onBatch?: (questions: QuestionContent[], info: { model: string }) => Promise<void> | void
     /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
     callModel?: ModelCall
   } = {},
 ): Promise<GenerationResult> {
-  const ladder =
-    options.workers && options.workers.length > 0
-      ? options.workers
-      : options.worker
-      ? [options.worker]
-      : options.configs && options.configs.length > 0
-      ? options.configs
-      : options.config
-        ? [options.config]
-        : readAiLadder()
-
-  const models = new Map<string, LanguageModel>()
+  const ladder = startLadder(options.models ?? readAiLadder(), options.signal)
   const callModel: ModelCall =
     options.callModel ??
-    (async ({ config, system, prompt, signal }) => {
-      const key = describeAiConfig(config)
-      let model = models.get(key)
-      if (!model) {
-        model = await getModel(config)
-        models.set(key, model)
-      }
-      const { object } = await generateObject({
-        model,
-        schema: responseSchema,
-        system,
-        prompt,
-        abortSignal: signal,
-        maxRetries: 2,
-      })
-      return { questions: object.questions }
-    })
-
-  /**
-   * Modely, kterým v tomhle běhu došel limit (nebo jsou přetížené). Pamatují
-   * se do konce běhu — jinak by se na vyčerpaný model naráželo u každé další
-   * dávky znovu a každá by čekala na tutéž chybu.
-   */
-  const exhausted = new Set<string>()
-  const used: string[] = []
-
-  /** Jedna dávka: zkouší modely žebříčku, dokud některý neodpoví. */
-  async function runBatch(system: string, prompt: string): Promise<{ questions: QuestionContent[]; model: string }> {
-    let lastError: unknown = new Error('Žádný model k dispozici')
-    for (const config of ladder) {
-      const key = describeAiConfig(config)
-      if (exhausted.has(key)) continue
-      try {
-        const result = await callModel({ config, system, prompt, signal: options.signal })
-        if (!used.includes(key)) used.push(key)
-        return { questions: result.questions, model: key }
-      } catch (error) {
-        // Přerušení uživatelem není důvod ke střídání modelů.
-        if (options.signal?.aborted || (error as { name?: string })?.name === 'AbortError') throw error
-        // Odpověď přišla, jen se netrefila do tvaru — model funguje, dávku
-        // zachrání volající (salvageQuestions). Přepínat nemá co.
-        if (rawTextOf(error) !== null) {
-          if (!used.includes(key)) used.push(key)
-          throw error
-        }
-        // Chybný klíč nebo zrušený model — na tom nic nezmění ani další pokus,
-        // natož jiný model ze žebříčku.
-        if (!describeAiError(error).retryable) throw error
-        exhausted.add(key)
-        lastError = error
-      }
-    }
-    // Žebříček došel: hotová práce je díky onBatch uložená, chyba posledního
-    // modelu putuje nahoru, ať ji volající přeloží do češtiny.
-    throw lastError
-  }
+    (() => {
+      const call = objectCall(responseSchema)
+      return async (input) => ({ questions: (await call(input)).questions })
+    })()
+  const system = buildSystemPrompt(request.gradeName)
 
   const chunks = chunkText(request.text)
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
-  // Rozvrh typů pro celé generování (viz distributeTypes) — každá dávka si
-  // z něj vezme jen svůj úsek podle toho, kolik otázek už je hotových.
+  // Rozvrh typů pro celé generování — každá dávka si vezme svůj úsek.
   const typeSchedule = distributeTypes(request.types, request.count)
 
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []
   const failedCalls: GenerationResult['failedCalls'] = []
-
-  if (options.workers && options.workers.length > 0) {
-    const tasks: { chunk: string; batchSize: number; types: QuestionType[]; worker: AiConfig }[] = []
-    const concurrency = Math.max(
-      1,
-      Math.min(options.workers.length, Number(process.env.OLLAMA_CONCURRENCY) || options.workers.length),
-    )
-    const activeWorkers = options.workers.slice(0, concurrency)
-    let workerIndex = 0
-    for (const chunk of chunks) {
-      const chunkBatches = splitIntoBatches(Math.min(perChunk, request.count))
-      for (const batchSize of chunkBatches) {
-        const batchTypes = typeSchedule.slice(tasks.length * MAX_PER_CALL, tasks.length * MAX_PER_CALL + batchSize)
-        tasks.push({
-          chunk,
-          batchSize,
-          types: batchTypes.length > 0 ? batchTypes : request.types,
-          worker: activeWorkers[workerIndex++ % activeWorkers.length] as AiConfig,
-        })
-      }
-    }
-
-    type WorkerResult = Awaited<ReturnType<typeof callModel>> & { task: (typeof tasks)[number] }
-    const results: WorkerResult[] = []
-    const failures: { task: (typeof tasks)[number]; error: unknown }[] = []
-    let nextTask = 0
-    await Promise.all(
-      activeWorkers.map(async (worker) => {
-        while (true) {
-          const task = tasks[nextTask++]
-          if (!task) return
-          const prompt = buildUserPrompt({
-            ...request,
-            text: task.chunk,
-            count: task.batchSize,
-            types: task.types,
-            avoid: request.avoid,
-          })
-          try {
-            const result = await callModel({ config: worker, system: buildSystemPrompt(request.gradeName), prompt, signal: options.signal })
-            results.push({ ...result, task })
-          } catch (error) {
-            if (options.signal?.aborted || (error as { name?: string })?.name === 'AbortError') throw error
-            failures.push({ task, error })
-          }
-        }
-      }),
-    )
-
-    const completed = [
-      ...results.map((result) => ({ task: result.task, result })),
-      ...failures.map((failure) => ({ task: failure.task, error: failure.error })),
-    ]
-    const seenPrompts = new Set(request.avoid ?? [])
-    for (const [index, item] of completed.entries()) {
-      if ('error' in item) {
-        failedCalls.push({ reason: item.error instanceof Error ? item.error.message : String(item.error) })
-        continue
-      }
-      const batch: QuestionContent[] = []
-      for (const [offset, question] of item.result.questions.entries()) {
-        const errors = validateQuestionContent(question)
-        if (errors.length > 0) {
-          rejected.push({ index: accepted.length + offset, errors })
-          continue
-        }
-        const normalized = withDefaultPoints(normalizeOrderingPayload(question))
-        const promptKey = promptOf(normalized)
-        if (seenPrompts.has(promptKey)) continue
-        seenPrompts.add(promptKey)
-        batch.push(normalized)
-      }
-      accepted.push(...batch)
-      if (batch.length > 0) await options.onBatch?.(batch, { model: describeAiConfig(item.task.worker) })
-      if ((index + 1) % Math.max(1, tasks.length / chunks.length) === 0) {
-        options.onChunk?.(Math.ceil((index + 1) / Math.max(1, tasks.length / chunks.length)), chunks.length)
-      }
-    }
-    return { questions: accepted.slice(0, request.count), rejected, chunks: chunks.length, failedCalls, models: [...new Set(tasks.map((task) => describeAiConfig(task.worker)))] }
-  }
 
   for (const [index, chunk] of chunks.entries()) {
     const remaining = request.count - accepted.length
@@ -320,11 +155,7 @@ export async function generateQuestions(
     for (const batchSize of splitIntoBatches(Math.min(perChunk, remaining))) {
       if (accepted.length >= request.count) break
 
-      // Úsek celkového rozvrhu typů odpovídající téhle dávce. Pád na
-      // request.types by nastal jen kdyby byl rozvrh kratší než count
-      // (nemělo by se stát, ale ať dávka i tak dostane platné typy).
       const batchTypes = typeSchedule.slice(accepted.length, accepted.length + batchSize)
-
       const prompt = buildUserPrompt({
         ...request,
         text: chunk,
@@ -335,15 +166,15 @@ export async function generateQuestions(
       })
 
       let produced: QuestionContent[] = []
-      let batchModel = describeAiConfig(ladder[0] as AiConfig)
+      let batchModel = ''
       try {
-        const result = await runBatch(buildSystemPrompt(request.gradeName), prompt)
-        produced = result.questions
+        const result = await ladder.call((config) => callModel({ config, system, prompt, signal: options.signal }))
+        produced = result.value.questions
         batchModel = result.model
       } catch (error) {
         const raw = rawTextOf(error)
         if (raw === null) throw error
-
+        batchModel = ladder.used.at(-1) ?? ''
         try {
           produced = salvageQuestions(JSON.parse(raw))
         } catch {
@@ -377,21 +208,8 @@ export async function generateQuestions(
     rejected,
     chunks: chunks.length,
     failedCalls,
-    models: used,
+    models: ladder.used,
   }
-}
-
-/**
- * Body doplní podle typu, pokud model vrátil výchozí 1 nebo nesmyslně vysokou
- * hodnotu. Gemini u přiřazovacích otázek nabízelo i 25 bodů — na písemce pro
- * druhý stupeň to jednu otázku postaví nad zbytek testu. Učitelka si body může
- * kdykoli přepsat ručně, schéma proto širší rozsah dál připouští.
- */
-const MAX_AI_POINTS = 10
-
-function withDefaultPoints(question: QuestionContent): QuestionContent {
-  if (question.points > 1 && question.points <= MAX_AI_POINTS) return question
-  return { ...question, points: DEFAULT_POINTS[question.type] }
 }
 
 /**

@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from 'drizzle-orm'
-import { AVOID_LIMIT } from '@testmaker/core/ai'
+import { AI_SETTINGS } from '@testmaker/core/ai'
 import {
   normalizeEvidence,
   parseQuestionSnapshot,
@@ -126,7 +126,7 @@ export function questionPrompt(question: { payload: unknown }): string {
 /**
  * Zadání otázek tématu pro seznam „těmhle se vyhni" v promptu.
  *
- * Bere se přesně tolik, kolik se do promptu vejde (`AVOID_LIMIT`), a od těch
+ * Bere se přesně tolik, kolik se do promptu vejde (`AI_SETTINGS.avoidLimit`), a od těch
  * nejnovějších: právě jim se model musí vyhnout nejvíc, protože z nich se
  * naposledy generovalo. Dřív se načítalo osmdesát otázek bez řazení, takže
  * o výběru rozhodovalo pořadí řádků v databázi, a prompt pak seznam ořezával
@@ -135,7 +135,7 @@ export function questionPrompt(question: { payload: unknown }): string {
 export async function loadAvoidPrompts(
   scope: Scope,
   topicId: string,
-  limit = AVOID_LIMIT,
+  limit: number = AI_SETTINGS.avoidLimit,
 ): Promise<string[]> {
   const rows = await db
     .select({ payload: questions.payload })

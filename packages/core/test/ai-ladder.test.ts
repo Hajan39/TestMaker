@@ -152,7 +152,7 @@ describe('přepnutí na další model při vyčerpaném limitu', () => {
     const result = await generateQuestions(
       { ...ZADANI, count: 10, types: [...ZADANI.types] },
       {
-        configs: [PRVNI, DRUHY],
+        models: [PRVNI, DRUHY],
         callModel: call,
         onBatch: (batch, info) => {
           ulozeno.push({ pocet: batch.length, model: info.model })
@@ -175,7 +175,7 @@ describe('přepnutí na další model při vyčerpaném limitu', () => {
 
     const result = await generateQuestions(
       { ...ZADANI, count: 15, types: [...ZADANI.types] },
-      { configs: [PRVNI, DRUHY], callModel: call },
+      { models: [PRVNI, DRUHY], callModel: call },
     )
 
     expect(result.questions).toHaveLength(15)
@@ -189,7 +189,7 @@ describe('přepnutí na další model při vyčerpaném limitu', () => {
     const { call, volani } = podvrzenyModel({ 'google:a': CHYBNY_KLIC, 'google:b': 'odpovi' })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { configs: [PRVNI, DRUHY], callModel: call }),
+      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { models: [PRVNI, DRUHY], callModel: call }),
     ).rejects.toThrow(/API key/)
 
     expect(volani).toEqual(['google:a'])
@@ -199,7 +199,7 @@ describe('přepnutí na další model při vyčerpaném limitu', () => {
     const { call, volani } = podvrzenyModel({ 'google:a': VYCERPANY_LIMIT, 'google:b': VYCERPANY_LIMIT })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { configs: [PRVNI, DRUHY], callModel: call }),
+      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { models: [PRVNI, DRUHY], callModel: call }),
     ).rejects.toThrow(/quota/)
 
     expect(volani).toEqual(['google:a', 'google:b'])
@@ -209,9 +209,17 @@ describe('přepnutí na další model při vyčerpaném limitu', () => {
     const { call, volani } = podvrzenyModel({ 'google:a': VYCERPANY_LIMIT })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 5, types: [...ZADANI.types] }, { config: PRVNI, callModel: call }),
+      generateQuestions({ ...ZADANI, count: 5, types: [...ZADANI.types] }, { models: [PRVNI], callModel: call }),
     ).rejects.toThrow(/quota/)
 
     expect(volani).toEqual(['google:a'])
+  })
+})
+
+describe('žebříček bez modelů', () => {
+  it('bez jediného modelu skončí srozumitelnou chybou', async () => {
+    await expect(
+      generateQuestions({ ...ZADANI, count: 1, types: [...ZADANI.types] }, { models: [] }),
+    ).rejects.toThrow(/Žádný model/)
   })
 })

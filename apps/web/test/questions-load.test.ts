@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
-import { AVOID_LIMIT } from '@testmaker/core/ai'
+import { AI_SETTINGS } from '@testmaker/core/ai'
 import { db, questions } from '@/db'
 import { QUESTION_LIST_LIMIT, loadAvoidPrompts, loadQuestions } from '@/lib/questions'
 import { seedQuestion, seedTopic, UCET } from './helpers'
@@ -83,9 +83,9 @@ describe('seznam „těmhle otázkám se vyhni"', () => {
     )
 
     const avoid = await loadAvoidPrompts(UCET, topicId)
-    // Prompt seznam ořezává na `AVOID_LIMIT`; načítat víc nemá smysl, protože
-    // o zahozených položkách by rozhodovalo pořadí řádků v databázi.
-    expect(avoid.length).toBeLessThanOrEqual(AVOID_LIMIT)
+    // Prompt seznam ořezává na `AI_SETTINGS.avoidLimit`; načítat víc nemá smysl,
+    // protože o zahozených položkách by rozhodovalo pořadí řádků v databázi.
+    expect(avoid.length).toBeLessThanOrEqual(AI_SETTINGS.avoidLimit)
     expect(avoid).toHaveLength(5)
   })
 

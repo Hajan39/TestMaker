@@ -2,8 +2,7 @@
  * Hromadné generování otázek z příkazové řádky.
  *
  * Fronta v aplikaci potřebuje otevřené okno; přes tenhle skript jde nechat
- * projet celý ročník nebo celou knihovnu na pozadí, třeba přes noc. Při
- * nastavení Ollama workerů témata zpracovává přes omezenou paralelní frontu.
+ * projet celý ročník nebo celou knihovnu na pozadí, třeba přes noc.
  *
  * Příklady:
  *   pnpm --filter @testmaker/web generate:bulk -- --grade <id> --count 10
@@ -86,7 +85,7 @@ async function main(): Promise<void> {
   const { db, grades, questions, topics, users } = await import('../src/db/index')
   const { and, eq, ne, sql } = await import('drizzle-orm')
   const { DEFAULT_GENERATE_PARAMS, generateForTopic, resolveCount } = await import('../src/lib/generation')
-  const { describeAiConfig, isAiConfigured, readAiLadder, readOllamaWorkers } = await import('@testmaker/core/ai')
+  const { describeAiConfig, isAiConfigured, readAiLadder } = await import('@testmaker/core/ai')
   const { asc } = await import('drizzle-orm')
 
   // Za koho se generuje. Bez identity by otázky neměly školu ani autora —
@@ -124,16 +123,11 @@ async function main(): Promise<void> {
     .where(and(eq(topics.schoolId, ucet.schoolId), scope, eq(topics.lowContent, false)))
     .orderBy(topics.name)
 
-  const workers = readOllamaWorkers()
-  const ladder = workers.length > 0 ? workers : readAiLadder()
-  const concurrency =
-    workers.length > 0 ? Math.max(1, Math.min(workers.length, Number(process.env.OLLAMA_CONCURRENCY) || 1)) : 1
+  const ladder = readAiLadder()
   console.log(
-    workers.length > 0
-      ? `Ollama workeři (${concurrency} současně): ${workers.map(describeAiConfig).join(', ')}`
-      : ladder.length > 1
-        ? `žebříček modelů: ${ladder.map(describeAiConfig).join(' → ')}`
-        : `poskytovatel ${ladder[0]?.provider}, model ${ladder[0]?.model}`,
+    ladder.length > 1
+      ? `žebříček modelů: ${ladder.map(describeAiConfig).join(' → ')}`
+      : `model ${ladder[0] ? describeAiConfig(ladder[0]) : '—'}`,
   )
   console.log(`témat v rozsahu: ${rows.length}`)
 
@@ -141,8 +135,7 @@ async function main(): Promise<void> {
   let failed = 0
   /** Co se za celý běh použilo — na konci je vidět, jestli se přepínalo. */
   const usedModels = new Set<string>()
-  let nextTopic = 0
-  async function runTopic(topic: (typeof rows)[number], index: number, worker?: (typeof workers)[number]): Promise<void> {
+  async function runTopic(topic: (typeof rows)[number], index: number): Promise<void> {
     const label = `${index + 1}/${rows.length} ${topic.grade ? `${topic.grade} · ` : ''}${topic.name}`
 
     const wanted = await resolveCount(scopeUcet, topic.id, {
@@ -177,7 +170,7 @@ async function main(): Promise<void> {
         ...DEFAULT_GENERATE_PARAMS,
         count: options.count,
         mode: options.mode,
-      }, worker ? { worker } : undefined)
+      })
       created += outcome.created
       for (const model of outcome.models) usedModels.add(model)
       console.log(
@@ -199,26 +192,15 @@ async function main(): Promise<void> {
     }
   }
 
-  async function workerLoop(worker?: (typeof workers)[number]): Promise<void> {
-    while (true) {
-      const index = nextTopic++
-      const topic = rows[index]
-      if (!topic) return
-      try {
-        await runTopic(topic, index, worker)
-      } catch (error) {
-        failed += 1
-        const { describeAiError } = await import('@testmaker/core/ai')
-        console.log(`${index + 1}/${rows.length} ${topic.name}: ${describeAiError(error).message}`)
-      }
+  for (const [index, topic] of rows.entries()) {
+    try {
+      await runTopic(topic, index)
+    } catch (error) {
+      failed += 1
+      const { describeAiError } = await import('@testmaker/core/ai')
+      console.log(`${index + 1}/${rows.length} ${topic.name}: ${describeAiError(error).message}`)
     }
   }
-
-  await Promise.all(
-    Array.from({ length: concurrency }, (_, index) =>
-      workerLoop(workers.length > 0 ? workers[index] : undefined),
-    ),
-  )
 
   console.log(
     `hotovo: ${created} nových otázek, ${failed} témat skončilo chybou` +

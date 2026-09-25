@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
-import { generateQuestions, readOllamaWorkers, type AiConfig } from '@testmaker/core/ai'
+import { generateQuestions } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
 import { db, generationJobs, grades, materials, questions, subjects, topics, users } from '@/db'
 import { skola, type Scope } from '@/lib/uzivatel'
@@ -168,8 +168,6 @@ export async function generateForTopic(
     onSaved?: (info: { created: number; questions: Question[] }) => void | Promise<void>
     /** Podvržené generování pro testy; v aplikaci se nepředává. */
     generate?: typeof generateQuestions
-    /** Konkrétní Ollama worker pro tento běh. */
-    worker?: AiConfig
   } = {},
 ): Promise<GenerateOutcome> {
   const wanted = await resolveCount(scope, topicId, params)
@@ -201,8 +199,6 @@ export async function generateForTopic(
     },
     {
       signal: options.signal,
-      worker: options.worker,
-      workers: options.worker ? undefined : readOllamaWorkers(),
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
         const ids = await insertQuestions(scope, batch, { topicId, source: 'ai', status: 'draft' })
@@ -329,7 +325,7 @@ export async function regenerateQuestion(
       difficulty: (original.difficulty as 1 | 2 | 3) ?? 2,
       avoid,
     },
-    { signal: options.signal, workers: readOllamaWorkers() },
+    { signal: options.signal },
   )
 
   const replacement = result.questions[0]

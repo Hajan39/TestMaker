@@ -1,4 +1,5 @@
 import { QUESTION_TYPE_LABELS, type QuestionType } from '../schema/question'
+import { AI_SETTINGS } from './settings'
 
 export interface GenerationRequest {
   /** Text materiálu. */
@@ -31,29 +32,10 @@ const TYPE_HINTS: Record<QuestionType, string> = {
   label_image: 'Nepoužívej — obrázky se ve fázi 1 negenerují.',
 }
 
-/**
- * Kolik zadání se vejde do seznamu „těmhle otázkám se vyhni".
- *
- * Seznam se ořezává, aby prompt nenarůstal do nekonečna u témat s dlouhou
- * historií generování — 40 položek stačilo, dokud šly první ty starší
- * z databáze. Volající dává napřed nově vzniklé otázky z běžícího generování
- * (viz generate.ts), takže při tématu s desítkami existujících otázek se do 40
- * nevešly ani ty čerstvé z právě běžící dávky.
- *
- * Podle téhož čísla si volající (`loadAvoidPrompts` ve webu) načítá otázky
- * z databáze — jinak by vybíral víc, než se do promptu vejde, a o tom, které
- * zahodit, by rozhodovalo pořadí řádků v databázi.
- */
-export const AVOID_LIMIT = 80
-
-/**
- * Delší zadání by prompt prodražilo neúměrně k přínosu — pro odlišení
- * duplicity stačí začátek.
- */
-const AVOID_ITEM_MAX_LEN = 100
-
 function truncateAvoidItem(text: string): string {
-  return text.length > AVOID_ITEM_MAX_LEN ? `${text.slice(0, AVOID_ITEM_MAX_LEN)}…` : text
+  return text.length > AI_SETTINGS.avoidItemMaxLength
+    ? `${text.slice(0, AI_SETTINGS.avoidItemMaxLength)}…`
+    : text
 }
 
 /**
@@ -149,7 +131,7 @@ export function buildUserPrompt(request: GenerationRequest): string {
     sections.push(
       '',
       'Tyto otázky už existují, vytvoř jiné (ani parafráze):',
-      ...request.avoid.slice(0, AVOID_LIMIT).map((q) => `- ${truncateAvoidItem(q)}`),
+      ...request.avoid.slice(0, AI_SETTINGS.avoidLimit).map((q) => `- ${truncateAvoidItem(q)}`),
     )
   }
 
