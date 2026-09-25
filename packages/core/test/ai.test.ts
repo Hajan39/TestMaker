@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
-import { chunkText, distributeTypes, pickChunks, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
+import {
+  chunkText,
+  distributeTypes,
+  evidenceMatches,
+  pickChunks,
+  promptOf,
+  salvageQuestions,
+  splitIntoBatches,
+} from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompts/questions'
 import { describeAiError } from '../src/ai/errors'
 import {
@@ -555,5 +563,37 @@ describe('ročník řídí náročnost otázek', () => {
     })
     expect(prompt).toContain('6. ročník')
     expect(prompt).toContain('11–12 let')
+  })
+})
+
+describe('kontrola citace', () => {
+  const usek = '=== voda.pdf ===\nVoda se v přírodě neustále pohybuje.\nTento děj nazýváme „koloběh vody".'
+  const s = (quote?: string): QuestionContent =>
+    questionContentSchema.parse({
+      type: 'short_answer',
+      payload: { prompt: 'Jak nazýváme pohyb vody v přírodě?', answer: 'koloběh vody' },
+      ...(quote === undefined ? {} : { evidence: { fileName: 'voda.pdf', quote } }),
+    })
+
+  it('doslovná citace projde', () => {
+    expect(evidenceMatches(s('Voda se v přírodě neustále pohybuje.'), usek)).toBe(true)
+  })
+
+  it('snese jiné uvozovky, velikost písmen, chybějící tečku a zalomení řádku', () => {
+    expect(evidenceMatches(s('tento děj nazýváme "koloběh vody"'), usek)).toBe(true)
+    expect(evidenceMatches(s('pohybuje. Tento děj'), usek)).toBe(true)
+  })
+
+  it('snese vypuštění uprostřed citace', () => {
+    expect(evidenceMatches(s('Voda se v přírodě … neustále pohybuje'), usek)).toBe(true)
+  })
+
+  it('vymyšlenou citaci odmítne', () => {
+    expect(evidenceMatches(s('Voda se vypařuje při teplotě 100 stupňů.'), usek)).toBe(false)
+  })
+
+  it('otázka bez citace projde', () => {
+    expect(evidenceMatches(s(), usek)).toBe(true)
+    expect(evidenceMatches(s('   '), usek)).toBe(true)
   })
 })

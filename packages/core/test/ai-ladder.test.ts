@@ -234,3 +234,20 @@ describe('typy otázek pro AI', () => {
     expect(prompty.join('\n')).toContain('single_choice')
   })
 })
+
+describe('kontrola citace při generování', () => {
+  it('otázku s citací, která v materiálu není, zahodí a ostatní ponechá', async () => {
+    const call: ModelCall = async () => ({
+      questions: [
+        { ...otazka(1), evidence: { fileName: 'x', quote: 'Koloběh vody v přírodě zahrnuje výpar' } },
+        { ...otazka(2), evidence: { fileName: 'x', quote: 'Voda vře při sto stupních.' } },
+      ],
+    })
+    const vysledek = await generateQuestions(
+      { ...ZADANI, count: 2, types: [...ZADANI.types] },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(vysledek.questions.map((q) => (q.payload as { prompt: string }).prompt)).toEqual(['Otázka číslo 1?'])
+    expect(vysledek.rejected[0]?.errors).toContain('citace v evidence se v materiálu nenašla')
+  })
+})

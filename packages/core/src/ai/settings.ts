@@ -33,4 +33,6 @@ export const AI_SETTINGS = {
   avoidItemMaxLength: 100,
   /** Víc bodů od modelu se nepřebírá (Gemini nabízelo i 25 za přiřazování). */
   maxAiPoints: 10,
+  /** Nejkratší kus citace, který má smysl v materiálu hledat; kratší by se našel kdekoli. */
+  minEvidencePart: 8,
 } as const

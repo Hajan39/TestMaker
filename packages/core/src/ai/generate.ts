@@ -158,6 +158,46 @@ export function withDefaultPoints(question: QuestionContent): QuestionContent {
   return { ...question, points: DEFAULT_POINTS[question.type] }
 }
 
+export const EVIDENCE_NOT_FOUND = 'citace v evidence se v materiálu nenašla'
+
+/**
+ * Text pro porovnání citace s materiálem: bez rozdílu velikosti písmen,
+ * uvozovek a bílých znaků. Model citaci opisuje a drobnosti mění; kvůli nim
+ * se otázka zahodit nesmí.
+ */
+function normalizeForMatch(text: string): string {
+  return text
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[„“”"'‚‘’«»]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Stojí citace z `evidence` opravdu v materiálu? Citace se dělí na vypuštění
+ * („…", „...") a každý kus musí v textu být. Otázka bez citace projde —
+ * chybějící doklad je slabší prohřešek než vymyšlený.
+ */
+export function evidenceMatches(question: QuestionContent, source: string): boolean {
+  const quote = question.evidence?.quote?.trim()
+  if (!quote) return true
+  const haystack = normalizeForMatch(source)
+  const parts = quote
+    .split(/…|\.\.\./)
+    .map((part) => normalizeForMatch(part).replace(/[.,;:!?]+$/, '').trim())
+    .filter((part) => part.length >= AI_SETTINGS.minEvidencePart)
+  if (parts.length === 0) return true
+  return parts.every((part) => haystack.includes(part))
+}
+
+/** Všechny důvody, proč otázku nepustit do banky: tvar i doklad. */
+export function checkQuestion(question: QuestionContent, source: string): string[] {
+  const errors = validateQuestionContent(question)
+  if (!evidenceMatches(question, source)) errors.push(EVIDENCE_NOT_FOUND)
+  return errors
+}
+
 /**
  * Požadované typy zúžené na ty, které smí AI generovat. Ve frontě můžou čekat
  * úlohy založené dřív, s typy, které už model nedostává; ty se tiše vynechají.
@@ -248,7 +288,7 @@ export async function generateQuestions(
 
       const batch: QuestionContent[] = []
       for (const [i, question] of produced.entries()) {
-        const errors = validateQuestionContent(question)
+        const errors = checkQuestion(question, chunk)
         if (errors.length > 0) {
           rejected.push({ index: accepted.length + i, errors })
           continue
