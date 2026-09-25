@@ -247,6 +247,7 @@ export async function generateQuestions(
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []
   const failedCalls: GenerationResult['failedCalls'] = []
+  const seen = new Set((request.avoid ?? []).map(dedupeKey))
 
   for (const [index, chunk] of chunks.entries()) {
     const remaining = request.count - accepted.length
@@ -293,7 +294,11 @@ export async function generateQuestions(
           rejected.push({ index: accepted.length + i, errors })
           continue
         }
-        batch.push(withDefaultPoints(normalizeOrderingPayload(question)))
+        const normalized = withDefaultPoints(normalizeOrderingPayload(question))
+        const key = dedupeKey(promptOf(normalized))
+        if (seen.has(key)) continue
+        seen.add(key)
+        batch.push(normalized)
       }
 
       accepted.push(...batch)
@@ -310,6 +315,18 @@ export async function generateQuestions(
     failedCalls,
     models: ladder.used,
   }
+}
+
+/**
+ * Klíč pro rozpoznání téže otázky: bez velikosti písmen, interpunkce
+ * a rozdílů v mezerách. Model tutéž otázku často vrátí jen s jinou tečkou.
+ */
+export function dedupeKey(text: string): string {
+  return text
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
 }
 
 /**

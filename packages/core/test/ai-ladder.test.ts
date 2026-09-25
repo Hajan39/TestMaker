@@ -251,3 +251,33 @@ describe('kontrola citace při generování', () => {
     expect(vysledek.rejected[0]?.errors).toContain('citace v evidence se v materiálu nenašla')
   })
 })
+
+describe('duplicity', () => {
+  it('stejné zadání lišící se velikostí písmen a interpunkcí uloží jen jednou', async () => {
+    const zneni = ['Co je výpar?', 'co je výpar', 'Co je  výpar ?']
+    const call: ModelCall = async () => ({
+      questions: zneni.map(
+        (prompt) =>
+          ({ ...otazka(0), payload: { prompt, answer: 'odpověď', acceptedAnswers: [] } }) as QuestionContent,
+      ),
+    })
+    const vysledek = await generateQuestions(
+      { ...ZADANI, count: 3, types: [...ZADANI.types] },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(vysledek.questions).toHaveLength(1)
+  })
+
+  it('otázku, která už v tématu je, znovu neuloží', async () => {
+    const call: ModelCall = async () => ({
+      questions: [
+        { ...otazka(0), payload: { prompt: 'Co je výpar?', answer: 'odpověď', acceptedAnswers: [] } } as QuestionContent,
+      ],
+    })
+    const vysledek = await generateQuestions(
+      { ...ZADANI, count: 1, types: [...ZADANI.types], avoid: ['co je VÝPAR'] },
+      { models: [PRVNI], callModel: call },
+    )
+    expect(vysledek.questions).toHaveLength(0)
+  })
+})
