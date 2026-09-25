@@ -1,5 +1,5 @@
 export * from './provider'
-export * from './prompt'
+export * from './prompts/questions'
 export * from './generate'
 export * from './puzzleWords'
 export * from './settings'

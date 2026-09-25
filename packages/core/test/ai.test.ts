@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import { chunkText, distributeTypes, promptOf, salvageQuestions, splitIntoBatches } from '../src/ai/generate'
-import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompt'
+import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompts/questions'
 import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,

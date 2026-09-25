@@ -8,7 +8,7 @@ import {
   type QuestionType,
 } from '../schema/question'
 import { objectCall, rawTextOf, startLadder } from './ladder'
-import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompt'
+import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompts/questions'
 import { readAiLadder, type AiConfig } from './provider'
 import { AI_SETTINGS } from './settings'
 

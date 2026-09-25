@@ -1,5 +1,5 @@
-import { QUESTION_TYPE_LABELS, type QuestionType } from '../schema/question'
-import { AI_SETTINGS } from './settings'
+import { QUESTION_TYPE_LABELS, type QuestionType } from '../../schema/question'
+import { AI_SETTINGS } from '../settings'
 
 export interface GenerationRequest {
   /** Text materiálu. */
@@ -18,7 +18,7 @@ export interface GenerationRequest {
   avoid?: string[]
 }
 
-const TYPE_HINTS: Record<QuestionType, string> = {
+export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   open: 'Volná odpověď na 2–6 řádků; v `answer` uveď vzorovou odpověď, ne jen heslo.',
   short_answer: 'Odpověď je jedno slovo, pojem nebo číslo. Do `acceptedAnswers` dej běžné varianty.',
   single_choice: 'Právě jedna možnost je správná. Distraktory musí být věcně blízké, ne zjevně nesmyslné.',
@@ -111,7 +111,7 @@ export function buildUserPrompt(request: GenerationRequest): string {
   const typeCounts = new Map<QuestionType, number>()
   for (const t of request.types) typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1)
   const typeLines = [...typeCounts.entries()].map(
-    ([t, n]) => `- ${t} (${QUESTION_TYPE_LABELS[t]}) × ${n}: ${TYPE_HINTS[t]}`,
+    ([t, n]) => `- ${t} (${QUESTION_TYPE_LABELS[t]}) × ${n}: ${QUESTION_TYPE_HINTS[t]}`,
   )
 
   const sections = [
