@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
+import { QuestionFileError } from '@testmaker/core/ai'
 import { db, questions } from '@/db'
 import { importQuestionFile, topicSourceFile } from '@/lib/questionFile'
 import { seedMaterial, seedTopic, UCET } from './helpers'
@@ -45,5 +46,11 @@ describe('otázky z Claude Code', () => {
     const cizi = { ...UCET, schoolId: 'jina-skola' }
     expect(await topicSourceFile(cizi, topicId)).toBeNull()
     expect(await importQuestionFile(cizi, topicId, '[]')).toBeNull()
+  })
+
+  it('nevalidní JSON v souboru se pozná jako chyba souboru, ne obecná chyba', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
+    await expect(importQuestionFile(UCET, topicId, '{nejde')).rejects.toBeInstanceOf(QuestionFileError)
   })
 })

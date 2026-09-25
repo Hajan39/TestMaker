@@ -66,6 +66,20 @@ export function buildQuestionRules(gradeName: string | null): string {
 }
 
 /**
+ * Chyba v obsahu souboru s otázkami (nevalidní JSON, chybějící seznam
+ * „questions"), ne v databázi ani jinde v aplikaci. Route handler podle týhle
+ * třídy pozná, že jde o soubor, který má učitelka opravit v Claude Code, a
+ * smí ji bezpečně ukázat jako hlášku uživateli — jiné výjimky (např. z
+ * databáze) se takhle rozlišit nedají a nesmí se zaměnit za chybu souboru.
+ */
+export class QuestionFileError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'QuestionFileError'
+  }
+}
+
+/**
  * Přečte soubor s otázkami a nechá jen ty, které projdou kontrolou tvaru,
  * doslovné citace (vůči zdrojovému textu) a duplicit — v souboru i vůči
  * otázkám, které už v tématu jsou.
@@ -79,14 +93,14 @@ export function readQuestionFile(
   try {
     raw = JSON.parse(json)
   } catch {
-    throw new Error('Soubor není platný JSON. Nech ho v Claude Code zapsat znovu příkazem /otazky.')
+    throw new QuestionFileError('Soubor není platný JSON. Nech ho v Claude Code zapsat znovu příkazem /otazky.')
   }
   const list = Array.isArray(raw)
     ? raw
     : Array.isArray((raw as { questions?: unknown })?.questions)
       ? (raw as { questions: unknown[] }).questions
       : null
-  if (!list) throw new Error('V souboru chybí seznam otázek („questions").')
+  if (!list) throw new QuestionFileError('V souboru chybí seznam otázek („questions").')
 
   const seen = new Set(existing.map(dedupeKey))
   const questions: QuestionContent[] = []

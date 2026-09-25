@@ -17,12 +17,28 @@ export function ClaudeCodeImport({ topicId }: { topicId: string }) {
   async function upload(file: File) {
     setBusy(true)
     try {
-      const response = await fetch(`${base}/otazky-soubor`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: await file.text(),
-      })
-      const data = (await response.json()) as { created?: number; rejected?: unknown[]; error?: string }
+      let response: Response
+      try {
+        response = await fetch(`${base}/otazky-soubor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: await file.text(),
+        })
+      } catch {
+        // Výpadek sítě — fetch samo o sobě žádnou odpověď nevrátí.
+        toast.error('Otázky se nepodařilo nahrát — zkontroluj připojení a zkus to znovu.')
+        return
+      }
+      // Odpověď nemusí být JSON (např. spadne-li server dřív, než stihne
+      // odpovědět tělem) — bez vlastního try/catch by se to ztratilo jako
+      // nezachycené odmítnutí a učitelka by neviděla vůbec nic.
+      let data: { created?: number; rejected?: unknown[]; error?: string }
+      try {
+        data = (await response.json()) as { created?: number; rejected?: unknown[]; error?: string }
+      } catch {
+        toast.error('Otázky se nepodařilo nahrát — zkontroluj připojení a zkus to znovu.')
+        return
+      }
       if (!response.ok) {
         toast.error(data.error ?? 'Otázky se nepodařilo nahrát.')
         return

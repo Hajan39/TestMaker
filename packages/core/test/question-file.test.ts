@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTopicSourceFile, existingPromptsFromSource, readQuestionFile } from '../src/ai/questionFile'
+import { QuestionFileError, buildTopicSourceFile, existingPromptsFromSource, readQuestionFile } from '../src/ai/questionFile'
 
 const ZDROJ = buildTopicSourceFile({
   subjectName: 'Přírodopis',
@@ -46,8 +46,13 @@ describe('soubor s otázkami z Claude Code', () => {
     expect(rejected.map((r) => r.index)).toEqual([1, 2, 3, 4])
   })
 
-  it('neplatný JSON vysvětlí česky', () => {
+  it('neplatný JSON vysvětlí česky a označí chybou souboru, ne obecnou', () => {
     expect(() => readQuestionFile('{nejde', ZDROJ)).toThrow(/není platný JSON/)
+    expect(() => readQuestionFile('{nejde', ZDROJ)).toThrow(QuestionFileError)
+  })
+
+  it('chybějící seznam otázek je taky chyba souboru', () => {
+    expect(() => readQuestionFile('{}', ZDROJ)).toThrow(QuestionFileError)
   })
 
   it('zdrojový soubor nese předmět, ročník, téma a existující otázky', () => {

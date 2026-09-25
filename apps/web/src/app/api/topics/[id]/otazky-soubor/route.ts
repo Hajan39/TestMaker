@@ -1,3 +1,4 @@
+import { QuestionFileError } from '@testmaker/core/ai'
 import { importQuestionFile } from '@/lib/questionFile'
 import { sRozsahem } from '@/lib/uzivatel'
 
@@ -13,8 +14,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (!result) return Response.json({ error: 'Téma se nenašlo' }, { status: 404 })
         return Response.json(result)
       } catch (error) {
-        // readQuestionFile hází jen srozumitelné české hlášky o obsahu souboru.
-        return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 })
+        // Jen chyba obsahu souboru (nevalidní JSON, chybějící seznam otázek)
+        // smí učitelce popsat, co má opravit — cokoli jiného (třeba výpadek
+        // databáze) není chyba souboru a musí propadnout jako 500, ne se
+        // tvářit jako snadno opravitelný problém se souborem.
+        if (error instanceof QuestionFileError) {
+          return Response.json({ error: error.message }, { status: 400 })
+        }
+        throw error
       }
     },
     { zapis: true },
