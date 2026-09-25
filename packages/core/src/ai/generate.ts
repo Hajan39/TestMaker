@@ -43,6 +43,14 @@ export type ModelCall = (input: {
 
 const FILE_HEADER = /^=== .+ ===$/
 
+/**
+ * Oddělovač mezi kusy uvnitř úseku — i mezi přeneseným záhlavím a obsahem,
+ * který za ním hned následuje. Musí to být tentýž řetězec, kterým se kusy
+ * opravdu spojují, jinak rozpočet v `chunkText` počítá s jinou délkou
+ * odřezu, než jaká se pak doopravdy připojí, a úsek limit přesáhne.
+ */
+const PIECE_SEPARATOR = '\n\n'
+
 function firstLine(text: string): string {
   return (text.split('\n', 1)[0] ?? '').trim()
 }
@@ -87,17 +95,20 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
   for (const paragraph of text.split(/\n\n+/)) {
     if (FILE_HEADER.test(firstLine(paragraph))) header = firstLine(paragraph)
 
-    // Kus se může ocitnout hned po resetu `current` na holé záhlaví — bez
-    // zmenšení rozpočtu o délku záhlaví by pak spolu s ním limit přesáhl.
-    const budget = header ? Math.max(maxChars - header.length - 1, 1) : maxChars
+    // Kus se může ocitnout hned po záhlaví — ať už po výslovném resetu, nebo
+    // protože ho tak vrátí sám `splitLong` (záhlaví je z pohledu dělení jen
+    // další řádek odstavce). Rozpočet se proto zmenší o záhlaví i stejný
+    // oddělovač, jaký se za ně opravdu připojí, ať se s ním kus do maxChars
+    // vejde v obou případech.
+    const budget = header ? Math.max(maxChars - header.length - PIECE_SEPARATOR.length, 1) : maxChars
 
     for (const piece of splitLong(paragraph, budget)) {
       const onlyHeader = current.trim() === '' || current.trim() === header
-      if (!onlyHeader && current.length + piece.length + 2 > maxChars) {
+      if (!onlyHeader && current.length + piece.length + PIECE_SEPARATOR.length > maxChars) {
         parts.push(current.trim())
-        current = header && !FILE_HEADER.test(firstLine(piece)) ? `${header}\n` : ''
+        current = header && !FILE_HEADER.test(firstLine(piece)) ? `${header}${PIECE_SEPARATOR}` : ''
       }
-      current += `${piece}\n\n`
+      current += `${piece}${PIECE_SEPARATOR}`
     }
   }
   if (current.trim()) parts.push(current.trim())

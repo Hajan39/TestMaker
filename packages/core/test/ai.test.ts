@@ -140,6 +140,15 @@ describe('dělení dlouhých materiálů', () => {
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
     for (const chunk of chunks) expect(chunk).toMatch(/^=== dokument\.pdf ===/)
   })
+
+  it('záhlaví druhého souboru se do limitu vejde i u jednoslovných úseků, kde rozpočet sedí přesně', () => {
+    const prvni = `=== a.pdf ===\n${'b'.repeat(985)}`
+    const header = '=== dokument.pdf ==='
+    const text = `${prvni}\n\n${header}\n${'a '.repeat(2000)}`
+    const chunks = chunkText(text, 1000)
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(1000)
+    for (const chunk of chunks) expect(chunk).toMatch(/^=== .+\.pdf ===/)
+  })
 })
 
 describe('výběr úseků', () => {
