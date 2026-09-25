@@ -94,27 +94,45 @@ na třídu, a otevře editor testu.
 - Migrace se píše tak, aby šla bezpečně pustit nad ostrou `local.db`
   (jen `UPDATE` stavu a přidání nepovinného sloupce); ověřuje se na `e2e.db`.
 
+## Nastavení AI a Claude Code
+
+Doplněno 2026-09-25 po rozhodnutí vyhodit Ollamu.
+
+- **Poskytovatelé:** jen Google Gemini, OpenRouter (placený, v žebříčku
+  poslední) a Anthropic s API klíčem. Ollama, paralelní workeři, Groq,
+  Mistral, DeepInfra, Together, vlastní adresa a přihlášení předplatným
+  (`ANTHROPIC_AUTH_TOKEN`) z aplikace mizí.
+- **Jedno místo:** model a pořadí určuje jen `AI_MODELS`
+  (`poskytovatel:model`, čárkou); čísla generování jsou
+  v `packages/core/src/ai/settings.ts`, prompty v `packages/core/src/ai/prompts/`,
+  volání modelu se žebříčkem v `packages/core/src/ai/ladder.ts`
+  (sdílí ho otázky i hlavolamy). `.env.example` má AI část na pár řádků.
+- **Claude Code (`/otazky`):** předplatné Claude Max v aplikaci použít nejde
+  (Anthropic ho mimo Claude Code odmítá), v Claude Code ano. Téma nabízí
+  „Stáhnout materiály" (text s hlavičkou o ročníku a existujících otázkách)
+  a „Nahrát otázky" (JSON soubor). Skill `/otazky` píše otázky podle týchž
+  pravidel jako aplikace a kontroluje je týmž kódem; soubor smí obsahovat
+  všechny typy kromě `label_image`.
+
 ## Kvalita generování
 
 Samostatný první krok, protože na něm stojí smysl celé přestavby.
 
-- **Kontext Ollamy:** nastavit `num_ctx` (výchozí 16 384, přepsatelné
-  proměnnou prostředí) a ověřit na workeru přes `/api/ps`, že model opravdu
-  běží s tímto kontextem.
-- **Menší úseky:** do jednoho volání jde úsek materiálu o 6–8 tisících
-  znaků, ne až 120 tisíc. Otázky se rozkládají po úsecích.
-- **Méně typů pro AI:** `single_choice`, `true_false`, `short_answer`.
-  Ostatní typy zůstávají pro ruční tvorbu; AI je zatím negeneruje.
-- **Kratší prompt:** pravidla zúžit na ta, která malý model udrží
-  (samostatná otázka, jednoznačná odpověď z materiálu, jazyk pro ročník,
-  citace v `evidence`).
-- **Kontrola citace:** otázka, jejíž `evidence` se (po normalizaci mezer)
-  nenajde v textu úseku, se zahodí.
-- **Oprava ve větvi s workery:** paralelní dávky nad týmž úsekem si mají
-  předávat už vzniklá zadání, aby nevznikaly duplicity.
+- **Menší úseky:** do jednoho volání jde úsek materiálu o nejvýš 8 000
+  znaků, ne až 120 tisíc. Úseky se vybírají po celém tématu, záhlaví souboru
+  se přenáší do každého úseku.
+- **Méně typů pro AI v aplikaci:** `single_choice`, `true_false`,
+  `short_answer`. Ostatní typy zůstávají pro ruční tvorbu a pro `/otazky`.
+- **Kratší prompt:** pravidla zúžit na ta, která model udrží (samostatná
+  otázka, jednoznačná odpověď z materiálu, jazyk pro ročník, doslovná citace
+  v `evidence`).
+- **Kontrola citace:** otázka, jejíž citace se (po normalizaci uvozovek,
+  mezer a velikosti písmen) nenajde v textu, se zahodí; otázka bez citace
+  projde.
+- **Duplicity:** stejné zadání lišící se jen interpunkcí nebo velikostí písmen
+  se uloží jednou.
 - **Srovnávací základ:** jedno téma s krátkým materiálem, 10 otázek, hodnocení
-  ano/ne od učitelky před změnou a po ní; podle téhož základu se pak srovnávají
-  modely (`qwen3:14b` proti větším lokálním nebo cloudovým).
+  ano/ne od učitelky; srovnávají se modely z `AI_MODELS` a otázky z `/otazky`.
 
 ## Pořadí prací
 
@@ -140,7 +158,7 @@ Každý krok jde nasadit samostatně a aplikace mezi nimi funguje.
   tisk.
 - Jednotkové testy: migrace `draft` → `approved`, smazání a vrácení otázky,
   přesměrování starých adres, kontrola citace v `evidence`, dělení materiálu
-  na úseky, předání `num_ctx` providerovi.
+  na úseky, žebříček z `AI_MODELS`, kontrola souboru z Claude Code.
 - `pnpm test`, `pnpm typecheck`, `pnpm build` po každém kroku.
 
 ## Mimo rozsah
