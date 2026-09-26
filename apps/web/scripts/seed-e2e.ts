@@ -338,6 +338,12 @@ async function main() {
   let materials = 0
   let topicCount = 0
   let questionCount = 0
+  /**
+   * Téma pro záložku „AI kvalita“ ve Správě: potřebuje otázky s nastaveným
+   * modelem a pár řádků `question_feedback`, jinak by e2e test tabulku
+   * nikdy nedostal na oči a jen by tiše přijal prázdný stav.
+   */
+  let aiKvalitaTopicId: string | null = null
 
   for (const subject of SUBJECTS) {
     const subjectId = newId()
@@ -372,6 +378,7 @@ async function main() {
           lowContent: body.length < MIN_USABLE_TOPIC_CHARS,
         })
         topicCount += 1
+        if (topic.name === 'Fotosyntéza a dýchání rostlin') aiKvalitaTopicId = topicId
 
         const fileName = topic.fileName ?? `${topic.name}.txt`
         await db.insert(schema.materials).values({
@@ -411,6 +418,57 @@ async function main() {
           questionCount += 1
         }
       }
+    }
+  }
+
+  /**
+   * Data pro záložku „AI kvalita“ ve Správě: čtyři otázky od jednoho modelu,
+   * z toho dvě později přegenerované se stejným důvodem — přehled tak má co
+   * spočítat (podíl 50 %, nejčastější důvod „Moc těžká“, i předmět s nejvíc
+   * přegenerováním) a e2e test si na konkrétní čísla může sáhnout.
+   */
+  if (aiKvalitaTopicId) {
+    const AI_KVALITA_MODEL = 'e2e:model-a'
+    const aiQuestionIds: string[] = []
+    for (let i = 0; i < 4; i++) {
+      const id = newId()
+      aiQuestionIds.push(id)
+      const payload = {
+        prompt: `AI kvalita: otázka ${i + 1}`,
+        options: ['První možnost', 'Druhá možnost'],
+        correctIndex: 0,
+      }
+      await db.insert(schema.questions).values({
+        id,
+        schoolId: SKOLA_ID,
+        createdBy: VYCHOZI_UCET_ID,
+        topicId: aiKvalitaTopicId,
+        materialId: null,
+        type: 'single_choice',
+        payload,
+        blocks: [],
+        points: 1,
+        difficulty: 2,
+        source: 'ai',
+        model: AI_KVALITA_MODEL,
+        status: 'approved',
+        searchText: `${JSON.stringify(payload)} `.toLocaleLowerCase('cs'),
+      })
+      questionCount += 1
+    }
+    // Jen dvě ze čtyř se „přegenerovaly“ — zbylé dvě ukazují, že podíl umí
+    // být i menší než 100 %.
+    for (const questionId of aiQuestionIds.slice(0, 2)) {
+      await db.insert(schema.questionFeedback).values({
+        id: newId(),
+        schoolId: SKOLA_ID,
+        questionId,
+        replacementId: null,
+        model: AI_KVALITA_MODEL,
+        reason: 'tezka',
+        note: null,
+        createdBy: VYCHOZI_UCET_ID,
+      })
     }
   }
 

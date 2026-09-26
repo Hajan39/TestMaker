@@ -149,6 +149,22 @@ describe('loadAiQuality', () => {
     expect(prehled.models.find((row) => row.model === 'staré')).toBeUndefined()
   })
 
+  it('model má vlastní okno pro generování a pro přegenerování — otázka mimo okno, přegenerování uvnitř dá generated: 0', async () => {
+    const { topicId } = await seedTopic()
+    const stary = new Date(Date.now() - 120 * DEN).toISOString()
+    const q = await seedAiQuestion(topicId, { model: 'stary-model', createdAt: stary })
+    // Zpětná vazba vzniká dnes (výchozí `createdAt`), i když otázka vznikla
+    // dávno mimo okno — každé číslo se počítá podle vlastního data.
+    await seedFeedback({ questionId: q, model: 'stary-model', reason: 'tezka' })
+
+    const prehled = await loadAiQuality(UCET)
+    expect(prehled.models.find((row) => row.model === 'stary-model')).toEqual({
+      model: 'stary-model',
+      generated: 0,
+      regenerated: 1,
+    })
+  })
+
   it('vlastní zadané období (`since`) se použije místo výchozích 90 dní', async () => {
     const { topicId } = await seedTopic()
     const stary = new Date(Date.now() - 120 * DEN).toISOString()

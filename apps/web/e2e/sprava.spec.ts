@@ -38,16 +38,24 @@ test('události ukazují, co se v aplikaci dělo', async ({ page }) => {
   await expect(page.getByText('prihlaseni').first()).toBeVisible()
 })
 
-test('správce vidí záložku AI kvalita', async ({ page }) => {
+test('správce vidí záložku AI kvalita s čísly ze zkušebních dat', async ({ page }) => {
   await page.goto('/sprava')
   await page.getByRole('tab', { name: 'AI kvalita' }).click()
-  // Bez zkušebních dat z regenerace jde vidět prázdný stav; pokud se do
-  // testovací databáze mezitím dostala zpětná vazba, ukáže se rovnou tabulka
-  // modelů — obojí je v pořádku, hlavní je, že záložka vůbec existuje a
-  // nespadne.
-  const prazdnyStav = page.getByText('Zatím žádná zpětná vazba.')
-  const modely = page.getByText('Modely')
-  await expect(prazdnyStav.or(modely)).toBeVisible()
+
+  // Seed (`scripts/seed-e2e.ts`) založí čtyři otázky modelu „e2e:model-a“,
+  // z toho dvě přegenerované s důvodem „Moc těžká“ — přehled na nich musí
+  // ukázat konkrétní čísla, ne jen to, že se něco vypsalo.
+  const radekModelu = page.locator('[data-slot="card"]').filter({ hasText: 'e2e:model-a' })
+  await expect(radekModelu).toContainText('vygenerováno 4')
+  await expect(radekModelu).toContainText('přegenerováno 2')
+  await expect(radekModelu).toContainText('50 %')
+
+  const radekDuvodu = page.locator('[data-slot="card"]').filter({ hasText: 'Moc těžká' })
+  await expect(radekDuvodu).toContainText('2×')
+
+  const radekPredmetu = page.locator('[data-slot="card"]').filter({ hasText: 'PŘÍRODOPIS' })
+  await expect(radekPredmetu).toContainText('2×')
+  await expect(radekPredmetu).toContainText('moc těžká')
 })
 
 test('učitelka se do správy vůbec nedostane', async ({ browser }) => {

@@ -43,6 +43,18 @@ function vychoziOd(): string {
  * nejčastější důvody přegenerování a předměty, kde se přegeneruje nejvíc.
  * Výchozí období jsou poslední tři měsíce — starší přegenerování už nikoho
  * nezajímá, model se od nich mohl dávno změnit.
+ *
+ * Přijaté zjednodušení: `generated` a `regenerated` mají každé své vlastní
+ * devadesátidenní okno — první podle `questions.created_at` (kdy otázka
+ * vznikla), druhé podle `question_feedback.created_at` (kdy ji učitelka
+ * zavrhla). Otázka vygenerovaná před 89 dny a přegenerovaná dnes se tak
+ * počítá v obou oknech, ale otázka vygenerovaná před rokem a přegenerovaná
+ * dnes už do „vygenerováno“ nespadá — podíl u takového modelu proto může
+ * vyjít přes 100 % (víc přegenerování, než kolik je v okně vidět generování).
+ * Rozhraní to řeší zobrazením „—“ místo procenta, kdykoli by šlo o dělení
+ * nulou nebo o zavádějící číslo nad 100 %; přesné provázání by vyžadovalo
+ * dotahovat `questions.created_at` i pro přegenerované otázky, což pro
+ * orientační přehled ve Správě nestojí za složitost navíc.
  */
 export async function loadAiQuality(scope: Scope, options: { since?: string } = {}): Promise<AiQuality> {
   const since = options.since ?? vychoziOd()

@@ -344,8 +344,14 @@ export function SpravaScreen({
               <Card className="divide-y divide-line">
                 <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">Modely</p>
                 {aiKvalita.models.map((model) => {
+                  // Bez vygenerované otázky v okně nejde spočítat podíl — „—“,
+                  // ne dělení nulou. Nahoru se ořízne na 100 %: obě čísla mají
+                  // vlastní devadesátidenní okno (viz komentář v aiQuality.ts),
+                  // takže přegenerovaných může technicky být víc než vygenerovaných.
                   const podil =
-                    model.generated > 0 ? Math.round((model.regenerated / model.generated) * 100) : null
+                    model.generated > 0
+                      ? `${Math.min(100, Math.round((model.regenerated / model.generated) * 100))} %`
+                      : '—'
                   return (
                     <div
                       key={model.model}
@@ -353,8 +359,7 @@ export function SpravaScreen({
                     >
                       <span className="font-medium text-fg">{model.model}</span>
                       <span className="ui-numeric text-fg-soft">
-                        vygenerováno {model.generated} · přegenerováno {model.regenerated}
-                        {podil !== null ? ` · ${podil} %` : ''}
+                        vygenerováno {model.generated} · přegenerováno {model.regenerated} · {podil}
                       </span>
                     </div>
                   )
