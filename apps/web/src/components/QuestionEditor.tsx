@@ -190,17 +190,32 @@ export function QuestionEditorForm({
 export function QuestionEditor({
   topicId,
   question,
+  returnFocusRef,
   onClose,
   onSaved,
 }: {
   topicId: string
   question: Question | null
+  /**
+   * Tlačítko, na které se má vrátit ohnisko po zavření dialogu. Otevírá-li
+   * se editor z nabídky u řádku (třemi tečkami), Radix bez tohohle vrátí
+   * ohnisko na `<body>` — nabídka se zavírá ve stejném tiku, ve kterém se
+   * dialog otevírá, a okrade tak sama sebe o svůj vlastní návrat ohniska.
+   */
+  returnFocusRef?: React.RefObject<HTMLElement | null>
   onClose: () => void
   onSaved: () => void
 }) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[85vh] max-w-3xl overflow-y-auto"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return
+          event.preventDefault()
+          returnFocusRef.current.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{question ? 'Upravit otázku' : 'Nová otázka'}</DialogTitle>
         </DialogHeader>

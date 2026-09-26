@@ -122,5 +122,5 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   await expect(page.getByRole('button', { name: 'Nová otázka', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Upravit', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Nahradit modelem', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Přegenerovat', exact: true })).toHaveCount(0)
 })

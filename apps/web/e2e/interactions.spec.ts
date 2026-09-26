@@ -10,28 +10,39 @@ import { testTopicPath } from './fixtures'
 // — natvrdo zadané id z autorova disku by na cizí databázi neexistovalo.
 
 test.describe('editor otázky', () => {
-  test('otevře se, zavře Escapem a vrátí ohnisko', async ({ page }) => {
-    await page.goto(await testTopicPath(page.request))
-    await page.getByRole('button', { name: 'Vlastní otázka' }).click()
+  // Dialog se dnes otevírá jen z banky (úprava otázky z řádku) — téma otázky
+  // upravuje přímo v kartě, bez dialogu. `Vlastní otázka` jako spouštěč proto
+  // zmizel; scénář se stejným ověřením (Escape zavře, ohnisko se vrátí) běží
+  // nad bankou, kde dialog pořád je.
+  test('otevře se z nabídky u řádku, zavře Escapem a vrátí ohnisko', async ({ page }) => {
+    const path = await testTopicPath(page.request)
+    const topicId = path.split('/').pop()!
+    await page.goto(`/questions?topicId=${topicId}`)
+
+    const row = page.locator('tr[data-question-id]').first()
+    const trigger = row.getByRole('button', { name: /^Akce u otázky/ })
+    await trigger.click()
+    await page.getByRole('menuitem', { name: 'Upravit' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByText('Nová otázka')).toBeVisible()
+    await expect(dialog.getByText('Upravit otázku')).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(dialog).not.toBeVisible()
+    await expect(trigger).toBeFocused()
   })
 
   test('nabídka typu otázky jde ovládat a mění pole formuláře', async ({ page }) => {
     await page.goto(await testTopicPath(page.request))
-    await page.getByRole('button', { name: 'Vlastní otázka' }).click()
+    await page.getByRole('button', { name: 'Nová otázka' }).click()
 
-    const dialog = page.getByRole('dialog')
-    await dialog.getByRole('combobox').first().click()
+    const form = page.getByTestId('new-question-form')
+    await form.getByLabel('Typ').click()
     await page.getByRole('option', { name: 'Volná odpověď' }).click()
 
     // U volné odpovědi se ptáme na počet linek; u výběru možností ne.
-    await expect(dialog.getByText('Počet linek')).toBeVisible()
+    await expect(form.getByText('Počet linek')).toBeVisible()
   })
 })
 

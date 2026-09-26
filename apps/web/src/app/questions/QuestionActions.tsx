@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import type { Question } from '@testmaker/core/schema'
 import { DropdownMenuItem, toast } from '@testmaker/ui'
 import { RowActions } from '@/components/RowActions'
@@ -27,12 +28,16 @@ export function QuestionActions({
   question: Question
   /** Zadání otázky do popisku tlačítka — na kartě je nabídek pod sebou víc. */
   label: string
-  /** Otevře editor; chybí u otázky bez tématu, ta se upravovat nedá. */
-  onEdit: (() => void) | null
+  /**
+   * Otevře editor; chybí u otázky bez tématu, ta se upravovat nedá. Dostane
+   * tlačítko „Akce" tohohle řádku, ať mu po zavření dialogu jde vrátit ohnisko.
+   */
+  onEdit: ((trigger: HTMLButtonElement | null) => void) | null
   /** Zavolá se po náhradě nebo smazání — seznam se má obnovit. */
   onChanged: () => void
 }) {
   const regenerate = useRegenerateQuestion(question.id, question.type, onChanged)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   async function remove() {
     try {
@@ -59,12 +64,18 @@ export function QuestionActions({
   }
 
   return (
-    <RowActions label={`Akce u otázky ${label}`} busy={regenerate.busy ? 'Nahrazuji…' : null}>
-      {onEdit ? <DropdownMenuItem onSelect={() => onEdit()}>Upravit</DropdownMenuItem> : null}
+    <RowActions
+      label={`Akce u otázky ${label}`}
+      busy={regenerate.busy ? 'Přegeneruji…' : null}
+      triggerRef={triggerRef}
+    >
+      {onEdit ? (
+        <DropdownMenuItem onSelect={() => onEdit(triggerRef.current)}>Upravit</DropdownMenuItem>
+      ) : null}
       {/* Bez nakonfigurovaného modelu se náhrada vůbec nenabídne — jinak by
           učitelka klikla a dozvěděla se to až z chyby. */}
       {regenerate.available ? (
-        <DropdownMenuItem onSelect={() => void regenerate.run()}>Nahradit modelem</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void regenerate.run()}>Přegenerovat</DropdownMenuItem>
       ) : null}
       <DropdownMenuItem variant="destructive" onSelect={() => void remove()}>
         Smazat

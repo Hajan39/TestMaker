@@ -25,11 +25,19 @@ import {
 export function RowActions({
   label = 'Akce',
   busy = null,
+  triggerRef,
   children,
 }: {
   /** Popisek tlačítka pro čtečku obrazovky; u karet se hodí doplnit název položky. */
   label?: string
   busy?: string | null
+  /**
+   * Ref na samotné tlačítko. Nabídka po výběru „Upravit" sama vrátí ohnisko
+   * sem — jenže otevře-li se editor (dialog) ve stejném tiku, tenhle krok mu
+   * ukradne a po zavření dialogu (Escape) skončí ohnisko na `<body>`. Kdo
+   * dialog otevírá, si přes ref tlačítko podrží a po zavření ho zaostří sám.
+   */
+  triggerRef?: React.Ref<HTMLButtonElement>
   children: ReactNode
 }) {
   if (busy) {
@@ -47,7 +55,7 @@ export function RowActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="icon-sm" variant="ghost" aria-label={label}>
+        <Button ref={triggerRef} size="icon-sm" variant="ghost" aria-label={label}>
           <MoreVertical className="size-4" />
         </Button>
       </DropdownMenuTrigger>

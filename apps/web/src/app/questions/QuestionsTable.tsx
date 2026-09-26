@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
@@ -34,7 +34,7 @@ import { QuestionActions } from './QuestionActions'
  * zůstává, ať jde smazanou otázku dohledat a vrátit.
  */
 const STATUS_FILTER_LABELS: Partial<Record<QuestionStatus, string>> = {
-  approved: 'Schválené',
+  approved: 'Použitelné',
   rejected: 'Smazané',
 }
 
@@ -149,6 +149,13 @@ export function QuestionsTable({
   const [refreshing, startRefresh] = useTransition()
   const [navigating, startNavigate] = useTransition()
   const [editing, setEditing] = useState<Question | null>(null)
+  // Tlačítko „Akce" řádku, jehož editor je otevřený — po zavření dialogu se
+  // na něj vrátí ohnisko, jinak by po Escapu skončilo na `<body>`.
+  const editReturnFocusRef = useRef<HTMLButtonElement | null>(null)
+  function openEditor(row: Question, trigger: HTMLButtonElement | null) {
+    editReturnFocusRef.current = trigger
+    setEditing(row)
+  }
   const [search, setSearch] = useState(filters.search)
   // Poslední stránka a filtry, které přišly ze serveru — podle nich se pozná,
   // že se obsah pod rukama vyměnil.
@@ -541,7 +548,7 @@ export function QuestionsTable({
                   <QuestionActions
                     question={row}
                     label={promptOf(row)}
-                    onEdit={row.topicId ? () => setEditing(row) : null}
+                    onEdit={row.topicId ? (trigger) => openEditor(row, trigger) : null}
                     onChanged={() => startRefresh(() => router.refresh())}
                   />
                 </div>
@@ -621,7 +628,7 @@ export function QuestionsTable({
                         <QuestionActions
                           question={row}
                           label={promptOf(row)}
-                          onEdit={row.topicId ? () => setEditing(row) : null}
+                          onEdit={row.topicId ? (trigger) => openEditor(row, trigger) : null}
                           onChanged={() => startRefresh(() => router.refresh())}
                         />
                       </div>
@@ -653,6 +660,7 @@ export function QuestionsTable({
         <QuestionEditor
           topicId={editing.topicId}
           question={editing}
+          returnFocusRef={editReturnFocusRef}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)

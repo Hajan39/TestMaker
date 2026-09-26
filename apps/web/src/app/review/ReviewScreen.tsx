@@ -453,7 +453,7 @@ function ReviewFeed({
       }
       const replacement = data.question
       setItems((current) => current.map((item) => (item.id === id ? replacement : item)))
-      toast.success('Otázka nahrazena novou od modelu. Původní je zamítnutá.')
+      toast.success('Otázka nahrazena novou.')
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Náhradu se nepodařilo vytvořit')
