@@ -59,6 +59,15 @@ Tři kroky, každý má svůj důvod:
 2. Pomocná tabulka po návratu nemá co evidovat, takže mizí spolu s ním.
 3. Poslední příkaz smaže záznam o migraci z evidence drizzle. Bez něj by
    migrace platila za hotovou a `pnpm db:migrate` by ji už nikdy nespustil.
+   Drizzle ale migrátor `libsql` porovnává jen proti nejnovějšímu `created_at`
+   v `__drizzle_migrations` — smazání záznamu 0014 tedy způsobí její nové
+   spuštění při příštím `pnpm db:migrate` jen tehdy, když je pořád tou
+   nejnověji provedenou migrací. Přibyla-li mezitím další migrace (0015 a
+   výš), smazání záznamu 0014 nic neopakuje — musela by se smazat i ona,
+   jinak migrátor porovnává proti jejímu `created_at` a 0014 už za novější
+   nepovažuje. Nad ostrou (nasazenou) Turso databází navíc `pnpm db:migrate`
+   musí běžet s `DATABASE_URL` mířícím právě na ni, jinak se návrat provede
+   jen nad lokální `local.db` a ostrá databáze zůstane beze změny.
 
 Na rozdíl od migrace 0006 tady nejde smazat poslední záznam podle
 `ORDER BY created_at DESC LIMIT 1` — 0014 nemusí být poslední provedená
