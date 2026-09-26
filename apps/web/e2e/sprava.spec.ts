@@ -50,12 +50,18 @@ test('správce vidí záložku AI kvalita s čísly ze zkušebních dat', async 
   await expect(radekModelu).toContainText('přegenerováno 2')
   await expect(radekModelu).toContainText('50 %')
 
-  const radekDuvodu = page.locator('[data-slot="card"]').filter({ hasText: 'Moc těžká' })
-  await expect(radekDuvodu).toContainText('2×')
+  // Podle nadpisu karty, ne podle „Moc těžká" — ten se opakuje i v kartě
+  // předmětů („nejčastěji moc těžká") a matchnul by obě.
+  const kartaDuvodu = page.locator('[data-slot="card"]').filter({ hasText: 'Nejčastější důvody přegenerování' })
+  await expect(kartaDuvodu).toContainText('Moc těžká')
+  await expect(kartaDuvodu).toContainText('2×')
 
-  const radekPredmetu = page.locator('[data-slot="card"]').filter({ hasText: 'PŘÍRODOPIS' })
-  await expect(radekPredmetu).toContainText('2×')
-  await expect(radekPredmetu).toContainText('moc těžká')
+  const kartaPredmetu = page
+    .locator('[data-slot="card"]')
+    .filter({ hasText: 'Předměty s nejvíc přegenerováním' })
+  await expect(kartaPredmetu).toContainText('PŘÍRODOPIS')
+  await expect(kartaPredmetu).toContainText('2×')
+  await expect(kartaPredmetu).toContainText('moc těžká')
 })
 
 test('správce udělá z důvodu pravidlo promptu a pak ho vypne', async ({ page }) => {
