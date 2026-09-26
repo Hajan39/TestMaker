@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
   buildCryptogram,
@@ -10,6 +11,7 @@ import {
   solutionGrid,
   WORD_SEARCH_DIRECTIONS,
 } from '../src/puzzle/index'
+import { generatePuzzleWords, type PuzzleWordsCall } from '../src/ai/puzzleWords'
 import { puzzleContentSchema, type PuzzleEntry } from '../src/schema/puzzle'
 
 const SLOVA: PuzzleEntry[] = [
@@ -208,6 +210,31 @@ describe('tajenka', () => {
     ])
     // Písmeno „Y" v seznamu není — tajenka to musí říct, ne ho tiše vynechat.
     expect(result.problems.map((problem) => problem.subject)).toContain('Y')
+  })
+})
+
+describe('slova od modelu', () => {
+  it('odpověď ve špatném tvaru zkusí dalším modelem', async () => {
+    const volani: string[] = []
+    const call: PuzzleWordsCall = async ({ config }) => {
+      volani.push(config.model)
+      if (config.model === 'a') {
+        throw new NoObjectGeneratedError({
+          message: 'x',
+          text: '{}',
+          response: {} as never,
+          usage: {} as never,
+          finishReason: 'stop',
+        })
+      }
+      return { words: [{ word: 'houba', clue: 'Roste v lese a má klobouk.' }] }
+    }
+    const vysledek = await generatePuzzleWords(
+      { text: 'Houba roste v lese.', topicName: 'Houby', subjectName: 'Přírodopis', gradeName: null, count: 1, kind: 'wordsearch' },
+      { models: [{ provider: 'google', model: 'a' }, { provider: 'google', model: 'b' }], callModel: call },
+    )
+    expect(volani).toEqual(['a', 'b'])
+    expect(vysledek.entries.map((e) => e.word)).toEqual(['houba'])
   })
 })
 
