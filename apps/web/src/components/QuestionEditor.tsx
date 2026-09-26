@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   DEFAULT_POINTS,
   QUESTION_TYPE_LABELS,
@@ -54,6 +54,9 @@ export function QuestionEditorForm({
   const [explanation, setExplanation] = useState(question?.explanation ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Karta v úpravě a „Nová otázka" mohou stát na obrazovce vedle sebe —
+  // pevná id by se pak zdvojila a `htmlFor` by mířilo na cizí pole.
+  const uid = useId()
 
   function changeType(next: QuestionType) {
     setType(next)
@@ -112,9 +115,9 @@ export function QuestionEditorForm({
     <>
       <div className="flex flex-wrap gap-3">
         <div className="w-56">
-          <Label htmlFor="question-editor-type">Typ</Label>
+          <Label htmlFor={`question-editor-type-${uid}`}>Typ</Label>
           <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
-            <SelectTrigger id="question-editor-type" className="w-full">
+            <SelectTrigger id={`question-editor-type-${uid}`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -127,9 +130,9 @@ export function QuestionEditorForm({
           </Select>
         </div>
         <div className="w-24">
-          <Label htmlFor="question-editor-points">Body</Label>
+          <Label htmlFor={`question-editor-points-${uid}`}>Body</Label>
           <Input
-            id="question-editor-points"
+            id={`question-editor-points-${uid}`}
             type="number"
             min={0}
             step={0.5}
@@ -138,12 +141,12 @@ export function QuestionEditorForm({
           />
         </div>
         <div className="w-36">
-          <Label htmlFor="question-editor-difficulty">Obtížnost</Label>
+          <Label htmlFor={`question-editor-difficulty-${uid}`}>Obtížnost</Label>
           <Select
             value={String(difficulty)}
             onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
           >
-            <SelectTrigger id="question-editor-difficulty" className="w-full">
+            <SelectTrigger id={`question-editor-difficulty-${uid}`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -160,9 +163,9 @@ export function QuestionEditorForm({
       </div>
 
       <div className="mt-4">
-        <Label htmlFor="question-editor-explanation">Poznámka do klíče (nepovinné)</Label>
+        <Label htmlFor={`question-editor-explanation-${uid}`}>Poznámka do klíče (nepovinné)</Label>
         <Textarea
-          id="question-editor-explanation"
+          id={`question-editor-explanation-${uid}`}
           value={explanation}
           placeholder="Proč je odpověď správně — vytiskne se jen do klíče pro učitele."
           onChange={(event) => setExplanation(event.target.value)}

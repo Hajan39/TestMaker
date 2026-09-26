@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import type { QuestionType } from '@testmaker/core/schema'
 import {
   Button,
@@ -30,10 +31,15 @@ export function PayloadFields({
   const str = (key: string) => String(payload[key] ?? '')
   const list = (key: string) => (payload[key] as string[] | undefined) ?? []
 
+  // Karta v úpravě a „Nová otázka" mohou stát na obrazovce vedle sebe — pevná
+  // id by se pak zdvojila a `htmlFor` by mířilo na cizí pole.
+  const uid = useId()
+  const id = (name: string) => `payload-${name}-${uid}`
+
   const prompt = (
     <div>
-      <Label htmlFor="payload-prompt">Zadání</Label>
-      <Textarea id="payload-prompt" value={str('prompt')} onChange={(event) => set('prompt', event.target.value)} />
+      <Label htmlFor={id('prompt')}>Zadání</Label>
+      <Textarea id={id('prompt')} value={str('prompt')} onChange={(event) => set('prompt', event.target.value)} />
     </div>
   )
 
@@ -44,9 +50,9 @@ export function PayloadFields({
           {prompt}
           <div className="flex gap-3">
             <div className="w-32">
-              <Label htmlFor="payload-lines">Počet linek</Label>
+              <Label htmlFor={id('lines')}>Počet linek</Label>
               <Input
-                id="payload-lines"
+                id={id('lines')}
                 type="number"
                 min={1}
                 max={20}
@@ -56,9 +62,9 @@ export function PayloadFields({
             </div>
           </div>
           <div>
-            <Label htmlFor="payload-open-answer">Vzorová odpověď (do klíče)</Label>
+            <Label htmlFor={id('open-answer')}>Vzorová odpověď (do klíče)</Label>
             <Textarea
-              id="payload-open-answer"
+              id={id('open-answer')}
               value={str('answer')}
               onChange={(event) => set('answer', event.target.value)}
             />
@@ -71,17 +77,17 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor="payload-short-answer">Správná odpověď</Label>
+            <Label htmlFor={id('short-answer')}>Správná odpověď</Label>
             <Input
-              id="payload-short-answer"
+              id={id('short-answer')}
               value={str('answer')}
               onChange={(event) => set('answer', event.target.value)}
             />
           </div>
           <div>
-            <Label htmlFor="payload-accepted-answers">Další uznávané odpovědi (oddělené středníkem)</Label>
+            <Label htmlFor={id('accepted-answers')}>Další uznávané odpovědi (oddělené středníkem)</Label>
             <Input
-              id="payload-accepted-answers"
+              id={id('accepted-answers')}
               value={list('acceptedAnswers').join('; ')}
               onChange={(event) =>
                 set(
@@ -203,16 +209,16 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor="payload-fillblank-text">Text s vynechávkami — místo k doplnění zapiš jako ___</Label>
-            <Textarea id="payload-fillblank-text" value={text} onChange={(event) => set('text', event.target.value)} />
+            <Label htmlFor={id('fillblank-text')}>Text s vynechávkami — místo k doplnění zapiš jako ___</Label>
+            <Textarea id={id('fillblank-text')} value={text} onChange={(event) => set('text', event.target.value)} />
             <p className="mt-1 text-xs text-fg-muted">
               Vynechávek v textu: {placeholders}, doplňovaných výrazů: {blanks.length}
             </p>
           </div>
           <div>
-            <Label htmlFor="payload-blanks">Správné výrazy v pořadí (oddělené středníkem)</Label>
+            <Label htmlFor={id('blanks')}>Správné výrazy v pořadí (oddělené středníkem)</Label>
             <Input
-              id="payload-blanks"
+              id={id('blanks')}
               value={blanks.join('; ')}
               onChange={(event) =>
                 set('blanks', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
@@ -220,9 +226,9 @@ export function PayloadFields({
             />
           </div>
           <div>
-            <Label htmlFor="payload-wordbank">Nabídka slov navíc (nepovinné, oddělené středníkem)</Label>
+            <Label htmlFor={id('wordbank')}>Nabídka slov navíc (nepovinné, oddělené středníkem)</Label>
             <Input
-              id="payload-wordbank"
+              id={id('wordbank')}
               value={list('wordBank').join('; ')}
               onChange={(event) =>
                 set('wordBank', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
@@ -308,9 +314,9 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor="payload-headers">Hlavička (oddělená středníkem)</Label>
+            <Label htmlFor={id('headers')}>Hlavička (oddělená středníkem)</Label>
             <Input
-              id="payload-headers"
+              id={id('headers')}
               value={headers.join('; ')}
               onChange={(event) => {
                 const next = event.target.value.split(';').map((value) => value.trim())
@@ -348,11 +354,11 @@ export function PayloadFields({
             </Button>
           </div>
           <div>
-            <Label htmlFor="payload-table-answers">
+            <Label htmlFor={id('table-answers')}>
               Správné hodnoty pro prázdné buňky po řádcích (oddělené středníkem)
             </Label>
             <Input
-              id="payload-table-answers"
+              id={id('table-answers')}
               value={answers.join('; ')}
               onChange={(event) =>
                 set('answers', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))

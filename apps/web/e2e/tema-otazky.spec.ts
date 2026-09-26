@@ -1,8 +1,13 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext } from '@playwright/test'
 
 /**
  * Otázky v tématu jako karty: úprava přímo v seznamu, přegenerování, smazání
- * s možností vrácení, filtr a čtení bez práv u role `nahled`.
+ * s možností vrácení a filtr.
+ *
+ * Čtení bez práv u role `nahled` je v `role.spec.ts` — tenhle soubor běží
+ * bez přihlašování (port 3100), kde roli přepnout nejde; scénář pro `nahled`
+ * potřebuje přihlašovací konfiguraci (port 3101), stejně jako zbytek toho
+ * souboru.
  *
  * Kontrola konceptů (`kontrola.spec.ts`) mizí — tenhle soubor ji nenahrazuje,
  * protože fronta ke schválení v tématu končí; otázky se tu jen upravují,
@@ -114,7 +119,7 @@ test.describe('otázky v tématu', () => {
     const newForm = page.getByTestId('new-question-form')
     // Typ nejdřív — přepnutí typu zadání zase vyprázdní (jiný typ má jiný
     // tvar odpovědi), takže by smazalo, co se do něj napsalo dřív.
-    await newForm.locator('#question-editor-type').click()
+    await newForm.getByLabel('Typ').click()
     await page.getByRole('option', { name: 'Krátká odpověď' }).click()
     await newForm.getByLabel('Zadání').fill(`Vedlejší otázka ${Date.now()}`)
     await newForm.getByLabel('Správná odpověď').fill('vedlejší')
@@ -163,45 +168,5 @@ test.describe('otázky v tématu', () => {
 
     await expect(page.locator('li[data-question-id]', { hasText: pravdaNepravda })).toBeVisible()
     await expect(page.locator('li[data-question-id]', { hasText: kratka })).toHaveCount(0)
-  })
-})
-
-/**
- * Role `nahled`: čte a tiskne, ale karty nejde upravit ani smazat a nový
- * formulář se nenabízí. Běží jen přes přihlašovací konfiguraci (port 3101) —
- * stejně jako `role.spec.ts`, jehož vzor tu následuje.
- */
-test.describe('otázky v tématu — role nahled', () => {
-  test.use({ storageState: 'e2e/.auth/nahled.json' })
-
-  test.beforeEach(({ baseURL }) => {
-    test.skip(
-      !baseURL?.includes('3101'),
-      'Spouštěj přes: pnpm exec playwright test -c playwright.login.config.ts',
-    )
-  })
-
-  test('náhled vidí seznam otázek, ale žádné tlačítko, které by je měnilo', async ({ page, browser, baseURL }) => {
-    // Náhled sám nesmí zapisovat — téma i otázku pro něj založí učitelka
-    // ve vlastním kontextu, nahled si pak jen otevře stránku ke čtení.
-    const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
-    let topicId: string
-    try {
-      topicId = await ensureTopic(pisatel.request)
-      await pridatOtazku(pisatel.request, topicId, { prompt: `Otázka pro náhled ${Date.now()}`, difficulty: 1 })
-    } finally {
-      await pisatel.close()
-    }
-
-    await page.goto(`/topics/${topicId}`)
-
-    // `exact: true` je tu podstatné: „Upravit téma“ i „Smazat téma“ jinak
-    // vyhoví i hledání „Upravit“/„Smazat“ podřetězcem a test by mlčky
-    // procházel, i kdyby karta svoje tlačítko skutečně nabízela.
-    await expect(page.locator('li[data-question-id]').first()).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Nová otázka', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Upravit', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Nahradit modelem', exact: true })).toHaveCount(0)
   })
 })
