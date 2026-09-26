@@ -308,6 +308,12 @@ export const questions = sqliteTable(
     difficulty: integer('difficulty').notNull().default(2),
     explanation: text('explanation'),
     source: text('source').notNull().default('ai').$type<'ai' | 'manual'>(),
+    /**
+     * Výchozí `draft` se v praxi nikdy neuplatní — každý vkládaný řádek
+     * (generování i ruční přidání) status nastavuje sám na `approved`.
+     * Zůstává jako neškodná záloha, ne jako popis skutečného chování; měnit
+     * ho by znamenalo přestavbu tabulky, a k tomu není důvod.
+     */
     status: text('status').notNull().default('draft').$type<'draft' | 'approved' | 'rejected'>(),
     createdAt: text('created_at').notNull().default(now),
     /** Soubor, ze kterého otázka vznikla. */
