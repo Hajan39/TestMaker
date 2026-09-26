@@ -75,7 +75,7 @@ export function buildPuzzleWordsSystemPrompt(): string {
     '   Nikdy neuváděj sousloví ani více slov. Slovo nesmí obsahovat mezery, pomlčky, spojovníky ani číslice.',
     `3. Slovo má ${MIN_LETTERS} až ${MAX_LETTERS} písmen. Diakritiku piš normálně (list, kořen, chloroplast).`,
     '4. Nápověda je jedna krátká školní věta nebo opis, ze kterého žák slovo uhodne. Nikdy v ní slovo samo neuveď.',
-    '5. Nápověda má nejvýš 60 znaků, je samostatná a nepoužívá odkazy na obrázky ani na strany materiálu.',
+    '5. Nápovědu napiš celou a srozumitelně; její délku neomezuj umělým zkracováním. Může zabrat celý řádek i více řádků a nepoužívá odkazy na obrázky ani na strany materiálu.',
     '6. Nápověda musí vést k jedinému slovu ze seznamu; nepoužívej obecné definice, na které by odpovídalo více slov.',
     '7. Slovo musí být doložitelné v dodaném materiálu a nápověda musí odpovídat jeho významu v tomto materiálu.',
     '8. Slova se neopakují a neliší se jen tvarem téhož pojmu.',
@@ -212,7 +212,7 @@ export function filterEntries(
       continue
     }
     seen.add(key)
-    entries.push({ word, clue: clue.length > 200 ? `${clue.slice(0, 199)}…` : clue })
+    entries.push({ word, clue })
   }
 
   return { entries, rejected }

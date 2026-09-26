@@ -167,9 +167,9 @@ export function PuzzleBody({
 
       <Text style={{ fontSize: 9, marginBottom: 3 }}>Otázky:</Text>
       {result.rows.map((row) => (
-        <View key={row.number} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+        <View key={row.number} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
           <Text style={{ width: 16, fontSize: 9 }}>{row.number}.</Text>
-          <Text style={{ width: '100%', fontSize: 9, paddingRight: 6 }}>{sanitizeText(row.clue)}</Text>
+          <Text style={{ flex: 1, fontSize: 9, paddingRight: 6 }}>{sanitizeText(row.clue)}</Text>
         </View>
       ))}
 

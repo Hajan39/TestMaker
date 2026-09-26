@@ -92,12 +92,12 @@ function WordSearchView({
       </div>
 
       <ul
-        className="mt-2 grid grid-cols-2 gap-x-3 sm:grid-cols-3"
+        className="mt-2 grid gap-x-3 sm:grid-cols-2"
         style={{ fontSize: pt(9) }}
         data-slot="puzzle-words"
       >
         {puzzle.entries.map((entry, i) => (
-          <li key={i} className="truncate">
+          <li key={i} className="min-w-0 whitespace-normal break-words">
             {entry.word.toUpperCase()}
             {showClues ? ` – ${entry.clue}` : ''}
           </li>
@@ -179,10 +179,9 @@ function CryptogramView({
 
       <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Otázky:</div>
       {result.rows.map((row) => (
-        <div key={row.number} className="flex items-center gap-2" style={{ marginBottom: pt(3) }}>
+        <div key={row.number} className="flex items-start gap-2" style={{ marginBottom: pt(3) }}>
           <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
-          {/* Pevná šířka nápovědy: jinak by se vyznačený sloupec rozpadl. */}
-          <span className="truncate" style={{ width: '42%', fontSize: pt(9) }}>
+          <span className="min-w-0 flex-1 whitespace-normal break-words" style={{ fontSize: pt(9) }}>
             {row.clue}
           </span>
         </div>
