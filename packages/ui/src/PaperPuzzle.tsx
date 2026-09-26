@@ -154,6 +154,7 @@ function CryptogramView({
         {result.rows.map((row, rowIndex) => (
           <div
             key={row.number}
+            data-slot="puzzle-row"
             className="flex items-center"
             style={{ width: pt(gridWidth + 16), marginBottom: pt(3) }}
           >

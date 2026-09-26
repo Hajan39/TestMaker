@@ -93,9 +93,12 @@ test.describe('hlavolamy', () => {
     await napisNazev(page, nazev)
     await page.getByLabel('Tajená věta').fill('les')
 
-    // Tři písmena tajenky = tři řádky s nápovědou.
-    const radky = page.locator('[data-slot="puzzle-rows"] > div')
-    await expect(radky).toHaveCount(4) // tři řádky + řádek s tajenkou
+    // Tři písmena tajenky = tři řádky s nápovědou. Počítají se přímo řádky
+    // mřížky (`data-slot="puzzle-row"`), ne všechny přímé děti obalu — ten
+    // má navíc řádek s tajenkou a popisky „Doplňovačka“/„Otázky“, které by
+    // počet přebily.
+    const radky = page.locator('[data-slot="puzzle-row"]')
+    await expect(radky).toHaveCount(3)
 
     // Řešení ukáže, co má vyjít — prázdná políčka se vyplní.
     await page.getByText('Ukázat řešení').click()
