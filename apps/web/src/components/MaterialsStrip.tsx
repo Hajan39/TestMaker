@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ChevronDown, FileUp, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
@@ -38,6 +38,14 @@ export type { GroupMaterial } from '@/components/MaterialRow'
 
 type UploadPhase = 'idle' | 'extracting' | 'uploading'
 
+export interface MaterialsStripHandle {
+  /**
+   * Otevře nahrávání souborů zvenčí — z prázdného stavu tématu, kde pruh sám
+   * není vidět (`EmptyState` v `TopicWorkspace` ho nahrazuje).
+   */
+  openUpload: () => void
+}
+
 /**
  * Pruh materiálů jednoho tématu. Nahrávání souborů rovnou sem, přepnutí
  * „Použít pro generování", smazání a — v režimu „Upravit téma" — přejmenování,
@@ -47,15 +55,14 @@ type UploadPhase = 'idle' | 'extracting' | 'uploading'
  * druhé jméno („skupina") pro touž věc vedlo k tomu, že si učitelka před
  * „Smazat skupinu" nebyla jistá, jestli maže totéž, co jinde téma.
  */
-export function MaterialsStrip({
-  topicId,
-  topicName,
-  materials,
-}: {
-  topicId: string
-  topicName: string
-  materials: GroupMaterial[]
-}) {
+export const MaterialsStrip = forwardRef<
+  MaterialsStripHandle,
+  {
+    topicId: string
+    topicName: string
+    materials: GroupMaterial[]
+  }
+>(function MaterialsStrip({ topicId, topicName, materials }, ref) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const filesRef = useRef<HTMLInputElement>(null)
@@ -84,6 +91,13 @@ export function MaterialsStrip({
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [skipped, setSkipped] = useState<IssueItem[]>([])
   const [failed, setFailed] = useState<IssueItem[]>([])
+
+  useImperativeHandle(ref, () => ({
+    openUpload: () => {
+      setOpen(true)
+      filesRef.current?.click()
+    },
+  }))
 
   useEffect(() => {
     if (!manage) return
@@ -414,4 +428,4 @@ export function MaterialsStrip({
       ) : null}
     </Card>
   )
-}
+})

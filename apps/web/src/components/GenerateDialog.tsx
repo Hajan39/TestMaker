@@ -184,3 +184,70 @@ export function ProgressLine({ label }: { label: string }) {
 export function useGenerateSettings(initial: GenerateSettings = DEFAULT_SETTINGS) {
   return useState<GenerateSettings>(initial)
 }
+
+/**
+ * Nastavení generování přímo v tématu: jen počet a obtížnost. Výběr typů a
+ * režim „Doplnit na celkový počet" tu schválně chybí — v tématu se generuje
+ * vždycky ze všech typů, o které se model umí pokusit, a vždycky přidává
+ * nové otázky. To se hodí pro hromadné generování (`GenerateSettingsForm`
+ * výš), ne pro jedno téma, kde by to jen zdržovalo.
+ */
+export interface SimpleGenerateSettings {
+  count: number
+  difficulty: 1 | 2 | 3 | 'mix'
+}
+
+export const DEFAULT_SIMPLE_SETTINGS: SimpleGenerateSettings = {
+  count: 10,
+  difficulty: 'mix',
+}
+
+export function SimpleGenerateSettingsForm({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: SimpleGenerateSettings
+  onChange: (next: SimpleGenerateSettings) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      <div className="w-24">
+        <Label htmlFor="generate-count">Počet</Label>
+        <Input
+          id="generate-count"
+          type="number"
+          min={1}
+          max={60}
+          value={value.count}
+          disabled={disabled}
+          onChange={(event) => onChange({ ...value, count: Number(event.target.value) || 1 })}
+        />
+      </div>
+      <div className="w-36">
+        <Label htmlFor="generate-difficulty">Obtížnost</Label>
+        <Select
+          value={String(value.difficulty)}
+          disabled={disabled}
+          onValueChange={(next) =>
+            onChange({
+              ...value,
+              difficulty: next === 'mix' ? 'mix' : (Number(next) as 1 | 2 | 3),
+            })
+          }
+        >
+          <SelectTrigger id="generate-difficulty" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mix">Promíchat</SelectItem>
+            <SelectItem value="1">Lehké</SelectItem>
+            <SelectItem value="2">Střední</SelectItem>
+            <SelectItem value="3">Těžké</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}

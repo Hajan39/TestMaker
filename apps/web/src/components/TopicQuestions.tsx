@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
@@ -37,6 +37,14 @@ export interface TestUsage {
   title: string
 }
 
+export interface TopicQuestionsHandle {
+  /**
+   * Otevře formulář „Nová otázka" zvenčí — z prázdného stavu tématu
+   * (`EmptyState` v `TopicWorkspace`), kde tahle karta zprvu není vidět.
+   */
+  openCreate: () => void
+}
+
 /**
  * Otázky tématu jako karty: úprava přímo na místě, přegenerování, smazání
  * s vrácením a přidání vlastní — bez fronty ke schválení, ta v tématu končí.
@@ -45,23 +53,24 @@ export interface TestUsage {
  * `questions` — to se mění s každým `router.refresh()` (dogenerování,
  * smazání jiné karty), ale rozepsaná úprava zůstává otevřená dál.
  */
-export function TopicQuestions({
-  topic,
-  defaultTemplateId,
-  questions,
-  usage,
-}: {
-  /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
-  topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
-  /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
-  defaultTemplateId: string
-  questions: Question[]
-  /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
-  usage: Record<string, TestUsage[]>
-}) {
+export const TopicQuestions = forwardRef<
+  TopicQuestionsHandle,
+  {
+    /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
+    topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
+    /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
+    defaultTemplateId: string
+    questions: Question[]
+    /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
+    usage: Record<string, TestUsage[]>
+  }
+>(function TopicQuestions({ topic, defaultTemplateId, questions, usage }, ref) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const [creating, setCreating] = useState(false)
+  useImperativeHandle(ref, () => ({
+    openCreate: () => setCreating(true),
+  }))
   const [editingId, setEditingId] = useState<string | null>(null)
   // Smazaná (i přegenerovaná) karta zmizí hned, bez čekání na obnovení seznamu
   // ze serveru — tahle množina je jediné místo, kde se to pozná.
@@ -364,4 +373,4 @@ export function TopicQuestions({
       ) : null}
     </Card>
   )
-}
+})

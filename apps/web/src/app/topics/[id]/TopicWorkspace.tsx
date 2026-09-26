@@ -2,28 +2,22 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Question } from '@testmaker/core/schema'
-import { Button, Card, OTAZKY, plural, pocet, toast } from '@testmaker/ui'
+import { AI_QUESTION_TYPES, type Question } from '@testmaker/core/schema'
+import { Button, Card, EmptyState, MATERIALY_Z, OTAZKY, plural, pocet, toast } from '@testmaker/ui'
 import {
   AiUnavailable,
-  DEFAULT_SETTINGS,
-  GenerateSettingsForm,
+  DEFAULT_SIMPLE_SETTINGS,
   ProgressLine,
-  type GenerateSettings,
+  SimpleGenerateSettingsForm,
+  type SimpleGenerateSettings,
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
-import { TopicQuestions, type TestUsage } from '@/components/TopicQuestions'
+import type { GroupMaterial } from '@/components/MaterialRow'
+import { MaterialsStrip, type MaterialsStripHandle } from '@/components/MaterialsStrip'
+import { TopicQuestions, type TestUsage, type TopicQuestionsHandle } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { useMuzeMenit } from '@/components/Prava'
-
-interface MaterialSummary {
-  id: string
-  fileName: string
-  charCount: number
-  /** Vyplněné u materiálu odloženého jako duplicitní obsah — do modelu nejde. */
-  duplicateOfId?: string | null
-}
 
 export function TopicWorkspace({
   topic,
@@ -33,16 +27,15 @@ export function TopicWorkspace({
   usage,
   listTruncated,
   listLimit,
-  usableCount,
   lowContent,
   ai,
-  group,
 }: {
   /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
   topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
   /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
   defaultTemplateId: string
-  materials: MaterialSummary[]
+  /** Materiály tématu — beze změny se předávají i do pruhu materiálů pod hlavní akcí. */
+  materials: GroupMaterial[]
   questions: Question[]
   /** Testy, ve kterých už otázky jsou — jen ty, na které je volající vidí. */
   usage: Record<string, TestUsage[]>
@@ -50,20 +43,13 @@ export function TopicWorkspace({
   listTruncated: boolean
   /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
   listLimit: number
-  /**
-   * Otázky tématu kromě smazaných. Dogenerování doplňuje právě na tenhle
-   * počet, ne na délku seznamu — ten je useknutý limitem.
-   */
-  usableCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
   lowContent: boolean
   ai: { configured: boolean; provider: string; model: string; problems: string[] }
-  /** Materiály tématu — vykreslí se mezi hlavní akcí a seznamem otázek. */
-  group: React.ReactNode
 }) {
   const muzeMenit = useMuzeMenit()
   const router = useRouter()
-  const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<SimpleGenerateSettings>(DEFAULT_SIMPLE_SETTINGS)
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +62,12 @@ export function TopicWorkspace({
   /** Dokončený běh: souhrn zůstane na obrazovce i po zmizení hlášky. */
   const [outcome, setOutcome] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const materialsStripRef = useRef<MaterialsStripHandle>(null)
+  const topicQuestionsRef = useRef<TopicQuestionsHandle>(null)
+  // Nahrání prvního materiálu nebo napsání první otázky z prázdného stavu
+  // odkrývá zbytek stránky ještě dřív, než dojede `router.refresh()` — jinak
+  // by tlačítko v `EmptyState` muselo mířit na skrytou plochu.
+  const [revealed, setRevealed] = useState(false)
 
   // Po obnovení seznamu přijdou tytéž otázky i v `questions` — podle id se
   // proto čerstvé, které už v seznamu jsou, vynechají, ať se nezdvojí.
@@ -85,11 +77,15 @@ export function TopicWorkspace({
   }, [fresh, questions])
 
   // Ukazujeme jen to, co skutečně půjde do modelu: generování duplicitní
-  // obsah vynechává, takže se nesmí počítat ani tady — jinak na obrazovce
-  // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
-  const usable = materials.filter((material) => !material.duplicateOfId)
-  const topUp = settings.mode === 'target'
-  const willCreate = topUp ? Math.max(0, settings.count - usableCount) : settings.count
+  // obsah i ručně vynechaný materiál vždycky přeskočí, takže se nesmí počítat
+  // ani tady — jinak na obrazovce stojí velké číslo a hned pod ním upozornění,
+  // že materiálů je málo.
+  const usable = materials.filter((material) => !material.duplicateOfId && !material.excluded)
+  // Téma úplně bez obsahu (žádný materiál, žádná otázka) dostane jednotnou
+  // výzvu místo karty generování a pruhu materiálů — obojí by jen ukazovalo
+  // vlastní prázdný stav vedle sebe.
+  const isEmpty = materials.length === 0 && questions.length === 0
+  const showEmptyState = isEmpty && muzeMenit && !revealed
 
   async function generate() {
     setError(null)
@@ -113,30 +109,37 @@ export function TopicWorkspace({
     }
 
     try {
-      await generateQuestionsStream({ topicId: topic.id, ...settings }, (event) => {
-        if (event.type === 'progress') {
-          cast = { done: event.done, total: event.total }
-          prubeh()
-        } else if (event.type === 'saved') {
-          hotovo = event.created
-          // Nejnovější nahoře — stejně jako seznam otázek pod tím.
-          setFresh((current) => [...event.questions.slice().reverse(), ...current])
-          prubeh()
-        } else if (event.type === 'done') {
-          setStatus(null)
-          // Podrobný souhrn (co se zahodilo, kolikrát model selhal) má jedno
-          // místo — trvalý řádek v kartě. Bublina jen upozorní, že je hotovo,
-          // ať se táž věta nečte dvakrát vedle sebe.
-          setOutcome(summarizeRun(event))
-          toast.success(
-            event.created > 0
-              ? `Hotovo, ${event.created} ${plural(event.created, 'nová', 'nové', 'nových')} ${plural(event.created, ...OTAZKY)}.`
-              : 'Hotovo, ale nevznikla ani jedna otázka.',
-            { duration: 12_000 },
-          )
-          router.refresh()
-        } else if (event.type === 'error') setError(event.message)
-      }, abortRef.current.signal)
+      // Typy i režim se v tématu nevybírají — posílá se pevně všechno, co
+      // model umí, a vždycky se přidávají nové otázky (nikdy „doplnit na
+      // celkový počet"), to je pro hromadné generování, ne pro jedno téma.
+      await generateQuestionsStream(
+        { topicId: topic.id, count: settings.count, difficulty: settings.difficulty, types: [...AI_QUESTION_TYPES] },
+        (event) => {
+          if (event.type === 'progress') {
+            cast = { done: event.done, total: event.total }
+            prubeh()
+          } else if (event.type === 'saved') {
+            hotovo = event.created
+            // Nejnovější nahoře — stejně jako seznam otázek pod tím.
+            setFresh((current) => [...event.questions.slice().reverse(), ...current])
+            prubeh()
+          } else if (event.type === 'done') {
+            setStatus(null)
+            // Podrobný souhrn (co se zahodilo, kolikrát model selhal) má jedno
+            // místo — trvalý řádek v kartě. Bublina jen upozorní, že je hotovo,
+            // ať se táž věta nečte dvakrát vedle sebe.
+            setOutcome(summarizeRun(event))
+            toast.success(
+              event.created > 0
+                ? `Hotovo, ${event.created} ${plural(event.created, 'nová', 'nové', 'nových')} ${plural(event.created, ...OTAZKY)}.`
+                : 'Hotovo, ale nevznikla ani jedna otázka.',
+              { duration: 12_000 },
+            )
+            router.refresh()
+          } else if (event.type === 'error') setError(event.message)
+        },
+        abortRef.current.signal,
+      )
     } catch (streamError) {
       setError(streamError instanceof Error ? streamError.message : String(streamError))
     } finally {
@@ -146,9 +149,39 @@ export function TopicWorkspace({
 
   return (
     <div className="space-y-5">
-      {/* Náhled si téma prohlíží a tiskne, ale negeneruje — karta by mu jen
-          nabízela tlačítko, které skončí odmítnutím. */}
-      {ai.configured && muzeMenit ? (
+      {/* Téma úplně bez obsahu dostane jednu jasnou výzvu místo karty
+          generování a pruhu materiálů — obojí by tu jen ukazovalo vlastní
+          prázdný stav vedle sebe. Zmizí sama, jakmile něco přibude
+          (`router.refresh()` po uložení), `revealed` jen předbíhá, než dojede. */}
+      {showEmptyState ? (
+        <EmptyState
+          title="Téma je zatím prázdné."
+          hint="Nahraj materiál, ze kterého mají vzniknout otázky, nebo si první otázku napiš sama."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button
+                onClick={() => {
+                  setRevealed(true)
+                  materialsStripRef.current?.openUpload()
+                }}
+              >
+                Nahrát materiál
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRevealed(true)
+                  topicQuestionsRef.current?.openCreate()
+                }}
+              >
+                Napsat otázku
+              </Button>
+            </div>
+          }
+        />
+      ) : ai.configured && muzeMenit ? (
+        /* Náhled si téma prohlíží a tiskne, ale negeneruje — karta by mu jen
+           nabízela tlačítko, které skončí odmítnutím. */
         <Card className="gap-2 p-3">
           {/* Karta byla nadpis, dva odstavce a teprve pak tlačítko. Podstatné
               je jediné: tlačítko, kolik otázek vznikne a kde se to doladí —
@@ -156,31 +189,18 @@ export function TopicWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={lowContent ? 'outline' : 'default'}
-              disabled={generating || usable.length === 0 || willCreate === 0}
+              disabled={generating || usable.length === 0}
               onClick={() => void generate()}
             >
-              {usableCount > 0 ? 'Dogenerovat otázky' : 'Generovat otázky'}
+              Vygenerovat otázky
             </Button>
             <span className="text-sm text-fg-muted">
-              {willCreate === 0
-                ? 'Zvolený počet je už naplněný, nic se nevytvoří.'
-                : topUp
-                  ? `Doplní se ${pocet(willCreate, OTAZKY)}.`
-                  : `Vznikne ${pocet(willCreate, OTAZKY)}.`}
+              {usable.length === 0
+                ? 'Nejdřív nahraj materiál nebo ho zapni pro generování.'
+                : `Vznikne ${pocet(settings.count, OTAZKY)} z ${pocet(usable.length, MATERIALY_Z)}.`}
             </span>
             <div className="ml-auto">
-              <GenerateSettingsForm
-                value={settings}
-                onChange={setSettings}
-                disabled={generating}
-                note={
-                  <p className="text-xs text-fg-muted">
-                    Model {ai.model} dostane všechny materiály tématu naráz, aby se otázky
-                    neopakovaly; stávající otázky dostane jako seznam, kterému se má vyhnout.
-                    Materiály označené jako duplicitní obsah se vynechávají.
-                  </p>
-                }
-              />
+              <SimpleGenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
             </div>
           </div>
 
@@ -201,9 +221,11 @@ export function TopicWorkspace({
         <AiUnavailable problems={ai.problems} />
       ) : null}
 
-      {muzeMenit ? <ClaudeCodeImport topicId={topic.id} /> : null}
+      {muzeMenit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
 
-      {group}
+      <div className={showEmptyState ? 'hidden' : undefined}>
+        <MaterialsStrip ref={materialsStripRef} topicId={topic.id} topicName={topic.name} materials={materials} />
+      </div>
 
       {listTruncated ? (
         <p className="text-sm text-fg-muted">
@@ -212,7 +234,15 @@ export function TopicWorkspace({
         </p>
       ) : null}
 
-      <TopicQuestions topic={topic} defaultTemplateId={defaultTemplateId} questions={shownQuestions} usage={usage} />
+      <div className={showEmptyState ? 'hidden' : undefined}>
+        <TopicQuestions
+          ref={topicQuestionsRef}
+          topic={topic}
+          defaultTemplateId={defaultTemplateId}
+          questions={shownQuestions}
+          usage={usage}
+        />
+      </div>
     </div>
   )
 }

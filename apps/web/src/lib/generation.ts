@@ -21,7 +21,7 @@ export interface GenerateParams {
 }
 
 export const DEFAULT_GENERATE_PARAMS: GenerateParams = {
-  count: 12,
+  count: 10,
   types: [...AI_QUESTION_TYPES],
   difficulty: 'mix',
   mode: 'add',

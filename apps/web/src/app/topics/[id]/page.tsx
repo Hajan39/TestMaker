@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation'
 import { InlineName } from '@/components/InlineName'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { MATERIALY, OTAZKY, StatRow, plural } from '@testmaker/ui'
-import { MaterialsStrip } from '@/components/MaterialsStrip'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
@@ -117,17 +116,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           gradeName: topic.gradeName,
         }}
         defaultTemplateId={defaultTemplateId(templates)}
-        materials={materialRows.filter((material) => !material.duplicateOfId)}
+        materials={materialRows}
         questions={questionList.items}
         usage={usage}
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
-        usableCount={usableQuestionCount}
         lowContent={topic.lowContent}
         ai={aiStatus()}
-        // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný
-        // klientské komponentě jako prop se přenáší jako položka seznamu.
-        group={<MaterialsStrip key="materialy" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
       />
     </div>
   )

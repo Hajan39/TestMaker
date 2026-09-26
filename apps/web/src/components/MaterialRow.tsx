@@ -70,7 +70,7 @@ export function MaterialRow({
   }
 
   return (
-    <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+    <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-material-id={material.id}>
       {/* Názvy souborů bývají dlouhé a bez mezer, proto se musí zalomit i uprostřed slova. */}
       <span
         className={cn(

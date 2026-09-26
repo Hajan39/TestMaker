@@ -34,3 +34,6 @@ export const ROCNIKY: PluralForms = ['ročník', 'ročníky', 'ročníků']
  * obrazovka psala znovu po svém.
  */
 export const TEMAT_Z: PluralForms = ['tématu', 'témat', 'témat']
+
+/** Materiály po předložce „z“: „z 1 materiálu“, „ze 3 materiálů“. */
+export const MATERIALY_Z: PluralForms = ['materiálu', 'materiálů', 'materiálů']

@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test'
-import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import { testTopicPath } from './fixtures'
 
 /**
@@ -40,25 +39,18 @@ test.describe('hromadný výběr', () => {
     await expect(page.getByText(/^Otázek:\s*[1-9]/)).toBeVisible()
   })
 
-  test('u typů otázek doplní všechny zpět jedním tlačítkem', async ({ page }) => {
+  test('generování v tématu nabízí jen počet a obtížnost, žádný výběr typů', async ({ page }) => {
+    // Výběr typů a režim „Doplnit na celkový počet" patří jen hromadnému
+    // generování (`BulkGenerate`) — v tématu se generuje vždycky ze všech
+    // typů a vždycky přidávají nové otázky, ať to učitelku nezdržuje.
     await page.goto(await testTopicPath(page.request))
-    const settings = page.getByRole('button', { name: 'Nastavení generování' })
-    test.skip((await settings.count()) === 0, 'Generování není nakonfigurované.')
+    const generate = page.getByRole('button', { name: 'Vygenerovat otázky' })
+    test.skip((await generate.count()) === 0, 'Generování není nakonfigurované.')
 
-    await settings.click()
-    // Nastavení generování je vlastní oblast; popisek se jinak trefí i do
-    // odznaků u otázek pod ním. Vzato ze seznamu typů, které model umí
-    // (`AI_QUESTION_TYPES`), aby test nezávisel na tom, který typ tam zrovna je.
-    const typeLabel = QUESTION_TYPE_LABELS[AI_QUESTION_TYPES[1]]
-    const types = page.locator('label').filter({ hasText: typeLabel }).first()
-    const selectAllTypes = page.getByRole('button', { name: 'Vybrat vše' })
-    // Ve výchozím stavu jsou vybrané všechny typy, takže tlačítko nic nedělá.
-    await expect(selectAllTypes).toBeDisabled()
-
-    await types.click()
-    await expect(selectAllTypes).toBeEnabled()
-    await selectAllTypes.click()
-    await expect(selectAllTypes).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Nastavení generování' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Vybrat vše' })).toHaveCount(0)
+    await expect(page.getByLabel('Počet', { exact: true })).toBeVisible()
+    await expect(page.locator('#generate-difficulty')).toBeVisible()
   })
 })
 
