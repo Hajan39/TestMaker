@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import type { generatePuzzleWords } from '@testmaker/core/ai'
 import { buildPuzzle, readCryptogram } from '@testmaker/core/puzzle'
-import { db, puzzles, testItems } from '@/db'
+import { db, materials, puzzles, testItems } from '@/db'
 import { GET as listPuzzles, POST as createPuzzle } from '@/app/api/puzzles/route'
 import { DELETE as deletePuzzleRoute, PUT as updatePuzzleRoute } from '@/app/api/puzzles/[id]/route'
 import { POST as createTest } from '@/app/api/tests/route'
@@ -211,5 +211,25 @@ describe('slova od modelu', () => {
     await expect(
       suggestPuzzleWords(UCET, topicId, { kind: 'cryptogram', count: 5, generate: modelSelze }),
     ).rejects.toThrow(/quota/)
+  })
+
+  it('vynechaný materiál se do zdroje pro hlavolam nedostane', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'pouzity.txt', text: TEXT })
+    const vynechanyId = await seedMaterial(topicId, { fileName: 'vynechany.txt', text: TEXT })
+    await db.update(materials).set({ excluded: true }).where(eq(materials.id, vynechanyId))
+
+    let poslanyText = ''
+    await suggestPuzzleWords(UCET, topicId, {
+      kind: 'wordsearch',
+      count: 2,
+      generate: async (request) => {
+        poslanyText = request.text
+        return { entries: [], rejected: [], models: [] }
+      },
+    })
+
+    expect(poslanyText).toContain('pouzity.txt')
+    expect(poslanyText).not.toContain('vynechany.txt')
   })
 })

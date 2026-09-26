@@ -314,7 +314,14 @@ export async function suggestPuzzleWords(
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
     .from(materials)
-    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(
+      and(
+        skola(scope, materials),
+        eq(materials.topicId, topicId),
+        isNull(materials.duplicateOfId),
+        eq(materials.excluded, false),
+      ),
+    )
     .orderBy(asc(materials.fileName))
 
   const text = rows
