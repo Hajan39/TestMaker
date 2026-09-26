@@ -139,8 +139,18 @@ export async function uploadMaterials(
       body: JSON.stringify({ materials: batch, ...(topicId ? { topicId } : {}) }),
     })
     if (!response.ok) {
+      // Server posílá vysvětlení česky (neplatná data, téma se nenašlo);
+      // syrový JSON by učitelce nic neřekl.
       const detail = await response.text()
-      throw new Error(`Import selhal (${response.status}): ${detail.slice(0, 200)}`)
+      const message = (() => {
+        try {
+          const parsed = JSON.parse(detail) as { error?: string }
+          return parsed.error ?? detail
+        } catch {
+          return detail
+        }
+      })()
+      throw new Error(message.slice(0, 300) || `Import selhal (${response.status}).`)
     }
     const result = (await response.json()) as { imported: number; duplicates: number }
     imported += result.imported

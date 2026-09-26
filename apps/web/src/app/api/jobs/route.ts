@@ -50,12 +50,18 @@ export async function POST(request: Request) {
   const vybrana = await resolveTopicIds(ucet, input)
   if (vybrana.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
 
-  // Témata bez použitelného textu nemá smysl zařazovat.
+  // Témata bez použitelného textu nemá smysl zařazovat — stejné pravidlo jako
+  // jinde: duplicitní ani ručně vyřazený materiál se nepočítá.
   const withText = await db
     .selectDistinct({ id: materials.topicId })
     .from(materials)
     .where(
-      and(skola(ucet, materials), inArray(materials.topicId, vybrana), isNull(materials.duplicateOfId)),
+      and(
+        skola(ucet, materials),
+        inArray(materials.topicId, vybrana),
+        isNull(materials.duplicateOfId),
+        eq(materials.excluded, false),
+      ),
     )
   const topicIds = withText.map((row) => row.id)
 

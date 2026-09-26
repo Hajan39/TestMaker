@@ -108,7 +108,7 @@ export async function seedTopic(options: {
 /** Materiál s hotovým textem — tak, jak ho po extrakci pošle prohlížeč. */
 export async function seedMaterial(
   topicId: string,
-  options: { fileName?: string; text?: string } = {},
+  options: { fileName?: string; text?: string; excluded?: boolean; needsOcr?: boolean } = {},
 ): Promise<string> {
   const id = newId()
   const fileName = options.fileName ?? `${id}.txt`
@@ -124,7 +124,8 @@ export async function seedMaterial(
     text,
     charCount: text.length,
     pageCount: null,
-    needsOcr: false,
+    needsOcr: options.needsOcr ?? false,
+    excluded: options.excluded ?? false,
     contentHash: `hash-${id}`,
   })
   return id

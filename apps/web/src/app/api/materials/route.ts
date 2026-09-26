@@ -56,7 +56,13 @@ export async function POST(request: Request) {
   const priorByPath = new Map(
     (
       await db
-        .select({ id: materials.id, relativePath: materials.relativePath, contentHash: materials.contentHash, topicId: materials.topicId })
+        .select({
+          id: materials.id,
+          relativePath: materials.relativePath,
+          contentHash: materials.contentHash,
+          topicId: materials.topicId,
+          excluded: materials.excluded,
+        })
         .from(materials)
         .where(
           fixedTopicId
@@ -122,6 +128,10 @@ export async function POST(request: Request) {
       pageCount: material.pageCount,
       needsOcr: material.needsOcr,
       contentHash: material.contentHash,
+      // Nahrání nové verze souboru, který učitelka dřív ručně vyřadila,
+      // vyřazení zachovává — jinak by se změněný soubor tiše vrátil do
+      // generování, aniž by o tom rozhodla znovu.
+      excluded: prior?.excluded ?? false,
     })
     known.add(knownKey(topicId, material.contentHash))
     touchedTopics.add(topicId)

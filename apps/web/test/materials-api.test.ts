@@ -153,6 +153,32 @@ describe('import materiálů', () => {
     expect(list[0]!.contentHash).toBe('hash-bunka-v2')
   })
 
+  it('re-nahrání změněné verze ručně vyřazeného souboru zachová vyřazení', async () => {
+    const path = 'Přírodopis/8. ročník/List/List.docx'
+    await importMaterials([
+      extracted({ topic: 'List', relativePath: path, fileName: 'List.docx', contentHash: 'hash-list-v1' }),
+    ])
+    const puvodni = (await rows('List'))[0]!
+    const vyrazeni = await PATCH(jsonReq('/api/materials', 'PATCH', { id: puvodni.id, excluded: true }))
+    expect(vyrazeni.status).toBe(200)
+
+    const result = await importMaterials([
+      extracted({
+        topic: 'List',
+        relativePath: path,
+        fileName: 'List.docx',
+        contentHash: 'hash-list-v2',
+        text: `${TEXT} Doplněná verze.`,
+      }),
+    ])
+
+    expect(result).toMatchObject({ imported: 1, replaced: 1 })
+    const list = await rows('List')
+    expect(list).toHaveLength(1)
+    expect(list[0]!.contentHash).toBe('hash-list-v2')
+    expect(list[0]!.excluded).toBe(true)
+  })
+
   it('stejný obsah v jiném formátu odloží jako duplicitní a do generování ho nepustí', async () => {
     const result = await importMaterials([
       extracted({ topic: 'Houby', fileName: 'Houby.docx', contentHash: 'hash-houby-docx' }),

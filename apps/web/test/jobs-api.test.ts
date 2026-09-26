@@ -67,6 +67,14 @@ describe('zařazení do fronty', () => {
     expect(result.enqueued).toBe(0)
   })
 
+  it('téma, kde je jediný materiál ručně vyřazený, se nezařadí', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'Vyřazený.docx', excluded: true })
+
+    const result = await enqueue({ topicIds: [topicId] })
+    expect(result.enqueued).toBe(0)
+  })
+
   it('téma, které už otázky má, se přeskočí', async () => {
     const topicId = await topicWithMaterial()
     await seedQuestion(topicId)

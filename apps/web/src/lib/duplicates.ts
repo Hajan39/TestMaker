@@ -36,6 +36,10 @@ export async function linkDuplicates(
     .limit(1)
   if (!fresh) return { duplicateOfId: null, score: null }
 
+  // Ručně vyřazený materiál nesmí vyhrát jako „ponechaný originál" — jinak by
+  // nahrání lepší verze (třeba PDF místo vyřazené prezentace) skončilo tak, že
+  // nová verze se označí jako duplicita té vyřazené a z tématu je nakonec
+  // nepoužitelné obojí.
   const siblings = await db
     .select()
     .from(materials)
@@ -45,6 +49,7 @@ export async function linkDuplicates(
         eq(materials.topicId, fresh.topicId),
         ne(materials.id, materialId),
         isNull(materials.duplicateOfId),
+        eq(materials.excluded, false),
       ),
     )
 

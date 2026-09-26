@@ -202,6 +202,13 @@ export const DEFAULT_SIMPLE_SETTINGS: SimpleGenerateSettings = {
   difficulty: 'mix',
 }
 
+/** Ořízne zadaný počet na celé číslo 1–60 — server stejný rozsah vynucuje sám (`enqueueSchema`). */
+function clampCount(raw: string): number {
+  const parsed = Math.round(Number(raw))
+  if (!Number.isFinite(parsed)) return 1
+  return Math.min(60, Math.max(1, parsed))
+}
+
 export function SimpleGenerateSettingsForm({
   value,
   onChange,
@@ -222,7 +229,7 @@ export function SimpleGenerateSettingsForm({
           max={60}
           value={value.count}
           disabled={disabled}
-          onChange={(event) => onChange({ ...value, count: Number(event.target.value) || 1 })}
+          onChange={(event) => onChange({ ...value, count: clampCount(event.target.value) })}
         />
       </div>
       <div className="w-36">

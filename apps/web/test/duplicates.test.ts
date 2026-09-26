@@ -85,6 +85,23 @@ describe('rozpoznání duplicit', () => {
   it('neznámý materiál nic nerozbije', async () => {
     expect(await linkDuplicates(UCET, 'neexistuje')).toEqual({ duplicateOfId: null, score: null })
   })
+
+  it('ručně vyřazený materiál se nestane vybraným originálem — nová verze zůstává použitelná', async () => {
+    const { topicId } = await seedTopic()
+    // Prezentace (.odp) má vyšší přednost formátu než PDF, takže by ji
+    // `preferredMaterial` normálně vybral jako „ponechaný originál“ — přesto
+    // je ale ručně vyřazená z generování. Bez opravy by nově nahrané PDF
+    // skončilo jako duplicita něčeho nepoužitelného a z tématu by nešlo
+    // vygenerovat nic.
+    const odp = await seedMaterial(topicId, { fileName: 'Buňka.odp', text: LONG_TEXT, excluded: true })
+    const pdf = await seedMaterial(topicId, { fileName: 'Buňka.pdf', text: LONG_TEXT })
+
+    const link = await linkDuplicates(UCET, pdf)
+
+    expect(link.duplicateOfId).toBeNull()
+    expect((await materialRow(pdf))?.duplicateOfId).toBeNull()
+    expect((await materialRow(odp))?.duplicateOfId).toBeNull()
+  })
 })
 
 describe('přepočet stavu tématu', () => {
