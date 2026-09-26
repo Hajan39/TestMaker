@@ -12,6 +12,7 @@ import { db, generationJobs, grades, materials, questionFeedback, questions, sub
 import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 import { MIN_GENERATE_CHARS } from '@/lib/materials'
+import { loadActivePromptRules } from '@/lib/promptRules'
 import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
 
 export interface GenerateParams {
@@ -198,6 +199,7 @@ export async function generateForTopic(
   }
 
   const avoid = await loadAvoidPrompts(scope, topicId)
+  const schoolRules = await loadActivePromptRules(scope)
 
   // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
   let created = 0
@@ -212,6 +214,7 @@ export async function generateForTopic(
       types: params.types,
       difficulty: params.difficulty,
       avoid,
+      schoolRules,
     },
     {
       signal: options.signal,
@@ -345,6 +348,7 @@ export async function regenerateQuestion(
   // Nahrazovaná otázka je v seznamu „vyhni se" taky — jinak by model klidně
   // vrátil tutéž otázku, kterou učitelka právě zavrhla.
   const avoid = await loadAvoidPrompts(scope, topicId)
+  const schoolRules = await loadActivePromptRules(scope)
 
   // Důvod dodává modelu nápovědu do promptu a u „moc těžká"/„moc lehká" i
   // posouvá obtížnost náhrady — ořezanou zpátky na 1–3, aby se nepřehoupla
@@ -364,6 +368,7 @@ export async function regenerateQuestion(
       types: [type as (typeof AI_QUESTION_TYPES)[number]],
       difficulty,
       avoid,
+      schoolRules,
       // Náhrada vzniká z pasáže, o kterou se opírala původní otázka — jinak
       // by model dostal vždy první úsek tématu, ať šlo o cokoli.
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),

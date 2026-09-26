@@ -13,25 +13,49 @@ import { buildSystemPrompt, QUESTION_TYPE_HINTS } from './prompts/questions'
 export const CLAUDE_CODE_MODEL = 'claude-code'
 
 const EXISTING_HEADER = '# Otázky, které už v tématu jsou — nepiš je znovu:'
+const RULES_HEADER = '# Pravidla školy:'
 
-/** Text tématu pro Claude Code: hlavička s ročníkem a existujícími otázkami, pak materiály. */
+/**
+ * Text tématu pro Claude Code: hlavička s ročníkem, existujícími otázkami
+ * a pravidly školy, pak materiály. Pravidla se do stažitelného souboru
+ * dostávají tudy, ne přes `buildQuestionRules` — ten skript je bez databáze
+ * (`otazky:pravidla`), takže o škole neví nic; tenhle soubor ale škola
+ * generuje, takže si aktivní pravidla dokáže dotáhnout sám.
+ */
 export function buildTopicSourceFile(meta: {
   subjectName: string
   gradeName: string | null
   topicName: string
   text: string
   existing: string[]
+  schoolRules?: string[]
 }): string {
   const lines = [
     `# Předmět: ${meta.subjectName}`,
     `# Ročník: ${meta.gradeName || 'neurčen'}`,
     `# Téma: ${meta.topicName}`,
   ]
+  if (meta.schoolRules && meta.schoolRules.length > 0) {
+    lines.push(RULES_HEADER, ...meta.schoolRules.map((rule) => `# - ${rule.replace(/\s+/g, ' ').trim()}`))
+  }
   if (meta.existing.length > 0) {
     lines.push(EXISTING_HEADER, ...meta.existing.map((prompt) => `# - ${prompt.replace(/\s+/g, ' ').trim()}`))
   }
   lines.push('', meta.text)
   return lines.join('\n')
+}
+
+/** Pravidla školy z hlavičky staženého souboru — pro `/otazky` v Claude Code. */
+export function schoolRulesFromSource(source: string): string[] {
+  const lines = source.split('\n')
+  const start = lines.indexOf(RULES_HEADER)
+  if (start === -1) return []
+  const rules: string[] = []
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith('# - ')) break
+    rules.push(line.slice(4))
+  }
+  return rules
 }
 
 /** Existující otázky z hlavičky zdrojového souboru. */
@@ -61,13 +85,19 @@ export function materialFromSource(source: string): string {
   return lines.slice(lines[i] === '' ? i + 1 : i).join('\n')
 }
 
-/** Pravidla pro psaní otázek: týž systémový prompt jako v aplikaci, typy a přesný tvar (JSON Schema). */
-export function buildQuestionRules(gradeName: string | null): string {
+/**
+ * Pravidla pro psaní otázek: týž systémový prompt jako v aplikaci, typy a
+ * přesný tvar (JSON Schema). Skript `otazky:pravidla` je bez databáze, takže
+ * `schoolRules` odtud nedostane nikdy — pravidla školy do Claude Code chodí
+ * hlavičkou staženého souboru (`buildTopicSourceFile`), tenhle parametr je
+ * tu jen proto, aby volání s pravidly nezůstalo netestovatelné.
+ */
+export function buildQuestionRules(gradeName: string | null, schoolRules: string[] = []): string {
   const types = Object.entries(QUESTION_TYPE_HINTS)
     .filter(([type]) => type !== 'label_image')
     .map(([type, hint]) => `- ${type}: ${hint}`)
   return [
-    buildSystemPrompt(gradeName),
+    buildSystemPrompt(gradeName, schoolRules),
     '',
     'Typy otázek (label_image nepoužívej):',
     ...types,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   QuestionFileError,
+  buildQuestionRules,
   buildTopicSourceFile,
   existingPromptsFromSource,
   materialFromSource,
   readQuestionFile,
+  schoolRulesFromSource,
 } from '../src/ai/questionFile'
 
 const ZDROJ = buildTopicSourceFile({
@@ -65,6 +67,39 @@ describe('soubor s otázkami z Claude Code', () => {
     expect(ZDROJ).toContain('# Ročník: 6. ročník')
     expect(ZDROJ).toContain('=== houby.pdf ===')
     expect(existingPromptsFromSource(ZDROJ)).toEqual(['Co je podhoubí?'])
+  })
+
+  it('bez pravidel školy hlavičku nepřidá', () => {
+    expect(ZDROJ).not.toContain('# Pravidla školy:')
+    expect(schoolRulesFromSource(ZDROJ)).toEqual([])
+  })
+
+  it('aktivní pravidla školy jdou do hlavičky staženého souboru, aby je Claude Code dodržel taky', () => {
+    const sPravidly = buildTopicSourceFile({
+      subjectName: 'Přírodopis',
+      gradeName: '6. ročník',
+      topicName: 'Houby',
+      text: '=== houby.pdf ===\nHouby nemají chlorofyl.',
+      existing: [],
+      schoolRules: ['Nepoužívej otázky ano/ne.', 'Piš kratší zadání.'],
+    })
+    expect(sPravidly).toContain('# Pravidla školy:')
+    expect(schoolRulesFromSource(sPravidly)).toEqual(['Nepoužívej otázky ano/ne.', 'Piš kratší zadání.'])
+    // Hlavička se pořád dá odříznout — materiál zůstane jen a jen text.
+    expect(materialFromSource(sPravidly)).toBe('=== houby.pdf ===\nHouby nemají chlorofyl.')
+  })
+})
+
+describe('pravidla pro Claude Code (/otazky)', () => {
+  it('bez pravidel školy obsahuje jen obecná pravidla — skript je bez databáze', () => {
+    const rules = buildQuestionRules('6. ročník')
+    expect(rules).not.toContain('Pravidla této školy')
+  })
+
+  it('s pravidly školy je připojí (pro test buildSystemPrompt s parametrem navíc)', () => {
+    const rules = buildQuestionRules('6. ročník', ['Piš kratší zadání.'])
+    expect(rules).toContain('Pravidla této školy:')
+    expect(rules).toContain('- Piš kratší zadání.')
   })
 })
 

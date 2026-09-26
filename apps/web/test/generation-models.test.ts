@@ -1,12 +1,17 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { generateQuestions } from '@testmaker/core/ai'
 import type { QuestionContent } from '@testmaker/core/schema'
-import { db, materials, topics, questions } from '@/db'
+import { db, materials, promptRules, topics, questions } from '@/db'
 import { generateForTopic, DEFAULT_GENERATE_PARAMS, loadTopicSource } from '@/lib/generation'
 import { recomputeTopicContent } from '@/lib/duplicates'
 import { topicSourceFile } from '@/lib/questionFile'
+import { createPromptRule } from '@/lib/promptRules'
 import { seedMaterial, seedTopic, UCET } from './helpers'
+
+beforeEach(async () => {
+  await db.delete(promptRules)
+})
 
 /**
  * Žebříček modelů pohledem aplikace: co se uložilo do databáze, když prvnímu
@@ -89,6 +94,24 @@ describe('generování tématu se žebříčkem modelů', () => {
     const rows = await db.select({ id: questions.id, model: questions.model }).from(questions).where(eq(questions.topicId, topicId))
     expect(rows).toHaveLength(2)
     expect(rows.every((row) => row.model === 'google:gemini-flash-latest')).toBe(true)
+  })
+})
+
+describe('pravidla školy se předají dávkovému generování', () => {
+  it('aktivní pravidlo je v požadavku na model', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    await createPromptRule(UCET, { text: 'Piš kratší zadání.' })
+
+    let schoolRules: string[] | undefined
+    await generateForTopic(UCET, topicId, { ...DEFAULT_GENERATE_PARAMS, count: 2 }, {
+      generate: async (request, options) => {
+        schoolRules = request.schoolRules
+        await options?.onBatch?.([otazka(1), otazka(2)], { model: 'google:gemini-flash-latest' })
+        return { questions: [otazka(1), otazka(2)], rejected: [], chunks: 1, failedCalls: [], models: ['google:gemini-flash-latest'] }
+      },
+    })
+    expect(schoolRules).toEqual(['Piš kratší zadání.'])
   })
 })
 

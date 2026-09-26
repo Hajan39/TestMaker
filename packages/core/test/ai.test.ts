@@ -73,6 +73,26 @@ describe('prompty', () => {
     expect(prompt).toContain('doslova')
   })
 
+  it('bez pravidel školy sekci vůbec nepřidá', () => {
+    expect(buildSystemPrompt('6. ročník')).not.toContain('Pravidla této školy')
+    expect(buildSystemPrompt('6. ročník', [])).not.toContain('Pravidla této školy')
+  })
+
+  it('aktivní pravidla školy se připojí jako odrážky', () => {
+    const prompt = buildSystemPrompt('6. ročník', ['Nepoužívej otázky ano/ne.', 'Piš kratší zadání.'])
+    expect(prompt).toContain('Pravidla této školy:')
+    expect(prompt).toContain('- Nepoužívej otázky ano/ne.')
+    expect(prompt).toContain('- Piš kratší zadání.')
+  })
+
+  it('i s deseti pravidly zůstane prompt v rozumné délce', () => {
+    const rules = Array.from({ length: 10 }, (_, i) => `Pravidlo číslo ${i} `.padEnd(300, 'x'))
+    const prompt = buildSystemPrompt('6. ročník', rules)
+    // Základ (< 1600) plus nejvýš deset pravidel po 300 znacích — hranice je
+    // orientační, hlavně aby nikdo omylem nepřidal pravidlo bez limitu délky.
+    expect(prompt.length).toBeLessThan(1600 + 10 * 320)
+  })
+
   it('důvod nahrazení se objeví v promptu jako nápověda modelu', () => {
     const prompt = buildUserPrompt({
       text: 'x',

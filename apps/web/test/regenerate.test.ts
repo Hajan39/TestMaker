@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
-import { db, generationJobs, questionFeedback, questions } from '@/db'
+import { db, generationJobs, promptRules, questionFeedback, questions } from '@/db'
 import { topicBusyMessage, regenerateQuestion } from '@/lib/generation'
 import { newId } from '@/lib/ids'
+import { createPromptRule, setPromptRuleActive } from '@/lib/promptRules'
 import { POST } from '@/app/api/questions/regenerate/route'
 import { jsonReq, seedMaterial, seedQuestion, seedTopic, seedUcet, UCET } from './helpers'
 
@@ -59,6 +60,10 @@ async function stavy(topicId: string): Promise<Map<string, string>> {
     .where(eq(questions.topicId, topicId))
   return new Map(rows.map((row) => [row.id, row.status]))
 }
+
+beforeEach(async () => {
+  await db.delete(promptRules)
+})
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -239,6 +244,27 @@ describe('důvod přegenerování ovlivňuje obtížnost náhrady', () => {
       },
     })
     expect(difficulty).toBe(2)
+  })
+})
+
+describe('pravidla školy se předají generování náhrady', () => {
+  it('jen aktivní pravidla vlastní školy, vypnuté ani cizí ne', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+
+    const aktivni = await createPromptRule(UCET, { text: 'Piš kratší zadání.' })
+    const vypnute = await createPromptRule(UCET, { text: 'Tohle se nepoužije.' })
+    await setPromptRuleActive(UCET, vypnute.id, false)
+
+    let schoolRules: string[] | undefined
+    await regenerateQuestion(UCET, original, {
+      generate: async (request, options) => {
+        schoolRules = request.schoolRules
+        return modelVrati(request, options)
+      },
+    })
+    expect(schoolRules).toEqual([aktivni.text])
   })
 })
 

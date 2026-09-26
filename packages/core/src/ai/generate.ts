@@ -312,7 +312,7 @@ export async function generateQuestions(
       const call = objectCall(responseSchema)
       return async (input) => ({ questions: (await call(input)).questions })
     })()
-  const system = buildSystemPrompt(request.gradeName)
+  const system = buildSystemPrompt(request.gradeName, request.schoolRules)
 
   // Úseků jen tolik, kolik je potřeba plných dávek (viz `questionsPerCall`),
   // a posun podle toho, kolik otázek už v tématu je — další dogenerování tak

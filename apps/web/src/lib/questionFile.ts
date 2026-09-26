@@ -4,17 +4,20 @@ import { buildTopicSourceFile, CLAUDE_CODE_MODEL, readQuestionFile } from '@test
 import { db, questions } from '@/db'
 import { loadTopicSource } from './generation'
 import { insertQuestions, loadAvoidPrompts } from './questions'
+import { loadActivePromptRules } from './promptRules'
 import type { Scope } from './uzivatel'
 
 /**
  * Text tématu ke stažení pro Claude Code (`/otazky`). Stejný text, jaký
- * dostává model při generování v aplikaci, s hlavičkou o ročníku
- * a otázkách, které už v tématu jsou. Cizí téma → `null`.
+ * dostává model při generování v aplikaci, s hlavičkou o ročníku, otázkách,
+ * které už v tématu jsou, a aktivních pravidlech školy — jinak by je Claude
+ * Code neznal (skript `otazky:pravidla` je bez databáze). Cizí téma → `null`.
  */
 export async function topicSourceFile(scope: Scope, topicId: string): Promise<{ fileName: string; text: string } | null> {
   const source = await loadTopicSource(scope, topicId)
   if (!source) return null
   const existing = await loadAvoidPrompts(scope, topicId)
+  const schoolRules = await loadActivePromptRules(scope)
   return {
     fileName: `${source.topicName}.txt`,
     text: buildTopicSourceFile({
@@ -23,6 +26,7 @@ export async function topicSourceFile(scope: Scope, topicId: string): Promise<{ 
       topicName: source.topicName,
       text: source.text,
       existing,
+      schoolRules,
     }),
   }
 }

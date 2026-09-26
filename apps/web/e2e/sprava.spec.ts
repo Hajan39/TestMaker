@@ -58,6 +58,26 @@ test('správce vidí záložku AI kvalita s čísly ze zkušebních dat', async 
   await expect(radekPredmetu).toContainText('moc těžká')
 })
 
+test('správce udělá z důvodu pravidlo promptu a pak ho vypne', async ({ page }) => {
+  await page.goto('/sprava')
+  await page.getByRole('tab', { name: 'AI kvalita' }).click()
+
+  // Ze seedu (viz test výše) je tu důvod „Moc těžká" — z toho vznikne pravidlo.
+  const radekDuvodu = page.locator('[data-slot="card"]').filter({ hasText: 'Moc těžká' })
+  await radekDuvodu.getByRole('button', { name: 'Udělat z toho pravidlo' }).click()
+
+  await expect(page.getByRole('heading', { name: /Nové pravidlo z důvodu/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Uložit pravidlo' }).click()
+
+  const radekPravidla = page.locator('[data-slot="card"]').filter({ hasText: 'Pravidla promptu školy' })
+  await expect(radekPravidla).toContainText('1/10 aktivních')
+  await expect(radekPravidla).toContainText('Aktivní')
+
+  await radekPravidla.getByRole('button', { name: 'Vypnout' }).click()
+  await expect(radekPravidla).toContainText('0/10 aktivních')
+  await expect(radekPravidla).toContainText('Vypnuté')
+})
+
 test('učitelka se do správy vůbec nedostane', async ({ browser }) => {
   const context = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json' })
   const page = await context.newPage()

@@ -28,6 +28,12 @@ export interface GenerationRequest {
    * a model by to bral jako další pravidlo.
    */
   replacementReason?: { hint: string; note?: string }
+  /**
+   * Pravidla, která si škola sama přidala ve Správě (`promptRules`, jen
+   * aktivní). Vznikají výslovným uložením správce z opakujícího se důvodu
+   * přegenerování — nikdy se nepřidávají automaticky.
+   */
+  schoolRules?: string[]
 }
 
 /** Nejdelší poznámka učitelky, která se vejde do promptu — delší se ořízne. */
@@ -72,11 +78,11 @@ export function describeGradeAudience(gradeName: string | null | undefined): str
   return `žák ${grade}. ročníku základní školy (${grade + 5}–${grade + 6} let)`
 }
 
-export function buildSystemPrompt(gradeName?: string | null): string {
+export function buildSystemPrompt(gradeName?: string | null, schoolRules?: string[]): string {
   const audience = describeGradeAudience(gradeName)
   // Pravidel je schválně málo — co jde zkontrolovat v kódu (tvar, indexy,
   // citace), se kontroluje v kódu (`checkQuestion`), ne promptem.
-  return [
+  const lines = [
     'Jsi učitel na české základní škole a píšeš otázky do písemky.',
     '',
     `Otázky řeší ${audience}. Náročnost se řídí ročníkem, ne odborností materiálu:`,
@@ -91,7 +97,13 @@ export function buildSystemPrompt(gradeName?: string | null): string {
     '6. Do `evidence` napiš název souboru ze záhlaví `=== … ===` a jednu větu z materiálu doslova, beze změny slov. Otázka s citací, která v materiálu není, se zahodí.',
     '7. Do `explanation` napiš jednu větu pro učitele, proč je odpověď správná.',
     '8. Otázky se nesmějí opakovat ani ptát na totéž jinými slovy.',
-  ].join('\n')
+  ]
+  // Jen když správce nějaké pravidlo doopravdy uložil — jinak by prázdná
+  // sekce nafukovala prompt zbytečně u všech ostatních škol.
+  if (schoolRules && schoolRules.length > 0) {
+    lines.push('', 'Pravidla této školy:', ...schoolRules.map((rule) => `- ${rule}`))
+  }
+  return lines.join('\n')
 }
 
 export function buildUserPrompt(request: GenerationRequest): string {

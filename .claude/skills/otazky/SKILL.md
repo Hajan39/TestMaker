@@ -7,7 +7,10 @@ description: Napíše otázky do písemky z materiálů jednoho tématu TestMake
 
 Vstupem je textový soubor z tématu (tlačítko „Stáhnout materiály" na stránce
 tématu). Hlavička souboru (`# Předmět`, `# Ročník`, `# Téma`, případně
-`# Otázky, které už v tématu jsou`) říká, pro koho píšeš a co už existuje.
+`# Pravidla školy` a `# Otázky, které už v tématu jsou`) říká, pro koho píšeš,
+co škola navíc vyžaduje a co už existuje. Pravidla školy dodrž stejně jako
+pravidla z kroku 3 — vznikla stejnou cestou, jen se do promptu aplikace
+přidávají v databázi, kdežto sem se dostanou touhle hlavičkou.
 
 Skripty `otazky:pravidla` a `otazky:over` běží přes `pnpm --filter @testmaker/web …`,
 tedy ve složce `apps/web`. Cesty k souborům jim proto předávej vždy

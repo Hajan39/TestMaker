@@ -388,6 +388,30 @@ export const questionFeedback = sqliteTable(
 )
 
 /**
+ * Pravidlo, kterým si škola sama doplňuje prompt pro generování otázek.
+ * Vzniká výslovně — správce ve Správě promění opakující se důvod
+ * přegenerování v pravidlo (předvyplněné z jeho nápovědy, upravitelné);
+ * nic se do promptu nedostane samo od sebe. Aktivních smí být nejvýš deset
+ * (`MAX_ACTIVE_PROMPT_RULES` v `lib/promptRules.ts`) — jinak by prompt
+ * nafoukla jedna škola, která pravidla jen sbírá a nikdy nevypíná.
+ */
+export const promptRules = sqliteTable(
+  'prompt_rules',
+  {
+    id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Max. 300 znaků — hlídá `lib/promptRules.ts`, ne databáze. */
+    text: text('text').notNull(),
+    /** Důvod přegenerování, ze kterého pravidlo vzniklo; ruční pravidlo ho nemá. */
+    reason: text('reason').$type<RegenerateReason>(),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    createdBy: createdBy(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [index('prompt_rules_school_idx').on(table.schoolId, table.active)],
+)
+
+/**
  * Hlavolamy (osmisměrka, tajenka). Vlastní tabulka, ne další druh otázky:
  * hlavolam nemá odpověď ani body, negeneruje se do banky a učitelka ho hledá
  * jinde než otázky. Do písemky se zařadí jako položka testu (`test_items`
@@ -618,3 +642,4 @@ export type SchoolRow = typeof schools.$inferSelect
 export type UserRow = typeof users.$inferSelect
 export type SessionRow = typeof sessions.$inferSelect
 export type AuditRow = typeof auditLog.$inferSelect
+export type PromptRuleRow = typeof promptRules.$inferSelect

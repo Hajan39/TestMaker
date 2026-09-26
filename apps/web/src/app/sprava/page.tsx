@@ -4,6 +4,7 @@ import { auditLog, db, schools, users } from '@/db'
 import { loadAiQuality } from '@/lib/aiQuality'
 import { countJobs } from '@/lib/jobs'
 import { aiStatus } from '@/lib/ai'
+import { loadPromptRules } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
 import { ucetStranky } from '@/lib/uzivatel'
 import { SpravaScreen } from './SpravaScreen'
@@ -28,7 +29,7 @@ export default async function SpravaPage() {
     )
   }
 
-  const [uzivatele, udalosti, [skola], fronta, aiKvalita] = await Promise.all([
+  const [uzivatele, udalosti, [skola], fronta, aiKvalita, pravidla] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -67,6 +68,7 @@ export default async function SpravaPage() {
       .limit(1),
     countJobs(ucet),
     loadAiQuality(ucet),
+    loadPromptRules(ucet),
   ])
   const ai = aiStatus()
 
@@ -91,6 +93,7 @@ export default async function SpravaPage() {
         udalosti={udalosti}
         fronta={fronta}
         aiKvalita={aiKvalita}
+        pravidla={pravidla}
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
         prihlasovani={authMode()}

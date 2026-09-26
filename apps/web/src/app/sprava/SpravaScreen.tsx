@@ -17,10 +17,12 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
   toast,
 } from '@testmaker/ui'
-import { REGENERATE_REASONS } from '@testmaker/core/schema'
+import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import type { AiQuality } from '@/lib/aiQuality'
+import type { PromptRule } from '@/lib/promptRules'
 import { ROLES, ROLE_LABELS, USER_STATUS_LABELS, type Role, type UserStatus } from '@/lib/role'
 
 export interface UcetRadek {
@@ -64,6 +66,7 @@ export function SpravaScreen({
   aiConfigured,
   aiProblems,
   prihlasovani,
+  pravidla,
 }: {
   ja: string
   skola: string
@@ -76,6 +79,8 @@ export function SpravaScreen({
   /** Proč v žebříčku modelů něco chybí (`describeAiSetup`) — pro majitele. */
   aiProblems: string[]
   prihlasovani: 'zapnuto' | 'vypnuto' | 'chybne-nastaveno'
+  /** Pravidla promptu školy — nejnovější první. */
+  pravidla: PromptRule[]
 }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -87,6 +92,44 @@ export function SpravaScreen({
    * a podruhé ho nikdo nezjistí, protože v databázi je jen otisk.
    */
   const [heslo, setHeslo] = useState<{ email: string; heslo: string } | null>(null)
+
+  // Rozpracované pravidlo z tlačítka „Udělat z toho pravidlo" — předvyplněné
+  // z nápovědy důvodu, ale správce ho může před uložením upravit.
+  const [novePravidlo, setNovePravidlo] = useState<{ reason: RegenerateReason; text: string } | null>(null)
+  const [pravidloBusy, setPravidloBusy] = useState(false)
+
+  async function ulozitPravidlo() {
+    if (!novePravidlo) return
+    setPravidloBusy(true)
+    const response = await fetch('/api/prompt-rules', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: novePravidlo.text, reason: novePravidlo.reason }),
+    })
+    setPravidloBusy(false)
+    const data = (await response.json()) as { error?: string }
+    if (!response.ok) {
+      toast.error(data.error ?? 'Pravidlo se nepodařilo uložit.')
+      return
+    }
+    toast.success('Pravidlo uloženo a hned se použije při dalším generování.')
+    setNovePravidlo(null)
+    router.refresh()
+  }
+
+  async function prepnoutPravidlo(id: string, active: boolean) {
+    const response = await fetch('/api/prompt-rules', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, active }),
+    })
+    const data = (await response.json()) as { error?: string }
+    if (!response.ok) {
+      toast.error(data.error ?? 'Změna se nepovedla.')
+      return
+    }
+    router.refresh()
+  }
 
   async function zalozit(event: React.FormEvent) {
     event.preventDefault()
@@ -378,10 +421,48 @@ export function SpravaScreen({
                     <span className="text-fg">
                       {row.reason ? REGENERATE_REASONS[row.reason].label : 'bez udání důvodu'}
                     </span>
-                    <span className="ui-numeric text-fg-soft">{row.count}×</span>
+                    <div className="flex items-center gap-3">
+                      <span className="ui-numeric text-fg-soft">{row.count}×</span>
+                      {row.reason ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setNovePravidlo({ reason: row.reason!, text: REGENERATE_REASONS[row.reason!].hint })
+                          }
+                        >
+                          Udělat z toho pravidlo
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
               </Card>
+
+              {novePravidlo ? (
+                <Card className="space-y-2 p-4">
+                  <h3 className="font-medium text-fg">
+                    Nové pravidlo z důvodu „{REGENERATE_REASONS[novePravidlo.reason].label}"
+                  </h3>
+                  <p className="text-sm text-fg-soft">
+                    Text se připojí ke každému dalšímu generování otázek pro tuhle školu, dokud ho
+                    nevypneš. Uprav ho, jak potřebuješ.
+                  </p>
+                  <Textarea
+                    value={novePravidlo.text}
+                    maxLength={300}
+                    onChange={(event) => setNovePravidlo({ ...novePravidlo, text: event.target.value })}
+                  />
+                  <div className="flex gap-2">
+                    <Button disabled={pravidloBusy || !novePravidlo.text.trim()} onClick={() => void ulozitPravidlo()}>
+                      Uložit pravidlo
+                    </Button>
+                    <Button variant="ghost" onClick={() => setNovePravidlo(null)}>
+                      Zrušit
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
 
               {aiKvalita.bySubject.length > 0 ? (
                 <Card className="divide-y divide-line">
@@ -406,6 +487,37 @@ export function SpravaScreen({
               ) : null}
             </>
           )}
+
+          <Card className="divide-y divide-line">
+            <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+              Pravidla promptu školy ({pravidla.filter((p) => p.active).length}/10 aktivních)
+            </p>
+            {pravidla.length === 0 ? (
+              <p className="p-3 text-sm text-fg-soft">
+                Zatím žádné — vznikne uložením u některého z důvodů přegenerování výše.
+              </p>
+            ) : (
+              pravidla.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
+                >
+                  <div className="flex-1">
+                    <p className="text-fg">{p.text}</p>
+                    {p.reason ? (
+                      <p className="text-xs text-fg-muted">z důvodu „{REGENERATE_REASONS[p.reason].label}"</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={p.active ? 'secondary' : 'outline'}>{p.active ? 'Aktivní' : 'Vypnuté'}</Badge>
+                    <Button size="sm" variant="ghost" onClick={() => void prepnoutPravidlo(p.id, !p.active)}>
+                      {p.active ? 'Vypnout' : 'Zapnout'}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
