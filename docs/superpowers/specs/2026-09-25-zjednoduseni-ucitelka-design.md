@@ -134,6 +134,22 @@ Samostatný první krok, protože na něm stojí smysl celé přestavby.
 - **Srovnávací základ:** jedno téma s krátkým materiálem, 10 otázek, hodnocení
   ano/ne od učitelky; srovnávají se modely z `AI_MODELS` a otázky z `/otazky`.
 
+## Přegenerování s důvodem (doplněno 2026-09-26)
+
+- „Přegenerovat" na kartě otázky nabídne nepovinný důvod: štítky „Nedává
+  smysl", „Špatné možnosti", „Odpověď v materiálu není", „Moc těžká",
+  „Moc lehká", „Špatná čeština" a volitelnou poznámku. Bez výběru funguje
+  jedním klikem jako dnes.
+- Důvod jde do zadání náhrady („předchozí verze měla špatné možnosti…");
+  „moc těžká / lehká" posune obtížnost náhrady.
+- Důvod se ukládá k nahrazené otázce spolu s modelem, který ji vyrobil.
+  Správa ukáže přehled: podíl přegenerovaných otázek podle modelu
+  a nejčastější důvody (i podle předmětu).
+- Z přehledu jde nejčastější chybu jedním klikem povýšit na trvalé pravidlo
+  promptu; nic se do promptu nepřidává automaticky.
+- Později (samostatně): „Lehčí / Těžší verze" otázky a celé písemky, varianty
+  navázané na původní otázku.
+
 ## Pořadí prací
 
 Každý krok jde nasadit samostatně a aplikace mezi nimi funguje.
@@ -149,6 +165,8 @@ Každý krok jde nasadit samostatně a aplikace mezi nimi funguje.
    stránek `/import`, `/generovani`, `/review`, `/questions` a komponent,
    které používaly jen ony (`ReviewPanel`, `BulkGenerate` a další podle
    skutečných importů).
+6. Přegenerování s důvodem a přehled chyb podle modelu (kapitola výše).
+7. Lehčí / těžší verze otázek a písemky.
 
 ## Testování
 
