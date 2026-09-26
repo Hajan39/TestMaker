@@ -39,6 +39,7 @@ describe('otázky z Claude Code', () => {
 
     const ulozene = await db.select().from(questions).where(eq(questions.topicId, topicId))
     expect(ulozene.map((q) => q.model)).toEqual(['claude-code'])
+    expect(ulozene.map((q) => q.status)).toEqual(['approved'])
   })
 
   it('cizí téma se tváří jako neexistující', async () => {

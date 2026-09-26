@@ -14,8 +14,8 @@ export interface GenerateParams {
   /**
    * `add` = vytvoř `count` nových otázek.
    * `target` = doplň téma tak, aby v něm bylo dohromady `count` otázek.
-   * Doplňování je to, co učitelka chce u tématu, kde už něco má: po kontrole
-   * konceptů část zamítne a potřebuje dorovnat počet, ne začínat znovu.
+   * Doplňování je to, co učitelka chce u tématu, kde už něco má: část otázek
+   * zamítne a potřebuje dorovnat počet, ne začínat znovu.
    */
   mode?: 'add' | 'target'
 }
@@ -201,7 +201,7 @@ export async function generateForTopic(
       signal: options.signal,
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
-        const ids = await insertQuestions(scope, batch, { topicId, source: 'ai', status: 'draft' })
+        const ids = await insertQuestions(scope, batch, { topicId, source: 'ai' })
         // Který model otázku vyrobil, se ukládá jen do databáze pro pozdější
         // porovnání kvality — v rozhraní se nikde nezobrazuje. Zapisuje se
         // zvlášť, aby `insertQuestions` zůstalo o obsahu otázky, ne o tom,
@@ -337,7 +337,7 @@ export async function regenerateQuestion(
   }
 
   // Až teď — náhrada je na světě, původní otázka může odejít.
-  const [newId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai', status: 'draft' })
+  const [newId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai' })
   // Model jen do databáze, stejně jako u dávkového generování (v rozhraní nikde).
   const usedModel = result.models[0]
   if (newId && usedModel) await db.update(questions).set({ model: usedModel }).where(eq(questions.id, newId))

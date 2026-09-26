@@ -59,13 +59,15 @@ describe('generování tématu se žebříčkem modelů', () => {
     expect(outcome.models).toEqual(['google:gemini-flash-latest', 'google:gemini-flash-lite-latest'])
 
     const rows = await db
-      .select({ model: questions.model })
+      .select({ model: questions.model, status: questions.status })
       .from(questions)
       .where(eq(questions.topicId, topicId))
     expect(rows).toHaveLength(4)
     // Model se ukládá k otázce, ale jen do databáze — v rozhraní se nikde nebere.
     expect(rows.filter((row) => row.model === 'google:gemini-flash-latest')).toHaveLength(2)
     expect(rows.filter((row) => row.model === 'google:gemini-flash-lite-latest')).toHaveLength(2)
+    // Otázky vznikají rovnou použitelné, ne jako koncept ke schválení.
+    expect(rows.every((row) => row.status === 'approved')).toBe(true)
   })
 
   it('když generování v půlce spadne, hotové dávky zůstanou uložené', async () => {

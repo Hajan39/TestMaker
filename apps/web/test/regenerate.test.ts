@@ -96,13 +96,13 @@ describe('náhrada jedné otázky modelem', () => {
     const replacement = await regenerateQuestion(UCET, original, { generate: modelVrati })
 
     expect(replacement.id).not.toBe(original)
-    // Náhrada jde do fronty jako koncept — učitelka ji má vidět, než ji pustí do testu.
-    expect(replacement.status).toBe('draft')
+    // Náhrada je rovnou použitelná — schvalování konceptů zmizelo.
+    expect(replacement.status).toBe('approved')
     expect(replacement.topicId).toBe(topicId)
 
     const stav = await stavy(topicId)
     expect(stav.get(original)).toBe('rejected')
-    expect(stav.get(replacement.id)).toBe('draft')
+    expect(stav.get(replacement.id)).toBe('approved')
   })
 
   it('když model selže, nezmění se v databázi vůbec nic', async () => {
@@ -136,7 +136,7 @@ describe('náhrada jedné otázky modelem', () => {
   it('nad tématem s běžícím dávkovým generováním se odmítne a téma nezablokuje', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
-    const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'draft' })
+    const original = await seedQuestion(topicId, { prompt: 'Špatná otázka', status: 'approved' })
 
     await db.insert(generationJobs).values({
       id: newId(),
@@ -152,7 +152,7 @@ describe('náhrada jedné otázky modelem', () => {
     // Rezervace zůstala jediná — náhrada si téma nezabrala pro sebe.
     const jobs = await db.select().from(generationJobs).where(eq(generationJobs.topicId, topicId))
     expect(jobs).toHaveLength(1)
-    expect((await stavy(topicId)).get(original)).toBe('draft')
+    expect((await stavy(topicId)).get(original)).toBe('approved')
   })
 
   it('otázku bez tématu nahradit nejde — nemá se z čeho generovat', async () => {

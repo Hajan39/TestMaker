@@ -206,7 +206,9 @@ export async function insertQuestions(
       explanation: item.explanation ?? null,
       searchText: searchTextFor(item),
       source: context.source ?? 'ai',
-      status: context.status ?? 'draft',
+      // Schvalování konceptů zmizelo — otázka je rovnou použitelná. `draft`
+      // zůstává v `QuestionStatus` jen kvůli starším řádkům a návratu migrace.
+      status: context.status ?? 'approved',
       sourceFile: evidence?.fileName ?? null,
       sourceQuote: evidence?.quote ?? null,
     }

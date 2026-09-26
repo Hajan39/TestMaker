@@ -41,7 +41,7 @@ export async function importQuestionFile(
   if (!source) return null
   const existing = await loadAvoidPrompts(scope, topicId)
   const { questions: accepted, rejected } = readQuestionFile(json, source.text, existing)
-  const ids = await insertQuestions(scope, accepted, { topicId, source: 'ai', status: 'draft' })
+  const ids = await insertQuestions(scope, accepted, { topicId, source: 'ai' })
   // Odkud otázka je, se ukládá jen do databáze pro srovnání kvality (jako u generování).
   if (ids.length > 0) await db.update(questions).set({ model: CLAUDE_CODE_MODEL }).where(inArray(questions.id, ids))
   return { created: ids.length, rejected }
