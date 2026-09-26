@@ -50,7 +50,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
       .from(materials)
       .where(and(skola(ucet, materials), eq(materials.topicId, id)))
       .orderBy(asc(materials.fileName)),
-    loadQuestions(ucet, { topicIds: [id] }),
+    // Zamítnuté se do seznamu vůbec nenačítají — karta by je stejně
+    // nezobrazovala a učitelka by je nemohla ani upravit, ani vrátit zpět.
+    loadQuestions(ucet, { topicIds: [id], statuses: ['draft', 'approved'] }),
     countQuestions(ucet, { topicId: id }),
     countQuestions(ucet, { topicId: id, statuses: ['draft'] }),
     // Zamítnuté se do doplňování počtu nepočítají.

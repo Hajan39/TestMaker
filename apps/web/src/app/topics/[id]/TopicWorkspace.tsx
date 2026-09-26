@@ -14,7 +14,7 @@ import {
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
-import { ReviewPanel } from '@/components/ReviewPanel'
+import { TopicQuestions } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { useMuzeMenit } from '@/components/Prava'
 
@@ -231,7 +231,7 @@ export function TopicWorkspace({
         </p>
       ) : null}
 
-      <ReviewPanel topicId={topicId} questions={shownQuestions} />
+      <TopicQuestions topicId={topicId} questions={shownQuestions} />
     </div>
   )
 }
