@@ -29,17 +29,21 @@ import {
 import { emptyPayload } from '@/lib/questionDefaults'
 import { PayloadFields } from './PayloadFields'
 
-/** Editor jedné otázky — vlastní i vygenerované; všechny typy ve stejném dialogu. */
-export function QuestionEditor({
+/**
+ * Formulář otázky — pole, uložení i chyby, bez dialogu okolo. Vyjmutý
+ * z `QuestionEditor`, aby šel použít i jinde než ve vyskakovacím okně (třeba
+ * rovnou v řádku seznamu).
+ */
+export function QuestionEditorForm({
   topicId,
   question,
-  onClose,
+  onCancel,
   onSaved,
 }: {
   topicId: string
   question: Question | null
-  onClose: () => void
-  onSaved: () => void
+  onCancel: () => void
+  onSaved: (saved?: Question) => void
 }) {
   const [type, setType] = useState<QuestionType>(question?.type ?? 'single_choice')
   const [payload, setPayload] = useState<Record<string, unknown>>(
@@ -105,81 +109,99 @@ export function QuestionEditor({
   }
 
   return (
+    <>
+      <div className="flex flex-wrap gap-3">
+        <div className="w-56">
+          <Label htmlFor="question-editor-type">Typ</Label>
+          <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
+            <SelectTrigger id="question-editor-type" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {QUESTION_TYPES.filter((t) => t !== 'label_image').map((value) => (
+                <SelectItem key={value} value={value}>
+                  {QUESTION_TYPE_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-24">
+          <Label htmlFor="question-editor-points">Body</Label>
+          <Input
+            id="question-editor-points"
+            type="number"
+            min={0}
+            step={0.5}
+            value={points}
+            onChange={(event) => setPoints(Number(event.target.value) || 0)}
+          />
+        </div>
+        <div className="w-36">
+          <Label htmlFor="question-editor-difficulty">Obtížnost</Label>
+          <Select
+            value={String(difficulty)}
+            onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
+          >
+            <SelectTrigger id="question-editor-difficulty" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Lehká</SelectItem>
+              <SelectItem value="2">Střední</SelectItem>
+              <SelectItem value="3">Těžká</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <PayloadFields type={type} payload={payload} onChange={setPayload} />
+      </div>
+
+      <div className="mt-4">
+        <Label htmlFor="question-editor-explanation">Poznámka do klíče (nepovinné)</Label>
+        <Textarea
+          id="question-editor-explanation"
+          value={explanation}
+          placeholder="Proč je odpověď správně — vytiskne se jen do klíče pro učitele."
+          onChange={(event) => setExplanation(event.target.value)}
+        />
+      </div>
+
+      {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel}>
+          Zrušit
+        </Button>
+        <Button disabled={saving} onClick={() => void save()}>
+          {saving ? 'Ukládám…' : 'Uložit'}
+        </Button>
+      </div>
+    </>
+  )
+}
+
+/** Editor jedné otázky v dialogu — vlastní i vygenerované; všechny typy ve stejném formuláři. */
+export function QuestionEditor({
+  topicId,
+  question,
+  onClose,
+  onSaved,
+}: {
+  topicId: string
+  question: Question | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{question ? 'Upravit otázku' : 'Nová otázka'}</DialogTitle>
         </DialogHeader>
-
-        <div className="flex flex-wrap gap-3">
-          <div className="w-56">
-            <Label htmlFor="question-editor-type">Typ</Label>
-            <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
-              <SelectTrigger id="question-editor-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {QUESTION_TYPES.filter((t) => t !== 'label_image').map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {QUESTION_TYPE_LABELS[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-24">
-            <Label htmlFor="question-editor-points">Body</Label>
-            <Input
-              id="question-editor-points"
-              type="number"
-              min={0}
-              step={0.5}
-              value={points}
-              onChange={(event) => setPoints(Number(event.target.value) || 0)}
-            />
-          </div>
-          <div className="w-36">
-            <Label htmlFor="question-editor-difficulty">Obtížnost</Label>
-            <Select
-              value={String(difficulty)}
-              onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
-            >
-              <SelectTrigger id="question-editor-difficulty" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">Lehká</SelectItem>
-                <SelectItem value="2">Střední</SelectItem>
-                <SelectItem value="3">Těžká</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <PayloadFields type={type} payload={payload} onChange={setPayload} />
-        </div>
-
-        <div className="mt-4">
-          <Label htmlFor="question-editor-explanation">Poznámka do klíče (nepovinné)</Label>
-          <Textarea
-            id="question-editor-explanation"
-            value={explanation}
-            placeholder="Proč je odpověď správně — vytiskne se jen do klíče pro učitele."
-            onChange={(event) => setExplanation(event.target.value)}
-          />
-        </div>
-
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            Zrušit
-          </Button>
-          <Button disabled={saving} onClick={() => void save()}>
-            {saving ? 'Ukládám…' : 'Uložit'}
-          </Button>
-        </div>
+        <QuestionEditorForm topicId={topicId} question={question} onCancel={onClose} onSaved={() => onSaved()} />
       </DialogContent>
     </Dialog>
   )
