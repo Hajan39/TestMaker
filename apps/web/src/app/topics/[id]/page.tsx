@@ -39,7 +39,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   // Počty se berou dotazem, ne délkou seznamu: seznam je useknutý limitem
   // a u tématu s tisícem otázek by čísla nahoře lhala.
-  const [materialRows, questionList, usableQuestionCount, templates] = await Promise.all([
+  const [materialRows, questionList, usableQuestionCount, rejectedCount, templates] = await Promise.all([
     db
       .select({
         id: materials.id,
@@ -60,6 +60,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     // Jediný počet nahoře i pro dogenerování — zamítnuté (smazané) se do něj
     // nepočítají, jinak by smazání karty číslo nesnížilo.
     countQuestions(ucet, { topicId: id, statuses: ['draft', 'approved'] }),
+    // Počet smazaných (zamítnutých) otázek — pro přepínač „Smazané (N)"
+    // nad seznamem, ať se nemusí načítat celý seznam jen kvůli číslu.
+    countQuestions(ucet, { topicId: id, statuses: ['rejected'] }),
     // Výchozí šablona pro test, který ze zaškrtnutých otázek vznikne rovnou
     // v tématu — stejný výběr jako u nového testu z prázdna.
     loadTemplates(ucet),
@@ -121,6 +124,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         materials={materialRows}
         questions={questionList.items}
         usage={usage}
+        rejectedCount={rejectedCount}
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
         lowContent={topic.lowContent}

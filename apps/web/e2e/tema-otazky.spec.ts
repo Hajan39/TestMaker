@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 /**
  * Otázky v tématu jako karty: úprava přímo v seznamu, přegenerování, smazání
@@ -124,6 +124,14 @@ async function headerCount(page: Page): Promise<number> {
   const text = await page.locator('h2', { hasText: 'Otázky (' }).textContent()
   const match = text?.match(/\((\d+)\)/)
   expect(match, `hlavička otázek nemá tvar „Otázky (N)“: ${text}`).toBeTruthy()
+  return Number(match![1])
+}
+
+/** Přečte číslo z přepínače „Smazané (N)“. */
+async function readDeletedCount(toggle: Locator): Promise<number> {
+  const text = await toggle.textContent()
+  const match = text?.match(/\((\d+)\)/)
+  expect(match, `přepínač „Smazané“ nemá tvar „Smazané (N)“: ${text}`).toBeTruthy()
   return Number(match![1])
 }
 
@@ -360,6 +368,35 @@ test.describe('otázky v tématu', () => {
 
     await page.getByRole('button', { name: 'Vrátit zpět' }).click()
     await expect(page.locator('li[data-question-id]', { hasText: a })).toBeVisible()
+  })
+
+  test('přepínač „Smazané“ najde smazanou otázku a jde ji obnovit', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka pro smazané ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(row).toBeVisible()
+
+    const toggle = page.getByRole('button', { name: /^Smazané \(\d+\)$/ })
+    const before = await readDeletedCount(toggle)
+
+    await row.getByRole('button', { name: 'Smazat' }).click()
+    await expect(row).toHaveCount(0)
+    await expect.poll(() => readDeletedCount(toggle)).toBe(before + 1)
+
+    // Zapnutí přepínače dotáhne smazané otázky a ukáže je jako tlumené karty
+    // s jediným tlačítkem „Obnovit“.
+    await toggle.click()
+    const deletedRow = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(deletedRow).toBeVisible()
+    await expect(deletedRow.getByRole('button', { name: 'Upravit' })).toHaveCount(0)
+    await deletedRow.getByRole('button', { name: 'Obnovit' }).click()
+
+    await expect.poll(() => readDeletedCount(toggle)).toBe(before)
+    // Karta je zpátky v běžném seznamu.
+    await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
   })
 })
 

@@ -26,6 +26,7 @@ export function TopicWorkspace({
   materials,
   questions,
   usage,
+  rejectedCount,
   listTruncated,
   listLimit,
   lowContent,
@@ -41,6 +42,8 @@ export function TopicWorkspace({
   questions: Question[]
   /** Testy, ve kterých už otázky jsou — jen ty, na které je volající vidí. */
   usage: Record<string, TestUsage[]>
+  /** Počet smazaných (zamítnutých) otázek tématu — pro přepínač „Smazané". */
+  rejectedCount: number
   /** Seznam otázek je useknutý limitem — v tématu jich je víc, než se vypisuje. */
   listTruncated: boolean
   /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
@@ -274,6 +277,7 @@ export function TopicWorkspace({
           defaultTemplateId={defaultTemplateId}
           questions={shownQuestions}
           usage={usage}
+          rejectedCount={rejectedCount}
         />
       </div>
     </div>

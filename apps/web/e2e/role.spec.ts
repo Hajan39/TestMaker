@@ -128,6 +128,10 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   // náhled do banky nic nepřidává, ani do ní vybírat otázky nemá jak.
   await expect(page.getByRole('checkbox', { name: 'Vybrat do testu' })).toHaveCount(0)
   await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
+
+  // Přepínač „Smazané“ vede k obnovení otázky — taky akce ke změně, kterou
+  // náhled nemá.
+  await expect(page.getByRole('button', { name: /^Smazané \(\d+\)$/ })).toHaveCount(0)
 })
 
 /**

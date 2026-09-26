@@ -1,6 +1,6 @@
 'use client'
 
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
@@ -63,8 +63,13 @@ export const TopicQuestions = forwardRef<
     questions: Question[]
     /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
     usage: Record<string, TestUsage[]>
+    /**
+     * Počet smazaných (zamítnutých) otázek tématu, načtený se stránkou.
+     * Seznam smazaných karet se dotahuje zvlášť, až po zapnutí přepínače.
+     */
+    rejectedCount: number
   }
->(function TopicQuestions({ topic, defaultTemplateId, questions, usage }, ref) {
+>(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount }, ref) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const [creating, setCreating] = useState(false)
@@ -84,6 +89,32 @@ export const TopicQuestions = forwardRef<
   // (`active`), takže o odebrání se tahle množina starat nemusí.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [creatingTest, setCreatingTest] = useState(false)
+  // Smazané otázky se zvlášť: `null` znamená „ještě nenačteno" — teprve po
+  // zapnutí přepínače se pro ně pošle dotaz, aby se nenačítaly zbytečně
+  // pokaždé, když učitelka otevře téma.
+  const [showDeleted, setShowDeleted] = useState(false)
+  const [deletedQuestions, setDeletedQuestions] = useState<Question[] | null>(null)
+  const [loadingDeleted, setLoadingDeleted] = useState(false)
+  // Otázka, u které se právě obnovuje stav — chrání proti dvojímu kliknutí
+  // na „Obnovit", stejně jako `busyIds` u mazání.
+  const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set())
+  // Kolik se toho od posledního obnovení stránky ze serveru smazalo (+) nebo
+  // vrátilo (-), aniž by se to promítlo do `rejectedCount` — ten se totiž
+  // nemění, dokud stránku neobnoví `router.refresh()`. Jakmile se to stane
+  // a `rejectedCount` se posune, delta se zase vynuluje.
+  const [deletedDelta, setDeletedDelta] = useState(0)
+  const previousRejectedCount = useRef(rejectedCount)
+  useEffect(() => {
+    if (rejectedCount !== previousRejectedCount.current) {
+      previousRejectedCount.current = rejectedCount
+      setDeletedDelta(0)
+    }
+  }, [rejectedCount])
+
+  // Dokud se seznam smazaných nenačetl, počet se počítá z hodnoty ze
+  // serveru a lokální delty; jakmile se seznam jednou stáhne, počítá se
+  // přímo z něj — ten se při obnovení karty zmenšuje sám.
+  const deletedCount = deletedQuestions?.length ?? rejectedCount + deletedDelta
 
   const sorted = useMemo(
     () =>
@@ -192,6 +223,13 @@ export const TopicQuestions = forwardRef<
     setHiddenIds((current) => new Set(current).add(question.id))
     try {
       const previous = await rejectQuestions([question])
+      // Smazaná karta se počítá do „Smazané" hned, ne až po obnovení
+      // stránky ze serveru — a přibude i do už načteného seznamu smazaných,
+      // ať je vidět, i když se panel zrovna teď zapne.
+      setDeletedDelta((current) => current + 1)
+      setDeletedQuestions((current) =>
+        current === null ? null : [{ ...question, status: 'rejected' }, ...current],
+      )
       toast.success('Otázka smazána', {
         duration: 10_000,
         action: {
@@ -204,6 +242,10 @@ export const TopicQuestions = forwardRef<
                   next.delete(question.id)
                   return next
                 })
+                setDeletedDelta((current) => Math.max(0, current - 1))
+                setDeletedQuestions((current) =>
+                  current === null ? null : current.filter((q) => q.id !== question.id),
+                )
                 toast.success('Vráceno zpět')
                 router.refresh()
               })
@@ -222,6 +264,61 @@ export const TopicQuestions = forwardRef<
       toast.error(error instanceof Error ? error.message : 'Otázku se nepodařilo smazat')
     } finally {
       setBusyIds((current) => {
+        const next = new Set(current)
+        next.delete(question.id)
+        return next
+      })
+    }
+  }
+
+  /** Dotáhne smazané (zamítnuté) otázky tématu — jen jednou, při prvním zapnutí. */
+  async function loadDeleted() {
+    setLoadingDeleted(true)
+    try {
+      const response = await fetch(
+        `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected`,
+      )
+      if (!response.ok) throw new Error('Smazané otázky se nepodařilo načíst.')
+      const data = (await response.json()) as { items: Question[] }
+      setDeletedQuestions(data.items)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Smazané otázky se nepodařilo načíst.')
+      setShowDeleted(false)
+    } finally {
+      setLoadingDeleted(false)
+    }
+  }
+
+  function toggleShowDeleted() {
+    setShowDeleted((current) => {
+      const next = !current
+      if (next && deletedQuestions === null) void loadDeleted()
+      return next
+    })
+  }
+
+  /** Vrátí smazanou otázku zpátky mezi schválené. */
+  async function restore(question: Question) {
+    if (restoringIds.has(question.id)) return
+    setRestoringIds((current) => new Set(current).add(question.id))
+    try {
+      await restoreStatuses([[question.id, 'approved']])
+      setDeletedQuestions((current) => (current ?? []).filter((q) => q.id !== question.id))
+      setDeletedDelta((current) => Math.max(0, current - 1))
+      // Otázka se mohla schovat i tady (smazáním v tomhle náčtu stránky) —
+      // bez odebrání z `hiddenIds` by po obnovení zůstala v běžném seznamu
+      // dál skrytá, i když ji server už znovu posílá jako schválenou.
+      setHiddenIds((current) => {
+        const next = new Set(current)
+        next.delete(question.id)
+        return next
+      })
+      toast.success('Otázka obnovena')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Otázku se nepodařilo obnovit')
+    } finally {
+      setRestoringIds((current) => {
         const next = new Set(current)
         next.delete(question.id)
         return next
@@ -289,6 +386,16 @@ export const TopicQuestions = forwardRef<
             />
             Jen nepoužité v testu
           </label>
+          {muzeMenit ? (
+            <Button
+              size="sm"
+              variant={showDeleted ? 'secondary' : 'outline'}
+              aria-pressed={showDeleted}
+              onClick={toggleShowDeleted}
+            >
+              Smazané ({deletedCount})
+            </Button>
+          ) : null}
           {muzeMenit ? (
             <Button size="sm" variant="outline" onClick={() => setCreating(true)} disabled={creating}>
               Nová otázka
@@ -370,6 +477,42 @@ export const TopicQuestions = forwardRef<
           onCreate={() => void createTestFromSelection()}
           onClear={() => setSelectedIds(new Set())}
         />
+      ) : null}
+
+      {showDeleted && muzeMenit ? (
+        <div className="mt-4 border-t border-line-soft pt-3">
+          <h3 className="text-sm font-semibold text-fg-soft">Smazané otázky</h3>
+          {loadingDeleted ? (
+            <p className="mt-2 text-sm text-fg-muted">Načítám…</p>
+          ) : (deletedQuestions?.length ?? 0) === 0 ? (
+            <p className="mt-2 text-sm text-fg-muted">Žádné smazané otázky.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-line-soft">
+              {deletedQuestions!.map((question) => (
+                <li key={question.id} data-question-id={question.id} className="py-3">
+                  <QuestionCard
+                    topicId={topic.id}
+                    question={question}
+                    editing={false}
+                    muzeMenit={muzeMenit}
+                    selected={false}
+                    busy={false}
+                    usage={undefined}
+                    onEditStart={() => {}}
+                    onEditCancel={() => {}}
+                    onEditSaved={() => {}}
+                    onToggleSelect={() => {}}
+                    onRegenerateDone={() => {}}
+                    onRemove={() => {}}
+                    deleted
+                    restoring={restoringIds.has(question.id)}
+                    onRestore={() => void restore(question)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : null}
     </Card>
   )

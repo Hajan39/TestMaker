@@ -29,6 +29,9 @@ export function QuestionCard({
   onToggleSelect,
   onRegenerateDone,
   onRemove,
+  deleted,
+  restoring,
+  onRestore,
 }: {
   topicId: string
   question: Question
@@ -46,7 +49,30 @@ export function QuestionCard({
   onToggleSelect: () => void
   onRegenerateDone: () => void
   onRemove: () => void
+  /**
+   * Karta ze seznamu „Smazané" — tlumená podoba s jediným tlačítkem
+   * „Obnovit" místo úprav, přegenerování a mazání.
+   */
+  deleted?: boolean
+  /** Právě probíhá obnovení — chrání proti dvojímu kliknutí na „Obnovit". */
+  restoring?: boolean
+  onRestore?: () => void
 }) {
+  if (deleted) {
+    return (
+      <div className="flex gap-3 opacity-60">
+        <div className="min-w-0 flex-1">
+          <QuestionPreview question={question} />
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Button size="sm" variant="ghost" disabled={restoring} onClick={onRestore}>
+            Obnovit
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (editing) {
     return (
       <QuestionEditorForm
