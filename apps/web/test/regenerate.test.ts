@@ -1,11 +1,18 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
-import { db, generationJobs, questions } from '@/db'
+import { db, generationJobs, questionFeedback, questions } from '@/db'
 import { topicBusyMessage, regenerateQuestion } from '@/lib/generation'
 import { newId } from '@/lib/ids'
-import { seedMaterial, seedQuestion, seedTopic, UCET } from './helpers'
+import { POST } from '@/app/api/questions/regenerate/route'
+import { jsonReq, seedMaterial, seedQuestion, seedTopic, seedUcet, UCET } from './helpers'
+
+/** Prostředí s klíčem — testy na API vrstvě volání modelu stejně nespouštějí. */
+function withKey(): void {
+  vi.stubEnv('AI_MODELS', 'google:gemini-flash-latest')
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key')
+}
 
 /** Materiál musí mít dost textu, jinak se generování odmítne ještě před modelem. */
 const TEXT =
@@ -52,6 +59,10 @@ async function stavy(topicId: string): Promise<Map<string, string>> {
     .where(eq(questions.topicId, topicId))
   return new Map(rows.map((row) => [row.id, row.status]))
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('náhrada jedné otázky modelem', () => {
   it('předá modelu citaci nahrazované otázky, ať náhrada vznikne ze stejné pasáže', async () => {
@@ -158,5 +169,143 @@ describe('náhrada jedné otázky modelem', () => {
   it('otázku bez tématu nahradit nejde — nemá se z čeho generovat', async () => {
     const orphan = await seedQuestion(null, { status: 'draft' })
     await expect(regenerateQuestion(UCET, orphan, { generate: modelVrati })).rejects.toThrow(/téma/)
+  })
+})
+
+describe('důvod přegenerování ovlivňuje obtížnost náhrady', () => {
+  it('"moc těžká" obtížnost sníží', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    await db.update(questions).set({ difficulty: 2 }).where(eq(questions.id, original))
+
+    let difficulty: unknown = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      reason: 'tezka',
+      generate: async (request, options) => {
+        difficulty = request.difficulty
+        return modelVrati(request, options)
+      },
+    })
+    expect(difficulty).toBe(1)
+  })
+
+  it('"moc těžká" u obtížnosti 1 se nepřehoupne pod stupnici', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    await db.update(questions).set({ difficulty: 1 }).where(eq(questions.id, original))
+
+    let difficulty: unknown = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      reason: 'tezka',
+      generate: async (request, options) => {
+        difficulty = request.difficulty
+        return modelVrati(request, options)
+      },
+    })
+    expect(difficulty).toBe(1)
+  })
+
+  it('"moc lehká" u obtížnosti 3 se nepřehoupne nad stupnici', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    await db.update(questions).set({ difficulty: 3 }).where(eq(questions.id, original))
+
+    let difficulty: unknown = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      reason: 'lehka',
+      generate: async (request, options) => {
+        difficulty = request.difficulty
+        return modelVrati(request, options)
+      },
+    })
+    expect(difficulty).toBe(3)
+  })
+
+  it('důvod bez posunu (např. "špatná čeština") obtížnost nemění', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    await db.update(questions).set({ difficulty: 2 }).where(eq(questions.id, original))
+
+    let difficulty: unknown = 'nezavoláno'
+    await regenerateQuestion(UCET, original, {
+      reason: 'cestina',
+      generate: async (request, options) => {
+        difficulty = request.difficulty
+        return modelVrati(request, options)
+      },
+    })
+    expect(difficulty).toBe(2)
+  })
+})
+
+describe('zpětná vazba z přegenerování', () => {
+  it('po náhradě vznikne řádek s modelem nahrazené otázky, i bez důvodu', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    await db
+      .update(questions)
+      .set({ model: 'google:gemini-flash-latest' })
+      .where(eq(questions.id, original))
+
+    const replacement = await regenerateQuestion(UCET, original, { generate: modelVrati })
+
+    const [feedback] = await db
+      .select()
+      .from(questionFeedback)
+      .where(eq(questionFeedback.questionId, original))
+    expect(feedback).toBeDefined()
+    expect(feedback!.replacementId).toBe(replacement.id)
+    expect(feedback!.model).toBe('google:gemini-flash-latest')
+    expect(feedback!.reason).toBeNull()
+    expect(feedback!.note).toBeNull()
+  })
+
+  it('s vyplněným důvodem a poznámkou se obojí uloží', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+
+    await regenerateQuestion(UCET, original, {
+      reason: 'nesmysl',
+      note: 'Ptá se na dvě věci najednou.',
+      generate: modelVrati,
+    })
+
+    const [feedback] = await db
+      .select()
+      .from(questionFeedback)
+      .where(eq(questionFeedback.questionId, original))
+    expect(feedback!.reason).toBe('nesmysl')
+    expect(feedback!.note).toBe('Ptá se na dvě věci najednou.')
+  })
+})
+
+describe('API náhrady: neplatný důvod a role bez zápisu', () => {
+  it('neplatný důvod v těle požadavku je 400', async () => {
+    withKey()
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+
+    const response = await POST(
+      jsonReq('/api/questions/regenerate', 'POST', { id: original, reason: 'neexistujici-duvod' }),
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('náhled otázku přegenerovat nesmí — 403', async () => {
+    withKey()
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+    vi.stubEnv('E2E_UZIVATEL', (await seedUcet({ role: 'nahled' })).userId)
+
+    const response = await POST(jsonReq('/api/questions/regenerate', 'POST', { id: original }))
+    expect(response.status).toBe(403)
   })
 })

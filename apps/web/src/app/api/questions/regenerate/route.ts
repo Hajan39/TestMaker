@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
 import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
 import { skola, sRozsahem } from '@/lib/uzivatel'
@@ -8,7 +9,13 @@ import { skola, sRozsahem } from '@/lib/uzivatel'
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
-const bodySchema = z.object({ id: z.string().min(1) })
+const bodySchema = z.object({
+  id: z.string().min(1),
+  /** Proč se otázka nahrazuje — nepovinné, přegenerování jedním kliknutím funguje beze změny. */
+  reason: z.enum(Object.keys(REGENERATE_REASONS) as [string, ...string[]]).optional(),
+  /** Vlastní poznámka učitelky navíc k důvodu. */
+  note: z.string().max(1000).optional(),
+})
 
 /**
  * Je náhrada modelem vůbec k dispozici? Rozhraní podle toho tlačítko skryje,
@@ -58,7 +65,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const question = await regenerateQuestion(ucet, parsed.data.id, { signal: request.signal })
+    const question = await regenerateQuestion(ucet, parsed.data.id, {
+      signal: request.signal,
+      reason: parsed.data.reason as RegenerateReason | undefined,
+      note: parsed.data.note,
+    })
     return Response.json({ question })
   } catch (error) {
     // Hlášky poskytovatele jsou anglicky a technické; překládáme je.

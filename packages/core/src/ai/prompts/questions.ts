@@ -21,7 +21,17 @@ export interface GenerationRequest {
    * z úseku, ve kterém ta citace stojí — náhrada má být ze stejné látky.
    */
   focus?: string
+  /**
+   * Proč učitelka nahrazovanou otázku zavrhla (`REGENERATE_REASONS[reason].hint`)
+   * a její volitelná vlastní poznámka. Poznámka jde do promptu jako citace
+   * v uvozovkách, ne jako instrukce — jinak by si do ní šlo napsat cokoli
+   * a model by to bral jako další pravidlo.
+   */
+  replacementReason?: { hint: string; note?: string }
 }
+
+/** Nejdelší poznámka učitelky, která se vejde do promptu — delší se ořízne. */
+export const MAX_REPLACEMENT_NOTE_LENGTH = 300
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   open: 'Volná odpověď na 2–6 řádků; v `answer` uveď vzorovou odpověď, ne jen heslo.',
@@ -124,6 +134,18 @@ export function buildUserPrompt(request: GenerationRequest): string {
       'Tyto otázky už existují, vytvoř jiné (ani parafráze):',
       ...request.avoid.slice(0, AI_SETTINGS.avoidLimit).map((q) => `- ${truncateAvoidItem(q)}`),
     )
+  }
+
+  if (request.replacementReason) {
+    sections.push('', `Proč se otázka nahrazuje: ${request.replacementReason.hint}`)
+    const note = request.replacementReason.note?.trim()
+    if (note) {
+      const truncated =
+        note.length > MAX_REPLACEMENT_NOTE_LENGTH ? `${note.slice(0, MAX_REPLACEMENT_NOTE_LENGTH)}…` : note
+      // Uvozovky, ne instrukce: poznámka je citace toho, co napsala učitelka,
+      // model ji nemá poslouchat jako další pravidlo generování.
+      sections.push(`Poznámka učitelky: "${truncated}"`)
+    }
   }
 
   if (request.styleSample) {

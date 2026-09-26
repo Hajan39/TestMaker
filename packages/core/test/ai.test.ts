@@ -73,6 +73,50 @@ describe('prompty', () => {
     expect(prompt).toContain('doslova')
   })
 
+  it('důvod nahrazení se objeví v promptu jako nápověda modelu', () => {
+    const prompt = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['open'],
+      difficulty: 2,
+      replacementReason: { hint: 'Předchozí verze byla na ročník moc těžká.' },
+    })
+    expect(prompt).toContain('Proč se otázka nahrazuje: Předchozí verze byla na ročník moc těžká.')
+  })
+
+  it('poznámka učitelky jde do promptu jako oříznutá citace v uvozovkách', () => {
+    const dlouha = 'a'.repeat(400)
+    const prompt = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['open'],
+      difficulty: 2,
+      replacementReason: { hint: 'Předchozí verze měla špatné možnosti.', note: dlouha },
+    })
+    expect(prompt).toContain(`Poznámka učitelky: "${'a'.repeat(300)}…"`)
+    expect(prompt).not.toContain('a'.repeat(301))
+  })
+
+  it('bez poznámky se do promptu vloží jen nápověda, ne prázdná citace', () => {
+    const prompt = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['open'],
+      difficulty: 2,
+      replacementReason: { hint: 'Předchozí verze měla chyby v češtině.' },
+    })
+    expect(prompt).not.toContain('Poznámka učitelky')
+  })
+
   it('pokryje všechny typy, které smí AI generovat', () => {
     const prompt = buildUserPrompt({
       text: 'x',

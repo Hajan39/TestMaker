@@ -214,6 +214,47 @@ export function normalizeEvidence(
   }
 }
 
+/**
+ * Důvody, kvůli kterým učitelka otázku přegeneruje. Každý dodává model do
+ * promptu srozumitelnou nápovědu (`hint`) a případně posouvá obtížnost
+ * náhrady (`shift`) — „moc těžká"/„moc lehká" jsou jediné dva důvody, které
+ * s obtížností hýbou, ostatní ji nechávají beze změny.
+ */
+export const REGENERATE_REASONS = {
+  nesmysl: {
+    label: 'Nedává smysl',
+    hint: 'Předchozí verze nedávala smysl — zadání musí být jasné a jednoznačné.',
+    shift: 0,
+  },
+  moznosti: {
+    label: 'Špatné možnosti',
+    hint: 'Předchozí verze měla špatné možnosti — právě jedna musí být správná a ostatní věrohodně špatné.',
+    shift: 0,
+  },
+  mimo: {
+    label: 'Odpověď v materiálu není',
+    hint: 'Předchozí verze se ptala na něco, co v materiálu není — drž se doslova textu.',
+    shift: 0,
+  },
+  tezka: {
+    label: 'Moc těžká',
+    hint: 'Předchozí verze byla na ročník moc těžká.',
+    shift: -1,
+  },
+  lehka: {
+    label: 'Moc lehká',
+    hint: 'Předchozí verze byla moc lehká.',
+    shift: 1,
+  },
+  cestina: {
+    label: 'Špatná čeština',
+    hint: 'Předchozí verze měla chyby v češtině — piš spisovně a jednoduše.',
+    shift: 0,
+  },
+} as const
+
+export type RegenerateReason = keyof typeof REGENERATE_REASONS
+
 export const QUESTION_STATUSES = ['draft', 'approved', 'rejected'] as const
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number]
 

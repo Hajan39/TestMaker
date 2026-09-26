@@ -1,8 +1,14 @@
 import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { generateQuestions } from '@testmaker/core/ai'
-import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
-import { db, generationJobs, grades, materials, questions, subjects, topics, users } from '@/db'
+import {
+  AI_QUESTION_TYPES,
+  REGENERATE_REASONS,
+  type Question,
+  type QuestionType,
+  type RegenerateReason,
+} from '@testmaker/core/schema'
+import { db, generationJobs, grades, materials, questionFeedback, questions, subjects, topics, users } from '@/db'
 import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
@@ -279,6 +285,11 @@ export function topicBusyMessage(kdo: string): string {
   return `Nad tímhle tématem právě generuje ${kdo}. Počkej, než to doběhne, a zkus to znovu.`
 }
 
+/** Obtížnost do rozsahu 1–3 — posun od důvodu ji nesmí přehoupnout mimo stupnici. */
+function clampDifficulty(value: number): 1 | 2 | 3 {
+  return Math.min(3, Math.max(1, value)) as 1 | 2 | 3
+}
+
 /**
  * Nahradí jednu otázku novou od modelu.
  *
@@ -289,11 +300,23 @@ export function topicBusyMessage(kdo: string): string {
  * jednu otázku míň a učitelka by nevěděla, kam se poděla.
  *
  * `generate` se dá podstrčit v testech; v aplikaci se nepředává.
+ *
+ * `reason` volí, proč se otázka nahrazuje: nese nápovědu do promptu a u
+ * „moc těžká"/„moc lehká" i posun obtížnosti náhrady (ořezaný na 1–3). `note`
+ * je volná poznámka učitelky navíc k důvodu. Oboje je nepovinné — přegenerování
+ * jedním kliknutím beze změny funguje dál. Po úspěšné náhradě vznikne řádek
+ * `questionFeedback` i bez důvodu — jinak by nešlo spočítat, jaký podíl
+ * otázek od kterého modelu učitelky nakonec přegenerují.
  */
 export async function regenerateQuestion(
   scope: Scope,
   questionId: string,
-  options: { signal?: AbortSignal; generate?: typeof generateQuestions } = {},
+  options: {
+    signal?: AbortSignal
+    generate?: typeof generateQuestions
+    reason?: RegenerateReason
+    note?: string
+  } = {},
 ): Promise<Question> {
   const [original] = await db
     .select()
@@ -322,6 +345,13 @@ export async function regenerateQuestion(
   // vrátil tutéž otázku, kterou učitelka právě zavrhla.
   const avoid = await loadAvoidPrompts(scope, topicId)
 
+  // Důvod dodává modelu nápovědu do promptu a u „moc těžká"/„moc lehká" i
+  // posouvá obtížnost náhrady — ořezanou zpátky na 1–3, aby se nepřehoupla
+  // mimo stupnici (moc lehká otázka obtížnosti 3 zůstane na 3, ne na 4).
+  const reasonInfo = options.reason ? REGENERATE_REASONS[options.reason] : undefined
+  const originalDifficulty = (original.difficulty as 1 | 2 | 3) ?? 2
+  const difficulty = reasonInfo ? clampDifficulty(originalDifficulty + reasonInfo.shift) : originalDifficulty
+
   const generate = options.generate ?? generateQuestions
   const result = await generate(
     {
@@ -331,11 +361,12 @@ export async function regenerateQuestion(
       gradeName: source.gradeName || null,
       count: 1,
       types: [type as (typeof AI_QUESTION_TYPES)[number]],
-      difficulty: (original.difficulty as 1 | 2 | 3) ?? 2,
+      difficulty,
       avoid,
       // Náhrada vzniká z pasáže, o kterou se opírala původní otázka — jinak
       // by model dostal vždy první úsek tématu, ať šlo o cokoli.
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
+      ...(reasonInfo ? { replacementReason: { hint: reasonInfo.hint, note: options.note } } : {}),
     },
     { signal: options.signal },
   )
@@ -346,19 +377,34 @@ export async function regenerateQuestion(
   }
 
   // Až teď — náhrada je na světě, původní otázka může odejít.
-  const [newId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai' })
+  const [replacementId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai' })
   // Model jen do databáze, stejně jako u dávkového generování (v rozhraní nikde).
   const usedModel = result.models[0]
-  if (newId && usedModel) await db.update(questions).set({ model: usedModel }).where(eq(questions.id, newId))
+  if (replacementId && usedModel) {
+    await db.update(questions).set({ model: usedModel }).where(eq(questions.id, replacementId))
+  }
   await db
     .update(questions)
     .set({ status: 'rejected', reviewedBy: scope.userId, reviewedAt: new Date().toISOString() })
     .where(and(skola(scope, questions), eq(questions.id, questionId)))
 
+  // Zpětná vazba vzniká vždycky, i bez důvodu — jinak by nešlo spočítat podíl
+  // přegenerovaných otázek podle modelu, který je vytvořil.
+  await db.insert(questionFeedback).values({
+    id: newId(),
+    schoolId: scope.schoolId,
+    questionId,
+    replacementId,
+    model: original.model ?? null,
+    reason: options.reason ?? null,
+    note: options.note?.trim() || null,
+    createdBy: scope.userId,
+  })
+
   const [row] = await db
     .select()
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.id, newId!)))
+    .where(and(skola(scope, questions), eq(questions.id, replacementId!)))
     .limit(1)
   if (!row) throw new Error('Náhradu se nepodařilo uložit')
   return toQuestion(row)

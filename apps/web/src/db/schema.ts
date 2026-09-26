@@ -14,6 +14,7 @@ import type {
   PuzzleContent,
   PuzzleEntry,
   QuestionContent,
+  RegenerateReason,
   TemplateConfig,
   TestHeaderConfig,
 } from '@testmaker/core/schema'
@@ -358,6 +359,32 @@ export const questions = sqliteTable(
      */
     index('questions_school_created_idx').on(table.schoolId, table.createdAt, table.id),
   ],
+)
+
+/**
+ * Zpětná vazba z přegenerování otázky modelem: proč učitelka nahrazovanou
+ * otázku zavrhla (nebo bez důvodu, jedním kliknutím) a jaký model tu
+ * nahrazenou otázku vytvořil. Vzniká při každé náhradě, i bez vyplněného
+ * důvodu — jinak by nešlo spočítat, jaký podíl otázek od kterého modelu
+ * učitelky nakonec přegenerují.
+ */
+export const questionFeedback = sqliteTable(
+  'question_feedback',
+  {
+    id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Nahrazená otázka. Smazání otázky záznam nemaže, jen ztratí odkaz. */
+    questionId: text('question_id').references(() => questions.id, { onDelete: 'set null' }),
+    /** Otázka, která ji nahradila. */
+    replacementId: text('replacement_id').references(() => questions.id, { onDelete: 'set null' }),
+    /** Model, který nahrazenou otázku vygeneroval — prázdné u starších otázek bez modelu. */
+    model: text('model'),
+    reason: text('reason').$type<RegenerateReason>(),
+    note: text('note'),
+    createdBy: createdBy(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [index('question_feedback_school_idx').on(table.schoolId, table.createdAt)],
 )
 
 /**
