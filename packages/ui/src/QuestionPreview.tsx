@@ -11,10 +11,15 @@ const DIFFICULTY_LABELS = ['', 'lehká', 'střední', 'těžká']
 export function QuestionPreview({
   question,
   showAnswers = true,
+  showStatus = false,
   className,
 }: {
   question: Question | QuestionContent
   showAnswers?: boolean
+  /** Odznak stavu (schváleno/koncept/zamítnuto) — jen tam, kde stav ještě
+   *  něco rozhoduje (fronta ke kontrole). Jinde by jen zabíral místo, protože
+   *  otázka v tématu i v bance je vždy použitelná. */
+  showStatus?: boolean
   className?: string
 }) {
   const payload = question.payload as { prompt?: string; text?: string }
@@ -24,17 +29,17 @@ export function QuestionPreview({
         <Badge variant="secondary">{QUESTION_TYPE_LABELS[question.type]}</Badge>
         <Badge variant="secondary">{question.points} b.</Badge>
         <Badge variant="secondary">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
-        {/* Stav se ukazuje vždy. Chybějící odznak si nikdo nevšimne, a do písemky
-            pak může proklouznout nezkontrolovaný nebo zamítnutý koncept. */}
-        {/* Stav, ne akce: značková zelená patří tlačítkům. Odznak „schváleno“
-            u dvaceti řádků banky by jinak přezářil všechno ostatní. */}
-        {'status' in question && question.status === 'approved' ? (
+        {/* Stav, ne akce: značková zelená patří tlačítkům. Odznak se navíc
+            ukazuje jen tam, kde `showStatus` řekne, že stav ještě rozhoduje
+            (fronta ke kontrole) — jinde je otázka vždy použitelná a odznak by
+            jen zabíral místo. */}
+        {showStatus && 'status' in question && question.status === 'approved' ? (
           <Badge variant="status">schváleno</Badge>
         ) : null}
-        {'status' in question && question.status === 'draft' ? (
+        {showStatus && 'status' in question && question.status === 'draft' ? (
           <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
         ) : null}
-        {'status' in question && question.status === 'rejected' ? (
+        {showStatus && 'status' in question && question.status === 'rejected' ? (
           <Badge variant="destructive">zamítnuto</Badge>
         ) : null}
         {'source' in question && question.source === 'manual' ? <Badge variant="secondary">vlastní</Badge> : null}

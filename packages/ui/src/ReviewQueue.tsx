@@ -169,7 +169,7 @@ export function ReviewQueue({
       </div>
 
       <div className="rounded-[var(--radius-inner)] border border-line p-4">
-        <QuestionPreview question={current} />
+        <QuestionPreview question={current} showStatus />
       </div>
 
       {current.evidence ? (
