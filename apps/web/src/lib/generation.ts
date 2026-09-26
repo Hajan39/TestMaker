@@ -133,11 +133,20 @@ export async function loadTopicSource(
     .limit(1)
   if (!meta) return null
 
-  // Duplicitní exporty téhož obsahu do zdroje nepatří — jen by otázky zdvojily.
+  // Duplicitní exporty téhož obsahu a ručně vynechané materiály do zdroje
+  // nepatří — duplicita by otázky zdvojila, vynechaný materiál do generování
+  // učitelka záměrně nechce pustit.
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
     .from(materials)
-    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(
+      and(
+        skola(scope, materials),
+        eq(materials.topicId, topicId),
+        isNull(materials.duplicateOfId),
+        eq(materials.excluded, false),
+      ),
+    )
     .orderBy(asc(materials.fileName))
 
   const text = rows

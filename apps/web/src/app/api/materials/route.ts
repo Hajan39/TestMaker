@@ -1,6 +1,7 @@
 import { importBatchSchema } from '@testmaker/core/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db, materials, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
@@ -144,6 +145,38 @@ export async function DELETE(request: Request) {
       // Materiály, které na smazaný ukazovaly jako na duplicitu, řeší cizí klíč
       // (`set null`) sám — tady jen přepočítáme použitelný objem textu tématu.
       if (row) await recomputeTopicContent(ucet, row.topicId)
+      return NextResponse.json({ ok: true })
+    },
+    { zapis: true },
+  )
+}
+
+const excludeSchema = z.object({ id: z.string().min(1), excluded: z.boolean() })
+
+/** Vynechá (nebo vrátí zpátky) materiál z generování otázek. */
+export async function PATCH(request: Request) {
+  return sRozsahem(
+    async (ucet) => {
+      const parsed = excludeSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+      }
+
+      const [row] = await db
+        .select({ topicId: materials.topicId })
+        .from(materials)
+        .where(and(skola(ucet, materials), eq(materials.id, parsed.data.id)))
+        .limit(1)
+      if (!row) return NextResponse.json({ error: 'Materiál se nenašel' }, { status: 404 })
+
+      await db
+        .update(materials)
+        .set({ excluded: parsed.data.excluded })
+        .where(and(skola(ucet, materials), eq(materials.id, parsed.data.id)))
+      // Vynechaný materiál se přestává počítat do použitelného textu tématu,
+      // takže se stejně jako po smazání musí přepočítat.
+      await recomputeTopicContent(ucet, row.topicId)
+
       return NextResponse.json({ ok: true })
     },
     { zapis: true },

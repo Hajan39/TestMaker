@@ -78,15 +78,23 @@ export async function linkDuplicates(
 }
 
 /**
- * Přepočítá použitelný objem textu tématu (bez duplicit) a označí témata,
- * na která na písemku nevystačí. Volá se po každé změně materiálů tématu —
- * importu, smazání i po označení duplicity, protože ta se do součtu nepočítá.
+ * Přepočítá použitelný objem textu tématu (bez duplicit a bez vynechaných
+ * materiálů) a označí témata, na která na písemku nevystačí. Volá se po každé
+ * změně materiálů tématu — importu, smazání, vynechání i po označení
+ * duplicity, protože se nic z toho do součtu nepočítá.
  */
 export async function recomputeTopicContent(scope: Scope, topicId: string): Promise<void> {
   const [row] = await db
     .select({ usableCharCount: sum(materials.charCount) })
     .from(materials)
-    .where(and(skola(scope, materials), eq(materials.topicId, topicId), isNull(materials.duplicateOfId)))
+    .where(
+      and(
+        skola(scope, materials),
+        eq(materials.topicId, topicId),
+        isNull(materials.duplicateOfId),
+        eq(materials.excluded, false),
+      ),
+    )
 
   const usableCharCount = Number(row?.usableCharCount ?? 0)
   await db

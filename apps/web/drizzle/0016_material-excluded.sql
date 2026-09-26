@@ -1,0 +1,1 @@
+ALTER TABLE `materials` ADD `excluded` integer DEFAULT false NOT NULL;

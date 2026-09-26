@@ -2,8 +2,10 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import type { generateQuestions } from '@testmaker/core/ai'
 import type { QuestionContent } from '@testmaker/core/schema'
-import { db, questions } from '@/db'
-import { generateForTopic, DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
+import { db, materials, topics, questions } from '@/db'
+import { generateForTopic, DEFAULT_GENERATE_PARAMS, loadTopicSource } from '@/lib/generation'
+import { recomputeTopicContent } from '@/lib/duplicates'
+import { topicSourceFile } from '@/lib/questionFile'
 import { seedMaterial, seedTopic, UCET } from './helpers'
 
 /**
@@ -87,5 +89,33 @@ describe('generování tématu se žebříčkem modelů', () => {
     const rows = await db.select({ id: questions.id, model: questions.model }).from(questions).where(eq(questions.topicId, topicId))
     expect(rows).toHaveLength(2)
     expect(rows.every((row) => row.model === 'google:gemini-flash-latest')).toBe(true)
+  })
+})
+
+describe('vynechaný materiál do generování nejde', () => {
+  it('loadTopicSource i soubor pro Claude Code vynechaný materiál přeskočí', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { fileName: 'pouzity.txt', text: TEXT })
+    const vynechanyId = await seedMaterial(topicId, { fileName: 'vynechany.txt', text: TEXT })
+    await db.update(materials).set({ excluded: true }).where(eq(materials.id, vynechanyId))
+
+    const source = await loadTopicSource(UCET, topicId)
+    expect(source?.text).not.toContain('vynechany.txt')
+    expect(source?.text).toContain('pouzity.txt')
+    expect(source?.sources).toBe(1)
+
+    const soubor = await topicSourceFile(UCET, topicId)
+    expect(soubor?.text).not.toContain('vynechany.txt')
+  })
+
+  it('usableCharCount vynechaný materiál nepočítá', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId, { text: TEXT })
+    await db.update(materials).set({ excluded: true }).where(eq(materials.id, materialId))
+
+    await recomputeTopicContent(UCET, topicId)
+    const [topic] = await db.select().from(topics).where(eq(topics.id, topicId)).limit(1)
+    expect(topic!.usableCharCount).toBe(0)
+    expect(topic!.lowContent).toBe(true)
   })
 })

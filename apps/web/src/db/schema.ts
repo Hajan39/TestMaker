@@ -258,6 +258,8 @@ export const materials = sqliteTable(
     }),
     /** Míra shody s materiálem v `duplicateOfId` (0–1). */
     duplicateScore: real('duplicate_score'),
+    /** Učitelka materiál ručně vynechala z generování — text zůstává v knihovně. */
+    excluded: integer('excluded', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [

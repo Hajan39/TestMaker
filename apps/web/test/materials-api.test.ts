@@ -1,9 +1,29 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { POST, DELETE } from '@/app/api/materials/route'
-import { db, materials, topics } from '@/db'
-import { jsonReq, req, seedTopic } from './helpers'
+import { POST, DELETE, PATCH } from '@/app/api/materials/route'
+import { db, materials, schools, topics, users } from '@/db'
+import { newId } from '@/lib/ids'
+import { jsonReq, req, seedTopic, seedMaterial, seedUcet } from './helpers'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
+/** Učitelka z jiné školy — cizí materiál pro ni nesmí existovat. */
+async function ucitelkaJineSkoly(): Promise<string> {
+  const schoolId = newId()
+  await db.insert(schools).values({ id: schoolId, name: 'Jiná škola', slug: `jina-materialy-${schoolId}` })
+  const userId = newId()
+  await db.insert(users).values({
+    id: userId,
+    schoolId,
+    email: `${userId}@localhost`,
+    name: 'Cizí učitelka',
+    role: 'ucitelka',
+  })
+  return userId
+}
 
 /**
  * Import materiálů. Tady se do knihovny dostávají data, takže chyba v téhle
@@ -226,5 +246,41 @@ describe('nahrání do zadaného tématu', () => {
     const result = await importMaterials([extracted({ topic: 'Beze změny' })])
     expect(result).toMatchObject({ imported: 1, duplicates: 0 })
     expect(await rows('Beze změny')).toHaveLength(1)
+  })
+})
+
+describe('vynechání materiálu z generování', () => {
+  it('PATCH nastaví excluded a přepočte použitelný objem textu tématu', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId, { text: TEXT })
+
+    const response = await PATCH(jsonReq('/api/materials', 'PATCH', { id: materialId, excluded: true }))
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ ok: true })
+
+    const [material] = await db.select().from(materials).where(eq(materials.id, materialId)).limit(1)
+    expect(material!.excluded).toBe(true)
+
+    const [topic] = await db.select().from(topics).where(eq(topics.id, topicId)).limit(1)
+    expect(topic!.usableCharCount).toBe(0)
+    expect(topic!.lowContent).toBe(true)
+  })
+
+  it('cizí materiál se tváří jako neexistující — 404', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId)
+    vi.stubEnv('E2E_UZIVATEL', await ucitelkaJineSkoly())
+
+    const response = await PATCH(jsonReq('/api/materials', 'PATCH', { id: materialId, excluded: true }))
+    expect(response.status).toBe(404)
+  })
+
+  it('náhled vynechávat nesmí — 403', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId)
+    vi.stubEnv('E2E_UZIVATEL', (await seedUcet({ role: 'nahled' })).userId)
+
+    const response = await PATCH(jsonReq('/api/materials', 'PATCH', { id: materialId, excluded: true }))
+    expect(response.status).toBe(403)
   })
 })
