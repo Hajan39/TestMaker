@@ -117,6 +117,13 @@ export function TopicQuestions({
     [active, selectedIds],
   )
   const selectedPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
+  // Kolik vybraných otázek aktuální filtr schovává — bez toho by po zapnutí
+  // filtru vypadalo, že se výběr sám o sobě zmenšil, i když otázky zůstaly
+  // vybrané, jen nejsou vidět.
+  const hiddenSelectedCount = useMemo(() => {
+    const visibleIds = new Set(visible.map((question) => question.id))
+    return selectedQuestions.filter((question) => !visibleIds.has(question.id)).length
+  }, [visible, selectedQuestions])
 
   function toggleSelection(questionId: string) {
     setSelectedIds((current) => {
@@ -156,6 +163,10 @@ export function TopicQuestions({
         throw new Error(detail.error ?? `Test se nepodařilo založit (${response.status})`)
       }
       const result = (await response.json()) as { id: string }
+      // `refresh()` před `push()`: bez něj zůstane tahle stránka tématu
+      // v historii se starým stavem (bez štítku „V testu“) a návrat tlačítkem
+      // zpět ho ukáže neaktuální.
+      router.refresh()
       router.push(`/tests/${result.id}?tema=${topic.id}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Test se nepodařilo založit')
@@ -266,7 +277,6 @@ export function TopicQuestions({
               onCheckedChange={(checked) =>
                 setFilters((current) => ({ ...current, onlyUnused: checked === true }))
               }
-              aria-label="Jen nepoužité v testu"
             />
             Jen nepoužité v testu
           </label>
@@ -316,7 +326,7 @@ export function TopicQuestions({
           )}
         </div>
       ) : (
-        <ul className={`mt-3 divide-y divide-line-soft ${selectedQuestions.length > 0 ? 'pb-16' : ''}`}>
+        <ul className="mt-3 divide-y divide-line-soft">
           {visible.map((question) => (
             <li key={question.id} data-question-id={question.id} className="py-3">
               <QuestionCard
@@ -346,6 +356,7 @@ export function TopicQuestions({
         <SelectionBar
           count={selectedQuestions.length}
           points={selectedPoints}
+          hiddenCount={hiddenSelectedCount}
           busy={creatingTest}
           onCreate={() => void createTestFromSelection()}
           onClear={() => setSelectedIds(new Set())}
