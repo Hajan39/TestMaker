@@ -11,7 +11,6 @@ import {
   Button,
   Card,
   Checkbox,
-  DeleteButton,
   EmptyState,
   Input,
   Label,
@@ -143,6 +142,7 @@ export function QuestionsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loadingMore, setLoadingMore] = useState(false)
   const [pending, setPending] = useState<'approved' | 'rejected' | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [refreshing, startRefresh] = useTransition()
   const [navigating, startNavigate] = useTransition()
   const [editing, setEditing] = useState<Question | null>(null)
@@ -274,6 +274,7 @@ export function QuestionsTable({
   async function removeSelected() {
     const chosen = rows.filter((row) => selected.has(row.id))
     if (chosen.length === 0) return
+    setDeleting(true)
     try {
       const previous = await rejectQuestions(chosen)
       setSelected(new Set())
@@ -295,10 +296,12 @@ export function QuestionsTable({
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Otázky se nepodařilo smazat')
+    } finally {
+      setDeleting(false)
     }
   }
 
-  const busy = pending !== null || refreshing
+  const busy = pending !== null || deleting || refreshing
 
   /**
    * Hromadný výběr se vztahuje na to, co je právě načtené. Filtr tak slouží
@@ -486,13 +489,18 @@ export function QuestionsTable({
           >
             Zamítnout
           </BusyButton>
-          <DeleteButton
-            label="Smazat"
+          {/* Bez potvrzovacího dialogu — smazání je jen změna stavu a jde hned
+              vrátit hláškou „Vrátit zpět“, není co dopředu potvrzovat. */}
+          <BusyButton
+            size="sm"
             variant="outline"
-            title="Smazat vybrané otázky?"
-            description={`Smaže se ${pocet(selected.size, OTAZKY)}. Otázky zmizí z banky i z výběru do testu. Uložené testy je vytisknou dál. Smazání půjde hned vrátit.`}
-            onConfirm={removeSelected}
-          />
+            busy={deleting}
+            busyLabel="Mažu…"
+            disabled={busy}
+            onClick={() => void removeSelected()}
+          >
+            {`Smazat (${selected.size})`}
+          </BusyButton>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>
             Zrušit výběr
           </Button>

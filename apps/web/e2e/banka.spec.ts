@@ -100,11 +100,9 @@ test.describe('banka otázek', () => {
     await page.getByRole('checkbox', { name: `Vybrat otázku ${prompt}` }).click()
     // Číslo je v liště jen jednou („Vybráno 1“), tlačítko ho neopakuje.
     await expect(page.getByText('Vybráno 1')).toBeVisible()
-    await page.getByRole('button', { name: 'Smazat', exact: true }).click()
-    // Smazání je jen změna stavu, ne mizení z uloženého testu — potvrzení to
-    // musí říkat, ne strašit ztrátou z písemky.
-    await expect(page.getByRole('alertdialog').getByText(/Uložené testy je vytisknou dál/)).toBeVisible()
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
+    // Smazání je jen změna stavu a jde hned vrátit zpět, takže tu není žádné
+    // potvrzení — tlačítko rovnou maže.
+    await page.getByRole('button', { name: 'Smazat (1)' }).click()
 
     await expect(page.getByText(/^Smazáno: 1 otázka/)).toBeVisible()
     // Smazání je jen změna stavu na „zamítnuto“ — řádek beze stavového filtru
@@ -138,6 +136,31 @@ test.describe('banka otázek', () => {
 
     await expect(dialog).toHaveCount(0)
     await expect(page.getByText(upraveny)).toBeVisible({ timeout: 15000 })
+  })
+
+  test('otázka se dá smazat z nabídky u řádku a smazání jde vrátit zpět', async ({ page }) => {
+    const topicId = await prepareTopic(page)
+    const prompt = `Na smazání z řádku ${Date.now()}`
+    await createQuestion(page.request, topicId, prompt)
+
+    await page.goto(`/questions?topicId=${topicId}&q=${encodeURIComponent('na smazání z řádku')}`)
+    const rows = page.locator('tr[data-question-id]')
+    await expect(rows).toHaveCount(1)
+
+    // Akce u řádku jsou v nabídce pod třemi tečkami — týž vzor jako u testů.
+    // Bez potvrzovacího dialogu: smazání je jen změna stavu a jde hned vrátit.
+    await rows.getByRole('button', { name: /^Akce u otázky/ }).click()
+    await page.getByRole('menuitem', { name: 'Smazat' }).click()
+
+    await expect(page.getByText('Otázka smazána')).toBeVisible()
+    // Smazání je jen změna stavu na „zamítnuto“ — řádek beze stavového filtru
+    // zůstává v seznamu, jen s jiným popiskem stavu.
+    await expect(rows).toHaveCount(1, { timeout: 15000 })
+    await expect(rows.getByText('zamítnuto')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Vrátit zpět' }).click()
+    await expect(page.getByText('Vráceno zpět')).toBeVisible()
+    await expect(rows.getByText('schváleno')).toBeVisible({ timeout: 15000 })
   })
 })
 
