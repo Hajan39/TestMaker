@@ -264,6 +264,7 @@ export async function loadRenderablePuzzle(
       // Hlavolam se neznámkuje: políčko na body ani známku na něm nemá co dělat.
       graded: false,
       templateId: templateRow.id,
+      gradeId: null,
       header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
       variants: 1,
       showKey: options.withKey,

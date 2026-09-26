@@ -142,6 +142,7 @@ export function makeTest(overrides: Partial<Test> = {}): Test {
     description: null,
     graded: true,
     templateId: 'tpl-1',
+    gradeId: null,
     header: {
       school: 'ZŠ Ukázková',
       subject: 'Přírodopis',

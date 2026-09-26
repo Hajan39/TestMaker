@@ -1,16 +1,43 @@
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { DELETE, GET, POST, PUT } from '@/app/api/tests/route'
-import { db, questions, testItems } from '@/db'
+import { db, grades, questions, schools, subjects, testItems, users } from '@/db'
+import { newId } from '@/lib/ids'
 import { loadTest, loadTestItems } from '@/lib/tests'
 import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 let templateId: string
 let topicId: string
+let gradeId: string
+
+const CIZI_SKOLA = 'skola-ciziho-mesta-testy'
+
+/** Ročník z úplně jiné školy — cizí věc se má tvářit jako neexistující. */
+async function ciziRocnik(): Promise<string> {
+  await db
+    .insert(schools)
+    .values({ id: CIZI_SKOLA, name: 'Jiná škola', slug: 'jina-testy' })
+    .onConflictDoNothing()
+  const cizaUcitelka = newId()
+  await db.insert(users).values({
+    id: cizaUcitelka,
+    schoolId: CIZI_SKOLA,
+    email: `${cizaUcitelka}@jina.cz`,
+    name: 'Cizí učitelka',
+    role: 'spravce',
+  })
+  const subjectId = newId()
+  const cizGradeId = newId()
+  await db.insert(subjects).values({ id: subjectId, schoolId: CIZI_SKOLA, name: 'Cizí předmět' })
+  await db.insert(grades).values({ id: cizGradeId, schoolId: CIZI_SKOLA, subjectId, name: 'Cizí ročník' })
+  return cizGradeId
+}
 
 beforeAll(async () => {
   templateId = await seedTemplate()
-  topicId = (await seedTopic()).topicId
+  const topic = await seedTopic()
+  topicId = topic.topicId
+  gradeId = topic.gradeId
 })
 
 const emptyHeader = { school: '', subject: '', className: '', teacher: '', date: '', note: '' }
@@ -212,6 +239,88 @@ describe('přeuložení testu', () => {
     const test = await loadTest(UCET, id)
     expect(test?.title).toBe('Přejmenovaná písemka')
     expect(test?.header).toMatchObject({ school: 'ZŠ Ukázková', className: '8.A' })
+  })
+})
+
+describe('ročník testu', () => {
+  it('uloží ročník téže školy', async () => {
+    const id = await createTest([], { gradeId })
+    const test = await loadTest(UCET, id)
+    expect(test?.gradeId).toBe(gradeId)
+  })
+
+  it('cizí ročník uloží jako null a odpověď se neliší', async () => {
+    const cizi = await ciziRocnik()
+    const response = await POST(
+      jsonReq('/api/tests', 'POST', {
+        title: 'Písemka',
+        description: null,
+        graded: true,
+        templateId,
+        gradeId: cizi,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        items: [],
+      }),
+    )
+    expect(response.status).toBe(200)
+    const { id } = (await response.json()) as { id: string }
+    const test = await loadTest(UCET, id)
+    expect(test?.gradeId).toBeNull()
+  })
+
+  it('neexistující ročník uloží jako null', async () => {
+    const id = await createTest([], { gradeId: 'rocnik-ktery-neni' })
+    const test = await loadTest(UCET, id)
+    expect(test?.gradeId).toBeNull()
+  })
+
+  it('přeuložení zachová i změní ročník', async () => {
+    const id = await createTest([], { gradeId })
+    await PUT(
+      jsonReq('/api/tests', 'PUT', {
+        id,
+        title: 'Přejmenovaná písemka',
+        description: null,
+        graded: true,
+        templateId,
+        gradeId,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        items: [],
+      }),
+    )
+    expect((await loadTest(UCET, id))?.gradeId).toBe(gradeId)
+
+    const jinyTopic = await seedTopic()
+    await PUT(
+      jsonReq('/api/tests', 'PUT', {
+        id,
+        title: 'Přejmenovaná písemka',
+        description: null,
+        graded: true,
+        templateId,
+        gradeId: jinyTopic.gradeId,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        items: [],
+      }),
+    )
+    expect((await loadTest(UCET, id))?.gradeId).toBe(jinyTopic.gradeId)
+  })
+
+  it('smazání ročníku test nesmaže, jen mu vezme vazbu', async () => {
+    const jinyTopic = await seedTopic()
+    const id = await createTest([], { gradeId: jinyTopic.gradeId })
+
+    await db.delete(grades).where(eq(grades.id, jinyTopic.gradeId))
+
+    const test = await loadTest(UCET, id)
+    expect(test).not.toBeNull()
+    expect(test?.gradeId).toBeNull()
   })
 })
 

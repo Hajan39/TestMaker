@@ -499,6 +499,12 @@ export const tests = sqliteTable(
     templateId: text('template_id')
       .notNull()
       .references(() => templates.id),
+    /**
+     * Třída, ze které test vznikl. Řídí nabídku témat v editoru a filtr
+     * přehledu podle třídy; nepovinné, protože starší testy i ty založené
+     * bez konkrétní třídy ho nemají. Smazání ročníku test nesmí vzít s sebou.
+     */
+    gradeId: text('grade_id').references(() => grades.id, { onDelete: 'set null' }),
     header: text('header', { mode: 'json' }).notNull().$type<TestHeaderConfig>(),
     variants: integer('variants').notNull().default(1),
     showKey: integer('show_key', { mode: 'boolean' }).notNull().default(true),

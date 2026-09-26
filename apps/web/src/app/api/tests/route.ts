@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { buildPuzzleSnapshots, buildQuestionSnapshots, testConditions } from '@/lib/tests'
+import { buildPuzzleSnapshots, buildQuestionSnapshots, resolveGradeId, testConditions } from '@/lib/tests'
 import { skola, sRozsahem, viditelnyTest, vlastni, type Prihlaseny } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -32,6 +32,8 @@ const testSchema = z.object({
   description: z.string().max(1000).nullable().default(null),
   graded: z.boolean().default(true),
   templateId: z.string().min(1),
+  /** Třída, ze které test vznikl; ověřuje se proti škole při uložení. */
+  gradeId: z.string().min(1).nullable().default(null),
   header: testHeaderConfigSchema,
   variants: z.union([z.literal(1), z.literal(2)]).default(1),
   showKey: z.boolean().default(true),
@@ -105,6 +107,9 @@ async function copyTest(ucet: Prihlaseny, sourceId: string): Promise<Response> {
     description: source.description,
     graded: source.graded,
     templateId: source.templateId,
+    // Ročník kopírovaného testu už při jeho uložení prošel ověřením proti
+    // škole; kopie ho přebírá beze změny stejně jako ostatní pole.
+    gradeId: source.gradeId,
     header: source.header,
     variants: source.variants,
     showKey: source.showKey,
@@ -151,8 +156,9 @@ export async function POST(request: Request) {
       }
       const id = newId()
       const { items, ...test } = parsed.data
+      const gradeId = await resolveGradeId(ucet, test.gradeId)
 
-      await db.insert(tests).values({ id, schoolId: ucet.schoolId, ownerId: ucet.userId, ...test })
+      await db.insert(tests).values({ id, schoolId: ucet.schoolId, ownerId: ucet.userId, ...test, gradeId })
       const problem = await writeItems(ucet, id, items)
       if (problem) return problem
 
@@ -172,12 +178,13 @@ export async function PUT(request: Request) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
   const { id, items, ...test } = parsed.data
+  const gradeId = await resolveGradeId(ucet, test.gradeId)
 
   // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
   // ne přepsat.
   const zmeneno = await db
     .update(tests)
-    .set({ ...test, updatedAt: new Date().toISOString() })
+    .set({ ...test, gradeId, updatedAt: new Date().toISOString() })
     .where(and(eq(tests.id, id), vlastni(ucet, tests)))
     .returning({ id: tests.id })
   if (zmeneno.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })

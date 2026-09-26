@@ -91,6 +91,7 @@ const SAMPLE_TEST: Test = {
   description: null,
   graded: true,
   templateId: 'sample',
+  gradeId: null,
   header: {
     school: 'ZŠ Ukázková',
     subject: 'Přírodopis',

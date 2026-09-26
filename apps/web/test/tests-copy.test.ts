@@ -124,6 +124,15 @@ describe('kopie testu', () => {
     expect(kopie.status).toBe(404)
     expect(kopie.error).toBe('Test se nenašel')
   })
+
+  it('kopie si ponechá ročník testu, ze kterého vznikla', async () => {
+    const { gradeId } = await seedTopic()
+    const sourceId = await createTest([], { gradeId })
+
+    const kopie = await copyTest(sourceId)
+    expect(kopie.status).toBe(200)
+    expect((await loadTest(UCET, kopie.id!))?.gradeId).toBe(gradeId)
+  })
 })
 
 describe('hledání v seznamu testů', () => {

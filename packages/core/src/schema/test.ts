@@ -143,6 +143,8 @@ export interface Test {
   /** Test na známky — bez toho se nevykreslují body ani políčko na známku. */
   graded: boolean
   templateId: string
+  /** Třída, ze které test vznikl. `null` u starších testů i testů bez třídy. */
+  gradeId: string | null
   header: TestHeaderConfig
   /** 1 = jen varianta A, 2 = A i B. */
   variants: 1 | 2

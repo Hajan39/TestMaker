@@ -11,7 +11,7 @@ import {
   type Template,
   type Test,
 } from '@testmaker/core/schema'
-import { db, assets, puzzles, questions, templates, testItems, tests } from '@/db'
+import { db, assets, grades, puzzles, questions, templates, testItems, tests } from '@/db'
 import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
@@ -87,12 +87,28 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
     description: row.description,
     graded: row.graded,
     templateId: row.templateId,
+    gradeId: row.gradeId,
     header: row.header,
     variants: row.variants === 2 ? 2 : 1,
     showKey: row.showKey,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
+}
+
+/**
+ * Ověří `gradeId` proti škole volající — cizí nebo neexistující ročník se má
+ * tiše uložit jako `null`, aby z odpovědi nešlo poznat, že ročník vůbec
+ * (v jiné škole) existuje.
+ */
+export async function resolveGradeId(scope: Scope, gradeId: string | null): Promise<string | null> {
+  if (!gradeId) return null
+  const [row] = await db
+    .select({ id: grades.id })
+    .from(grades)
+    .where(and(eq(grades.id, gradeId), skola(scope, grades)))
+    .limit(1)
+  return row ? row.id : null
 }
 
 /**
