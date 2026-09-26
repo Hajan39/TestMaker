@@ -203,7 +203,9 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     setPhase('uploading')
     setError(null)
     try {
-      const result = await uploadMaterials(materials, (done, total) => setProgress({ done, total }))
+      const result = await uploadMaterials(materials, {
+        onProgress: (done, total) => setProgress({ done, total }),
+      })
       setSummary(result)
       // Kam pokračovat: první tři témata stačí, víc odkazů by byl seznam.
       const found = await Promise.all(

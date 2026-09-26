@@ -1,7 +1,7 @@
 import { importBatchSchema } from '@testmaker/core/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
-import { db, materials } from '@/db'
+import { db, materials, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
 import { ensureTopic } from '@/lib/library'
@@ -15,6 +15,20 @@ export async function POST(request: Request) {
   const parsed = importBatchSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+  }
+
+  // Nahrání z konkrétního tématu: pole subject/grade/topic se ignorují a
+  // materiály jdou vždycky do tohohle tématu podle id, ne podle jmen —
+  // ta se mezitím mohla přejmenovat.
+  let fixedTopicId: string | null = null
+  if (parsed.data.topicId) {
+    const [topic] = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(skola(ucet, topics), eq(topics.id, parsed.data.topicId)))
+      .limit(1)
+    if (!topic) return NextResponse.json({ error: 'Téma se nenašlo' }, { status: 404 })
+    fixedTopicId = topic.id
   }
 
   const groupMaterials = new URL(request.url).searchParams.get('group') !== '0'
@@ -58,12 +72,14 @@ export async function POST(request: Request) {
 
     // Téma známe ještě před rozhodnutím o duplicitě: tentýž obsah v jiném
     // tématu je legitimní nový materiál, ne duplicita.
-    const topicId = await ensureTopic(ucet, {
-      subject: material.subject,
-      grade: material.grade,
-      topic: material.topic,
-      group: groupMaterials,
-    })
+    const topicId =
+      fixedTopicId ??
+      (await ensureTopic(ucet, {
+        subject: material.subject,
+        grade: material.grade,
+        topic: material.topic,
+        group: groupMaterials,
+      }))
 
     if (prior) {
       // Soubor na této cestě byl už dřív importovaný, ale s jiným obsahem —

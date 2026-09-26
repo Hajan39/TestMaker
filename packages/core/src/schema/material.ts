@@ -23,6 +23,8 @@ export type ExtractedMaterial = z.infer<typeof extractedMaterialSchema>
 
 export const importBatchSchema = z.object({
   materials: z.array(extractedMaterialSchema).min(1).max(50),
+  /** Když je vyplněné, jdou všechny materiály rovnou sem — pole subject/grade/topic se ignorují. */
+  topicId: z.string().min(1).optional(),
 })
 
 export interface Material {

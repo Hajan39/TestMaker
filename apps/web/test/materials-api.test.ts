@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { POST, DELETE } from '@/app/api/materials/route'
 import { db, materials, topics } from '@/db'
-import { jsonReq, req } from './helpers'
+import { jsonReq, req, seedTopic } from './helpers'
 
 /**
  * Import materiálů. Tady se do knihovny dostávají data, takže chyba v téhle
@@ -46,8 +46,10 @@ interface ImportResult {
 }
 
 /** Import bez seskupování podobných témat — testy chtějí téma přesně podle názvu. */
-async function importMaterials(items: ExtractedMaterial[]): Promise<ImportResult> {
-  const response = await POST(jsonReq('/api/materials?group=0', 'POST', { materials: items }))
+async function importMaterials(items: ExtractedMaterial[], topicId?: string): Promise<ImportResult> {
+  const response = await POST(
+    jsonReq('/api/materials?group=0', 'POST', { materials: items, ...(topicId ? { topicId } : {}) }),
+  )
   expect(response.status).toBe(200)
   return (await response.json()) as ImportResult
 }
@@ -176,5 +178,53 @@ describe('smazání materiálu', () => {
   it('bez id je to 400', async () => {
     const response = await DELETE(req('/api/materials', { method: 'DELETE' }))
     expect(response.status).toBe(400)
+  })
+})
+
+describe('nahrání do zadaného tématu', () => {
+  it('jde do tématu podle id, i když se mezitím přejmenovalo, a pole subject/grade/topic se ignorují', async () => {
+    const { topicId } = await seedTopic({ topic: 'Původní název' })
+    await db.update(topics).set({ name: 'Nový název' }).where(eq(topics.id, topicId))
+
+    const result = await importMaterials(
+      [extracted({ subject: 'Jiný předmět', grade: '9. ročník', topic: 'Úplně jiné téma' })],
+      topicId,
+    )
+
+    expect(result).toMatchObject({ imported: 1, duplicates: 0 })
+    const list = await db.select().from(materials).where(eq(materials.topicId, topicId))
+    expect(list).toHaveLength(1)
+    // Nemělo vzniknout žádné nové téma podle jmen z materiálu.
+    expect(await rows('Úplně jiné téma')).toHaveLength(0)
+  })
+
+  it('cizí nebo neexistující téma je 404', async () => {
+    const response = await POST(
+      jsonReq('/api/materials?group=0', 'POST', {
+        materials: [extracted()],
+        topicId: 'neexistujici-id',
+      }),
+    )
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({ error: 'Téma se nenašlo' })
+  })
+
+  it('stejný hash podruhé do téhož zadaného tématu nevznikne dvakrát', async () => {
+    const { topicId } = await seedTopic()
+    const material = extracted({ contentHash: 'hash-do-tematu' })
+
+    const first = await importMaterials([material], topicId)
+    const second = await importMaterials([material], topicId)
+
+    expect(first).toMatchObject({ imported: 1, duplicates: 0 })
+    expect(second).toMatchObject({ imported: 0, duplicates: 1 })
+    const list = await db.select().from(materials).where(eq(materials.topicId, topicId))
+    expect(list).toHaveLength(1)
+  })
+
+  it('bez topicId chování zůstává jako dřív — téma se hledá/zakládá podle jmen', async () => {
+    const result = await importMaterials([extracted({ topic: 'Beze změny' })])
+    expect(result).toMatchObject({ imported: 1, duplicates: 0 })
+    expect(await rows('Beze změny')).toHaveLength(1)
   })
 })

@@ -115,12 +115,19 @@ export async function extractAll(
   }
 }
 
+export interface UploadOptions {
+  /** Nahrání rovnou do tohoto tématu — pole subject/grade/topic materiálu se ignorují. */
+  topicId?: string
+  batchSize?: number
+  onProgress?: (done: number, total: number) => void
+}
+
 /** Odešle materiály po dávkách; vrátí souhrn. */
 export async function uploadMaterials(
   items: ExtractedMaterial[],
-  onProgress?: (done: number, total: number) => void,
-  batchSize = 10,
+  options: UploadOptions = {},
 ): Promise<{ imported: number; duplicates: number }> {
+  const { topicId, batchSize = 10, onProgress } = options
   let imported = 0
   let duplicates = 0
 
@@ -129,7 +136,7 @@ export async function uploadMaterials(
     const response = await fetch('/api/materials', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ materials: batch }),
+      body: JSON.stringify({ materials: batch, ...(topicId ? { topicId } : {}) }),
     })
     if (!response.ok) {
       const detail = await response.text()
