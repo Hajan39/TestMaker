@@ -115,6 +115,16 @@ test.describe('výběr otázek do testu', () => {
     await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
     await expect(page).toHaveURL(new RegExp(`tema=${topicId}`))
 
+    // Regresní test: `router.refresh()` musí proběhnout před `router.push()`
+    // (`TopicQuestions.createTestFromSelection`) — jinak zůstane stránka
+    // tématu v historii se starým stavem (bez štítku „V testu") a návrat
+    // tlačítkem zpět ho ukáže neaktuální.
+    await page.goBack()
+    await expect(page).toHaveURL(new RegExp(`/topics/${topicId}$`))
+    await expect(rowA.getByText(/^V testu:/)).toBeVisible()
+    await page.goForward()
+    await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
+
     // V osnově jsou obě otázky, v pořadí, jak stály v seznamu tématu shora —
     // to je nejnovější první, takže C (přidaná poslední) je nad A.
     const rows = page.locator('[data-slot="paper-sheet"] ol > li')
