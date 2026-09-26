@@ -27,8 +27,8 @@ export function RegenerateButton({
   if (!available) return null
 
   return (
-    <BusyButton size="sm" variant="ghost" busy={busy} busyLabel="Nahrazuji…" onClick={() => void run()}>
-      Nahradit modelem
+    <BusyButton size="sm" variant="ghost" busy={busy} busyLabel="Přegeneruji…" onClick={() => void run()}>
+      Přegenerovat
     </BusyButton>
   )
 }

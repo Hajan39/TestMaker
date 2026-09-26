@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
  * Otázky v tématu jako karty: úprava přímo v seznamu, přegenerování, smazání
@@ -28,35 +28,41 @@ const TEXT =
     12,
   )
 
-/** Založí (nebo najde) zkušební téma jen pro tenhle soubor. Vrací jeho id. */
-async function ensureTopic(request: APIRequestContext): Promise<string> {
+/**
+ * Založí (nebo najde) zkušební téma jen pro tenhle soubor. Vrací jeho id.
+ *
+ * `topic` jde přepsat — test na téma se všemi smazanými otázkami potřebuje
+ * vlastní, izolované téma, ať mu ho nezalidní otázky z ostatních testů
+ * v tomhle souboru (ty sdílejí `TOPIC` a nikdy nekončí úplně bez otázek).
+ */
+async function ensureTopic(request: APIRequestContext, topic: string = TOPIC): Promise<string> {
   const imported = await request.post('/api/materials', {
     data: {
       materials: [
         {
-          relativePath: `${SUBJECT}/${GRADE}/${TOPIC}.txt`,
-          fileName: `${TOPIC}.txt`,
+          relativePath: `${SUBJECT}/${GRADE}/${topic}.txt`,
+          fileName: `${topic}.txt`,
           subject: SUBJECT,
           grade: GRADE,
-          topic: TOPIC,
+          topic,
           mimeType: 'text/plain',
           sizeBytes: TEXT.length,
           text: TEXT,
           pageCount: null,
           needsOcr: false,
-          contentHash: 'e2e-tema-otazky-v1',
+          contentHash: `e2e-tema-otazky-v1:${topic}`,
         },
       ],
     },
   })
   expect(imported.ok(), 'zkušební materiál se nepodařilo naimportovat').toBe(true)
 
-  const found = await request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
+  const found = await request.get(`/api/library/search?q=${encodeURIComponent(topic)}`)
   expect(found.ok()).toBe(true)
   const { results } = (await found.json()) as { results: { topicId: string; topicName: string }[] }
-  const topic = results.find((result) => result.topicName.includes(TOPIC))
-  expect(topic, `zkušební téma „${TOPIC}“ se v knihovně nenašlo`).toBeTruthy()
-  return topic!.topicId
+  const found2 = results.find((result) => result.topicName.includes(topic))
+  expect(found2, `zkušební téma „${topic}“ se v knihovně nenašlo`).toBeTruthy()
+  return found2!.topicId
 }
 
 /** Založí unikátní otázku a vrátí její zadání. */
@@ -86,6 +92,14 @@ async function pridatOtazku(
         }
   const created = await request.post('/api/questions', { data: { topicId, question } })
   expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
+}
+
+/** Přečte číslo v hlavičce „Otázky (N)“. */
+async function headerCount(page: Page): Promise<number> {
+  const text = await page.locator('h2', { hasText: 'Otázky (' }).textContent()
+  const match = text?.match(/\((\d+)\)/)
+  expect(match, `hlavička otázek nemá tvar „Otázky (N)“: ${text}`).toBeTruthy()
+  return Number(match![1])
 }
 
 test.describe('otázky v tématu', () => {
@@ -168,5 +182,152 @@ test.describe('otázky v tématu', () => {
 
     await expect(page.locator('li[data-question-id]', { hasText: pravdaNepravda })).toBeVisible()
     await expect(page.locator('li[data-question-id]', { hasText: kratka })).toHaveCount(0)
+  })
+
+  test('filtr typu nabízí jen typy, které téma opravdu má', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    await page.goto(`/topics/${topicId}`)
+
+    await page.locator('#topic-question-type-filter').click()
+    // Tohle téma má v sobě jen krátké odpovědi a pravda/nepravda (z ostatních
+    // testů v tomhle souboru) — jiný typ (třeba doplňovačka) se model nikdy
+    // nezeptal na vytvoření, takže by v nabídce jen strašil jako prázdná volba.
+    await expect(page.getByRole('option', { name: 'Krátká odpověď' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Pravda / nepravda' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Doplňovačka' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  })
+
+  test('filtr bez shody nabídne zrušení filtru, ne hlášku o prázdném tématu', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka pro filtr bez shody ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
+
+    // Obtížnost „Těžká“ v tomhle tématu nemá žádná otázka z tohohle souboru.
+    await page.locator('#topic-question-difficulty-filter').click()
+    await page.getByRole('option', { name: 'Těžká' }).click()
+
+    await expect(page.getByText('Filtru neodpovídá žádná otázka.')).toBeVisible()
+    // Hláška o prázdném tématu by tu byla zavádějící — otázky v něm jsou,
+    // jen je zrovna schoval filtr.
+    await expect(page.getByText('V tématu zatím nejsou otázky.')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Zrušit filtr' }).click()
+    await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
+  })
+
+  test('smazání karty sníží počet v hlavičce, přegenerování ho nechá stejný', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka na počet v hlavičce ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(row).toBeVisible()
+    const before = await headerCount(page)
+
+    await row.getByRole('button', { name: 'Smazat' }).click()
+    await expect(row).toHaveCount(0)
+    await expect.poll(() => headerCount(page)).toBe(before - 1)
+
+    await page.getByRole('button', { name: 'Vrátit zpět' }).click()
+    await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
+    await expect.poll(() => headerCount(page)).toBe(before)
+  })
+
+  test('přegenerování skryje starou kartu ihned, bez čekání na obnovení stránky', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka na přegenerování ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+
+    // Model se nevolá — jen se ověřuje, že karta zmizí hned po úspěšné
+    // odpovědi, ne až po obnovení seznamu ze serveru (tam by zůstala viset,
+    // protože server o výměně nic neví).
+    await page.route('**/api/questions/regenerate', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: { configured: true } })
+        return
+      }
+      await route.fulfill({
+        json: {
+          question: {
+            id: `nahrazena-${Date.now()}`,
+            topicId,
+            materialId: null,
+            source: 'ai',
+            status: 'approved',
+            createdAt: new Date().toISOString(),
+            type: 'short_answer',
+            payload: { prompt: `${prompt} (nová)`, answer: 'odpověď', acceptedAnswers: [] },
+            blocks: [],
+            points: 1,
+            difficulty: 1,
+          },
+        },
+      })
+    })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: 'Přegenerovat' }).click()
+
+    await expect(row).toHaveCount(0)
+  })
+
+  test('vrácení smazané karty funguje i po mezitímním obnovení seznamu jinou akcí', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const a = `Karta A ke smazání ${Date.now()}`
+    const b = `Karta B k úpravě ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt: a, difficulty: 1 })
+    await pridatOtazku(page.request, topicId, { prompt: b, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const rowA = page.locator('li[data-question-id]', { hasText: a })
+    const rowB = page.locator('li[data-question-id]', { hasText: b })
+    await expect(rowA).toBeVisible()
+    await expect(rowB).toBeVisible()
+
+    await rowA.getByRole('button', { name: 'Smazat' }).click()
+    await expect(rowA).toHaveCount(0)
+    const toast = page.getByText('Otázka smazána')
+    await expect(toast).toBeVisible()
+
+    // Mezitím proběhne úprava jiné karty — ta po uložení volá
+    // `router.refresh()`, takže seznam se obnoví dřív, než se klikne na
+    // „Vrátit zpět“.
+    await rowB.getByRole('button', { name: 'Upravit' }).click()
+    const editovana = `${b} (upraveno)`
+    await rowB.getByLabel('Zadání').fill(editovana)
+    await rowB.getByRole('button', { name: 'Uložit' }).click()
+    await expect(page.getByText(editovana)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Vrátit zpět' }).click()
+    await expect(page.locator('li[data-question-id]', { hasText: a })).toBeVisible()
+  })
+})
+
+test.describe('téma bez otázek', () => {
+  test('smazání jediné otázky ukáže prázdný stav tématu', async ({ page }) => {
+    // Vlastní název bez společných slov s `TOPIC` — jinak by ho slučování
+    // podobných názvů (`sameTopic` v `packages/core/src/extract/grouping.ts`)
+    // spojilo se sdíleným tématem tohohle souboru místo založení nového.
+    // Přípona čistě z číslic by se přitom nepočítala vůbec — `topicTokens`
+    // číselné tokeny zahazuje — takže dva běhy tohohle testu by kvůli tomu
+    // sami sebe slily dohromady; `toString(36)` dá do přípony i písmena.
+    const topicId = await ensureTopic(page.request, `E2E izolovane prazdne tema ${Date.now().toString(36)}`)
+    const prompt = `Jediná otázka tématu ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: 'Smazat' }).click()
+    await expect(row).toHaveCount(0)
+    await expect(page.getByText('V tématu zatím nejsou otázky.')).toBeVisible()
   })
 })

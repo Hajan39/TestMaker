@@ -57,7 +57,7 @@ export function useRegenerateQuestion(
         toast.error(data.error ?? 'Náhradu se nepodařilo vytvořit')
         return
       }
-      toast.success('Otázka nahrazena novou od modelu. Původní je zamítnutá.')
+      toast.success('Otázka nahrazena novou.')
       onDone?.()
       router.refresh()
     } catch (error) {

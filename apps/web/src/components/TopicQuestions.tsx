@@ -40,9 +40,12 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
   const muzeMenit = useMuzeMenit()
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  // Smazaná karta zmizí hned, bez čekání na obnovení seznamu ze serveru —
-  // tahle množina je jediné místo, kde se to pozná.
+  // Smazaná (i přegenerovaná) karta zmizí hned, bez čekání na obnovení seznamu
+  // ze serveru — tahle množina je jediné místo, kde se to pozná.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+  // Otázka, u které se právě maže — chrání proti dvojímu kliknutí, než dojde
+  // odpověď ze serveru (smazání je optimistické, karta zmizí ještě dřív).
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '' })
 
   const sorted = useMemo(
@@ -53,18 +56,37 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
     [questions],
   )
 
-  const visible = sorted.filter((question) => {
-    if (hiddenIds.has(question.id)) return false
+  // Smazané (nebo přegenerované) karty se z tématu odečítají úplně — na
+  // hlavičce i na nabídce typů v filtru; filtr sám počet dál nemění.
+  const active = useMemo(() => sorted.filter((question) => !hiddenIds.has(question.id)), [sorted, hiddenIds])
+
+  // Filtr typu nabízí jen typy, které v tématu opravdu jsou — jinak by
+  // učitelka zvolila „Doplňovačka“ a dostala prázdno, i kdyby v tématu žádná
+  // nebyla nikdy.
+  const availableTypes = useMemo(() => {
+    const present = new Set(active.map((question) => question.type))
+    return (Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((type) => present.has(type))
+  }, [active])
+
+  const visible = active.filter((question) => {
     if (filters.type && question.type !== filters.type) return false
     if (filters.difficulty && question.difficulty !== filters.difficulty) return false
     return true
   })
 
+  function resetFilters() {
+    setFilters({ type: '', difficulty: '' })
+  }
+
   /** Smazání beze ptaní — jde hned vrátit zpět, proto tu není potvrzovací dialog. */
   async function remove(question: Question) {
+    if (busyIds.has(question.id)) return
+    setBusyIds((current) => new Set(current).add(question.id))
+    // Optimisticky: karta zmizí hned, ať smazání nečeká na odpověď ze
+    // serveru. Nepovede-li se, karta se vrátí a chyba se ohlásí hláškou.
+    setHiddenIds((current) => new Set(current).add(question.id))
     try {
       const previous = await rejectQuestions([question])
-      setHiddenIds((current) => new Set(current).add(question.id))
       toast.success('Otázka smazána', {
         duration: 10_000,
         action: {
@@ -78,6 +100,7 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
                   return next
                 })
                 toast.success('Vráceno zpět')
+                router.refresh()
               })
               .catch((error) =>
                 toast.error(error instanceof Error ? error.message : 'Vrácení se nepodařilo'),
@@ -85,14 +108,26 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
         },
       })
     } catch (error) {
+      // Smazání se nepovedlo — karta se vrátí zpátky do seznamu.
+      setHiddenIds((current) => {
+        const next = new Set(current)
+        next.delete(question.id)
+        return next
+      })
       toast.error(error instanceof Error ? error.message : 'Otázku se nepodařilo smazat')
+    } finally {
+      setBusyIds((current) => {
+        const next = new Set(current)
+        next.delete(question.id)
+        return next
+      })
     }
   }
 
   return (
     <Card className="gap-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-sm font-semibold text-fg">Otázky ({questions.length})</h2>
+        <h2 className="text-sm font-semibold text-fg">Otázky ({active.length})</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-44">
             <Label htmlFor="topic-question-type-filter">Typ</Label>
@@ -109,10 +144,10 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="vse">Všechny</SelectItem>
-                {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
+                <SelectItem value="vse">Všechny typy</SelectItem>
+                {availableTypes.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {label}
+                    {QUESTION_TYPE_LABELS[type]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -167,10 +202,23 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
 
       {visible.length === 0 && !creating ? (
         <div className="mt-4">
-          <EmptyState
-            title="V tématu zatím nejsou otázky."
-            hint="Nech je vygenerovat, nebo napiš první sama."
-          />
+          {active.length === 0 ? (
+            <EmptyState
+              title="V tématu zatím nejsou otázky."
+              // Náhled (role `nahled`) si nepíše otázky sama — ten dodatek
+              // by jí jen nabízel akci, kterou nemá.
+              hint={muzeMenit ? 'Nech je vygenerovat, nebo napiš první sama.' : 'Nech je vygenerovat.'}
+            />
+          ) : (
+            <EmptyState
+              title="Filtru neodpovídá žádná otázka."
+              action={
+                <Button variant="outline" onClick={resetFilters}>
+                  Zrušit filtr
+                </Button>
+              }
+            />
+          )}
         </div>
       ) : (
         <ul className="mt-3 divide-y divide-line-soft">
@@ -196,11 +244,16 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
                       <Button size="sm" variant="ghost" onClick={() => setEditingId(question.id)}>
                         Upravit
                       </Button>
-                      <RegenerateButton questionId={question.id} type={question.type} />
+                      <RegenerateButton
+                        questionId={question.id}
+                        type={question.type}
+                        onDone={() => setHiddenIds((current) => new Set(current).add(question.id))}
+                      />
                       <Button
                         size="sm"
                         variant="ghost"
                         className="text-danger hover:text-danger"
+                        disabled={busyIds.has(question.id)}
                         onClick={() => void remove(question)}
                       >
                         Smazat
