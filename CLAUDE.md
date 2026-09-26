@@ -123,6 +123,12 @@ proti ostré `local.db`; databázi staví `apps/web/scripts/seed-e2e.ts`
 Testy extraktorů a rozpoznávání duplicit používají skutečné soubory ve složce
 `sources/`. Ta není v gitu; bez ní se tyto testy přeskočí.
 
+Ručně psaná migrace, která mění schéma (ne jen data), musí dostat i svůj
+snímek v `apps/web/drizzle/meta` — jinak `pnpm db:generate` porovnává proti
+zastaralému základu a příští migrace by šla proti němu, ne proti tomu, co
+je doopravdy v `local.db`. Po přidání migrace proto spusť `pnpm db:generate`
+a ověř, že nehlásí žádnou změnu.
+
 Změny ve vykreslení PDF ověřuj na vygenerovaném souboru, ne jen podle typů:
 
 ```bash
