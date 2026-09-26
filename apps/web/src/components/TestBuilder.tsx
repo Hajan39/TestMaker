@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
 import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
@@ -32,11 +33,20 @@ export function TestBuilder({
   templates,
   test,
   items,
+  gradeId,
+  gradeLabel,
+  backTopic,
 }: {
   topics: PickerTopic[]
   templates: Template[]
   test: Test | null
   items: ResolvedTestItem[]
+  /** Třída testu (`gradeId` z `loadTest`) — jí se předfiltruje banka. */
+  gradeId?: string | null
+  /** Popisek třídy k zobrazení v hlavičce, např. „Přírodopis · 6. ročník". */
+  gradeLabel?: string | null
+  /** Téma, ze kterého test vznikl (`?tema=`) — jen když patří škole. */
+  backTopic?: { id: string; name: string } | null
 }) {
   const router = useRouter()
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
@@ -72,10 +82,15 @@ export function TestBuilder({
   )
   // Na stav otázky se tu nefiltruje: do banky jdou ze serveru jen schválené
   // otázky, takže do ostré písemky nemá koncept kudy proklouznout.
+  //
+  // Výchozí filtr třídy = třída testu — kdo dělá písemku pro 6. B, chce
+  // nejdřív vidět jen 6. B. Přepnutím na „Všechny třídy" jde vybrat i z
+  // jiných ročníků, tak vzniká opakovací test napříč tématy. Test bez třídy
+  // (starší nebo založený bez tématu) nabídne rovnou všechno jako dřív.
   const [filters, setFilters] = useState<BankFilters>({
     search: '',
     subject: '',
-    grade: '',
+    grade: gradeId ?? '',
     type: '',
   })
   const [saving, setSaving] = useState(false)
@@ -320,6 +335,17 @@ export function TestBuilder({
             patří do hlavičky na oči, ne do panelu, který se ani neotevře. */}
         <div className="min-w-0 flex-1 basis-64">
           <h1 className="ui-page-title">{test ? 'Úprava testu' : 'Nový test'}</h1>
+          {gradeLabel || backTopic ? (
+            <p className="mt-1 text-sm text-fg-muted">
+              {gradeLabel}
+              {gradeLabel && backTopic ? ' · ' : null}
+              {backTopic ? (
+                <Link href={`/topics/${backTopic.id}`} className="underline hover:no-underline">
+                  ← Zpět do tématu {backTopic.name}
+                </Link>
+              ) : null}
+            </p>
+          ) : null}
           <div className="mt-2 max-w-md">
             <Label htmlFor="test-title">Název písemky</Label>
             <Input

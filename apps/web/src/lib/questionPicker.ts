@@ -10,6 +10,8 @@ export interface PickerTopic {
   label: string
   subject: string
   grade: string
+  /** Ročník tématu — editor testu podle něj předfiltruje banku na třídu testu. */
+  gradeId: string
   name: string
   questions: Question[]
 }
@@ -43,6 +45,7 @@ export async function loadPickerTopics(
     .select({
       topicId: topics.id,
       topicName: topics.name,
+      gradeId: grades.id,
       gradeName: grades.name,
       subjectName: subjects.name,
       question: questions,
@@ -63,6 +66,7 @@ export async function loadPickerTopics(
         label: [row.subjectName, row.gradeName, row.topicName].filter(Boolean).join(' · '),
         subject: row.subjectName,
         grade: row.gradeName,
+        gradeId: row.gradeId,
         name: row.topicName,
         questions: [],
       }

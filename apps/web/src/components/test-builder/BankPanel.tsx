@@ -51,13 +51,24 @@ export function BankPanel({
 }) {
   const isUsed = (id: string) => (usedCounts.get(id) ?? 0) > 0
   const subjects = useMemo(() => [...new Set(topics.map((topic) => topic.subject))].sort(), [topics])
-  const grades = useMemo(() => [...new Set(topics.map((topic) => topic.grade))].sort(), [topics])
+  /**
+   * Nabídka ročníků je podle `gradeId`, ne podle názvu — dva ročníky se
+   * stejným jménem v různých předmětech ("6. ročník" v matice i v přírodopisu)
+   * by se jinak slily do jedné položky a filtr by ukázal obojí najednou.
+   */
+  const grades = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const topic of topics) {
+      if (!byId.has(topic.gradeId)) byId.set(topic.gradeId, `${topic.subject} · ${topic.grade}`)
+    }
+    return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], 'cs'))
+  }, [topics])
 
   const visibleTopics = useMemo(() => {
     const needle = filters.search.trim().toLocaleLowerCase('cs')
     return topics
       .filter((topic) => !filters.subject || topic.subject === filters.subject)
-      .filter((topic) => !filters.grade || topic.grade === filters.grade)
+      .filter((topic) => !filters.grade || topic.gradeId === filters.grade)
       .map((topic) => ({
         ...topic,
         questions: topic.questions.filter((question) => {
@@ -118,10 +129,10 @@ export function BankPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vse">Všechny</SelectItem>
-              {grades.map((grade) => (
-                <SelectItem key={grade} value={grade}>
-                  {grade}
+              <SelectItem value="vse">Všechny třídy</SelectItem>
+              {grades.map(([gradeId, label]) => (
+                <SelectItem key={gradeId} value={gradeId}>
+                  {label}
                 </SelectItem>
               ))}
             </SelectContent>

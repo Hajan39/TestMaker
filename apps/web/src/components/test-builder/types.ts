@@ -25,7 +25,12 @@ export interface DraftItem {
   questionMissing?: boolean
 }
 
-/** Filtry banky. Stav otázky mezi nimi není — v bance jsou vždy jen schválené. */
+/**
+ * Filtry banky. Stav otázky mezi nimi není — v bance jsou vždy jen schválené.
+ *
+ * `grade` je `gradeId`, ne název — ročníky se stejným názvem existují ve více
+ * předmětech a podle názvu by se filtr snadno netrefil do toho pravého.
+ */
 export interface BankFilters {
   search: string
   subject: string

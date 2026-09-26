@@ -21,6 +21,16 @@ describe('výběr otázek do testu', () => {
     expect(picked.every((question) => question.status === 'approved')).toBe(true)
   })
 
+  it('nese id ročníku, ne jen jeho název — banka podle něj předfiltruje na třídu testu', async () => {
+    const { topicId, gradeId } = await seedTopic({ topic: 'Oběhová soustava' })
+    await seedQuestion(topicId, { prompt: 'Schválená', status: 'approved' })
+
+    const topics = await loadPickerTopics(UCET)
+    const topic = topics.find((entry) => entry.id === topicId)
+
+    expect(topic?.gradeId).toBe(gradeId)
+  })
+
   it('téma, ve kterém jsou jen koncepty, v nabídce vůbec není', async () => {
     const { topicId } = await seedTopic({ topic: 'Jen koncepty' })
     await seedQuestion(topicId, { status: 'draft' })

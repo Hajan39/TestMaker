@@ -19,15 +19,19 @@ const TEXT =
     12,
   )
 
-async function ensureTopic(request: APIRequestContext, topic: string = TOPIC): Promise<string> {
+async function ensureTopic(
+  request: APIRequestContext,
+  topic: string = TOPIC,
+  grade: string = GRADE,
+): Promise<string> {
   const imported = await request.post('/api/materials', {
     data: {
       materials: [
         {
-          relativePath: `${SUBJECT}/${GRADE}/${topic}.txt`,
+          relativePath: `${SUBJECT}/${grade}/${topic}.txt`,
           fileName: `${topic}.txt`,
           subject: SUBJECT,
-          grade: GRADE,
+          grade,
           topic,
           mimeType: 'text/plain',
           sizeBytes: TEXT.length,
@@ -122,6 +126,29 @@ test.describe('výběr otázek do testu', () => {
 
     // Název testu = název tématu.
     await expect(page.getByLabel('Název písemky')).toHaveValue(/Výběr otázek do testu/)
+
+    // Hlavička ukazuje třídu, ze které test vznikl, a odkaz zpět do tématu.
+    const backLink = page.getByRole('link', { name: /Zpět do tématu/ })
+    await expect(backLink).toBeVisible()
+    await expect(backLink).toHaveAttribute('href', `/topics/${topicId}`)
+    await expect(backLink.locator('..')).toContainText(`${SUBJECT} · ${GRADE}`)
+
+    // Druhé téma v jiném ročníku — ve výchozím filtru (třída testu) banka
+    // ukazuje jen téma vlastní třídy; po přepnutí na „Všechny třídy“ i to druhé.
+    // Ročník i téma mají v názvu čas — jinak by novou položku pohltilo
+    // seskupení podobných témat do staré položky ze dřívějšího běhu.
+    const otherGrade = `${GRADE} jiná třída ${Date.now()}`
+    const otherTopic = `${TOPIC} jinde ${Date.now()}`
+    const otherTopicId = await ensureTopic(page.request, otherTopic, otherGrade)
+    await pridatOtazku(page.request, otherTopicId, `Otázka z jiné třídy ${Date.now()}`, 1)
+    await page.reload()
+
+    const bankOwnGrade = page.getByText(new RegExp(`${SUBJECT} · ${otherGrade} · `))
+    await expect(bankOwnGrade).toHaveCount(0)
+
+    await page.getByLabel('Ročník').click()
+    await page.getByRole('option', { name: 'Všechny třídy' }).click()
+    await expect(bankOwnGrade).toBeVisible()
   })
 
   test('„Zrušit výběr“ schová lištu', async ({ page }) => {
