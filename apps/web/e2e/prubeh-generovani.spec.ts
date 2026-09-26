@@ -107,11 +107,10 @@ test.describe('průběh generování u tématu', () => {
     // jen upozorní, že je hotovo.
     await expect(page.getByText(/Vytvořeno 2 otázky/)).toHaveCount(1)
     await expect(page.getByText('Zahozeno: 1 otázka — neúplné nebo si odporovaly.')).toBeVisible()
-    await expect(page.getByText('Hotovo, 2 otázky ke kontrole.')).toBeVisible()
-    const odkaz = page.getByRole('link', { name: 'Zkontrolovat' })
-    await expect(odkaz).toBeVisible()
-    await odkaz.click()
-    await expect(page).toHaveURL(/\/review\?topicId=/)
+    // Nové otázky jsou hned vidět jako karty pod tím — bublina už nikam
+    // neodkazuje, kontrola konceptů v tématu skončila.
+    await expect(page.getByText('Hotovo, 2 nové otázky.')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Zkontrolovat' })).toHaveCount(0)
   })
 
   test('průběh je čitelný ve světlém i tmavém režimu', async ({ page, request }) => {
@@ -139,7 +138,7 @@ test.describe('průběh generování u tématu', () => {
       })
 
       // Doběhnout to musí celé, jinak by druhý průchod začínal doprostřed.
-      await expect(page.getByRole('link', { name: 'Zkontrolovat' })).toBeVisible()
+      await expect(page.getByText(/^Vytvořeno/)).toBeVisible({ timeout: 10_000 })
       // Stav po doběhnutí: souhrn běhu je v kartě jednou, bublina jen hlásí hotovo.
       await page.screenshot({ path: `e2e/screenshots/tema-pote-${motiv}-1440.png`, fullPage: false })
 

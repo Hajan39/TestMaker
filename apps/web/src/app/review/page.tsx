@@ -46,7 +46,6 @@ export default async function ReviewPage({
         gradeId: grade.id,
         subjectId: subject.id,
         label: [subject.name, grade.name, topic.name].filter(Boolean).join(' · '),
-        draftCount: topic.draftCount,
       })),
     ),
   )

@@ -204,7 +204,6 @@ describe('ruční zakládání v knihovně', () => {
       materialCount: 0,
       questionCount: 0,
       approvedCount: 0,
-      draftCount: 0,
       lowContent: true,
     })
 

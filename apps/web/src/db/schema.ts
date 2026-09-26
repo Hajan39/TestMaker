@@ -335,7 +335,7 @@ export const questions = sqliteTable(
   (table) => [
     /**
      * Nejčastější dotaz v aplikaci: otázky jednoho tématu, obvykle zúžené
-     * stavem (koncepty ke kontrole, doplňování počtu v `resolveCount`).
+     * stavem (bez smazaných, doplňování počtu v `resolveCount`).
      * Nahrazuje dřívější index jen podle tématu — ten je jeho předponou,
      * takže dotazy bez stavu zvládne taky.
      */

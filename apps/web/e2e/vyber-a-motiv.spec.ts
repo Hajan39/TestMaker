@@ -10,16 +10,18 @@ import { testTopicPath } from './fixtures'
 // z autorova disku by na cizí databázi neexistovalo.
 
 test.describe('hromadný výběr', () => {
-  test('v otázkách tématu vybere vše, co je vidět', async ({ page }) => {
-    await page.goto(await testTopicPath(page.request))
+  test('v bance otázek zúžené na téma vybere vše, co je vidět', async ({ page }) => {
+    const path = await testTopicPath(page.request)
+    const topicId = path.split('/').pop()!
+    await page.goto(`/questions?topicId=${topicId}`)
 
-    const selectAll = page.getByRole('checkbox', { name: 'Vybrat vše' })
+    const selectAll = page.getByRole('checkbox', { name: /^Vybrat vše viditelné/ })
     await expect(selectAll).toBeVisible()
     await selectAll.click()
 
     // Po výběru se objeví lišta hromadných akcí s počtem.
     await expect(page.getByText(/^Vybráno \d+$/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Schválit' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Smazat/ })).toBeVisible()
 
     // Druhé kliknutí výběr zase zruší.
     await selectAll.click()

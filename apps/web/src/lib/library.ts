@@ -17,7 +17,6 @@ export interface TopicNode {
   materialCount: number
   questionCount: number
   approvedCount: number
-  draftCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
   lowContent: boolean
 }
@@ -62,7 +61,6 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
         topicId: questions.topicId,
         total: count(),
         approved: sql<number>`sum(case when ${questions.status} = 'approved' then 1 else 0 end)`,
-        draft: sql<number>`sum(case when ${questions.status} = 'draft' then 1 else 0 end)`,
       })
       .from(questions)
       .where(skola(scope, questions))
@@ -82,7 +80,6 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
       materialCount: materialsByTopic.get(topic.id) ?? 0,
       questionCount: stats?.total ?? 0,
       approvedCount: Number(stats?.approved ?? 0),
-      draftCount: Number(stats?.draft ?? 0),
       lowContent: topic.lowContent,
     })
     topicsByGrade.set(topic.gradeId, list)

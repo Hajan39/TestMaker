@@ -43,7 +43,6 @@ interface TopicOption {
   gradeId: string
   subjectId: string
   label: string
-  draftCount: number
 }
 
 /** Zápis stavu po dávkách — jeden požadavek nemá nést tisíc identifikátorů. */

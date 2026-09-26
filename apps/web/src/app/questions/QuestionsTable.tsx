@@ -19,7 +19,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  planUndo,
   toast,
   useMatchesMedia,
   pocet,
@@ -29,10 +28,14 @@ import { QuestionEditor } from '@/components/QuestionEditor'
 import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
 import { QuestionActions } from './QuestionActions'
 
-const STATUS_LABELS: Record<QuestionStatus, string> = {
-  draft: 'Koncept',
-  approved: 'Schváleno',
-  rejected: 'Zamítnuto',
+/**
+ * Nabídka filtru stavu. Bez „Koncept“ — koncepty schvalování zmizelo,
+ * generování i ruční přidání ukládá otázku rovnou jako použitelnou. „Smazané“
+ * zůstává, ať jde smazanou otázku dohledat a vrátit.
+ */
+const STATUS_FILTER_LABELS: Partial<Record<QuestionStatus, string>> = {
+  approved: 'Schválené',
+  rejected: 'Smazané',
 }
 
 /** Kolik identifikátorů nejvíc pojme jeden požadavek na hromadnou změnu stavu. */
@@ -141,7 +144,7 @@ export function QuestionsTable({
   const [cursor, setCursor] = useState(nextCursor)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loadingMore, setLoadingMore] = useState(false)
-  const [pending, setPending] = useState<'approved' | 'rejected' | null>(null)
+  const [restoring, setRestoring] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [refreshing, startRefresh] = useTransition()
   const [navigating, startNavigate] = useTransition()
@@ -230,44 +233,20 @@ export function QuestionsTable({
     }
   }
 
-  /** Vrácení hromadné akce; otázky mohly mít předtím různé stavy. */
-  async function undoBulk(previous: [string, QuestionStatus][]) {
-    try {
-      for (const step of planUndo(previous)) await writeStatus(step.ids, step.status)
-      toast.success(`Vráceno zpět: ${pocet(previous.length, OTAZKY)}`)
-      startRefresh(() => router.refresh())
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Vrácení se nepodařilo')
-    }
-  }
-
-  async function bulkStatus(next: 'approved' | 'rejected') {
-    const ids = [...selected]
+  /** Obnoví vybrané smazané otázky zpět na použitelné (bez fronty ke schválení). */
+  async function restoreSelected() {
+    const ids = rows.filter((row) => selected.has(row.id) && row.status === 'rejected').map((row) => row.id)
     if (ids.length === 0) return
-
-    // Stavy před akcí se poznamenají dřív, než se seznam obnoví — jinak by se
-    // „Vzít zpět“ nemělo k čemu vrátit.
-    const previous = ids.flatMap((id): [string, QuestionStatus][] => {
-      const question = rows.find((row) => row.id === id)
-      return question ? [[id, question.status]] : []
-    })
-
-    setPending(next)
+    setRestoring(true)
     try {
-      await writeStatus(ids, next)
+      await writeStatus(ids, 'approved')
       setSelected(new Set())
       startRefresh(() => router.refresh())
-      toast.success(
-        `${next === 'approved' ? 'Schváleno' : 'Zamítnuto'}: ${pocet(ids.length, OTAZKY)}`,
-        {
-          duration: 10_000,
-          action: { label: 'Vzít zpět', onClick: () => void undoBulk(previous) },
-        },
-      )
+      toast.success(`Obnoveno: ${pocet(ids.length, OTAZKY)}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Změnu se nepodařilo uložit')
+      toast.error(error instanceof Error ? error.message : 'Obnovení se nepodařilo')
     } finally {
-      setPending(null)
+      setRestoring(false)
     }
   }
 
@@ -301,7 +280,11 @@ export function QuestionsTable({
     }
   }
 
-  const busy = pending !== null || deleting || refreshing
+  const busy = restoring || deleting || refreshing
+  /** Kolik z vybraných je smazaných — jen ty jde vybraně obnovit. */
+  const selectedRejectedCount = rows.filter(
+    (row) => selected.has(row.id) && row.status === 'rejected',
+  ).length
 
   /**
    * Hromadný výběr se vztahuje na to, co je právě načtené. Filtr tak slouží
@@ -443,7 +426,7 @@ export function QuestionsTable({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="vse">Všechny</SelectItem>
-                {Object.entries(STATUS_LABELS).map(([status, label]) => (
+                {Object.entries(STATUS_FILTER_LABELS).map(([status, label]) => (
                   <SelectItem key={status} value={status}>
                     {label}
                   </SelectItem>
@@ -469,26 +452,20 @@ export function QuestionsTable({
         // Nižší váhu má jen „Zrušit výběr“, protože z lišty vede pryč.
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded bg-surface-muted px-3 py-2">
           <span className="text-sm text-fg-soft">Vybráno {selected.size}</span>
-          <BusyButton
-            size="sm"
-            variant="outline"
-            busy={pending === 'approved'}
-            busyLabel="Schvaluji…"
-            disabled={busy}
-            onClick={() => void bulkStatus('approved')}
-          >
-            Schválit
-          </BusyButton>
-          <BusyButton
-            size="sm"
-            variant="outline"
-            busy={pending === 'rejected'}
-            busyLabel="Zamítám…"
-            disabled={busy}
-            onClick={() => void bulkStatus('rejected')}
-          >
-            Zamítnout
-          </BusyButton>
+          {/* Obnovit dává smysl, jen když je mezi vybranými aspoň jedna smazaná —
+              jinak by tlačítko nemělo co vracet. */}
+          {selectedRejectedCount > 0 ? (
+            <BusyButton
+              size="sm"
+              variant="outline"
+              busy={restoring}
+              busyLabel="Obnovuji…"
+              disabled={busy}
+              onClick={() => void restoreSelected()}
+            >
+              {`Obnovit (${selectedRejectedCount})`}
+            </BusyButton>
+          ) : null}
           {/* Bez potvrzovacího dialogu — smazání je jen změna stavu a jde hned
               vrátit hláškou „Vrátit zpět“, není co dopředu potvrzovat. */}
           <BusyButton
@@ -569,11 +546,9 @@ export function QuestionsTable({
                   />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-soft">
-                  {row.status === 'draft' ? (
-                    <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
-                  ) : null}
-                  {row.status === 'approved' ? <Badge>schváleno</Badge> : null}
-                  {row.status === 'rejected' ? <Badge variant="destructive">zamítnuto</Badge> : null}
+                  {/* Schvalování zmizelo — štítek stavu má smysl jen u smazané
+                      otázky, ať jde poznat, proč tu je i mimo filtr „Smazané“. */}
+                  {row.status === 'rejected' ? <Badge variant="destructive">smazáno</Badge> : null}
                   <span>{QUESTION_TYPE_LABELS[row.type]}</span>
                   <span aria-hidden="true">·</span>
                   <span className="ui-numeric">{row.points} b.</span>
@@ -627,11 +602,7 @@ export function QuestionsTable({
                     <td className="max-w-sm truncate py-2 pr-4 text-fg">{promptOf(row)}</td>
                     <td className="py-2 pr-4 text-fg-soft">{QUESTION_TYPE_LABELS[row.type]}</td>
                     <td className="py-2 pr-4">
-                      {row.status === 'draft' ? (
-                        <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
-                      ) : null}
-                      {row.status === 'approved' ? <Badge>schváleno</Badge> : null}
-                      {row.status === 'rejected' ? <Badge variant="destructive">zamítnuto</Badge> : null}
+                      {row.status === 'rejected' ? <Badge variant="destructive">smazáno</Badge> : null}
                     </td>
                     <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
                     <td className="py-2 pr-4">

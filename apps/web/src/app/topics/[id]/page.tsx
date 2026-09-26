@@ -36,7 +36,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   // Počty se berou dotazem, ne délkou seznamu: seznam je useknutý limitem
   // a u tématu s tisícem otázek by čísla nahoře lhala.
-  const [materialRows, questionList, questionCount, draftCount, keptCount] = await Promise.all([
+  const [materialRows, questionList, questionCount, usableQuestionCount] = await Promise.all([
     db
       .select({
         id: materials.id,
@@ -54,7 +54,6 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     // nezobrazovala a učitelka by je nemohla ani upravit, ani vrátit zpět.
     loadQuestions(ucet, { topicIds: [id], statuses: ['draft', 'approved'] }),
     countQuestions(ucet, { topicId: id }),
-    countQuestions(ucet, { topicId: id, statuses: ['draft'] }),
     // Zamítnuté se do doplňování počtu nepočítají.
     countQuestions(ucet, { topicId: id, statuses: ['draft', 'approved'] }),
   ])
@@ -92,8 +91,6 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           { value: usableCount, label: plural(usableCount, ...MATERIALY) },
           { value: totalChars.toLocaleString('cs'), label: 'znaků k dispozici' },
           { value: questionCount, label: plural(questionCount, ...OTAZKY) },
-          // Jedno sloveso a jeden směr napříč aplikací: kolik zbývá ke kontrole.
-          { value: draftCount, label: 'ke kontrole', tone: 'draft' },
         ]}
       />
 
@@ -103,7 +100,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         questions={questionList.items}
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
-        keptCount={keptCount}
+        usableCount={usableQuestionCount}
         lowContent={topic.lowContent}
         ai={aiStatus()}
         // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný

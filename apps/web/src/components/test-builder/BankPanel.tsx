@@ -85,7 +85,7 @@ export function BankPanel({
       <h2 className="text-sm font-semibold text-fg">Banka otázek</h2>
       <p className="mt-1 text-sm text-fg-muted">
         Vybírej napříč předměty i ročníky — hodí se pro čtvrtletky a opakování z loňska.
-        Jsou tu jen schválené otázky; koncepty čekají ke kontrole.
+        Jsou tu jen použitelné otázky; smazané se sem nedostanou.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">

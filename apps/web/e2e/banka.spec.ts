@@ -60,31 +60,11 @@ test.describe('banka otázek', () => {
     await expect(page.getByLabel('Hledat')).toHaveValue('sopečný')
     await expect(rows).toHaveCount(SOPECNY_COUNT)
 
-    // Filtr stavu se s hledáním skládá: koncepty se slovem „sopečný“.
+    // Filtr stavu jde nastavit i přímo adresou, i když volba „Koncept“
+    // z rozhraní zmizela — koncepty jsou dnes jen pozůstatek starších řádků,
+    // schvalování v aplikaci není.
     await page.goto(`/questions?topicId=${topicId}&q=sope%C4%8Dn%C3%BD&status=draft`)
     await expect(rows).toHaveCount(DRAFT_COUNT)
-    await expect(page.getByText('koncept').first()).toBeVisible()
-  })
-
-  test('hromadné schválení ohlásí hláškou a dá se vzít zpět', async ({ page }) => {
-    const topicId = await prepareTopic(page)
-    await page.goto(`/questions?topicId=${topicId}&status=draft`)
-
-    const rows = page.locator('tr[data-question-id]')
-    await expect(rows).toHaveCount(DRAFT_COUNT)
-
-    await page.getByRole('checkbox', { name: /^Vybrat vše viditelné/ }).click()
-    await expect(page.getByText(`Vybráno ${DRAFT_COUNT}`)).toBeVisible()
-    await page.getByRole('button', { name: 'Schválit' }).click()
-
-    await expect(page.getByText(/^Schváleno: \d+ otáz/).first()).toBeVisible()
-    // Schválené otázky z filtru konceptů vypadly, takže tabulka je prázdná.
-    await expect(rows).toHaveCount(0)
-    await expect(page.getByText('Filtru nic neodpovídá')).toBeVisible()
-
-    await page.getByRole('button', { name: 'Vzít zpět' }).first().click()
-    await expect(page.getByText(/^Vráceno zpět/).first()).toBeVisible()
-    await expect(rows).toHaveCount(DRAFT_COUNT, { timeout: 15000 })
   })
 
   test('vybranou otázku jde z banky smazat a smazání jde vrátit zpět', async ({ page }) => {
@@ -105,14 +85,43 @@ test.describe('banka otázek', () => {
     await page.getByRole('button', { name: 'Smazat (1)' }).click()
 
     await expect(page.getByText(/^Smazáno: 1 otázka/)).toBeVisible()
-    // Smazání je jen změna stavu na „zamítnuto“ — řádek beze stavového filtru
-    // zůstává v seznamu, jen s jiným popiskem stavu.
-    await expect(rows).toHaveCount(1, { timeout: 15000 })
-    await expect(rows.getByText('zamítnuto')).toBeVisible()
+    // Smazaná otázka zmizí z výchozího pohledu — bez zúžení na stav se
+    // smazané neukazují, jen se dají dohledat přes filtr „Smazané“.
+    await expect(rows).toHaveCount(0, { timeout: 15000 })
 
     await page.getByRole('button', { name: 'Vrátit zpět' }).click()
     await expect(page.getByText(/^Vráceno zpět: 1 otázka/)).toBeVisible()
-    await expect(rows.getByText('schváleno')).toBeVisible({ timeout: 15000 })
+    await expect(rows).toHaveCount(1, { timeout: 15000 })
+  })
+
+  test('hromadné obnovení vrátí vybrané smazané otázky mezi použitelné', async ({ page }) => {
+    const topicId = await prepareTopic(page)
+    const prompt = `Na obnovení ${Date.now()}`
+    await createQuestion(page.request, topicId, prompt)
+
+    // Otázku rovnou smažeme přes API, ať test nezávisí na tlačítku smazání
+    // jinde v souboru.
+    await page.goto(`/questions?topicId=${topicId}&q=${encodeURIComponent('na obnovení')}`)
+    const rows = page.locator('tr[data-question-id]')
+    await expect(rows).toHaveCount(1)
+    await rows.getByRole('button', { name: /^Akce u otázky/ }).click()
+    await page.getByRole('menuitem', { name: 'Smazat' }).click()
+    await expect(page.getByText('Otázka smazána')).toBeVisible()
+
+    // Filtr „Smazané“ otázku najde a hromadné „Obnovit“ ji vrátí mezi použitelné.
+    // Přes rozbalovací nabídku, ne přímou navigací adresou — ve WebKitu se
+    // rovnou po sobě jdoucí `page.goto()` občas přebijí (Next.js si mezitím
+    // sám dotahuje RSC payload a jednu z navigací zruší).
+    await page.getByLabel('Stav').click()
+    await page.getByRole('option', { name: 'Smazané' }).click()
+    await expect(rows).toHaveCount(1)
+    await expect(rows.getByText('smazáno')).toBeVisible()
+
+    await page.getByRole('checkbox', { name: `Vybrat otázku ${prompt}` }).click()
+    await page.getByRole('button', { name: /^Obnovit/ }).click()
+    await expect(page.getByText(/^Obnoveno: 1 otázka/)).toBeVisible()
+    // Filtr zůstal na „Smazané“, takže obnovená otázka z výsledku vypadla.
+    await expect(rows).toHaveCount(0, { timeout: 15000 })
   })
 
   test('otázka se dá upravit rovnou z řádku banky', async ({ page }) => {
@@ -153,14 +162,13 @@ test.describe('banka otázek', () => {
     await page.getByRole('menuitem', { name: 'Smazat' }).click()
 
     await expect(page.getByText('Otázka smazána')).toBeVisible()
-    // Smazání je jen změna stavu na „zamítnuto“ — řádek beze stavového filtru
-    // zůstává v seznamu, jen s jiným popiskem stavu.
-    await expect(rows).toHaveCount(1, { timeout: 15000 })
-    await expect(rows.getByText('zamítnuto')).toBeVisible()
+    // Smazaná otázka zmizí z výchozího pohledu stejně jako při hromadném
+    // smazání — bez zúžení na stav se smazané neukazují.
+    await expect(rows).toHaveCount(0, { timeout: 15000 })
 
     await page.getByRole('button', { name: 'Vrátit zpět' }).click()
     await expect(page.getByText('Vráceno zpět')).toBeVisible()
-    await expect(rows.getByText('schváleno')).toBeVisible({ timeout: 15000 })
+    await expect(rows).toHaveCount(1, { timeout: 15000 })
   })
 })
 

@@ -34,7 +34,6 @@ export function TopicList({
           id: topic.id,
           label: topic.name,
           count: topic.questionCount,
-          flag: topic.draftCount > 0,
         }))}
         renderItem={(item, content, active) => (
           <Link href={`/topics/${item.id}`} className="block" aria-current={active ? 'page' : undefined}>

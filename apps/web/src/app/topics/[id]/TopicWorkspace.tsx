@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question } from '@testmaker/core/schema'
-import { Button, Card, OTAZKY, pocet, toast } from '@testmaker/ui'
+import { Button, Card, OTAZKY, plural, pocet, toast } from '@testmaker/ui'
 import {
   AiUnavailable,
   DEFAULT_SETTINGS,
@@ -32,7 +31,7 @@ export function TopicWorkspace({
   questions,
   listTruncated,
   listLimit,
-  keptCount,
+  usableCount,
   lowContent,
   ai,
   group,
@@ -45,11 +44,10 @@ export function TopicWorkspace({
   /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
   listLimit: number
   /**
-   * Otázky tématu kromě zamítnutých. Po kontrole konceptů má smysl doplňovat
-   * právě na počet těch, které v tématu zůstaly použitelné. Počítá se dotazem,
-   * ne z vypsaného seznamu — ten je useknutý limitem.
+   * Otázky tématu kromě smazaných. Dogenerování doplňuje právě na tenhle
+   * počet, ne na délku seznamu — ten je useknutý limitem.
    */
-  keptCount: number
+  usableCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
   lowContent: boolean
   ai: { configured: boolean; provider: string; model: string; problems: string[] }
@@ -62,8 +60,6 @@ export function TopicWorkspace({
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  /** Kolik otázek v právě běžícím generování už vzniklo. */
-  const [created, setCreated] = useState(0)
   /**
    * Otázky vytvořené v tomhle běhu. Seznam níž se obnovuje až po doběhnutí
    * (router.refresh), a čekat na to znamená deset minut koukat na kolečko —
@@ -86,13 +82,12 @@ export function TopicWorkspace({
   // stojí velké číslo a hned pod ním upozornění, že materiálů je málo.
   const usable = materials.filter((material) => !material.duplicateOfId)
   const topUp = settings.mode === 'target'
-  const willCreate = topUp ? Math.max(0, settings.count - keptCount) : settings.count
+  const willCreate = topUp ? Math.max(0, settings.count - usableCount) : settings.count
 
   async function generate() {
     setError(null)
     setGenerating(true)
     setOutcome(null)
-    setCreated(0)
     setFresh([])
     setStatus('Spouštím generování…')
     announceGeneration()
@@ -117,7 +112,6 @@ export function TopicWorkspace({
           prubeh()
         } else if (event.type === 'saved') {
           hotovo = event.created
-          setCreated(event.created)
           // Nejnovější nahoře — stejně jako seznam otázek pod tím.
           setFresh((current) => [...event.questions.slice().reverse(), ...current])
           prubeh()
@@ -129,17 +123,9 @@ export function TopicWorkspace({
           setOutcome(summarizeRun(event))
           toast.success(
             event.created > 0
-              ? `Hotovo, ${pocet(event.created, OTAZKY)} ke kontrole.`
+              ? `Hotovo, ${event.created} ${plural(event.created, 'nová', 'nové', 'nových')} ${plural(event.created, ...OTAZKY)}.`
               : 'Hotovo, ale nevznikla ani jedna otázka.',
-            {
-              duration: 12_000,
-              action: event.created > 0
-                ? {
-                    label: 'Zkontrolovat',
-                    onClick: () => router.push(`/review?topicId=${encodeURIComponent(topicId)}`),
-                  }
-                : undefined,
-            },
+            { duration: 12_000 },
           )
           router.refresh()
         } else if (event.type === 'error') setError(event.message)
@@ -166,14 +152,14 @@ export function TopicWorkspace({
               disabled={generating || usable.length === 0 || willCreate === 0}
               onClick={() => void generate()}
             >
-              {keptCount > 0 ? 'Dogenerovat otázky' : 'Generovat otázky'}
+              {usableCount > 0 ? 'Dogenerovat otázky' : 'Generovat otázky'}
             </Button>
             <span className="text-sm text-fg-muted">
               {willCreate === 0
                 ? 'Zvolený počet je už naplněný, nic se nevytvoří.'
                 : topUp
                   ? `Doplní se ${pocet(willCreate, OTAZKY)}.`
-                  : `Vznikne ${pocet(willCreate, OTAZKY)} ke kontrole.`}
+                  : `Vznikne ${pocet(willCreate, OTAZKY)}.`}
             </span>
             <div className="ml-auto">
               <GenerateSettingsForm
@@ -199,21 +185,9 @@ export function TopicWorkspace({
 
           {generating ? <ProgressLine label={status ?? 'Spouštím generování…'} /> : null}
 
-          {/* Souhrn běhu zůstává na obrazovce i po zmizení hlášky — učitelka se
-              k němu vrací, když se rozmýšlí, jestli má jít kontrolovat hned. */}
-          {!generating && outcome ? (
-            <p className="text-sm text-fg-soft">
-              {outcome}{' '}
-              {created > 0 ? (
-                <Link
-                  href={`/review?topicId=${encodeURIComponent(topicId)}`}
-                  className="text-brand underline underline-offset-2"
-                >
-                  Zkontrolovat
-                </Link>
-              ) : null}
-            </p>
-          ) : null}
+          {/* Souhrn běhu zůstává na obrazovce i po zmizení hlášky — nové otázky
+              jsou hned vidět jako karty pod tím, není kam dál chodit. */}
+          {!generating && outcome ? <p className="text-sm text-fg-soft">{outcome}</p> : null}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
       ) : muzeMenit ? (

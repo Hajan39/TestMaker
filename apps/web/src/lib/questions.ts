@@ -294,7 +294,7 @@ export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Pr
 }
 
 /**
- * Filtr pro frontu ke kontrole. Na rozdíl od `QuestionFilter` výš míří na
+ * Filtr pro stránkovanou frontu (banka, `/review`). Na rozdíl od `QuestionFilter` výš míří na
  * jedno patro knihovny (téma, ročník, předmět), ne na výčet témat — obrazovka
  * kontroly se zužuje právě takhle a seznam témat celého předmětu by se do
  * adresy nevešel.

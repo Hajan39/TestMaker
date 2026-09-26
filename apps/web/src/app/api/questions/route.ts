@@ -38,8 +38,8 @@ const bulkSchema = z.object({
 })
 
 /**
- * Hromadná akce nad celým tématem. Fronta ke kontrole jich umí mít přes tisíc
- * a posílat tisíc identifikátorů jen proto, aby se schválilo jedno téma, nemá
+ * Hromadná akce nad celým tématem. Otázek v něm umí být přes tisíc a posílat
+ * tisíc identifikátorů jen proto, aby se změnil stav jednoho tématu, nemá
  * smysl — stačí id tématu a stav, ze kterého se má měnit.
  */
 const bulkTopicSchema = z.object({
@@ -51,7 +51,7 @@ const bulkTopicSchema = z.object({
 /** Stránka fronty: filtr, velikost a kurzor za poslední přečtenou otázkou. */
 const listSchema = z.object({
   statuses: z.array(z.enum(QUESTION_STATUSES)).optional(),
-  /** Typy otázek — banka se jimi zužuje, fronta ke kontrole je neposílá. */
+  /** Typy otázek — banka se jimi zužuje, fronta na `/review` je neposílá. */
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
   topicId: z.string().optional(),
   gradeId: z.string().optional(),

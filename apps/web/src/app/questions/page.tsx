@@ -53,11 +53,11 @@ export default async function QuestionsPage({
     search: params.q ?? '',
   }
 
-  // Bez zúžení na stav se ukazuje všechno — i koncepty a zamítnuté. Přehled
-  // banky je právě od toho, aby bylo vidět, co kde leží; do skladače testu se
-  // oproti tomu berou jen schválené.
+  // Bez zúžení na stav se smazané schválně nezobrazují — jsou pryč, jen se
+  // dají dohledat a vrátit přes filtr „Smazané“. Do skladače testu se
+  // bere jen schválené, o patro výš (`lib/tests.ts`).
   const query = {
-    statuses: filters.status ? [filters.status] : undefined,
+    statuses: filters.status ? [filters.status] : (['draft', 'approved'] as QuestionStatus[]),
     types: filters.type ? [filters.type] : undefined,
     subjectId: filters.subjectId || undefined,
     gradeId: filters.gradeId || undefined,

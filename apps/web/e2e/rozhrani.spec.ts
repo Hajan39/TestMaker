@@ -4,7 +4,7 @@ import { testTopicPath } from './fixtures'
 /**
  * Tři doplňky rozhraní ze specifikace redesignu, které v prvním plánu chyběly:
  * hledání přes celou knihovnu, odhad stran pod osnovou testu a filtr
- * obtížnosti v kontrole konceptů.
+ * obtížnosti u otázek tématu.
  */
 
 // Téma s materiály i otázkami si test najde sám — natvrdo zadané id
@@ -77,7 +77,7 @@ test.describe('odhad stran pod osnovou testu', () => {
   })
 })
 
-test.describe('filtr obtížnosti v kontrole konceptů', () => {
+test.describe('filtr obtížnosti u otázek tématu', () => {
   test('rozbalovací nabídka se otevře a vybere hodnotu', async ({ page }) => {
     await page.goto(await testTopicPath(page.request))
 
@@ -85,20 +85,5 @@ test.describe('filtr obtížnosti v kontrole konceptů', () => {
     await difficultyFilter.click()
     await page.getByRole('option', { name: 'Těžká' }).click()
     await expect(difficultyFilter).toContainText('Těžká')
-  })
-
-  test('fronta Projít po jedné respektuje zvolenou obtížnost', async ({ page }) => {
-    await page.goto(await testTopicPath(page.request))
-
-    const difficultyFilter = page.getByLabel('Obtížnost')
-    await difficultyFilter.click()
-    await page.getByRole('option', { name: 'Lehká' }).click()
-
-    const passButton = page.getByRole('button', { name: 'Projít po jedné' })
-    // Pokud filtru nic neodpovídá, tlačítko je zakázané — obojí je platný stav.
-    if (await passButton.isEnabled()) {
-      await passButton.click()
-      await expect(page.getByRole('dialog')).toBeVisible()
-    }
   })
 })

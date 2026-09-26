@@ -29,7 +29,6 @@ export function LibrarySidebar({
               id: grade.id,
               label: grade.name || 'Bez ročníku',
               count: grade.topics.length,
-              flag: grade.topics.some((topic) => topic.draftCount > 0),
             }))}
             renderItem={(item, content, active) => (
               <Link href={`/?grade=${item.id}`} className="block" aria-current={active ? 'page' : undefined}>
