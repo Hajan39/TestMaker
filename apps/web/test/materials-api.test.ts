@@ -247,6 +247,62 @@ describe('nahrání do zadaného tématu', () => {
     expect(result).toMatchObject({ imported: 1, duplicates: 0 })
     expect(await rows('Beze změny')).toHaveLength(1)
   })
+
+  it('stejný název souboru se stejným obsahem do dvou různých témat je v obou', async () => {
+    const soubor = extracted({ relativePath: 'Pracovní list.docx', fileName: 'Pracovní list.docx' })
+    const { topicId: topicA } = await seedTopic({ topic: 'Téma A' })
+    const { topicId: topicB } = await seedTopic({ topic: 'Téma B' })
+
+    const first = await importMaterials([soubor], topicA)
+    const second = await importMaterials([soubor], topicB)
+
+    expect(first).toMatchObject({ imported: 1, duplicates: 0 })
+    expect(second).toMatchObject({ imported: 1, duplicates: 0 })
+    expect(await db.select().from(materials).where(eq(materials.topicId, topicA))).toHaveLength(1)
+    expect(await db.select().from(materials).where(eq(materials.topicId, topicB))).toHaveLength(1)
+  })
+
+  it('stejný název souboru s jiným obsahem do jiného tématu nenahradí materiál v prvním tématu', async () => {
+    const relativePath = 'Pracovní list.docx'
+    const { topicId: topicA } = await seedTopic({ topic: 'Téma A2' })
+    const { topicId: topicB } = await seedTopic({ topic: 'Téma B2' })
+
+    await importMaterials(
+      [extracted({ relativePath, fileName: relativePath, contentHash: 'hash-a-dlouhy', text: 'Obsah tématu A' })],
+      topicA,
+    )
+    const result = await importMaterials(
+      [extracted({ relativePath, fileName: relativePath, contentHash: 'hash-b-dlouhy', text: 'Obsah tématu B' })],
+      topicB,
+    )
+
+    expect(result).toMatchObject({ imported: 1, replaced: 0, duplicates: 0 })
+    const inA = await db.select().from(materials).where(eq(materials.topicId, topicA))
+    const inB = await db.select().from(materials).where(eq(materials.topicId, topicB))
+    expect(inA).toHaveLength(1)
+    expect(inA[0]!.contentHash).toBe('hash-a-dlouhy')
+    expect(inB).toHaveLength(1)
+    expect(inB[0]!.contentHash).toBe('hash-b-dlouhy')
+  })
+
+  it('opětovné nahrání do téhož tématu s jiným obsahem pořád nahradí v tomtéž tématu', async () => {
+    const relativePath = 'Pracovní list.docx'
+    const { topicId } = await seedTopic({ topic: 'Téma C' })
+
+    await importMaterials(
+      [extracted({ relativePath, fileName: relativePath, contentHash: 'hash-v1-dlouhy', text: 'Verze jedna' })],
+      topicId,
+    )
+    const result = await importMaterials(
+      [extracted({ relativePath, fileName: relativePath, contentHash: 'hash-v2-dlouhy', text: 'Verze dva' })],
+      topicId,
+    )
+
+    expect(result).toMatchObject({ imported: 1, replaced: 1, duplicates: 0 })
+    const list = await db.select().from(materials).where(eq(materials.topicId, topicId))
+    expect(list).toHaveLength(1)
+    expect(list[0]!.contentHash).toBe('hash-v2-dlouhy')
+  })
 })
 
 describe('vynechání materiálu z generování', () => {

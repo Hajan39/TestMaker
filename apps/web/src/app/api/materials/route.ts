@@ -48,12 +48,21 @@ export async function POST(request: Request) {
   // Podle relativní cesty poznáme opakovaný import téhož souboru. Když se
   // od minula změnil obsah (jiný hash), stará verze se nahradí novou, ať v
   // tématu nezůstávají obě a negeneruje se z nich dvakrát.
+  //
+  // Při nahrání do konkrétního tématu je relativní cesta jen název souboru
+  // (žádná složková struktura), takže stejně pojmenovaný soubor v jiném
+  // tématu je normální — hledání minulé verze se proto omezí na tohle téma,
+  // ať nahrání do tématu B neposmazává a nepřejmenovává materiály v tématu A.
   const priorByPath = new Map(
     (
       await db
         .select({ id: materials.id, relativePath: materials.relativePath, contentHash: materials.contentHash, topicId: materials.topicId })
         .from(materials)
-        .where(and(skola(ucet, materials), inArray(materials.relativePath, relativePaths)))
+        .where(
+          fixedTopicId
+            ? and(skola(ucet, materials), eq(materials.topicId, fixedTopicId), inArray(materials.relativePath, relativePaths))
+            : and(skola(ucet, materials), inArray(materials.relativePath, relativePaths)),
+        )
     ).map((row) => [row.relativePath, row]),
   )
 
