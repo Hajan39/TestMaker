@@ -178,7 +178,7 @@ test.describe('telefon (390 px)', () => {
       expect(box, 'nabídka akcí není vidět').not.toBeNull()
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390)
 
-      // V nabídce je i nevratné mazání — na telefonu tak jde s položkou udělat
+      // V nabídce je i mazání položky — na telefonu tak jde s položkou udělat
       // všechno, ne jen si ji přečíst.
       await akce.first().click()
       await expect(page.getByRole('menuitem', { name: 'Smazat' })).toBeVisible()
