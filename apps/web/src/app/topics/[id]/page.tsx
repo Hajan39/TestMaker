@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { InlineName } from '@/components/InlineName'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { MATERIALY, OTAZKY, StatRow, plural } from '@testmaker/ui'
-import { TopicGroup } from '@/components/TopicGroup'
+import { MaterialsStrip } from '@/components/MaterialsStrip'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
@@ -49,6 +49,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         needsOcr: materials.needsOcr,
         duplicateOfId: materials.duplicateOfId,
         duplicateScore: materials.duplicateScore,
+        excluded: materials.excluded,
       })
       .from(materials)
       .where(and(skola(ucet, materials), eq(materials.topicId, id)))
@@ -126,7 +127,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         ai={aiStatus()}
         // `key` kvůli varování Reactu: prvek vzniklý na serveru a předaný
         // klientské komponentě jako prop se přenáší jako položka seznamu.
-        group={<TopicGroup key="materialy" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
+        group={<MaterialsStrip key="materialy" topicId={topic.id} topicName={topic.name} materials={materialRows} />}
       />
     </div>
   )

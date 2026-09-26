@@ -1,44 +1,53 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, FileUp, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
+import { useMuzeMenit } from '@/components/Prava'
+import { MaterialRow, type GroupMaterial } from '@/components/MaterialRow'
+import { IssueList, SKIP_LABELS, type IssueItem } from '@/components/importIssues'
 import {
-  Badge,
+  entriesFromInput,
+  extractAll,
+  filesFromDrop,
+  triageEntries,
+  uploadMaterials,
+  type FileEntry,
+} from '@/lib/importClient'
+import {
   BusyButton,
   Button,
-  DeleteButton,
   cn,
   Card,
   Input,
   Label,
+  MATERIALY,
+  Progress,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  pocet,
+  toast,
 } from '@testmaker/ui'
 
-export interface GroupMaterial {
-  id: string
-  fileName: string
-  charCount: number
-  pageCount: number | null
-  needsOcr: boolean
-  duplicateOfId: string | null
-  duplicateScore: number | null
-}
+export type { GroupMaterial } from '@/components/MaterialRow'
+
+type UploadPhase = 'idle' | 'extracting' | 'uploading'
 
 /**
- * Materiály jednoho tématu. Učitelka téma může přejmenovat, sloučit s jiným
- * tématem téhož ročníku nebo z něj jednotlivý materiál vyjmout.
+ * Pruh materiálů jednoho tématu. Nahrávání souborů rovnou sem, přepnutí
+ * „Použít pro generování", smazání a — v režimu „Upravit téma" — přejmenování,
+ * přesun mezi tématy, sloučení a smazání celého tématu.
  *
- * Všechno se tu jmenuje „téma“ — navigace, dlaždice i filtry mluví o tématu a
- * druhé jméno („skupina“) pro touž věc vedlo k tomu, že si učitelka před
- * „Smazat skupinu“ nebyla jistá, jestli maže totéž, co jinde téma.
+ * Všechno se tu jmenuje „téma" — navigace, dlaždice i filtry mluví o tématu a
+ * druhé jméno („skupina") pro touž věc vedlo k tomu, že si učitelka před
+ * „Smazat skupinu" nebyla jistá, jestli maže totéž, co jinde téma.
  */
-export function TopicGroup({
+export function MaterialsStrip({
   topicId,
   topicName,
   materials,
@@ -48,6 +57,9 @@ export function TopicGroup({
   materials: GroupMaterial[]
 }) {
   const router = useRouter()
+  const muzeMenit = useMuzeMenit()
+  const filesRef = useRef<HTMLInputElement>(null)
+
   const [name, setName] = useState(topicName)
   const [siblings, setSiblings] = useState<{ id: string; name: string }[]>([])
   const [gradeOptions, setGradeOptions] = useState<{ id: string; name: string }[]>([])
@@ -61,8 +73,17 @@ export function TopicGroup({
   const [optionsReady, setOptionsReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
-  const [open, setOpen] = useState(false)
+  // Sbalený, jakmile v tématu materiály jsou — na obrazovce jde hlavně o
+  // otázky. Bez materiálů se rovnou ukazuje nahrávací plocha, ať učitelka
+  // hned ví, kudy začít.
+  const [open, setOpen] = useState(materials.length === 0)
   const [error, setError] = useState<string | null>(null)
+
+  const [dragging, setDragging] = useState(false)
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [skipped, setSkipped] = useState<IssueItem[]>([])
+  const [failed, setFailed] = useState<IssueItem[]>([])
 
   useEffect(() => {
     if (!manage) return
@@ -105,13 +126,73 @@ export function TopicGroup({
     }
   }
 
-  const active = materials.filter((material) => !material.duplicateOfId)
+  /** Extrahuje soubory v prohlížeči a nahraje je rovnou do tohoto tématu. */
+  async function handleFiles(entries: FileEntry[]) {
+    if (entries.length === 0) return
+    setError(null)
+    setOpen(true)
+
+    const { accepted, skipped: skippedFiles } = triageEntries(entries)
+    setSkipped(skippedFiles.map((item) => ({ ...item, reason: SKIP_LABELS[item.reason] ?? item.reason })))
+    setFailed([])
+
+    if (accepted.length === 0) return
+
+    setUploadPhase('extracting')
+    setProgress({ done: 0, total: accepted.length })
+
+    const extracted: ExtractedMaterial[] = []
+    const failures: IssueItem[] = []
+    let done = 0
+
+    try {
+      await extractAll(accepted, (result) => {
+        done += 1
+        setProgress({ done, total: accepted.length })
+        if (result.status === 'ok' && result.material) extracted.push(result.material)
+        else if (result.status === 'error') {
+          failures.push({ relativePath: result.relativePath, reason: result.reason ?? 'chyba' })
+        }
+      })
+    } catch (workerError) {
+      setError(workerError instanceof Error ? workerError.message : String(workerError))
+    }
+    setFailed(failures)
+
+    if (extracted.length === 0) {
+      setUploadPhase('idle')
+      return
+    }
+
+    setUploadPhase('uploading')
+    setProgress({ done: 0, total: extracted.length })
+    try {
+      const result = await uploadMaterials(extracted, {
+        topicId,
+        onProgress: (uploadDone, uploadTotal) => setProgress({ done: uploadDone, total: uploadTotal }),
+      })
+      toast.success(
+        result.duplicates > 0
+          ? `Nahráno ${pocet(result.imported, MATERIALY)} (${result.duplicates} už v tématu bylo).`
+          : `Nahráno ${pocet(result.imported, MATERIALY)}.`,
+      )
+      router.refresh()
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
+    } finally {
+      setUploadPhase('idle')
+    }
+  }
+
+  const uploadBusy = uploadPhase !== 'idle'
+  // Do generování nejde duplicitní obsah ani materiál ručně vyřazený —
+  // oboje se v hlavičce sečte jedním číslem, ať se počty nemusí luštit dva.
+  const active = materials.filter((material) => !material.duplicateOfId && !material.excluded)
+  const skippedCount = materials.length - active.length
 
   return (
     <Card className="gap-2 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* Seznam souborů je sbalený: na obrazovce tématu jde hlavně o otázky,
-            k materiálům se učitelka vrací, jen když je chce přeskládat. */}
         <button
           type="button"
           className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-fg"
@@ -122,93 +203,97 @@ export function TopicGroup({
           Materiály
           <span className="font-normal text-fg-muted">
             {active.length}
-            {materials.length !== active.length
-              ? ` + ${materials.length - active.length} duplicitních se vynechává`
-              : ''}
+            {skippedCount > 0 ? ` + ${skippedCount} vynechaných` : ''}
           </span>
         </button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            if (!manage) {
-              setOptionsReady(false)
-              setOpen(true)
-            }
-            setManage(!manage)
-          }}
-        >
-          {manage ? 'Hotovo' : 'Upravit téma'}
-        </Button>
+        {muzeMenit ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              if (!manage) {
+                setOptionsReady(false)
+                setOpen(true)
+              }
+              setManage(!manage)
+            }}
+          >
+            {manage ? 'Hotovo' : 'Upravit téma'}
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
       {open ? (
-      <ul className="mt-1 space-y-1 text-sm">
-        {materials.map((material) => {
-          const original = materials.find((row) => row.id === material.duplicateOfId)
-          return (
-            <li key={material.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              {/* Názvy souborů bývají dlouhé a bez mezer, proto se musí zalomit i uprostřed slova. */}
-              <span
-                className={cn(
-                  'min-w-0 break-all',
-                  material.duplicateOfId ? 'text-fg-muted' : 'text-fg-soft',
-                )}
-                title={material.fileName}
-              >
-                {material.fileName}
-              </span>
-              <span className="shrink-0 text-fg-muted">
-                {material.charCount.toLocaleString('cs')} znaků
-                {material.pageCount ? `, ${material.pageCount} str.` : ''}
-              </span>
-              {material.needsOcr ? (
-                <Badge className="shrink-0 bg-draft-bg text-draft-fg">skoro bez textu</Badge>
+        <div className="mt-2 space-y-3">
+          {muzeMenit ? (
+            <div
+              className={cn(
+                'flex flex-col items-center gap-2 rounded-md border border-dashed border-line-soft p-4 text-center transition-colors',
+                dragging && 'border-brand bg-brand-bg',
+              )}
+              onDragOver={(event) => {
+                event.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault()
+                setDragging(false)
+                if (uploadBusy) return
+                void filesFromDrop(event.dataTransfer).then(handleFiles)
+              }}
+            >
+              <input
+                ref={filesRef}
+                type="file"
+                multiple
+                className="hidden"
+                data-testid="topic-material-files"
+                onChange={(event) => {
+                  void handleFiles(entriesFromInput(event.target.files))
+                  event.target.value = ''
+                }}
+              />
+              <Button size="sm" variant="outline" disabled={uploadBusy} onClick={() => filesRef.current?.click()}>
+                <FileUp className="size-4" aria-hidden />
+                Nahrát materiály
+              </Button>
+              <p className="text-xs text-fg-muted">Nebo sem soubory přetáhni myší.</p>
+
+              {uploadBusy ? (
+                <div className="w-full max-w-sm space-y-1">
+                  <p className="text-xs text-fg-soft">
+                    <Loader2 className="mr-1 inline size-3.5 animate-spin" />
+                    {uploadPhase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
+                  </p>
+                  <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
+                </div>
               ) : null}
-              {material.duplicateOfId ? (
-                <span className="min-w-0 break-all text-xs text-fg-muted">
-                  stejný obsah jako {original?.fileName ?? 'jiný materiál'}
-                  {material.duplicateScore ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)` : ''}
-                </span>
-              ) : null}
-              {manage && (!optionsReady || siblings.length > 0) ? (
-                <Select
-                  value="presun"
-                  disabled={busy || !optionsReady}
-                  onValueChange={(value) =>
-                    value !== 'presun' && void call('PUT', { materialId: material.id, topicId: value })
-                  }
-                >
-                  <SelectTrigger className="ml-auto w-full shrink-0 sm:w-56" aria-busy={!optionsReady || undefined}>
-                    {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám témata…</span>}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="presun">Přesunout do…</SelectItem>
-                    {siblings.map((sibling) => (
-                      <SelectItem key={sibling.id} value={sibling.id}>
-                        {sibling.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null}
-              {manage ? (
-                <DeleteButton
-                  label="Smazat"
-                  title="Smazat materiál?"
-                  description={`Materiál „${material.fileName}" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.`}
-                  onConfirm={async () => {
-                    await fetch(`/api/materials?id=${encodeURIComponent(material.id)}`, { method: 'DELETE' })
-                    router.refresh()
-                  }}
+            </div>
+          ) : null}
+
+          {failed.length > 0 ? <IssueList title={`Nepodařilo se přečíst (${failed.length})`} items={failed} kind="danger" /> : null}
+          {skipped.length > 0 ? <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} kind="neutral" /> : null}
+
+          {materials.length > 0 ? (
+            <ul className="space-y-1 text-sm">
+              {materials.map((material) => (
+                <MaterialRow
+                  key={material.id}
+                  material={material}
+                  originalFileName={materials.find((row) => row.id === material.duplicateOfId)?.fileName ?? null}
+                  manage={manage}
+                  siblings={siblings}
+                  optionsReady={optionsReady}
+                  busy={busy}
+                  onMove={(target) => void call('PUT', { materialId: material.id, topicId: target })}
                 />
-              ) : null}
-            </li>
-          )
-        })}
-      </ul>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
 
       {open && manage ? (

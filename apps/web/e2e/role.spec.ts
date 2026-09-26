@@ -129,3 +129,29 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   await expect(page.getByRole('checkbox', { name: 'Vybrat do testu' })).toHaveCount(0)
   await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
 })
+
+/**
+ * Pruh materiálů (viz `tema-materialy.spec.ts`): náhled ho vidí, ale bez
+ * nahrávání, přepínače „Použít pro generování“, mazání a „Upravit téma“ —
+ * to všechno jsou akce ke změně, které mu brána i tak odmítne.
+ */
+test('náhled vidí pruh materiálů, ale bez nahrávání, přepínače a mazání', async ({ page, browser, baseURL }) => {
+  // Náhled sám nesmí zapisovat — téma pro něj založí učitelka ve vlastním
+  // kontextu, náhled si pak jen otevře stránku ke čtení.
+  const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+  let topicId: string
+  try {
+    topicId = await ensureTemaOtazky(pisatel.request)
+  } finally {
+    await pisatel.close()
+  }
+
+  await page.goto(`/topics/${topicId}`)
+  await page.getByRole('button', { name: /^Materiály/ }).click()
+
+  await expect(page.getByText(`${TEMA_TOPIC}.txt`)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Nahrát materiály' })).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: /Použít pro generování/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Upravit téma', exact: true })).toHaveCount(0)
+})

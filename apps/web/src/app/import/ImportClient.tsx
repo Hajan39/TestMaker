@@ -4,16 +4,13 @@ import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { groupForImport } from '@testmaker/core/extract'
-import { ChevronDown, FileUp, FolderUp, Loader2, Undo2 } from 'lucide-react'
+import { FileUp, FolderUp, Loader2, Undo2 } from 'lucide-react'
 import {
   Badge,
   Button,
   Card,
   Checkbox,
   cn,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
   Input,
   Progress,
   plural,
@@ -31,6 +28,7 @@ import {
   type FileEntry,
   type ImportDestination,
 } from '@/lib/importClient'
+import { IssueList, SKIP_LABELS } from '@/components/importIssues'
 
 type Phase = 'idle' | 'extracting' | 'preview' | 'uploading' | 'done'
 
@@ -60,15 +58,6 @@ interface PreviewGroup {
   topic: string
   include: boolean
   files: PreviewFile[]
-}
-
-const SKIP_LABELS: Record<string, string> = {
-  skryty: 'skrytý soubor',
-  docasny: 'dočasný soubor',
-  'systemova-slozka': 'systémová složka',
-  obrazek: 'obrázek (zatím nepodporován)',
-  nepodporovany: 'nepodporovaná přípona',
-  'stary-format': 'starý formát – převeď na .docx / .odp',
 }
 
 /** Pod tímhle počtem znaků na otázky text nejspíš nestačí. */
@@ -514,37 +503,5 @@ function Field({
         </datalist>
       ) : null}
     </label>
-  )
-}
-
-function IssueList({
-  title,
-  items,
-  kind,
-}: {
-  title: string
-  items: Failure[]
-  kind: 'danger' | 'neutral'
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <Card className="p-5">
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-semibold text-fg-soft">
-          {title}
-          <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
-            {items.map((item) => (
-              <li key={item.relativePath} className="flex flex-wrap gap-2">
-                <span className="text-fg-soft">{item.relativePath}</span>
-                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'}>{item.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
   )
 }
