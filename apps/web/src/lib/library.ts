@@ -15,8 +15,8 @@ export interface TopicNode {
   id: string
   name: string
   materialCount: number
+  /** Otázky tématu kromě smazaných — smazaná karta se do počtu nepočítá. */
   questionCount: number
-  approvedCount: number
   /** Použitelného textu (bez duplicit) je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
   lowContent: boolean
 }
@@ -59,8 +59,9 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
     db
       .select({
         topicId: questions.topicId,
-        total: count(),
-        approved: sql<number>`sum(case when ${questions.status} = 'approved' then 1 else 0 end)`,
+        // Smazané (rejected) se do počtu nepočítají — karta u nich stejně
+        // zmizí, takže by číslo nahoře lhalo.
+        total: sql<number>`sum(case when ${questions.status} != 'rejected' then 1 else 0 end)`,
       })
       .from(questions)
       .where(skola(scope, questions))
@@ -78,8 +79,7 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
       id: topic.id,
       name: topic.name,
       materialCount: materialsByTopic.get(topic.id) ?? 0,
-      questionCount: stats?.total ?? 0,
-      approvedCount: Number(stats?.approved ?? 0),
+      questionCount: Number(stats?.total ?? 0),
       lowContent: topic.lowContent,
     })
     topicsByGrade.set(topic.gradeId, list)

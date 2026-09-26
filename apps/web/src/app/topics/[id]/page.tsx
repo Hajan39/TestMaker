@@ -36,7 +36,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   // Počty se berou dotazem, ne délkou seznamu: seznam je useknutý limitem
   // a u tématu s tisícem otázek by čísla nahoře lhala.
-  const [materialRows, questionList, questionCount, usableQuestionCount] = await Promise.all([
+  const [materialRows, questionList, usableQuestionCount] = await Promise.all([
     db
       .select({
         id: materials.id,
@@ -53,8 +53,8 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     // Zamítnuté se do seznamu vůbec nenačítají — karta by je stejně
     // nezobrazovala a učitelka by je nemohla ani upravit, ani vrátit zpět.
     loadQuestions(ucet, { topicIds: [id], statuses: ['draft', 'approved'] }),
-    countQuestions(ucet, { topicId: id }),
-    // Zamítnuté se do doplňování počtu nepočítají.
+    // Jediný počet nahoře i pro dogenerování — zamítnuté (smazané) se do něj
+    // nepočítají, jinak by smazání karty číslo nesnížilo.
     countQuestions(ucet, { topicId: id, statuses: ['draft', 'approved'] }),
   ])
   // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
@@ -90,7 +90,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         items={[
           { value: usableCount, label: plural(usableCount, ...MATERIALY) },
           { value: totalChars.toLocaleString('cs'), label: 'znaků k dispozici' },
-          { value: questionCount, label: plural(questionCount, ...OTAZKY) },
+          { value: usableQuestionCount, label: plural(usableQuestionCount, ...OTAZKY) },
         ]}
       />
 

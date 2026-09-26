@@ -203,7 +203,6 @@ describe('ruční zakládání v knihovně', () => {
       name: 'Zatím prázdné',
       materialCount: 0,
       questionCount: 0,
-      approvedCount: 0,
       lowContent: true,
     })
 

@@ -58,12 +58,11 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
           acc.topics += 1
           acc.materials += topic.materialCount
           acc.questions += topic.questionCount
-          acc.approved += topic.approvedCount
         }
       }
       return acc
     },
-    { topics: 0, materials: 0, questions: 0, approved: 0 },
+    { topics: 0, materials: 0, questions: 0 },
   )
 
   return (
@@ -73,7 +72,7 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
           <h1 className="ui-page-title">Přehled knihovny</h1>
           <p className="mt-1 text-sm text-fg-soft">
             {pocet(totals.topics, TEMATA)} · {pocet(totals.materials, MATERIALY)} ·{' '}
-            {pocet(totals.questions, OTAZKY)} ({totals.approved} schválených)
+            {pocet(totals.questions, OTAZKY)}
           </p>
         </div>
         {/* Na úzké obrazovce se akce zalomí pod sebe místo toho, aby vytekly
