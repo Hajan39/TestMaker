@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from '@testmaker/core/schema'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import {
@@ -47,6 +47,13 @@ export function GenerateSettingsForm({
   /** Podrobnost k vysvětlení až tady dole — nahoře na obrazovce by zdržovala. */
   note?: ReactNode
 }) {
+  // Vlastní id na komponentu — natvrdo zapsané `generate-count`/`generate-mode`/
+  // `generate-difficulty` kolidovaly s `SimpleGenerateSettingsForm` níž, kdyby
+  // se obě formy někdy ocitly na téže stránce.
+  const countId = useId()
+  const modeId = useId()
+  const difficultyId = useId()
+
   const toggleType = (type: QuestionType) => {
     const types = value.types.includes(type)
       ? value.types.filter((t) => t !== type)
@@ -65,9 +72,9 @@ export function GenerateSettingsForm({
       <CollapsibleContent className="space-y-3 pt-3">
         <div className="flex flex-wrap gap-3">
           <div className="w-28">
-            <Label htmlFor="generate-count">Počet otázek</Label>
+            <Label htmlFor={countId}>Počet otázek</Label>
             <Input
-              id="generate-count"
+              id={countId}
               type="number"
               min={1}
               max={60}
@@ -77,13 +84,13 @@ export function GenerateSettingsForm({
             />
           </div>
           <div className="w-56">
-            <Label htmlFor="generate-mode">Počet otázek znamená</Label>
+            <Label htmlFor={modeId}>Počet otázek znamená</Label>
             <Select
               value={value.mode}
               disabled={disabled}
               onValueChange={(next) => onChange({ ...value, mode: next === 'target' ? 'target' : 'add' })}
             >
-              <SelectTrigger id="generate-mode" className="w-full">
+              <SelectTrigger id={modeId} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -93,7 +100,7 @@ export function GenerateSettingsForm({
             </Select>
           </div>
           <div className="w-40">
-            <Label htmlFor="generate-difficulty">Obtížnost</Label>
+            <Label htmlFor={difficultyId}>Obtížnost</Label>
             <Select
               value={String(value.difficulty)}
               disabled={disabled}
@@ -104,7 +111,7 @@ export function GenerateSettingsForm({
                 })
               }
             >
-              <SelectTrigger id="generate-difficulty" className="w-full">
+              <SelectTrigger id={difficultyId} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -233,7 +240,9 @@ export function SimpleGenerateSettingsForm({
         />
       </div>
       <div className="w-36">
-        <Label htmlFor="generate-difficulty">Obtížnost</Label>
+        {/* Vlastní jméno, ne obecné „Obtížnost" — filtr otázek pod tím se
+            jmenuje stejně a `getByLabel('Obtížnost')` by jinak trefil obě. */}
+        <Label htmlFor="generate-difficulty">Obtížnost nových otázek</Label>
         <Select
           value={String(value.difficulty)}
           disabled={disabled}

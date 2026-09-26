@@ -81,7 +81,9 @@ test.describe('filtr obtížnosti u otázek tématu', () => {
   test('rozbalovací nabídka se otevře a vybere hodnotu', async ({ page }) => {
     await page.goto(await testTopicPath(page.request))
 
-    const difficultyFilter = page.getByLabel('Obtížnost')
+    // `exact: true`: generování vedle má obtížnost pojmenovanou podobně
+    // („Obtížnost nových otázek") a bez toho by ji `getByLabel` našel taky.
+    const difficultyFilter = page.getByLabel('Obtížnost', { exact: true })
     await difficultyFilter.click()
     await page.getByRole('option', { name: 'Těžká' }).click()
     await expect(difficultyFilter).toContainText('Těžká')
