@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
   resolveTestItemPuzzle,
   resolveTestItemQuestion,
@@ -262,6 +262,41 @@ async function loadAssets(scope: Scope, items: ResolvedTestItem[]): Promise<Reco
   return Object.fromEntries(
     rows.map((row) => [row.id, `data:${row.mimeType};base64,${Buffer.from(row.data).toString('base64')}`]),
   )
+}
+
+/**
+ * Ve kterých viditelných testech otázky už jsou — pro štítek „V testu: …" a
+ * filtr „Jen nepoužité v testu" na kartě otázky v tématu.
+ *
+ * Cizí soukromý test kolegyně otázku prozradit nesmí (bod revize 1 v plánu),
+ * proto se testy čtou přes `viditelnyTest`, ne přes pouhou příslušnost ke
+ * škole. Test u téže otázky se uvádí jednou, i když v něm otázka figuruje
+ * víckrát (rozcvička a pak znovu v jiné části).
+ */
+export async function loadTestUsageForQuestions(
+  scope: Scope,
+  questionIds: string[],
+): Promise<Record<string, { testId: string; title: string }[]>> {
+  const ids = [...new Set(questionIds)]
+  if (ids.length === 0) return {}
+
+  const rows = await db
+    .select({ questionId: testItems.questionId, testId: tests.id, title: tests.title })
+    .from(testItems)
+    .innerJoin(tests, eq(tests.id, testItems.testId))
+    .where(and(inArray(testItems.questionId, ids), viditelnyTest(scope, tests)))
+    .orderBy(desc(tests.updatedAt))
+
+  const usage: Record<string, { testId: string; title: string }[]> = {}
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (!row.questionId) continue
+    const key = `${row.questionId}:${row.testId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    ;(usage[row.questionId] ??= []).push({ testId: row.testId, title: row.title })
+  }
+  return usage
 }
 
 /** Vše potřebné pro vykreslení testu do PDF. */

@@ -1,12 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import {
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Label,
   QuestionPreview,
@@ -25,6 +27,13 @@ import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
 interface Filters {
   type: QuestionType | ''
   difficulty: 1 | 2 | 3 | ''
+  /** „Jen nepoužité v testu" — schová otázky, které se aspoň v jednom viditelném testu už objevily. */
+  onlyUnused: boolean
+}
+
+export interface TestUsage {
+  testId: string
+  title: string
 }
 
 /**
@@ -35,7 +44,16 @@ interface Filters {
  * `questions` — to se mění s každým `router.refresh()` (dogenerování,
  * smazání jiné karty), ale rozepsaná úprava zůstává otevřená dál.
  */
-export function TopicQuestions({ topicId, questions }: { topicId: string; questions: Question[] }) {
+export function TopicQuestions({
+  topicId,
+  questions,
+  usage,
+}: {
+  topicId: string
+  questions: Question[]
+  /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
+  usage: Record<string, TestUsage[]>
+}) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const [creating, setCreating] = useState(false)
@@ -46,7 +64,7 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
   // Otázka, u které se právě maže — chrání proti dvojímu kliknutí, než dojde
   // odpověď ze serveru (smazání je optimistické, karta zmizí ještě dřív).
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
-  const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '' })
+  const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
 
   const sorted = useMemo(
     () =>
@@ -71,11 +89,12 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
   const visible = active.filter((question) => {
     if (filters.type && question.type !== filters.type) return false
     if (filters.difficulty && question.difficulty !== filters.difficulty) return false
+    if (filters.onlyUnused && (usage[question.id]?.length ?? 0) > 0) return false
     return true
   })
 
   function resetFilters() {
-    setFilters({ type: '', difficulty: '' })
+    setFilters({ type: '', difficulty: '', onlyUnused: false })
   }
 
   /** Smazání beze ptaní — jde hned vrátit zpět, proto tu není potvrzovací dialog. */
@@ -175,6 +194,16 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
               </SelectContent>
             </Select>
           </div>
+          <label className="flex items-center gap-2 pb-2 text-sm text-fg-soft">
+            <Checkbox
+              checked={filters.onlyUnused}
+              onCheckedChange={(checked) =>
+                setFilters((current) => ({ ...current, onlyUnused: checked === true }))
+              }
+              aria-label="Jen nepoužité v testu"
+            />
+            Jen nepoužité v testu
+          </label>
           {muzeMenit ? (
             <Button size="sm" variant="outline" onClick={() => setCreating(true)} disabled={creating}>
               Nová otázka
@@ -238,6 +267,7 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
                 <div className="flex gap-3">
                   <div className="min-w-0 flex-1">
                     <QuestionPreview question={question} />
+                    <TestUsageLabel usage={usage[question.id]} />
                   </div>
                   {muzeMenit ? (
                     <div className="flex shrink-0 flex-col items-end gap-1">
@@ -267,5 +297,24 @@ export function TopicQuestions({ topicId, questions }: { topicId: string; questi
         </ul>
       )}
     </Card>
+  )
+}
+
+/**
+ * Drobný štítek „V testu: Název" pod náhledem otázky. Testy, na které
+ * volající nevidí (cizí soukromý test kolegyně), sem `usage` vůbec nedostane
+ * — štítek proto nikdy neprozradí, že takový test existuje.
+ */
+function TestUsageLabel({ usage }: { usage: TestUsage[] | undefined }) {
+  if (!usage || usage.length === 0) return null
+  const [prvni, ...zbytek] = usage
+  return (
+    <p className="mt-1 text-xs text-fg-muted">
+      V testu:{' '}
+      <Link href={`/tests/${prvni!.testId}`} className="hover:text-brand hover:underline">
+        {prvni!.title}
+      </Link>
+      {zbytek.length > 0 ? ` a další ${zbytek.length}` : ''}
+    </p>
   )
 }

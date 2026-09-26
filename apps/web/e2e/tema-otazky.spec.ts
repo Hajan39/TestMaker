@@ -65,12 +65,12 @@ async function ensureTopic(request: APIRequestContext, topic: string = TOPIC): P
   return found2!.topicId
 }
 
-/** Založí unikátní otázku a vrátí její zadání. */
+/** Založí unikátní otázku a vrátí její id. */
 async function pridatOtazku(
   request: APIRequestContext,
   topicId: string,
   payload: { prompt: string; difficulty: 1 | 2 | 3; type?: 'short_answer' | 'true_false' },
-): Promise<void> {
+): Promise<string> {
   const question =
     payload.type === 'true_false'
       ? {
@@ -92,6 +92,31 @@ async function pridatOtazku(
         }
   const created = await request.post('/api/questions', { data: { topicId, question } })
   expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
+  const { id } = (await created.json()) as { id: string }
+  return id
+}
+
+/** Test s jedinou položkou — otázkou z tématu. Vzor: `createTest` v `e2e/testy.spec.ts`. */
+async function vytvoritTest(
+  request: APIRequestContext,
+  title: string,
+  questionId: string,
+): Promise<string> {
+  const created = await request.post('/api/tests', {
+    data: {
+      title,
+      description: null,
+      graded: true,
+      templateId: 'builtin-klasicka',
+      header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+      variants: 1,
+      showKey: true,
+      items: [{ kind: 'question', questionId }],
+    },
+  })
+  expect(created.ok(), 'zkušební test se nepodařilo založit').toBe(true)
+  const { id } = (await created.json()) as { id: string }
+  return id
 }
 
 /** Přečte číslo v hlavičce „Otázky (N)“. */
@@ -276,6 +301,34 @@ test.describe('otázky v tématu', () => {
     await row.getByRole('button', { name: 'Přegenerovat' }).click()
 
     await expect(row).toHaveCount(0)
+  })
+
+  test('karta ukáže, ve kterém testu otázka je, a filtr ji podle toho schová', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka pro použití v testu ${Date.now()}`
+    const questionId = await pridatOtazku(page.request, topicId, { prompt, difficulty: 1 })
+    const nazevTestu = `E2E test s otázkou tématu ${Date.now()}`
+    const testId = await vytvoritTest(page.request, nazevTestu, questionId)
+
+    // Kontrolní otázka beze zařazení do testu — filtr ji nesmí schovat.
+    const nepouzitaPrompt = `Otázka bez testu ${Date.now()}`
+    await pridatOtazku(page.request, topicId, { prompt: nepouzitaPrompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    const nepouzitaRow = page.locator('li[data-question-id]', { hasText: nepouzitaPrompt })
+    await expect(row).toBeVisible()
+    await expect(nepouzitaRow).toBeVisible()
+    const odkaz = row.getByRole('link', { name: nazevTestu })
+    await expect(odkaz).toBeVisible()
+    await expect(odkaz).toHaveAttribute('href', `/tests/${testId}`)
+
+    await page.getByRole('checkbox', { name: 'Jen nepoužité v testu' }).click()
+    await expect(row).toHaveCount(0)
+    await expect(nepouzitaRow).toBeVisible()
+
+    await page.getByRole('checkbox', { name: 'Jen nepoužité v testu' }).click()
+    await expect(row).toBeVisible()
   })
 
   test('vrácení smazané karty funguje i po mezitímním obnovení seznamu jinou akcí', async ({ page }) => {

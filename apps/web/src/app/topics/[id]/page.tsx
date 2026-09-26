@@ -8,6 +8,7 @@ import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
+import { loadTestUsageForQuestions } from '@/lib/tests'
 import { TopicWorkspace } from './TopicWorkspace'
 import { skola, ucetStranky } from '@/lib/uzivatel'
 
@@ -62,6 +63,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   const usableCount = usable.length
   const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
 
+  // Štítek „V testu: …" a filtr „Jen nepoužité v testu" na kartě otázky —
+  // jen za testy, na které tahle učitelka vidí (`viditelnyTest`).
+  const usage = await loadTestUsageForQuestions(
+    ucet,
+    questionList.items.map((question) => question.id),
+  )
+
   return (
     <div className="space-y-5">
       <div>
@@ -98,6 +106,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         topicId={topic.id}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList.items}
+        usage={usage}
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
         usableCount={usableQuestionCount}

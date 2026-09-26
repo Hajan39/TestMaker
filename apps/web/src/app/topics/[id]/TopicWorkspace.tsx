@@ -13,7 +13,7 @@ import {
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
-import { TopicQuestions } from '@/components/TopicQuestions'
+import { TopicQuestions, type TestUsage } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { useMuzeMenit } from '@/components/Prava'
 
@@ -29,6 +29,7 @@ export function TopicWorkspace({
   topicId,
   materials,
   questions,
+  usage,
   listTruncated,
   listLimit,
   usableCount,
@@ -39,6 +40,8 @@ export function TopicWorkspace({
   topicId: string
   materials: MaterialSummary[]
   questions: Question[]
+  /** Testy, ve kterých už otázky jsou — jen ty, na které je volající vidí. */
+  usage: Record<string, TestUsage[]>
   /** Seznam otázek je useknutý limitem — v tématu jich je víc, než se vypisuje. */
   listTruncated: boolean
   /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
@@ -205,7 +208,7 @@ export function TopicWorkspace({
         </p>
       ) : null}
 
-      <TopicQuestions topicId={topicId} questions={shownQuestions} />
+      <TopicQuestions topicId={topicId} questions={shownQuestions} usage={usage} />
     </div>
   )
 }
