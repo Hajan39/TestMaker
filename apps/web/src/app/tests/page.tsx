@@ -124,7 +124,7 @@ export default async function TestsPage({
               <div className="mt-4">
                 <EmptyState
                   title="Filtru nic neodpovídá"
-                  hint="Zkus jiné slovo v názvu nebo jinou šablonu."
+                  hint="Zkus jiné slovo v názvu, jinou šablonu nebo třídu."
                   action={
                     <Link href="/tests">
                       <Button variant="outline">Zrušit filtry</Button>
