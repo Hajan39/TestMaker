@@ -11,6 +11,7 @@ import { TestPage } from '@/components/test-builder/TestPage'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
 import { nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
+import { defaultTemplateId, emptyHeader } from '@/components/test-builder/defaults'
 
 const STRUCTURAL_TEXT: Record<'heading' | 'instruction' | 'page_break', string | null> = {
   heading: 'Nová část',
@@ -43,8 +44,8 @@ export function TestBuilder({
     title: test?.title ?? '',
     description: test?.description ?? '',
     graded: test?.graded ?? true,
-    templateId: test?.templateId ?? templates[0]?.id ?? '',
-    header: test?.header ?? { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+    templateId: test?.templateId ?? defaultTemplateId(templates),
+    header: test?.header ?? emptyHeader(),
     variants: test?.variants ?? 1,
     // Klíč se už nenastavuje u testu, ale volí se až při tisku („Zadání pro
     // žáky" / „Klíč pro mě"). Sloupec v databázi zůstává, jen ho nic nemění.

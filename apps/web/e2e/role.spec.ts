@@ -123,4 +123,9 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   await expect(page.getByRole('button', { name: 'Upravit', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Přegenerovat', exact: true })).toHaveCount(0)
+
+  // Zaškrtávátko „Vybrat do testu“ a lišta výběru jsou taky akce ke změně —
+  // náhled do banky nic nepřidává, ani do ní vybírat otázky nemá jak.
+  await expect(page.getByRole('checkbox', { name: 'Vybrat do testu' })).toHaveCount(0)
+  await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
 })

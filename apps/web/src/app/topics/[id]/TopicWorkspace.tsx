@@ -26,7 +26,8 @@ interface MaterialSummary {
 }
 
 export function TopicWorkspace({
-  topicId,
+  topic,
+  defaultTemplateId,
   materials,
   questions,
   usage,
@@ -37,7 +38,10 @@ export function TopicWorkspace({
   ai,
   group,
 }: {
-  topicId: string
+  /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
+  topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
+  /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
+  defaultTemplateId: string
   materials: MaterialSummary[]
   questions: Question[]
   /** Testy, ve kterých už otázky jsou — jen ty, na které je volající vidí. */
@@ -109,7 +113,7 @@ export function TopicWorkspace({
     }
 
     try {
-      await generateQuestionsStream({ topicId, ...settings }, (event) => {
+      await generateQuestionsStream({ topicId: topic.id, ...settings }, (event) => {
         if (event.type === 'progress') {
           cast = { done: event.done, total: event.total }
           prubeh()
@@ -197,7 +201,7 @@ export function TopicWorkspace({
         <AiUnavailable problems={ai.problems} />
       ) : null}
 
-      {muzeMenit ? <ClaudeCodeImport topicId={topicId} /> : null}
+      {muzeMenit ? <ClaudeCodeImport topicId={topic.id} /> : null}
 
       {group}
 
@@ -208,7 +212,7 @@ export function TopicWorkspace({
         </p>
       ) : null}
 
-      <TopicQuestions topicId={topicId} questions={shownQuestions} usage={usage} />
+      <TopicQuestions topic={topic} defaultTemplateId={defaultTemplateId} questions={shownQuestions} usage={usage} />
     </div>
   )
 }

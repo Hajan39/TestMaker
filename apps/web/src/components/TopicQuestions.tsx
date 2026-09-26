@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
@@ -11,7 +10,6 @@ import {
   Checkbox,
   EmptyState,
   Label,
-  QuestionPreview,
   Select,
   SelectContent,
   SelectItem,
@@ -20,9 +18,12 @@ import {
   toast,
 } from '@testmaker/ui'
 import { QuestionEditorForm } from '@/components/QuestionEditor'
-import { RegenerateButton } from '@/components/RegenerateButton'
+import { QuestionCard } from '@/components/QuestionCard'
+import { SelectionBar } from '@/components/SelectionBar'
 import { useMuzeMenit } from '@/components/Prava'
 import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
+import { emptyHeader } from '@/components/test-builder/defaults'
+import { newId } from '@/lib/ids'
 
 interface Filters {
   type: QuestionType | ''
@@ -45,11 +46,15 @@ export interface TestUsage {
  * smazání jiné karty), ale rozepsaná úprava zůstává otevřená dál.
  */
 export function TopicQuestions({
-  topicId,
+  topic,
+  defaultTemplateId,
   questions,
   usage,
 }: {
-  topicId: string
+  /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
+  topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
+  /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
+  defaultTemplateId: string
   questions: Question[]
   /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
   usage: Record<string, TestUsage[]>
@@ -65,6 +70,11 @@ export function TopicQuestions({
   // odpověď ze serveru (smazání je optimistické, karta zmizí ještě dřív).
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
+  // Zaškrtnuté otázky do nového testu. Smazaná (i přegenerovaná) karta z výběru
+  // sama zmizí — výběr se počítá jen proti otázkám, které pořád existují
+  // (`active`), takže o odebrání se tahle množina starat nemusí.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [creatingTest, setCreatingTest] = useState(false)
 
   const sorted = useMemo(
     () =>
@@ -95,6 +105,62 @@ export function TopicQuestions({
 
   function resetFilters() {
     setFilters({ type: '', difficulty: '', onlyUnused: false })
+  }
+
+  /**
+   * Vybrané otázky, které pořád existují, v pořadí, v jakém stojí v seznamu
+   * (`active`) — ne v pořadí zaškrtnutí. Smazaná nebo přegenerovaná karta tak
+   * z výběru i ze součtu bodů zmizí sama, jen tím, že vypadne z `active`.
+   */
+  const selectedQuestions = useMemo(
+    () => active.filter((question) => selectedIds.has(question.id)),
+    [active, selectedIds],
+  )
+  const selectedPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
+
+  function toggleSelection(questionId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(questionId)) next.delete(questionId)
+      else next.add(questionId)
+      return next
+    })
+  }
+
+  /** Nový test rovnou z vybraných otázek tématu — název přebírá od tématu. */
+  async function createTestFromSelection() {
+    if (selectedQuestions.length === 0) return
+    setCreatingTest(true)
+    try {
+      const response = await fetch('/api/tests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: topic.name,
+          templateId: defaultTemplateId,
+          header: { ...emptyHeader(), subject: topic.subjectName },
+          gradeId: topic.gradeId,
+          items: selectedQuestions.map((question) => ({
+            id: newId(),
+            kind: 'question',
+            questionId: question.id,
+            puzzleId: null,
+            text: null,
+            pointsOverride: null,
+            linesOverride: null,
+          })),
+        }),
+      })
+      if (!response.ok) {
+        const detail = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(detail.error ?? `Test se nepodařilo založit (${response.status})`)
+      }
+      const result = (await response.json()) as { id: string }
+      router.push(`/tests/${result.id}?tema=${topic.id}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Test se nepodařilo založit')
+      setCreatingTest(false)
+    }
   }
 
   /** Smazání beze ptaní — jde hned vrátit zpět, proto tu není potvrzovací dialog. */
@@ -218,7 +284,7 @@ export function TopicQuestions({
           className="mt-3 rounded-[var(--radius-outer)] border border-line p-3"
         >
           <QuestionEditorForm
-            topicId={topicId}
+            topicId={topic.id}
             question={null}
             onCancel={() => setCreating(false)}
             onSaved={() => {
@@ -250,71 +316,41 @@ export function TopicQuestions({
           )}
         </div>
       ) : (
-        <ul className="mt-3 divide-y divide-line-soft">
+        <ul className={`mt-3 divide-y divide-line-soft ${selectedQuestions.length > 0 ? 'pb-16' : ''}`}>
           {visible.map((question) => (
             <li key={question.id} data-question-id={question.id} className="py-3">
-              {editingId === question.id ? (
-                <QuestionEditorForm
-                  topicId={topicId}
-                  question={question}
-                  onCancel={() => setEditingId(null)}
-                  onSaved={() => {
-                    setEditingId(null)
-                    router.refresh()
-                  }}
-                />
-              ) : (
-                <div className="flex gap-3">
-                  <div className="min-w-0 flex-1">
-                    <QuestionPreview question={question} />
-                    <TestUsageLabel usage={usage[question.id]} />
-                  </div>
-                  {muzeMenit ? (
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(question.id)}>
-                        Upravit
-                      </Button>
-                      <RegenerateButton
-                        questionId={question.id}
-                        type={question.type}
-                        onDone={() => setHiddenIds((current) => new Set(current).add(question.id))}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-danger hover:text-danger"
-                        disabled={busyIds.has(question.id)}
-                        onClick={() => void remove(question)}
-                      >
-                        Smazat
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
+              <QuestionCard
+                topicId={topic.id}
+                question={question}
+                editing={editingId === question.id}
+                muzeMenit={muzeMenit}
+                selected={selectedIds.has(question.id)}
+                busy={busyIds.has(question.id)}
+                usage={usage[question.id]}
+                onEditStart={() => setEditingId(question.id)}
+                onEditCancel={() => setEditingId(null)}
+                onEditSaved={() => {
+                  setEditingId(null)
+                  router.refresh()
+                }}
+                onToggleSelect={() => toggleSelection(question.id)}
+                onRegenerateDone={() => setHiddenIds((current) => new Set(current).add(question.id))}
+                onRemove={() => void remove(question)}
+              />
             </li>
           ))}
         </ul>
       )}
-    </Card>
-  )
-}
 
-/**
- * Drobný štítek „V testu: Název" pod náhledem otázky. Testy, na které
- * volající nevidí (cizí soukromý test kolegyně), sem `usage` vůbec nedostane
- * — štítek proto nikdy neprozradí, že takový test existuje.
- */
-function TestUsageLabel({ usage }: { usage: TestUsage[] | undefined }) {
-  if (!usage || usage.length === 0) return null
-  const [prvni, ...zbytek] = usage
-  return (
-    <p className="mt-1 text-xs text-fg-muted">
-      V testu:{' '}
-      <Link href={`/tests/${prvni!.testId}`} className="hover:text-brand hover:underline">
-        {prvni!.title}
-      </Link>
-      {zbytek.length > 0 ? ` a další ${zbytek.length}` : ''}
-    </p>
+      {selectedQuestions.length > 0 ? (
+        <SelectionBar
+          count={selectedQuestions.length}
+          points={selectedPoints}
+          busy={creatingTest}
+          onCreate={() => void createTestFromSelection()}
+          onClear={() => setSelectedIds(new Set())}
+        />
+      ) : null}
+    </Card>
   )
 }

@@ -8,7 +8,8 @@ import { TopicGroup } from '@/components/TopicGroup'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
-import { loadTestUsageForQuestions } from '@/lib/tests'
+import { loadTemplates, loadTestUsageForQuestions } from '@/lib/tests'
+import { defaultTemplateId } from '@/components/test-builder/defaults'
 import { TopicWorkspace } from './TopicWorkspace'
 import { skola, ucetStranky } from '@/lib/uzivatel'
 
@@ -22,6 +23,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     .select({
       id: topics.id,
       name: topics.name,
+      gradeId: topics.gradeId,
       gradeName: grades.name,
       subjectName: subjects.name,
       usableCharCount: topics.usableCharCount,
@@ -37,7 +39,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   // Počty se berou dotazem, ne délkou seznamu: seznam je useknutý limitem
   // a u tématu s tisícem otázek by čísla nahoře lhala.
-  const [materialRows, questionList, usableQuestionCount] = await Promise.all([
+  const [materialRows, questionList, usableQuestionCount, templates] = await Promise.all([
     db
       .select({
         id: materials.id,
@@ -57,6 +59,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     // Jediný počet nahoře i pro dogenerování — zamítnuté (smazané) se do něj
     // nepočítají, jinak by smazání karty číslo nesnížilo.
     countQuestions(ucet, { topicId: id, statuses: ['draft', 'approved'] }),
+    // Výchozí šablona pro test, který ze zaškrtnutých otázek vznikne rovnou
+    // v tématu — stejný výběr jako u nového testu z prázdna.
+    loadTemplates(ucet),
   ])
   // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
   const usable = materialRows.filter((material) => !material.duplicateOfId)
@@ -103,7 +108,14 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
       />
 
       <TopicWorkspace
-        topicId={topic.id}
+        topic={{
+          id: topic.id,
+          name: topic.name,
+          subjectName: topic.subjectName,
+          gradeId: topic.gradeId,
+          gradeName: topic.gradeName,
+        }}
+        defaultTemplateId={defaultTemplateId(templates)}
         materials={materialRows.filter((material) => !material.duplicateOfId)}
         questions={questionList.items}
         usage={usage}
