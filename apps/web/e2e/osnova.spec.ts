@@ -1,10 +1,71 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
  * Položka na stránce písemky: co jde nastavit jen pro tenhle test, aniž by se
  * měnila otázka v bance. Ovládání položky (body, řádky, odebrání) se vynoří
  * u okraje listu, když je položka pod myší nebo v ní stojí ohnisko.
  */
+
+const SUBJECT = 'E2E OSNOVA'
+const GRADE = 'E2E osnova testu'
+
+/**
+ * Vlastní izolované téma se dvěma otázkami „krátká odpověď“ — bez vnořeného
+ * seznamu možností. `[data-slot="paper-sheet"] ol > li` totiž chytá i vnitřní
+ * `<ol>` odpovědí (možnosti u výběru, dvojice u přiřazování…), takže „první
+ * dvě schválené otázky odkudkoli z banky“ dřív občas byly typu s možnostmi
+ * a počty položek na stránce se rozjely. Tady se místo pořadí v DOM sahá po
+ * vlastních datech přes vyhledávací filtr banky, ať výsledek nezávisí na tom,
+ * co zrovna leží v bance z jiných souborů.
+ */
+async function seedOsnovaTopic(request: APIRequestContext): Promise<{ topicId: string; marker: string }> {
+  const marker = `Osnova test ${Date.now().toString(36)}`
+  const text = `${marker} popisuje vztahy mezi organismy v přírodě. `.repeat(12)
+  const imported = await request.post('/api/materials', {
+    data: {
+      materials: [
+        {
+          relativePath: `${SUBJECT}/${GRADE}/${marker}.txt`,
+          fileName: `${marker}.txt`,
+          subject: SUBJECT,
+          grade: GRADE,
+          topic: marker,
+          mimeType: 'text/plain',
+          sizeBytes: text.length,
+          text,
+          pageCount: null,
+          needsOcr: false,
+          contentHash: `e2e-osnova-v1:${marker}`,
+        },
+      ],
+    },
+  })
+  expect(imported.ok(), 'zkušební materiál se nepodařilo naimportovat').toBe(true)
+
+  const found = await request.get(`/api/library/search?q=${encodeURIComponent(marker)}`)
+  expect(found.ok()).toBe(true)
+  const { results } = (await found.json()) as { results: { topicId: string; topicName: string }[] }
+  const topic = results.find((result) => result.topicName.includes(marker))
+  expect(topic, `zkušební téma „${marker}“ se v knihovně nenašlo`).toBeTruthy()
+  return { topicId: topic!.topicId, marker }
+}
+
+/** Otázka typu „krátká odpověď“ — na papíře bez vnořeného seznamu možností. */
+async function seedShortAnswer(request: APIRequestContext, topicId: string, prompt: string): Promise<void> {
+  const created = await request.post('/api/questions', {
+    data: {
+      topicId,
+      question: {
+        type: 'short_answer',
+        difficulty: 1,
+        points: 1,
+        blocks: [],
+        payload: { prompt, answer: 'odpověď', acceptedAnswers: [] },
+      },
+    },
+  })
+  expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
+}
 test.describe('položka osnovy', () => {
   test('u volné odpovědi jde nastavit počet řádků a uloží se s testem', async ({ page }) => {
     await page.goto('/tests/new')
@@ -49,12 +110,35 @@ test.describe('položka osnovy', () => {
  * otázka smí do testu dostat víckrát.
  */
 test.describe('skládání osnovy', () => {
-  /** Přidá do prázdné osnovy dvě různé otázky z první rozbalené skupiny. */
-  async function pridejDveOtazky(page: import('@playwright/test').Page) {
+  /**
+   * Přidá do prázdné osnovy dvě vlastní otázky, ať výsledek nezávisí na tom,
+   * co je v bance z jiných souborů zrovna první — vyhledávací filtr banky
+   * zúží skupiny na jedinou, tu vlastní. Třetí otázka tématu zůstává
+   * nevybraná: „Vybrat vše" pak má co doplnit, aniž by odznačilo tyhle dvě.
+   */
+  async function pridejDveOtazky(page: Page) {
+    const { topicId, marker } = await seedOsnovaTopic(page.request)
+    await seedShortAnswer(page.request, topicId, `${marker}: první otázka`)
+    await seedShortAnswer(page.request, topicId, `${marker}: druhá otázka`)
+    await seedShortAnswer(page.request, topicId, `${marker}: třetí otázka`)
+
     await page.goto('/tests/new')
-    await page.locator('details summary').first().click()
+    // Opakované vyplnění (`toPass`): ve WebKitu se stane, že první písmena
+    // padnou do políčka dřív, než se stránka v prohlížeči oživí, a filtr
+    // banky se pak neprojeví — stejná pojistka jako `hledej` v testy.spec.ts.
+    const hledat = page.getByLabel('Hledat')
+    const group = page.locator('details')
+    await expect(async () => {
+      await hledat.fill('')
+      await hledat.fill(marker)
+      await expect(group).toHaveCount(1, { timeout: 2000 })
+    }).toPass({ timeout: 20_000 })
+
+    await group.locator('summary').click()
+
     const questions = page.locator('details[open] > ul > li')
-    await questions.first().getByRole('checkbox').click()
+    await expect(questions).toHaveCount(3)
+    await questions.nth(0).getByRole('checkbox').click()
     await questions.nth(1).getByRole('checkbox').click()
     return questions
   }
