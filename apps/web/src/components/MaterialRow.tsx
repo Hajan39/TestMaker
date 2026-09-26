@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Badge,
   Checkbox,
@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
   cn,
+  toast,
 } from '@testmaker/ui'
 import { useMuzeMenit } from '@/components/Prava'
 
@@ -54,16 +55,32 @@ export function MaterialRow({
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const [excludePending, setExcludePending] = useState(false)
+  // Optimistická změna: zaškrtnutí se projeví hned, ne až po `router.refresh()`.
+  // Když server odmítne, vrátí se zpátky a učitelka se to dozví hláškou —
+  // jinak by checkbox tiše zůstal v poloze, která se neuložila.
+  const [excludedOverride, setExcludedOverride] = useState(material.excluded)
+  useEffect(() => setExcludedOverride(material.excluded), [material.excluded])
 
   async function toggleExcluded() {
+    const next = !excludedOverride
+    setExcludedOverride(next)
     setExcludePending(true)
     try {
-      await fetch('/api/materials', {
+      const response = await fetch('/api/materials', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: material.id, excluded: !material.excluded }),
+        body: JSON.stringify({ id: material.id, excluded: next }),
       })
+      if (!response.ok) {
+        setExcludedOverride(!next)
+        const detail = (await response.json().catch(() => ({}))) as { error?: string }
+        toast.error(detail.error ?? 'Nepovedlo se to uložit, zkus to prosím znovu.')
+        return
+      }
       router.refresh()
+    } catch (networkError) {
+      setExcludedOverride(!next)
+      toast.error(networkError instanceof Error ? networkError.message : 'Nepovedlo se to uložit, zkus to prosím znovu.')
     } finally {
       setExcludePending(false)
     }
@@ -75,7 +92,7 @@ export function MaterialRow({
       <span
         className={cn(
           'min-w-0 break-all',
-          material.duplicateOfId || material.excluded ? 'text-fg-muted' : 'text-fg-soft',
+          material.duplicateOfId || excludedOverride ? 'text-fg-muted' : 'text-fg-soft',
         )}
         title={material.fileName}
       >
@@ -96,8 +113,8 @@ export function MaterialRow({
       {muzeMenit ? (
         <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
           <Checkbox
-            checked={!material.excluded}
-            disabled={excludePending}
+            checked={!material.duplicateOfId && !excludedOverride}
+            disabled={excludePending || !!material.duplicateOfId}
             aria-label={`Použít pro generování: ${material.fileName}`}
             onCheckedChange={() => void toggleExcluded()}
           />

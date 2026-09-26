@@ -84,9 +84,10 @@ test.describe('pruh materiálů v tématu', () => {
       await expect(page.getByText(first.name)).toBeVisible()
       await expect(page.getByText(second.name)).toBeVisible()
 
-      // Nahrání téhož souboru podruhé: nezdvojí se a hláška to řekne rovnou.
+      // Nahrání téhož souboru podruhé: nezdvojí se a hláška to řekne rovnou —
+      // nic se tentokrát neuloží, takže věta mluví jen o duplicitách.
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([first])
-      await expect(page.getByText(/už v tématu bylo/)).toBeVisible()
+      await expect(page.getByText('Všechny soubory už v tématu byly.')).toBeVisible()
       await expect(page.getByText(first.name)).toHaveCount(1)
     } finally {
       await cleanup(page.request, topicId)
@@ -121,11 +122,66 @@ test.describe('pruh materiálů v tématu', () => {
       await expandStrip(page)
 
       const header = page.getByRole('button', { name: /^Materiály/ })
-      await expect(header).toContainText('Materiály1')
+      await expect(header).toContainText('Materiály 1')
+      // Mezera mezi slovem a číslem musí být skutečná — jinak by přístupný
+      // název tlačítka zněl „Materiály1“ a čtečka obrazovky by ho přečetla
+      // jako jedno slovo.
+      await expect(header).toHaveAccessibleName(/Materiály 1/)
 
       await page.getByRole('checkbox', { name: /Použít pro generování: Úvodní materiál\.txt/ }).click()
 
-      await expect(header).toContainText('Materiály0 + 1 vynechaných')
+      await expect(header).toContainText('Materiály 0 + 1 vynechaný')
+    } finally {
+      await cleanup(page.request, topicId)
+    }
+  })
+
+  test('soubor bez textu skončí mezi přeskočenými, ne beze stopy', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    try {
+      await page.goto(`/topics/${topicId}`)
+      await expandStrip(page)
+
+      // Míň než 40 znaků — extrakce ho vyhodnotí jako prázdný, ne jako sken.
+      const empty = {
+        name: 'prazdna-poznamka.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('pár slov', 'utf8'),
+      }
+      await page.locator('[data-testid="topic-material-files"]').setInputFiles([empty])
+
+      await page.getByText(/^Přeskočeno/).click()
+      await expect(page.getByText(empty.name)).toBeVisible()
+      await expect(page.getByText('soubor neobsahuje žádný text')).toBeVisible()
+      // Nepřibyl mezi materiály tématu.
+      await expect(page.getByText(empty.name).locator('..').getByRole('checkbox')).toHaveCount(0)
+    } finally {
+      await cleanup(page.request, topicId)
+    }
+  })
+
+  test('duplicitní řádek má checkbox „Použít pro generování“ odškrtnutý a zamčený', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    try {
+      await page.goto(`/topics/${topicId}`)
+      await expandStrip(page)
+
+      // Druhý soubor s podmnožinou obsahu prvního, co založil téma
+      // (`ensureTopic`) — kratší text zaručuje, že se rozpozná jako
+      // duplicita jeho a ne naopak (rozhoduje delší z dvojice).
+      const duplicate = {
+        name: 'Duplicitní kopie.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from(text('Úvodní materiál založený přes API, aby téma existovalo.').slice(0, 200), 'utf8'),
+      }
+      await page.locator('[data-testid="topic-material-files"]').setInputFiles([duplicate])
+      await expect(page.getByText('stejný obsah jako')).toBeVisible()
+
+      const duplicateCheckbox = page.getByRole('checkbox', {
+        name: `Použít pro generování: ${duplicate.name}`,
+      })
+      await expect(duplicateCheckbox).not.toBeChecked()
+      await expect(duplicateCheckbox).toBeDisabled()
     } finally {
       await cleanup(page.request, topicId)
     }

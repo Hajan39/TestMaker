@@ -16,6 +16,7 @@ import {
   uploadMaterials,
   type FileEntry,
 } from '@/lib/importClient'
+import { isUsableMaterial } from '@/lib/materials'
 import {
   BusyButton,
   Button,
@@ -30,6 +31,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  plural,
   pocet,
   toast,
 } from '@testmaker/ui'
@@ -44,6 +46,12 @@ export interface MaterialsStripHandle {
    * není vidět (`EmptyState` v `TopicWorkspace` ho nahrazuje).
    */
   openUpload: () => void
+  /**
+   * Přetažení souboru mimo vlastní zónu pruhu — `TopicWorkspace` přebírá
+   * přetažení nad celou plochou tématu (jinak by ho prohlížeč otevřel jako
+   * novou stránku) a posílá ho sem, jako by dopadlo přímo do zóny.
+   */
+  handleExternalDrop: (dataTransfer: DataTransfer) => void
 }
 
 /**
@@ -61,8 +69,10 @@ export const MaterialsStrip = forwardRef<
     topicId: string
     topicName: string
     materials: GroupMaterial[]
+    /** Karta generování v tématu podle tohodle zakazuje tlačítko, dokud se soubory nahrávají. */
+    onBusyChange?: (busy: boolean) => void
   }
->(function MaterialsStrip({ topicId, topicName, materials }, ref) {
+>(function MaterialsStrip({ topicId, topicName, materials, onBusyChange }, ref) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const filesRef = useRef<HTMLInputElement>(null)
@@ -97,7 +107,29 @@ export const MaterialsStrip = forwardRef<
       setOpen(true)
       filesRef.current?.click()
     },
+    handleExternalDrop: (dataTransfer: DataTransfer) => {
+      if (uploadPhase !== 'idle') return
+      setOpen(true)
+      void filesFromDrop(dataTransfer).then(handleFiles)
+    },
   }))
+
+  const uploadBusy = uploadPhase !== 'idle'
+
+  // Karta generování v tématu tlačítko zakáže, dokud se soubory nahrávají —
+  // jinak by šlo spustit generování nad textem, který ještě není celý uložený.
+  useEffect(() => {
+    onBusyChange?.(uploadBusy)
+  }, [uploadBusy, onBusyChange])
+
+  // Zavření nebo obnovení stránky uprostřed čtení či ukládání souborů
+  // znamenalo ztrátu rozpracovaného nahrávání bez varování.
+  useEffect(() => {
+    if (!uploadBusy) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [uploadBusy])
 
   useEffect(() => {
     if (!manage) return
@@ -157,6 +189,10 @@ export const MaterialsStrip = forwardRef<
 
     const extracted: ExtractedMaterial[] = []
     const failures: IssueItem[] = []
+    // Extrakce doběhne, ale soubor nemá žádný text (`status: 'skipped'` z
+    // `processFile`) — patří mezi přeskočené vedle těch, co se vyřadily už
+    // podle přípony, jinak takový soubor beze stopy zmizí.
+    const emptySkips: IssueItem[] = []
     let done = 0
 
     try {
@@ -166,12 +202,18 @@ export const MaterialsStrip = forwardRef<
         if (result.status === 'ok' && result.material) extracted.push(result.material)
         else if (result.status === 'error') {
           failures.push({ relativePath: result.relativePath, reason: result.reason ?? 'chyba' })
+        } else if (result.status === 'skipped') {
+          emptySkips.push({
+            relativePath: result.relativePath,
+            reason: SKIP_LABELS[result.reason ?? ''] ?? 'soubor neobsahuje žádný text',
+          })
         }
       })
     } catch (workerError) {
       setError(workerError instanceof Error ? workerError.message : String(workerError))
     }
     setFailed(failures)
+    if (emptySkips.length > 0) setSkipped((current) => [...current, ...emptySkips])
 
     if (extracted.length === 0) {
       setUploadPhase('idle')
@@ -185,11 +227,15 @@ export const MaterialsStrip = forwardRef<
         topicId,
         onProgress: (uploadDone, uploadTotal) => setProgress({ done: uploadDone, total: uploadTotal }),
       })
-      toast.success(
-        result.duplicates > 0
-          ? `Nahráno ${pocet(result.imported, MATERIALY)} (${result.duplicates} už v tématu bylo).`
-          : `Nahráno ${pocet(result.imported, MATERIALY)}.`,
-      )
+      toast.success(uploadSummaryMessage(result))
+      // Sken bez textové vrstvy se do knihovny uloží (učitelka ho třeba
+      // nahradí lepší verzí), ale otázky z něj nikdy nevzniknou — na to má
+      // upozornit hned, ne až u zaškrtávátka v pruhu.
+      for (const material of extracted) {
+        if (material.needsOcr) {
+          toast(`„${material.fileName}" je nejspíš sken bez textu — otázky z něj nevzniknou.`)
+        }
+      }
       router.refresh()
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
@@ -198,10 +244,10 @@ export const MaterialsStrip = forwardRef<
     }
   }
 
-  const uploadBusy = uploadPhase !== 'idle'
-  // Do generování nejde duplicitní obsah ani materiál ručně vyřazený —
-  // oboje se v hlavičce sečte jedním číslem, ať se počty nemusí luštit dva.
-  const active = materials.filter((material) => !material.duplicateOfId && !material.excluded)
+  // Do generování nejde duplicitní obsah, materiál ručně vyřazený ani sken
+  // bez textové vrstvy — všechno se v hlavičce sečte jedním číslem, ať se
+  // počty nemusí luštit dva.
+  const active = materials.filter(isUsableMaterial)
   const skippedCount = materials.length - active.length
 
   return (
@@ -214,10 +260,12 @@ export const MaterialsStrip = forwardRef<
           onClick={() => setOpen(!open)}
         >
           <ChevronDown className={cn('size-4 transition-transform', open ? '' : '-rotate-90')} aria-hidden />
-          Materiály
+          Materiály{' '}
           <span className="font-normal text-fg-muted">
             {active.length}
-            {skippedCount > 0 ? ` + ${skippedCount} vynechaných` : ''}
+            {skippedCount > 0
+              ? ` + ${skippedCount} ${plural(skippedCount, 'vynechaný', 'vynechané', 'vynechaných')}`
+              : ''}
           </span>
         </button>
         {muzeMenit ? (
@@ -254,6 +302,10 @@ export const MaterialsStrip = forwardRef<
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => {
                 event.preventDefault()
+                // Vlastní zóna přetažení soubor zpracuje sama — nesmí probublat
+                // do obslužné rutiny na celé ploše tématu, jinak by se tentýž
+                // soubor nahrál dvakrát.
+                event.stopPropagation()
                 setDragging(false)
                 if (uploadBusy) return
                 void filesFromDrop(event.dataTransfer).then(handleFiles)
@@ -283,6 +335,7 @@ export const MaterialsStrip = forwardRef<
                     {uploadPhase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
                   </p>
                   <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
+                  <p className="text-xs text-fg-muted">Nechte stránku otevřenou, než se soubory nahrají.</p>
                 </div>
               ) : null}
             </div>
@@ -429,3 +482,18 @@ export const MaterialsStrip = forwardRef<
     </Card>
   )
 })
+
+/**
+ * Hláška po nahrání do tématu. Když se nenaimportovalo nic (všechny soubory
+ * v tématu už byly), obecná věta o duplicitách by zněla, že se nestalo nic —
+ * proto má vlastní znění. Sloveso se skloňuje podle počtu duplicit, ať
+ * nevznikne „1 už v tématu bylo“.
+ */
+function uploadSummaryMessage(result: { imported: number; duplicates: number }): string {
+  if (result.imported === 0) return 'Všechny soubory už v tématu byly.'
+  if (result.duplicates > 0) {
+    const bylo = plural(result.duplicates, 'byl', 'byly', 'bylo')
+    return `Nahráno ${pocet(result.imported, MATERIALY)} (${result.duplicates} už v tématu ${bylo}).`
+  }
+  return `Nahráno ${pocet(result.imported, MATERIALY)}.`
+}

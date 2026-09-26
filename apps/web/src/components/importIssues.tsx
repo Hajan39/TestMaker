@@ -16,6 +16,8 @@ export const SKIP_LABELS: Record<string, string> = {
   obrazek: 'obrázek (zatím nepodporován)',
   nepodporovany: 'nepodporovaná přípona',
   'stary-format': 'starý formát – převeď na .docx / .odp',
+  // Extrakce doběhla, ale soubor byl prázdný (`processFile` v `@testmaker/core/extract`).
+  'prázdný text': 'soubor neobsahuje žádný text',
 }
 
 export interface IssueItem {

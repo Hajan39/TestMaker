@@ -135,6 +135,9 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     const extracted: ExtractedMaterial[] = []
     const failures: Failure[] = []
     let done = 0
+    // Extrakce doběhne, ale soubor nemá žádný text (`status: 'skipped'` z
+    // `processFile`) — patří mezi přeskočené, jinak beze stopy zmizí.
+    const emptySkips: Failure[] = []
 
     try {
       await extractAll(accepted, (result) => {
@@ -143,6 +146,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         if (result.status === 'ok' && result.material) extracted.push(result.material)
         else if (result.status === 'error') {
           failures.push({ relativePath: result.relativePath, reason: result.reason ?? 'chyba' })
+        } else if (result.status === 'skipped') {
+          emptySkips.push({
+            relativePath: result.relativePath,
+            reason: SKIP_LABELS[result.reason ?? ''] ?? 'soubor neobsahuje žádný text',
+          })
         }
       })
     } catch (workerError) {
@@ -151,6 +159,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
 
     setGroups(toPreview(extracted))
     setFailed(failures)
+    if (emptySkips.length > 0) setSkipped((current) => [...current, ...emptySkips])
     setPhase('preview')
   }
 

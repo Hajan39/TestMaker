@@ -17,6 +17,7 @@ import type { GroupMaterial } from '@/components/MaterialRow'
 import { MaterialsStrip, type MaterialsStripHandle } from '@/components/MaterialsStrip'
 import { TopicQuestions, type TestUsage, type TopicQuestionsHandle } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
+import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
 import { useMuzeMenit } from '@/components/Prava'
 
 export function TopicWorkspace({
@@ -28,6 +29,7 @@ export function TopicWorkspace({
   listTruncated,
   listLimit,
   lowContent,
+  usableCharCount,
   ai,
 }: {
   /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
@@ -45,6 +47,8 @@ export function TopicWorkspace({
   listLimit: number
   /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
   lowContent: boolean
+  /** Použitelný text tématu ve znacích — stejné číslo, které karta ukazuje ve `StatRow`. */
+  usableCharCount: number
   ai: { configured: boolean; provider: string; model: string; problems: string[] }
 }) {
   const muzeMenit = useMuzeMenit()
@@ -68,6 +72,10 @@ export function TopicWorkspace({
   // odkrývá zbytek stránky ještě dřív, než dojede `router.refresh()` — jinak
   // by tlačítko v `EmptyState` muselo mířit na skrytou plochu.
   const [revealed, setRevealed] = useState(false)
+  // Zatímco se v pruhu materiálů čte nebo ukládá soubor, generování by sáhlo
+  // po textu, který ještě není hotový — tlačítko proto počká, než se pruh
+  // ohlásí jako volný.
+  const [materialsUploading, setMaterialsUploading] = useState(false)
 
   // Po obnovení seznamu přijdou tytéž otázky i v `questions` — podle id se
   // proto čerstvé, které už v seznamu jsou, vynechají, ať se nezdvojí.
@@ -77,10 +85,13 @@ export function TopicWorkspace({
   }, [fresh, questions])
 
   // Ukazujeme jen to, co skutečně půjde do modelu: generování duplicitní
-  // obsah i ručně vynechaný materiál vždycky přeskočí, takže se nesmí počítat
-  // ani tady — jinak na obrazovce stojí velké číslo a hned pod ním upozornění,
-  // že materiálů je málo.
-  const usable = materials.filter((material) => !material.duplicateOfId && !material.excluded)
+  // obsah, ručně vynechaný materiál i sken bez textové vrstvy vždycky
+  // přeskočí, takže se nesmí počítat ani tady — jinak na obrazovce stojí
+  // velké číslo a hned pod ním upozornění, že materiálů je málo.
+  const usable = materials.filter(isUsableMaterial)
+  // Stejná hranice, jakou generování hlídá na serveru (`MIN_GENERATE_CHARS`) —
+  // tlačítko se zakáže dřív, než by učitelka čekala na chybovou hlášku.
+  const tooLittleText = usableCharCount < MIN_GENERATE_CHARS
   // Téma úplně bez obsahu (žádný materiál, žádná otázka) dostane jednotnou
   // výzvu místo karty generování a pruhu materiálů — obojí by jen ukazovalo
   // vlastní prázdný stav vedle sebe.
@@ -148,7 +159,19 @@ export function TopicWorkspace({
   }
 
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      // Přetažení souboru mimo pruh materiálů by prohlížeč defaultně otevřel
+      // jako novou stránku a učitelka by o rozpracovanou práci přišla. Celá
+      // plocha tématu proto přetažení přebírá a posílá ho do pruhu, jako by
+      // ho pustila přímo na jeho ploše — vlastní zóna pruhu přetažení dál
+      // nepouští (`stopPropagation`), ať se totéž nezpracuje dvakrát.
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault()
+        if (muzeMenit) materialsStripRef.current?.handleExternalDrop(event.dataTransfer)
+      }}
+    >
       {/* Téma úplně bez obsahu dostane jednu jasnou výzvu místo karty
           generování a pruhu materiálů — obojí by tu jen ukazovalo vlastní
           prázdný stav vedle sebe. Zmizí sama, jakmile něco přibude
@@ -189,15 +212,19 @@ export function TopicWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={lowContent ? 'outline' : 'default'}
-              disabled={generating || usable.length === 0}
+              disabled={generating || usable.length === 0 || tooLittleText || materialsUploading}
               onClick={() => void generate()}
             >
               Vygenerovat otázky
             </Button>
             <span className="text-sm text-fg-muted">
-              {usable.length === 0
-                ? 'Nejdřív nahraj materiál nebo ho zapni pro generování.'
-                : `Vznikne ${pocet(settings.count, OTAZKY)} z ${pocet(usable.length, MATERIALY_Z)}.`}
+              {materialsUploading
+                ? 'Počkej, až se soubory nahrají.'
+                : usable.length === 0
+                  ? 'Nejdřív nahraj materiál nebo ho zapni pro generování.'
+                  : tooLittleText
+                    ? 'Použitelného textu je zatím míň než 200 znaků — na otázky to nestačí.'
+                    : `Vznikne ${pocet(settings.count, OTAZKY)} z ${pocet(usable.length, MATERIALY_Z)}.`}
             </span>
             <div className="ml-auto">
               <SimpleGenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
@@ -224,7 +251,13 @@ export function TopicWorkspace({
       {muzeMenit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
 
       <div className={showEmptyState ? 'hidden' : undefined}>
-        <MaterialsStrip ref={materialsStripRef} topicId={topic.id} topicName={topic.name} materials={materials} />
+        <MaterialsStrip
+          ref={materialsStripRef}
+          topicId={topic.id}
+          topicName={topic.name}
+          materials={materials}
+          onBusyChange={setMaterialsUploading}
+        />
       </div>
 
       {listTruncated ? (
