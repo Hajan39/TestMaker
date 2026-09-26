@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import { testTopicPath } from './fixtures'
 
 /**
@@ -45,9 +46,11 @@ test.describe('hromadný výběr', () => {
     test.skip((await settings.count()) === 0, 'Generování není nakonfigurované.')
 
     await settings.click()
-    // Nastavení generování je vlastní oblast; „Volná odpověď" se jinak trefí
-    // i do odznaků u otázek pod ním.
-    const types = page.locator('label').filter({ hasText: 'Volná odpověď' }).first()
+    // Nastavení generování je vlastní oblast; popisek se jinak trefí i do
+    // odznaků u otázek pod ním. Vzato ze seznamu typů, které model umí
+    // (`AI_QUESTION_TYPES`), aby test nezávisel na tom, který typ tam zrovna je.
+    const typeLabel = QUESTION_TYPE_LABELS[AI_QUESTION_TYPES[1]]
+    const types = page.locator('label').filter({ hasText: typeLabel }).first()
     const selectAllTypes = page.getByRole('button', { name: 'Vybrat vše' })
     // Ve výchozím stavu jsou vybrané všechny typy, takže tlačítko nic nedělá.
     await expect(selectAllTypes).toBeDisabled()
