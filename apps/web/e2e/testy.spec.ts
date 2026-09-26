@@ -55,6 +55,31 @@ test.describe('seznam testů', () => {
     )
     expect(otazky[0]).toBe(otazky[1])
   })
+
+  test('filtr podle třídy zúží seznam a zůstane v adrese', async ({ page }) => {
+    const stamp = Date.now()
+    const tridaA = await createGrade(page.request, `E2E předmět A ${stamp}`, `Třída A ${stamp}`)
+    const tridaB = await createGrade(page.request, `E2E předmět B ${stamp}`, `Třída B ${stamp}`)
+    const nazevA = `${PREFIX} třídy A ${stamp}`
+    const nazevB = `${PREFIX} třídy B ${stamp}`
+    await createTest(page.request, nazevA, { gradeId: tridaA.gradeId })
+    await createTest(page.request, nazevB, { gradeId: tridaB.gradeId })
+
+    await page.goto('/tests')
+    await page.getByLabel('Třída').click()
+    await page.getByRole('option', { name: tridaA.label }).click()
+
+    await expect(page).toHaveURL(new RegExp(`trida=${tridaA.gradeId}`))
+    await expect(page.getByRole('link', { name: nazevA })).toBeVisible()
+    await expect(page.getByRole('link', { name: nazevB })).toHaveCount(0)
+
+    // Odkaz s filtrem se dá poslat a otevřít znovu.
+    const url = page.url()
+    await page.goto('/tests')
+    await page.goto(url)
+    await expect(page.getByRole('link', { name: nazevA })).toBeVisible()
+    await expect(page.getByRole('link', { name: nazevB })).toHaveCount(0)
+  })
 })
 
 /**
@@ -76,7 +101,11 @@ async function hledej(page: Page, text: string): Promise<void> {
 }
 
 /** Test s jednou otázkou z banky. Otázka se bere z první, kterou knihovna má. */
-async function createTest(request: APIRequestContext, title: string): Promise<string> {
+async function createTest(
+  request: APIRequestContext,
+  title: string,
+  options: { gradeId?: string } = {},
+): Promise<string> {
   // `builtin-klasicka` je vestavěná šablona, kterou zakládá i seed testovací
   // databáze — na jiné id se tu spolehnout nedá.
   const bank = await request.get('/api/questions?status=approved&limit=1')
@@ -90,6 +119,7 @@ async function createTest(request: APIRequestContext, title: string): Promise<st
       description: null,
       graded: true,
       templateId: 'builtin-klasicka',
+      gradeId: options.gradeId ?? null,
       header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
       variants: 1,
       showKey: true,
@@ -99,4 +129,26 @@ async function createTest(request: APIRequestContext, title: string): Promise<st
   expect(created.ok(), 'zkušební test se nepodařilo založit').toBe(true)
   const { id } = (await created.json()) as { id: string }
   return id
+}
+
+/**
+ * Vlastní předmět a ročník pro filtr podle třídy — vznikají v knihovně přes
+ * API, ať test nezávisí na tom, jaké třídy má seedovaná databáze zrovna teď.
+ */
+async function createGrade(
+  request: APIRequestContext,
+  subjectName: string,
+  gradeName: string,
+): Promise<{ gradeId: string; label: string }> {
+  const subject = await request.post('/api/library', { data: { kind: 'subject', name: subjectName } })
+  expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+  const { id: subjectId } = (await subject.json()) as { id: string }
+
+  const grade = await request.post('/api/library', {
+    data: { kind: 'grade', name: gradeName, parentId: subjectId },
+  })
+  expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
+  const { id: gradeId } = (await grade.json()) as { id: string }
+
+  return { gradeId, label: `${subjectName} · ${gradeName}` }
 }

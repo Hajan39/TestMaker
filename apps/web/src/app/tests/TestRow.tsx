@@ -27,6 +27,8 @@ export interface TestRowData {
   questionCount: number
   points: number
   templateName: string
+  /** „Předmět · ročník"; `null` u testu bez třídy. */
+  gradeLabel: string | null
   updatedAt: string
 }
 
@@ -182,6 +184,7 @@ export function TestRow({ row }: { row: TestRowData }) {
       <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.questionCount}</td>
       <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
       <td className="py-2 pr-4 text-fg-soft">{row.templateName}</td>
+      <td className="py-2 pr-4 text-fg-soft">{row.gradeLabel ?? ''}</td>
       <td className="py-2 pr-4 text-fg-muted">
         {new Date(row.updatedAt).toLocaleDateString('cs')}
       </td>
@@ -220,6 +223,12 @@ export function TestCard({ row }: { row: TestRowData }) {
         <span className="ui-numeric">{row.points} b.</span>
         <span aria-hidden="true">·</span>
         <span>{row.templateName}</span>
+        {row.gradeLabel ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{row.gradeLabel}</span>
+          </>
+        ) : null}
         <span aria-hidden="true">·</span>
         <span className="text-fg-muted">{new Date(row.updatedAt).toLocaleDateString('cs')}</span>
       </p>

@@ -41,8 +41,9 @@ const testSchema = z.object({
 })
 
 /**
- * Seznam testů. Volitelně zúžený hledáním v názvu a popisu (`q`) a šablonou
- * (`templateId`) — testů přibývá každý rok a projít je očima přestalo stačit.
+ * Seznam testů. Volitelně zúžený hledáním v názvu a popisu (`q`), šablonou
+ * (`templateId`) a třídou (`gradeId`) — testů přibývá každý rok a projít je
+ * očima přestalo stačit.
  */
 export async function GET(request: Request) {
   return sRozsahem(async (ucet) => {
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
   const conditions = testConditions(ucet, {
     search: params.get('q') ?? undefined,
     templateId: params.get('templateId') ?? undefined,
+    gradeId: params.get('gradeId') ?? undefined,
   })
 
   const rows = await db

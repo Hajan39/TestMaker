@@ -32,6 +32,7 @@ export function TestsTable({ rows }: { rows: TestRowData[] }) {
             <th className="py-2 pr-4 font-medium">Otázky</th>
             <th className="py-2 pr-4 font-medium">Body</th>
             <th className="py-2 pr-4 font-medium">Šablona</th>
+            <th className="py-2 pr-4 font-medium">Třída</th>
             <th className="py-2 pr-4 font-medium">Změněno</th>
             <th className="py-2 pr-0 font-medium text-right">Akce</th>
           </tr>

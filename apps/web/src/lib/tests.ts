@@ -11,7 +11,7 @@ import {
   type Template,
   type Test,
 } from '@testmaker/core/schema'
-import { db, assets, grades, puzzles, questions, templates, testItems, tests } from '@/db'
+import { db, assets, grades, puzzles, questions, subjects, templates, testItems, tests } from '@/db'
 import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
@@ -26,6 +26,8 @@ export interface TestQuery {
   /** Hledá se v názvu a v popisu testu. */
   search?: string
   templateId?: string
+  /** Třída, ze které test vznikl — filtr v přehledu testů. */
+  gradeId?: string
 }
 
 /**
@@ -54,7 +56,30 @@ export function testConditions(scope: Scope, query: TestQuery): SQL[] {
     if (match) conditions.push(match)
   }
   if (query.templateId) conditions.push(eq(tests.templateId, query.templateId))
+  if (query.gradeId) conditions.push(eq(tests.gradeId, query.gradeId))
   return conditions
+}
+
+export interface TestGradeOption {
+  id: string
+  /** „Předmět · ročník", stejný tvar jako jinde v aplikaci. */
+  label: string
+}
+
+/**
+ * Nabídka tříd do filtru nad přehledem testů: jen ročníky, ve kterých je
+ * aspoň jeden test viditelný přihlášené osobě. Ročník bez testu by ve filtru
+ * ukazoval na prázdný seznam, proto se do nabídky nedostane.
+ */
+export async function loadTestGradeOptions(scope: Scope): Promise<TestGradeOption[]> {
+  const rows = await db
+    .selectDistinct({ id: grades.id, subjectName: subjects.name, gradeName: grades.name })
+    .from(tests)
+    .innerJoin(grades, eq(grades.id, tests.gradeId))
+    .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+    .where(viditelnyTest(scope, tests))
+    .orderBy(asc(subjects.position), asc(subjects.name), asc(grades.position), asc(grades.name))
+  return rows.map((row) => ({ id: row.id, label: `${row.subjectName} · ${row.gradeName}` }))
 }
 
 export async function loadTemplates(scope: Scope): Promise<Template[]> {

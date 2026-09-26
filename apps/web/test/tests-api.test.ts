@@ -147,6 +147,18 @@ describe('ukládání testu', () => {
     expect(row?.itemCount).toBe(2)
     expect(row?.templateName).toBeTruthy()
   })
+
+  it('gradeId v dotazu zúží seznam jen na testy té třídy', async () => {
+    const jinyTopic = await seedTopic()
+    const idVlastniTridy = await createTest([], { gradeId })
+    const idJineTridy = await createTest([], { gradeId: jinyTopic.gradeId })
+
+    const { tests } = (await (await GET(req(`/api/tests?gradeId=${gradeId}`))).json()) as {
+      tests: { id: string }[]
+    }
+    expect(tests.some((test) => test.id === idVlastniTridy)).toBe(true)
+    expect(tests.some((test) => test.id === idJineTridy)).toBe(false)
+  })
 })
 
 describe('přeuložení testu', () => {

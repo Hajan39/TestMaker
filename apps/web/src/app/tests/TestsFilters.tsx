@@ -26,10 +26,14 @@ export function TestsFilters({
   search,
   templateId,
   templates,
+  gradeId,
+  grades,
 }: {
   search: string
   templateId: string
   templates: { id: string; name: string }[]
+  gradeId: string
+  grades: { id: string; label: string }[]
 }) {
   const router = useRouter()
   const [text, setText] = useState(search)
@@ -45,10 +49,11 @@ export function TestsFilters({
   }
 
   const apply = useCallback(
-    (next: { search: string; templateId: string }) => {
+    (next: { search: string; templateId: string; gradeId: string }) => {
       const params = new URLSearchParams()
       if (next.search.trim()) params.set('q', next.search.trim())
       if (next.templateId) params.set('templateId', next.templateId)
+      if (next.gradeId) params.set('trida', next.gradeId)
       const query = params.toString()
       startNavigate(() => router.push(query ? `/tests?${query}` : '/tests', { scroll: false }))
     },
@@ -59,9 +64,9 @@ export function TestsFilters({
   // každém písmenu.
   useEffect(() => {
     if (text === search) return
-    const timer = setTimeout(() => apply({ search: text, templateId }), SEARCH_DELAY)
+    const timer = setTimeout(() => apply({ search: text, templateId, gradeId }), SEARCH_DELAY)
     return () => clearTimeout(timer)
-  }, [text, search, templateId, apply])
+  }, [text, search, templateId, gradeId, apply])
 
   return (
     <div className="flex flex-wrap items-end gap-2">
@@ -79,7 +84,7 @@ export function TestsFilters({
         <Select
           value={templateId || 'vse'}
           onValueChange={(value) =>
-            apply({ search: text, templateId: value === 'vse' ? '' : value })
+            apply({ search: text, templateId: value === 'vse' ? '' : value, gradeId })
           }
         >
           <SelectTrigger id="test-template" className="w-full">
@@ -90,6 +95,27 @@ export function TestsFilters({
             {templates.map((template) => (
               <SelectItem key={template.id} value={template.id}>
                 {template.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-52">
+        <Label htmlFor="test-grade">Třída</Label>
+        <Select
+          value={gradeId || 'vse'}
+          onValueChange={(value) =>
+            apply({ search: text, templateId, gradeId: value === 'vse' ? '' : value })
+          }
+        >
+          <SelectTrigger id="test-grade" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="vse">Všechny třídy</SelectItem>
+            {grades.map((grade) => (
+              <SelectItem key={grade.id} value={grade.id}>
+                {grade.label}
               </SelectItem>
             ))}
           </SelectContent>
