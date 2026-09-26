@@ -1,6 +1,7 @@
 import { asc, desc, eq } from 'drizzle-orm'
 import { PageShell } from '@testmaker/ui'
 import { auditLog, db, schools, users } from '@/db'
+import { loadAiQuality } from '@/lib/aiQuality'
 import { countJobs } from '@/lib/jobs'
 import { aiStatus } from '@/lib/ai'
 import { authMode } from '@/lib/session'
@@ -27,7 +28,7 @@ export default async function SpravaPage() {
     )
   }
 
-  const [uzivatele, udalosti, [skola], fronta] = await Promise.all([
+  const [uzivatele, udalosti, [skola], fronta, aiKvalita] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -65,6 +66,7 @@ export default async function SpravaPage() {
       .where(eq(schools.id, ucet.schoolId))
       .limit(1),
     countJobs(ucet),
+    loadAiQuality(ucet),
   ])
   const ai = aiStatus()
 
@@ -88,6 +90,7 @@ export default async function SpravaPage() {
         }))}
         udalosti={udalosti}
         fronta={fronta}
+        aiKvalita={aiKvalita}
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
         prihlasovani={authMode()}

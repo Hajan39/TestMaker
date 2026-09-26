@@ -37,3 +37,25 @@ test('události ukazují, co se v aplikaci dělo', async ({ page }) => {
   // Přihlášení zkušebních účtů se zapsalo — jinak by záznam nebyl k ničemu.
   await expect(page.getByText('prihlaseni').first()).toBeVisible()
 })
+
+test('správce vidí záložku AI kvalita', async ({ page }) => {
+  await page.goto('/sprava')
+  await page.getByRole('tab', { name: 'AI kvalita' }).click()
+  // Bez zkušebních dat z regenerace jde vidět prázdný stav; pokud se do
+  // testovací databáze mezitím dostala zpětná vazba, ukáže se rovnou tabulka
+  // modelů — obojí je v pořádku, hlavní je, že záložka vůbec existuje a
+  // nespadne.
+  const prazdnyStav = page.getByText('Zatím žádná zpětná vazba.')
+  const modely = page.getByText('Modely')
+  await expect(prazdnyStav.or(modely)).toBeVisible()
+})
+
+test('učitelka se do správy vůbec nedostane', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json' })
+  const page = await context.newPage()
+  await page.goto('/sprava')
+  // Hrubé síto v proxy pustí dál jen správce — učitelku vrátí na úvod dřív,
+  // než by uviděla jakoukoli záložku.
+  await expect(page).toHaveURL(/\/$/)
+  await context.close()
+})

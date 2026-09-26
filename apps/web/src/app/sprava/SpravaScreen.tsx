@@ -19,6 +19,8 @@ import {
   TabsTrigger,
   toast,
 } from '@testmaker/ui'
+import { REGENERATE_REASONS } from '@testmaker/core/schema'
+import type { AiQuality } from '@/lib/aiQuality'
 import { ROLES, ROLE_LABELS, USER_STATUS_LABELS, type Role, type UserStatus } from '@/lib/role'
 
 export interface UcetRadek {
@@ -58,6 +60,7 @@ export function SpravaScreen({
   uzivatele,
   udalosti,
   fronta,
+  aiKvalita,
   aiConfigured,
   aiProblems,
   prihlasovani,
@@ -68,6 +71,7 @@ export function SpravaScreen({
   uzivatele: UcetRadek[]
   udalosti: UdalostRadek[]
   fronta: { queued: number; running: number; done: number; error: number }
+  aiKvalita: AiQuality
   aiConfigured: boolean
   /** Proč v žebříčku modelů něco chybí (`describeAiSetup`) — pro majitele. */
   aiProblems: string[]
@@ -138,6 +142,7 @@ export function SpravaScreen({
           <TabsTrigger value="ucty">Účty</TabsTrigger>
           <TabsTrigger value="udalosti">Události a chyby</TabsTrigger>
           <TabsTrigger value="provoz">Provoz</TabsTrigger>
+          <TabsTrigger value="ai-kvalita">AI kvalita</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ucty" className="space-y-4">
@@ -324,6 +329,78 @@ export function SpravaScreen({
               <a href="/zaloha">Otevřít zálohu</a>
             </Button>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="ai-kvalita" className="space-y-4">
+          <p className="max-w-3xl text-sm text-fg-soft">
+            Za posledních devadesát dní: kolik otázek který model vygeneroval a kolik jich učitelky
+            nakonec přegenerovaly, i s nejčastějšími důvody.
+          </p>
+
+          {aiKvalita.reasons.length === 0 ? (
+            <Card className="p-4 text-sm text-fg-soft">Zatím žádná zpětná vazba.</Card>
+          ) : (
+            <>
+              <Card className="divide-y divide-line">
+                <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">Modely</p>
+                {aiKvalita.models.map((model) => {
+                  const podil =
+                    model.generated > 0 ? Math.round((model.regenerated / model.generated) * 100) : null
+                  return (
+                    <div
+                      key={model.model}
+                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
+                    >
+                      <span className="font-medium text-fg">{model.model}</span>
+                      <span className="ui-numeric text-fg-soft">
+                        vygenerováno {model.generated} · přegenerováno {model.regenerated}
+                        {podil !== null ? ` · ${podil} %` : ''}
+                      </span>
+                    </div>
+                  )
+                })}
+              </Card>
+
+              <Card className="divide-y divide-line">
+                <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                  Nejčastější důvody přegenerování
+                </p>
+                {aiKvalita.reasons.map((row) => (
+                  <div
+                    key={row.reason ?? 'bez-duvodu'}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
+                  >
+                    <span className="text-fg">
+                      {row.reason ? REGENERATE_REASONS[row.reason].label : 'bez udání důvodu'}
+                    </span>
+                    <span className="ui-numeric text-fg-soft">{row.count}×</span>
+                  </div>
+                ))}
+              </Card>
+
+              {aiKvalita.bySubject.length > 0 ? (
+                <Card className="divide-y divide-line">
+                  <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                    Předměty s nejvíc přegenerováním
+                  </p>
+                  {aiKvalita.bySubject.map((row) => (
+                    <div
+                      key={row.subject}
+                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
+                    >
+                      <span className="text-fg">{row.subject}</span>
+                      <span className="ui-numeric text-fg-soft">
+                        {row.regenerated}×
+                        {row.topReason
+                          ? ` · nejčastěji ${REGENERATE_REASONS[row.topReason].label.toLowerCase()}`
+                          : ''}
+                      </span>
+                    </div>
+                  ))}
+                </Card>
+              ) : null}
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>
