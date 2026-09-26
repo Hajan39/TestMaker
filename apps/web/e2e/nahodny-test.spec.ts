@@ -22,7 +22,7 @@ test.describe('náhodně sestavený test', () => {
 
     // Vybereme celou knihovnu a necháme vylosovat pět otázek.
     await dialog.getByRole('button', { name: 'Vybrat vše' }).click()
-    await dialog.getByLabel('Otázek').fill('5')
+    await dialog.getByLabel('Otázek', { exact: true }).fill('5')
 
     const summary = dialog.getByTestId('random-summary')
     await expect(summary).toContainText('5 otázek')
