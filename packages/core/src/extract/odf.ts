@@ -29,7 +29,9 @@ export async function extractOdf(data: ArrayBuffer | Uint8Array): Promise<Extrac
 
   const bodyEl = doc.getElementsByTagName('office:body')[0] ?? doc.documentElement
   const text = normalizeText(collectText(bodyEl))
-  return { text, pageCount: null, needsOcr: text.length < 40 }
+  // `needsOcr` značí sken bez textové vrstvy — ODT/ODS jsou vždy textový
+  // formát, krátký text tu znamená prázdný dokument, ne naskenovaný obrázek.
+  return { text, pageCount: null, needsOcr: false }
 }
 
 /** Buňky, mezi kterými se při čtení tabulky vkládá oddělovač. */

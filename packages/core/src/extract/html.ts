@@ -7,5 +7,7 @@ export function extractHtml(html: string): ExtractionResult {
     el.remove()
   }
   const text = normalizeText(doc.body?.textContent ?? '')
-  return { text, pageCount: null, needsOcr: text.length < 40 }
+  // `needsOcr` značí sken bez textové vrstvy — u HTML to nemá smysl, krátký
+  // text tu vždycky znamená prázdnou stránku, ne naskenovaný obrázek.
+  return { text, pageCount: null, needsOcr: false }
 }

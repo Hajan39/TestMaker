@@ -42,7 +42,9 @@ export async function extractFile(file: File): Promise<ExtractionResult> {
     case 'txt':
     case 'md': {
       const text = normalizeText(await file.text())
-      return { text, pageCount: null, needsOcr: text.length < 40 }
+      // `needsOcr` značí sken bez textové vrstvy — TXT/MD je vždy textový
+      // formát, krátký text tu znamená prázdný soubor, ne naskenovaný obrázek.
+      return { text, pageCount: null, needsOcr: false }
     }
     case 'doc':
     case 'ppt':

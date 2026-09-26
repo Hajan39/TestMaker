@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { extractDocx } from '../src/extract/docx'
 import { extractHtml } from '../src/extract/html'
 import { extractOdf } from '../src/extract/odf'
+import { processFile } from '../src/extract'
 
 const SOURCES = resolve(import.meta.dirname, '../../../sources')
 const hasSources = existsSync(SOURCES)
@@ -70,5 +71,22 @@ describe.skipIf(!hasSources)('extraktory na reálných materiálech', () => {
     const result = extractHtml(html)
     expect(result.text.length).toBeGreaterThan(50)
     expect(result.text).not.toContain('<script')
+  })
+})
+
+describe('processFile: soubor bez textu', () => {
+  it('krátký .txt (< 40 znaků) se přeskočí s důvodem „prázdný text", ne jako sken', async () => {
+    const file = new File(['jen pár slov'], 'prazdny.txt', { type: 'text/plain' })
+    const result = await processFile(file, 'prazdny.txt')
+    expect(result.status).toBe('skipped')
+    expect(result.reason).toBe('prázdný text')
+  })
+
+  it('dost dlouhý .txt projde jako obvykle, needsOcr je false', async () => {
+    const text = 'Dost dlouhý text, aby soubor nebyl vyhodnocený jako prázdný. '.repeat(3)
+    const file = new File([text], 'dost-dlouhy.txt', { type: 'text/plain' })
+    const result = await processFile(file, 'dost-dlouhy.txt')
+    expect(result.status).toBe('ok')
+    expect(result.material?.needsOcr).toBe(false)
   })
 })

@@ -16,7 +16,9 @@ export async function extractDocx(data: ArrayBuffer | Uint8Array): Promise<Extra
 
   const body = doc.getElementsByTagName('w:body')[0] ?? doc.documentElement
   const text = normalizeText(collectBody(body))
-  return { text, pageCount: null, needsOcr: text.length < 40 }
+  // `needsOcr` značí sken bez textové vrstvy — DOCX je vždy textový formát,
+  // krátký text tu znamená prázdný dokument, ne naskenovaný obrázek.
+  return { text, pageCount: null, needsOcr: false }
 }
 
 /** Text jednoho odstavce (`w:p`) včetně tabulátorů a ručních zalomení. */
