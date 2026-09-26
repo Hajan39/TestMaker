@@ -27,6 +27,7 @@ import {
   OTAZKY,
 } from '@testmaker/ui'
 import { QuestionEditor } from '@/components/QuestionEditor'
+import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
 import { QuestionActions } from './QuestionActions'
 
 const STATUS_LABELS: Record<QuestionStatus, string> = {
@@ -271,17 +272,30 @@ export function QuestionsTable({
   }
 
   async function removeSelected() {
-    const ids = [...selected]
-    if (ids.length === 0) return
-    const query = ids.map((id) => `id=${encodeURIComponent(id)}`).join('&')
-    const response = await fetch(`/api/questions?${query}`, { method: 'DELETE' })
-    if (!response.ok) {
-      toast.error('Otázky se nepodařilo smazat')
-      return
+    const chosen = rows.filter((row) => selected.has(row.id))
+    if (chosen.length === 0) return
+    try {
+      const previous = await rejectQuestions(chosen)
+      setSelected(new Set())
+      startRefresh(() => router.refresh())
+      toast.success(`Smazáno: ${pocet(chosen.length, OTAZKY)}`, {
+        duration: 10_000,
+        action: {
+          label: 'Vrátit zpět',
+          onClick: () =>
+            void restoreStatuses(previous)
+              .then(() => {
+                toast.success(`Vráceno zpět: ${pocet(previous.length, OTAZKY)}`)
+                startRefresh(() => router.refresh())
+              })
+              .catch((error) =>
+                toast.error(error instanceof Error ? error.message : 'Vrácení se nepodařilo'),
+              ),
+        },
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Otázky se nepodařilo smazat')
     }
-    setSelected(new Set())
-    startRefresh(() => router.refresh())
-    toast.success(`Smazáno: ${pocet(ids.length, OTAZKY)}`)
   }
 
   const busy = pending !== null || refreshing
@@ -476,7 +490,7 @@ export function QuestionsTable({
             label="Smazat"
             variant="outline"
             title="Smazat vybrané otázky?"
-            description={`Smaže se ${pocet(selected.size, OTAZKY)}. Pokud jsou použité v uloženém testu, zůstane tam jejich zmrazené znění, ale z banky zmizí. Akci nejde vrátit zpět.`}
+            description={`Smaže se ${pocet(selected.size, OTAZKY)}. Otázky zmizí z banky i z výběru do testu. Uložené testy je vytisknou dál. Smazání půjde hned vrátit.`}
             onConfirm={removeSelected}
           />
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set())}>

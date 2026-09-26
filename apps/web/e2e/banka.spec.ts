@@ -87,7 +87,7 @@ test.describe('banka otázek', () => {
     await expect(rows).toHaveCount(DRAFT_COUNT, { timeout: 15000 })
   })
 
-  test('vybranou otázku jde z banky smazat', async ({ page }) => {
+  test('vybranou otázku jde z banky smazat a smazání jde vrátit zpět', async ({ page }) => {
     const topicId = await prepareTopic(page)
     // Vlastní otázka jen pro tenhle běh — ostatní zkušební otázky musí zůstat.
     const prompt = `Na smazání ${Date.now()}`
@@ -101,10 +101,20 @@ test.describe('banka otázek', () => {
     // Číslo je v liště jen jednou („Vybráno 1“), tlačítko ho neopakuje.
     await expect(page.getByText('Vybráno 1')).toBeVisible()
     await page.getByRole('button', { name: 'Smazat', exact: true }).click()
+    // Smazání je jen změna stavu, ne mizení z uloženého testu — potvrzení to
+    // musí říkat, ne strašit ztrátou z písemky.
+    await expect(page.getByRole('alertdialog').getByText(/Uložené testy je vytisknou dál/)).toBeVisible()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
 
     await expect(page.getByText(/^Smazáno: 1 otázka/)).toBeVisible()
-    await expect(rows).toHaveCount(0, { timeout: 15000 })
+    // Smazání je jen změna stavu na „zamítnuto“ — řádek beze stavového filtru
+    // zůstává v seznamu, jen s jiným popiskem stavu.
+    await expect(rows).toHaveCount(1, { timeout: 15000 })
+    await expect(rows.getByText('zamítnuto')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Vrátit zpět' }).click()
+    await expect(page.getByText(/^Vráceno zpět: 1 otázka/)).toBeVisible()
+    await expect(rows.getByText('schváleno')).toBeVisible({ timeout: 15000 })
   })
 
   test('otázka se dá upravit rovnou z řádku banky', async ({ page }) => {

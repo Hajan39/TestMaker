@@ -1,8 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { DELETE, GET, PATCH, POST, PUT } from '@/app/api/questions/route'
+import { POST as createTest } from '@/app/api/tests/route'
 import { db, questions } from '@/db'
-import { jsonReq, req, seedMaterial, seedQuestion, seedTopic } from './helpers'
+import { loadPickerTopics } from '@/lib/questionPicker'
+import { loadTestItems } from '@/lib/tests'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 /**
  * Banka otázek: hledání a filtry se vyřizují na serveru a stránkuje se
@@ -211,6 +214,87 @@ describe('hromadné akce v bance', () => {
     const zbyle = new Set((await db.select({ id: questions.id }).from(questions)).map((row) => row.id))
     expect(zbyle.has(smazana)).toBe(false)
     expect(zbyle.has(zustava)).toBe(true)
+  })
+})
+
+describe('smazání otázky jako měkký stav', () => {
+  it('zamítne obě otázky a fronta pro test je dál nenabízí', async () => {
+    const { topicId } = await seedTopic()
+    const koncept = await seedQuestion(topicId, { status: 'draft' })
+    const schvalena = await seedQuestion(topicId, { status: 'approved' })
+
+    const response = await PUT(
+      jsonReq('/api/questions', 'PUT', { ids: [koncept, schvalena], status: 'rejected' }),
+    )
+    expect(response.status).toBe(200)
+
+    const stav = new Map(
+      (await db.select({ id: questions.id, status: questions.status }).from(questions)).map((row) => [
+        row.id,
+        row.status,
+      ]),
+    )
+    expect(stav.get(koncept)).toBe('rejected')
+    expect(stav.get(schvalena)).toBe('rejected')
+
+    const topics = await loadPickerTopics(UCET)
+    const ids = topics.flatMap((topic) => topic.questions.map((question) => question.id))
+    expect(ids).not.toContain(koncept)
+    expect(ids).not.toContain(schvalena)
+  })
+
+  it('vrácení dvěma voláními podle původního stavu vrátí koncept na koncept a schválenou na schválenou', async () => {
+    const { topicId } = await seedTopic()
+    const koncept = await seedQuestion(topicId, { status: 'draft' })
+    const schvalena = await seedQuestion(topicId, { status: 'approved' })
+
+    await PUT(jsonReq('/api/questions', 'PUT', { ids: [koncept, schvalena], status: 'rejected' }))
+    // Přesně to, co po kliknutí na „Vrátit zpět“ pošle klientský helper: každá
+    // skupina zvlášť do svého původního stavu.
+    await PUT(jsonReq('/api/questions', 'PUT', { ids: [koncept], status: 'draft' }))
+    await PUT(jsonReq('/api/questions', 'PUT', { ids: [schvalena], status: 'approved' }))
+
+    const [a] = await db.select({ status: questions.status }).from(questions).where(eq(questions.id, koncept))
+    const [b] = await db
+      .select({ status: questions.status })
+      .from(questions)
+      .where(eq(questions.id, schvalena))
+    expect(a?.status).toBe('draft')
+    expect(b?.status).toBe('approved')
+  })
+
+  it('otázka použitá v uloženém testu se smaže z banky, ale test ji dál tiskne ze svého snímku', async () => {
+    const templateId = await seedTemplate()
+    const { topicId } = await seedTopic()
+    const questionId = await seedQuestion(topicId, { prompt: 'Otázka v písemce', status: 'approved' })
+
+    const emptyHeader = { school: '', subject: '', className: '', teacher: '', date: '', note: '' }
+    const createResponse = await createTest(
+      jsonReq('/api/tests', 'POST', {
+        title: 'Písemka',
+        description: null,
+        graded: true,
+        templateId,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        items: [{ kind: 'question', questionId }],
+      }),
+    )
+    expect(createResponse.status).toBe(200)
+    const { id: testId } = (await createResponse.json()) as { id: string }
+
+    const pred = await loadTestItems(UCET, testId)
+    const snimekPred = pred[0]?.questionSnapshot
+
+    await PUT(jsonReq('/api/questions', 'PUT', { ids: [questionId], status: 'rejected' }))
+
+    const [row] = await db.select({ status: questions.status }).from(questions).where(eq(questions.id, questionId))
+    expect(row?.status).toBe('rejected')
+
+    const po = await loadTestItems(UCET, testId)
+    expect(po[0]?.questionSnapshot).toEqual(snimekPred)
+    expect(po[0]?.question?.payload).toMatchObject({ prompt: 'Otázka v písemce' })
   })
 })
 
