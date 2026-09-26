@@ -140,7 +140,8 @@ test.describe('výběr otázek do testu', () => {
     const otherGrade = `${GRADE} jiná třída ${Date.now()}`
     const otherTopic = `${TOPIC} jinde ${Date.now()}`
     const otherTopicId = await ensureTopic(page.request, otherTopic, otherGrade)
-    await pridatOtazku(page.request, otherTopicId, `Otázka z jiné třídy ${Date.now()}`, 1)
+    const otherPrompt = `Otázka z jiné třídy ${Date.now()}`
+    await pridatOtazku(page.request, otherTopicId, otherPrompt, 1)
     await page.reload()
 
     const bankOwnGrade = page.getByText(new RegExp(`${SUBJECT} · ${otherGrade} · `))
@@ -149,6 +150,81 @@ test.describe('výběr otázek do testu', () => {
     await page.getByLabel('Ročník').click()
     await page.getByRole('option', { name: 'Všechny třídy' }).click()
     await expect(bankOwnGrade).toBeVisible()
+
+    // Otázka z druhé třídy se přidá do osnovy přes banku a test se uloží —
+    // první uložení nesmí třídu testu vynulovat (kritická oprava: chybějící
+    // `gradeId` v těle žádosti dřív znamenal „zruš třídu“).
+    await bankOwnGrade.click() // rozbalí <details> tématu, jinak je otázka schovaná
+    const bankRow = page.locator('li', { hasText: otherPrompt })
+    await bankRow.getByRole('checkbox').first().click()
+    await expect(page.locator('[data-slot="paper-sheet"]').getByText(otherPrompt)).toBeVisible()
+
+    const saveResponse = page.waitForResponse(
+      (candidate) => candidate.url().includes('/api/tests') && candidate.request().method() === 'PUT',
+    )
+    await page.getByRole('button', { name: 'Uložit' }).click()
+    expect((await saveResponse).ok()).toBe(true)
+
+    await page.reload()
+
+    // Třída se v hlavičce pořád ukazuje a v osnově jsou otázky z obou témat.
+    await expect(backLink.locator('..')).toContainText(`${SUBJECT} · ${GRADE}`)
+    const rowsAfterSave = page.locator('[data-slot="paper-sheet"] ol > li')
+    await expect(rowsAfterSave.filter({ hasText: a })).toHaveCount(1)
+    await expect(rowsAfterSave.filter({ hasText: otherPrompt })).toHaveCount(1)
+
+    // Nabídka tisku odpovídá — obsah PDF se tu neověřuje, jen že se vygeneruje.
+    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    const pdfResponse = page.waitForResponse((candidate) => candidate.url().includes('/pdf'))
+    await page.getByRole('menuitem', { name: 'Stáhnout zadání pro žáky' }).click()
+    expect((await pdfResponse).ok()).toBe(true)
+  })
+
+  test('třídě testu bez otázek v bance se místo prázdného filtru nabídnou všechny třídy', async ({
+    page,
+  }) => {
+    // Vlastní třída testu skončí v bance bez jediné otázky (ta jediná se
+    // zamítne hned po založení testu) — Select nesmí zůstat zaseknutý na
+    // třídě, která v nabídce vůbec není, ani banka prázdná, i když jiná
+    // třída otázky má.
+    const gradeSelf = `${GRADE} bez otázek ${Date.now()}`
+    const topicSelf = `${TOPIC} bez otázek ${Date.now()}`
+    const topicIdSelf = await ensureTopic(page.request, topicSelf, gradeSelf)
+    const promptSelf = `Otázka co zmizí z banky ${Date.now()}`
+    const questionIdSelf = await pridatOtazku(page.request, topicIdSelf, promptSelf, 1)
+
+    const gradeOther = `${GRADE} zůstane v bance ${Date.now()}`
+    const topicOther = `${TOPIC} zůstane v bance ${Date.now()}`
+    const topicIdOther = await ensureTopic(page.request, topicOther, gradeOther)
+    const promptOther = `Otázka, co v bance zůstane ${Date.now()}`
+    await pridatOtazku(page.request, topicIdOther, promptOther, 1)
+
+    await page.goto(`/topics/${topicIdSelf}`)
+    const rowSelf = page.locator('li[data-question-id]', { hasText: promptSelf })
+    await rowSelf.getByRole('checkbox', { name: 'Vybrat do testu' }).click()
+    await page.getByRole('button', { name: 'Vytvořit test' }).click()
+    await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
+
+    // Otázka zmizí z banky zamítnutím — přesně scénář „třída bez otázek“.
+    const rejected = await page.request.put('/api/questions', {
+      data: { ids: [questionIdSelf], status: 'rejected' },
+    })
+    expect(rejected.ok()).toBe(true)
+
+    await page.reload()
+
+    // Trigger ukazuje „Všechny třídy“, ne prázdno a ne třídu, která v nabídce
+    // vůbec není. `getByLabel` by tu byl nejednoznačný — knihovna má i jiná
+    // témata, jejichž zaškrtávátko „Vybrat všechny otázky tématu … ročník …“
+    // stejné jméno obsahuje jako podřetězec.
+    await expect(page.getByRole('combobox', { name: 'Ročník' })).toHaveText('Všechny třídy')
+
+    // Téma jiné třídy je v bance rovnou vidět (bez ručního přepínání filtru),
+    // jen sbalené jako každé jiné — rozbalením se ukáže i otázka v něm.
+    const bankOtherGrade = page.getByText(new RegExp(`${SUBJECT} · ${gradeOther} · `))
+    await expect(bankOtherGrade).toBeVisible()
+    await bankOtherGrade.click()
+    await expect(page.getByText(promptOther)).toBeVisible()
   })
 
   test('„Zrušit výběr“ schová lištu', async ({ page }) => {

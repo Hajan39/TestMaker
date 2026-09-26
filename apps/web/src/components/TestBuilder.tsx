@@ -90,7 +90,10 @@ export function TestBuilder({
   const [filters, setFilters] = useState<BankFilters>({
     search: '',
     subject: '',
-    grade: gradeId ?? '',
+    // Předfiltrovat na třídu testu má smysl, jen když v bance vůbec něco z
+    // téhle třídy je — jinak by na Select svítil prázdný štítek nad prázdnou
+    // bankou a učitelka by nevěděla, že za to může zapnutý filtr.
+    grade: gradeId && topics.some((topic) => topic.gradeId === gradeId) ? gradeId : '',
     type: '',
   })
   const [saving, setSaving] = useState(false)
@@ -264,6 +267,9 @@ export function TestBuilder({
       description: settings.description.trim() || null,
       graded: settings.graded,
       templateId: settings.templateId,
+      // Třída testu se nemění v editoru — jen se drží, aby ji první uložení
+      // (POST i PUT) nevynulovalo tím, že pole vůbec nepošle.
+      gradeId: gradeId ?? null,
       header: settings.header,
       variants: settings.variants,
       showKey: settings.showKey,

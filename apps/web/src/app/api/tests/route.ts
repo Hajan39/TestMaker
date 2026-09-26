@@ -174,19 +174,33 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   return sRozsahem(
     async (ucet) => {
-  const schema = testSchema.extend({ id: z.string().min(1) })
+  // `gradeId` u PUT nemá výchozí hodnotu jako u POST: chybějící pole znamená
+  // „nech třídu, jak je" (starší klient, co pole vůbec neposílá), zatímco
+  // výslovné `null` znamená „zruš vazbu na třídu". Kdyby default doplnil
+  // `null` i za chybějící pole, první uložení z editoru, který gradeId
+  // neposílá, by třídu testu potichu smazalo.
+  const schema = testSchema.extend({
+    id: z.string().min(1),
+    gradeId: z.string().min(1).nullable().optional(),
+  })
   const parsed = schema.safeParse(await request.json())
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
-  const { id, items, ...test } = parsed.data
-  const gradeId = await resolveGradeId(ucet, test.gradeId)
+  const { id, items, gradeId: gradeIdVstup, ...test } = parsed.data
+  const gradeId = gradeIdVstup === undefined ? undefined : await resolveGradeId(ucet, gradeIdVstup)
 
   // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
   // ne přepsat.
   const zmeneno = await db
     .update(tests)
-    .set({ ...test, gradeId, updatedAt: new Date().toISOString() })
+    .set({
+      ...test,
+      // `gradeId` se do `.set()` dává, jen když ho tělo vůbec neslo — jinak
+      // by explicitní `undefined` v objektu `.set()` třídu nechtěně smazal.
+      ...(gradeId !== undefined ? { gradeId } : {}),
+      updatedAt: new Date().toISOString(),
+    })
     .where(and(eq(tests.id, id), vlastni(ucet, tests)))
     .returning({ id: tests.id })
   if (zmeneno.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })

@@ -244,6 +244,17 @@ describe('přeuložení testu', () => {
     expect(items[0]?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
   })
 
+  it('bez gradeId v těle třídu zachová (starší klient, který pole vůbec nepošle)', async () => {
+    const id = await createTest([], { gradeId })
+
+    // `resave` bez `gradeId` v `overrides` pole do těla vůbec nedá — přesně
+    // tak, jak dřív posílal editor. Chybějící pole nesmí třídu vynulovat;
+    // vynulovat ji smí jen ten, kdo pošle `gradeId: null` výslovně.
+    await resave(id, [])
+
+    expect((await loadTest(UCET, id))?.gradeId).toBe(gradeId)
+  })
+
   it('přepíše i hlavičku a název testu', async () => {
     const id = await createTest([])
     await resave(id, [], { header: { ...emptyHeader, school: 'ZŠ Ukázková', className: '8.A' } })

@@ -32,7 +32,7 @@ export default async function TestPage({
           .select({ subjectName: subjects.name, gradeName: grades.name })
           .from(grades)
           .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-          .where(eq(grades.id, test.gradeId))
+          .where(and(eq(grades.id, test.gradeId), skola(ucet, grades)))
           .limit(1)
       : Promise.resolve([]),
     // `?tema=` se ověří proti škole — cizí nebo neexistující téma se má tvářit
