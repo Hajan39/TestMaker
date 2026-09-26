@@ -11,6 +11,7 @@ import {
 import { db, generationJobs, grades, materials, questionFeedback, questions, subjects, topics, users } from '@/db'
 import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
+import { MIN_GENERATE_CHARS } from '@/lib/materials'
 import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
 
 export interface GenerateParams {
@@ -192,7 +193,7 @@ export async function generateForTopic(
 
   const source = await loadTopicSource(scope, topicId)
   if (!source) throw new Error('Téma nenalezeno')
-  if (source.text.trim().length < 200) {
+  if (source.text.trim().length < MIN_GENERATE_CHARS) {
     throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
   }
 
@@ -337,7 +338,7 @@ export async function regenerateQuestion(
 
   const source = await loadTopicSource(scope, topicId)
   if (!source) throw new Error('Téma nenalezeno')
-  if (source.text.trim().length < 200) {
+  if (source.text.trim().length < MIN_GENERATE_CHARS) {
     throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
   }
 

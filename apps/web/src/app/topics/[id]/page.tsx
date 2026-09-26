@@ -9,6 +9,7 @@ import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions } from '@/lib/questions'
 import { loadTemplates, loadTestUsageForQuestions } from '@/lib/tests'
 import { defaultTemplateId } from '@/components/test-builder/defaults'
+import { isUsableMaterial } from '@/lib/materials'
 import { TopicWorkspace } from './TopicWorkspace'
 import { skola, ucetStranky } from '@/lib/uzivatel'
 
@@ -63,8 +64,9 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     // v tématu — stejný výběr jako u nového testu z prázdna.
     loadTemplates(ucet),
   ])
-  // Do generování jde jen text materiálů, které nejsou duplicitní kopií jiného.
-  const usable = materialRows.filter((material) => !material.duplicateOfId)
+  // Do generování jde jen text materiálů, které nejsou duplicitní kopií
+  // jiného, nejsou ručně vyřazené a nejsou sken bez textové vrstvy.
+  const usable = materialRows.filter(isUsableMaterial)
   const usableCount = usable.length
   const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
 
@@ -122,6 +124,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
         lowContent={topic.lowContent}
+        usableCharCount={totalChars}
         ai={aiStatus()}
       />
     </div>
