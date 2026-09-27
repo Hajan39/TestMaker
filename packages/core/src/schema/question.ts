@@ -380,6 +380,12 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       if (new Set(pairs.map(([, r]) => r)).size !== pairs.length) {
         errors.push('pravý sloupec se v pairs opakuje')
       }
+      // Každá položka vlevo musí mít dvojici — jinak na papíře zůstane řádek,
+      // který nejde přiřadit k ničemu. Vpravo naopak položek navíc (distraktorů)
+      // být může, ty se do pairs prostě nezahrnou.
+      if (pairs.length !== left.length) {
+        errors.push('každá položka vlevo musí mít dvojici')
+      }
       break
     }
     case 'ordering': {
