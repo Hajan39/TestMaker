@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { Button, EmptyState, OTAZKY, TEMATA, pocet } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { ClassTiles } from '@/components/ClassTiles'
-import { LibrarySearch } from '@/components/LibrarySearch'
+import { LibraryPanes } from '@/components/LibraryPanes'
 import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 import { RememberClass } from '@/components/RememberClass'
 import { aiStatus } from '@/lib/ai'
@@ -35,6 +35,8 @@ export default async function HomePage({
   const muzeMenit = roleMuzeMenit(ucet.role)
 
   if (tree.length === 0) {
+    // `LibraryPanes` bez stromu sloupce sama vynechá — prázdná knihovna tak
+    // dostane jen tuhle hlášku přes celou plochu, ne prázdný postranní panel.
     return (
       <EmptyState
         title="Knihovna je zatím prázdná"
@@ -72,47 +74,49 @@ export default async function HomePage({
   )
 
   return (
-    <div className="space-y-5">
-      <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} userId={ucet.userId} />
+    <LibraryPanes tree={tree} grade={null}>
+      <div className="space-y-5">
+        <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} userId={ucet.userId} />
 
-      <div className="max-w-md">
-        <LibrarySearch />
-      </div>
+        {/* Hledání přes celou knihovnu je teď v postranním panelu (viz
+            `LibrarySidebar`) — dvě stejná pole na jedné stránce by měla
+            zdvojený popisek a to druhé by mířilo na neviditelnou kopii. */}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="ui-page-title">Třídy</h1>
-          <p className="mt-1 text-sm text-fg-soft">
-            {pocet(totals.topics, TEMATA)} · {pocet(totals.questions, OTAZKY)}
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="ui-page-title">Třídy</h1>
+            <p className="mt-1 text-sm text-fg-soft">
+              {pocet(totals.topics, TEMATA)} · {pocet(totals.questions, OTAZKY)}
+            </p>
+          </div>
+          {/* Na úzké obrazovce se akce zalomí pod sebe místo toho, aby vytekly
+              z hlavičky — `main` vodorovné rolování skrývá, takže tlačítko za
+              okrajem by bylo nedosažitelné. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {muzeMenit ? (
+              <>
+                <BulkGenerate
+                  ai={aiStatus()}
+                  // Rod předmětu se z názvu složky uhodnout nedá („Celý MATEMATIKA“),
+                  // tak se do názvu tlačítka přídavné jméno vůbec nedává.
+                  scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
+                />
+                <NewLibraryItem kind="subject" label="Založit předmět" />
+                <Link href="/import">
+                  <Button size="sm" variant="outline">
+                    Hromadný import
+                  </Button>
+                </Link>
+                <Link href="/tests/new">
+                  <Button size="sm">Nový test</Button>
+                </Link>
+              </>
+            ) : null}
+          </div>
         </div>
-        {/* Na úzké obrazovce se akce zalomí pod sebe místo toho, aby vytekly
-            z hlavičky — `main` vodorovné rolování skrývá, takže tlačítko za
-            okrajem by bylo nedosažitelné. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {muzeMenit ? (
-            <>
-              <BulkGenerate
-                ai={aiStatus()}
-                // Rod předmětu se z názvu složky uhodnout nedá („Celý MATEMATIKA“),
-                // tak se do názvu tlačítka přídavné jméno vůbec nedává.
-                scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
-              />
-              <NewLibraryItem kind="subject" label="Založit předmět" />
-              <Link href="/import">
-                <Button size="sm" variant="outline">
-                  Hromadný import
-                </Button>
-              </Link>
-              <Link href="/tests/new">
-                <Button size="sm">Nový test</Button>
-              </Link>
-            </>
-          ) : null}
-        </div>
-      </div>
 
-      <ClassTiles tree={tree} />
-    </div>
+        <ClassTiles tree={tree} />
+      </div>
+    </LibraryPanes>
   )
 }

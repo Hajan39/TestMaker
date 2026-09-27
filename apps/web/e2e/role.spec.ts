@@ -179,7 +179,10 @@ test('náhled vidí témata třídy, ale žádné tlačítko, které by ji měni
 
   await page.goto(`/tridy/${gradeId}`)
   await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
-  await expect(page.getByText('Téma pro náhled', { exact: true })).toBeVisible()
+  // Téma je teď vidět dvakrát — v prostředním sloupci i na dlaždici v obsahu —
+  // hledá se proto jen v obsahové ploše.
+  const obsah = page.getByRole('region', { name: 'Obsah tématu' })
+  await expect(obsah.getByText('Téma pro náhled', { exact: true })).toBeVisible()
 
   await expect(page.getByRole('button', { name: 'Přidat téma' })).toHaveCount(0)
   await expect(page.getByLabel('Přesunout téma do jiného ročníku')).toHaveCount(0)
@@ -252,7 +255,9 @@ test.describe('ucitelka nemaže v knihovně — to smí jen správce', () => {
     expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
 
     await page.goto('/?vse=1')
-    await expect(page.getByText(subjectName)).toBeVisible()
+    // Jméno předmětu je teď vidět i v postranním panelu — hledá se proto
+    // jen v obsahové ploše, kde je nadpisem sekce.
+    await expect(page.getByRole('heading', { name: subjectName })).toBeVisible()
     await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
     // Přejmenovat a přidat ročník ucitelce zůstávají — jen mazání je pryč.
     await expect(page.getByRole('button', { name: /Založit předmět/ })).toBeVisible()

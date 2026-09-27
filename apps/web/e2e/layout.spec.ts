@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { testTopicPath } from './fixtures'
+import { testGradeQuery, testTopicPath } from './fixtures'
 
 /**
  * Rozvržení a přetékání. Přesně tyhle vady prošly všemi kontrolami kódu,
@@ -75,21 +75,37 @@ for (const size of WIDTHS) {
 }
 
 test.describe('sloupce knihovny', () => {
-  // Ta stará strom-po-ročnících třípane už je jen na stránce tématu — úvod
-  // je teď jednosloupcové dlaždice tříd (viz `tridy.spec.ts`).
+  // Tři sloupce (předměty a ročníky · témata ročníku · obsah) jsou teď na
+  // úvodu, na stránce třídy i na stránce tématu — ne jen na tématu jako
+  // dřív. Test na úvodu jede přes `?vse=1`, aby ho zapamatovaná třída
+  // nepředběhla přesměrováním.
   test('nad 1280 px jsou tři sloupce', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
+
+    await page.goto('/?vse=1')
+    await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
+
+    await page.goto(await testGradeQuery(page.request))
+    await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
+
     await page.goto(await testTopicPath(page.request))
     await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
   })
 
   test('pod 1024 px se přepíná záložkami a navigace je dostupná', async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 800 })
-    await page.goto(await testTopicPath(page.request))
-    const tab = page.getByRole('tab', { name: 'Předměty a ročníky' })
-    await expect(tab).toBeVisible()
-    await tab.click()
-    await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
+
+    for (const goto of [
+      () => page.goto('/?vse=1'),
+      async () => page.goto(await testGradeQuery(page.request)),
+      async () => page.goto(await testTopicPath(page.request)),
+    ]) {
+      await goto()
+      const tab = page.getByRole('tab', { name: 'Předměty a ročníky' })
+      await expect(tab).toBeVisible()
+      await tab.click()
+      await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
+    }
   })
 })
 

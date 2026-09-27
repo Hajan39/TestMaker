@@ -4,21 +4,21 @@ import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 
-/** Obaluje detail tématu stejným rámem jako knihovnu, aby sloupce při přechodu zůstaly. */
-export default async function TopicLayout({
+/** Obaluje stránku třídy stejným rámem jako téma — zvýrazněný ročník je tenhle. */
+export default async function ClassLayout({
   children,
   params,
 }: {
   children: React.ReactNode
-  params: Promise<{ id: string }>
+  params: Promise<{ gradeId: string }>
 }) {
   const ucet = await ucetStranky()
-  const { id } = await params
+  const { gradeId } = await params
   const tree = await loadLibraryTree(ucet)
-  const grade = tree.flatMap((s) => s.grades).find((g) => g.topics.some((t) => t.id === id)) ?? null
+  const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   return (
-    <LibraryPanes tree={tree} grade={grade} activeTopicId={id}>
+    <LibraryPanes tree={tree} grade={grade}>
       {children}
     </LibraryPanes>
   )

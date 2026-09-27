@@ -1,16 +1,18 @@
-import { Delayed, LoadingHeading, LoadingTiles, Skeleton } from '@testmaker/ui'
+import { Delayed, LoadingHeading, LoadingList, LoadingTiles, ThreePane } from '@testmaker/ui'
 
 /**
- * Přechod na úvod. Úvod je od úklidu lišty jednosloupcový (dlaždice tříd bez
- * `ThreePane`) — kostra proto kopíruje jen tenhle jeden sloupec: hledání
- * nahoře, nadpis se statistikou a mřížka dlaždic.
+ * Obecná záložní kostra. Úvod (i stránky bez vlastního `loading.tsx` jako
+ * import, hlavolamy, banka otázek, revize, správa či záloha) mají tři sloupce
+ * stejně jako téma — rám se vykreslí hned a kostra vyplní jen jeho obsah, aby
+ * sloupce po načtení zůstaly na místě.
  */
-export default function HomeLoading() {
+export default function FallbackLoading() {
   return (
-    <Delayed label="Načítám třídy…" className="space-y-5">
-      <Skeleton className="h-9 max-w-md" />
-      <LoadingHeading stats />
-      <LoadingTiles count={6} />
-    </Delayed>
+    <ThreePane first={<LoadingList items={8} />} second={<LoadingList items={10} />}>
+      <Delayed label="Načítám…" className="space-y-5">
+        <LoadingHeading stats />
+        <LoadingTiles count={6} />
+      </Delayed>
+    </ThreePane>
   )
 }

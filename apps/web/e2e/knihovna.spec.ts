@@ -81,9 +81,11 @@ test.describe('ruční správa knihovny', () => {
       await vyplnDialog(page, 'Název ročníku', ROCNIK_NOVY, 'Uložit')
       await expect(page.getByRole('heading', { name: ROCNIK_NOVY, exact: true })).toBeVisible()
 
-      // Změna se propíše i do dlaždice na úvodu.
+      // Změna se propíše i do dlaždice na úvodu. Stejné jméno teď nese i
+      // odkaz v postranním panelu, proto se hledá jen v obsahové ploše.
       await page.goto('/?vse=1')
-      await expect(page.getByText(ROCNIK_NOVY, { exact: false })).toBeVisible()
+      const obsahUvodu = page.getByRole('region', { name: 'Obsah tématu' })
+      await expect(obsahUvodu.getByText(ROCNIK_NOVY, { exact: false })).toBeVisible()
 
       // --- Dva ročníky téhož jména to odmítne a řekne proč ------------------
       const nadpisPredmetuZnovu = page.getByRole('heading', { name: PREDMET, exact: true })

@@ -60,9 +60,41 @@ test.describe('rozcestník tříd', () => {
     const { subjectId, gradeId } = await zalozTridu(page.request, `E2E TRIDY DLAZDICE ${RAZITKO}`, GRADE)
     try {
       await page.goto('/?vse=1')
-      await page.locator(`a[href="/tridy/${gradeId}"]`).click()
+      // Stejný odkaz teď vede i z postranního panelu, ne jen z dlaždice —
+      // proto se hledá jen v obsahové ploše, jinak by na něj mířily dva prvky.
+      const obsah = page.getByRole('region', { name: 'Obsah tématu' })
+      await obsah.locator(`a[href="/tridy/${gradeId}"]`).click()
       await expect(page).toHaveURL(`/tridy/${gradeId}`)
       await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
+    } finally {
+      await smazPredmet(page.request, subjectId)
+    }
+  })
+
+  test('odkaz na třídu v postranním panelu otevře stránku třídy s jejími tématy uprostřed', async ({
+    page,
+  }) => {
+    // Tři sloupce patří i úvodu a stránce třídy, ne jen tématu — postranní
+    // panel s ročníky je proto na obou vidět a vede na tutéž stránku třídy,
+    // jejíž prostřední sloupec ukáže rovnou její témata.
+    const GRADE = `4. ročník ${RAZITKO}`
+    const TEMA = `Téma v postranním panelu ${RAZITKO}`
+    const { subjectId, gradeId } = await zalozTridu(page.request, `E2E TRIDY PANEL ${RAZITKO}`, GRADE)
+    const topic = await page.request.post('/api/library', {
+      data: { kind: 'topic', name: TEMA, parentId: gradeId },
+    })
+    expect(topic.ok(), 'zkušební téma se nepodařilo založit').toBe(true)
+
+    try {
+      await page.goto('/?vse=1')
+      const sidebar = page.getByRole('complementary', { name: 'Předměty a ročníky' })
+      await sidebar.getByRole('link', { name: GRADE, exact: false }).click()
+
+      await expect(page).toHaveURL(`/tridy/${gradeId}`)
+      await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
+
+      const stredniSloupec = page.getByRole('complementary', { name: 'Témata ročníku' })
+      await expect(stredniSloupec.getByText(TEMA, { exact: true })).toBeVisible()
     } finally {
       await smazPredmet(page.request, subjectId)
     }
