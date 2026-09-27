@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Button, EmptyState, OTAZKY, TEMATA, pocet } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { ClassTiles } from '@/components/ClassTiles'
@@ -20,10 +21,15 @@ export const dynamic = 'force-dynamic'
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vse?: string }>
+  searchParams: Promise<{ vse?: string; grade?: string }>
 }) {
+  const { vse, grade } = await searchParams
+  // Stará adresa knihovny s ročníkem v dotazu (`/?grade=<id>`) vede na jeho
+  // novou stránku třídy — jinak by se staré odkazy z rozhraní i uložené
+  // v prohlížeči rozsypaly. Existenci třídy ověří až stránka třídy sama.
+  if (grade) redirect(`/tridy/${grade}`)
+
   const ucet = await ucetStranky()
-  const { vse } = await searchParams
   const tree = await loadLibraryTree(ucet)
 
   if (tree.length === 0) {

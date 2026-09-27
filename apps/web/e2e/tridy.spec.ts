@@ -84,6 +84,23 @@ test.describe('rozcestník tříd', () => {
     }
   })
 
+  test('položka „Třídy" v liště ukáže dlaždice i se zapamatovanou třídou', async ({ page }) => {
+    const GRADE = `9. ročník ${RAZITKO}`
+    const { subjectId, gradeId } = await zalozTridu(page.request, `E2E TRIDY LISTA ${RAZITKO}`, GRADE)
+    try {
+      await page.goto(`/tridy/${gradeId}`)
+      await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
+
+      // Klik na „Třídy“ v liště nesmí skončit zpátky v zapamatované třídě —
+      // vede vždy na přehled dlaždic (`/?vse=1`), stejně jako odkaz „Všechny třídy“.
+      await page.getByRole('link', { name: 'Třídy', exact: true }).click()
+      await expect(page).toHaveURL('/?vse=1')
+      await expect(page.getByText(GRADE, { exact: false }).first()).toBeVisible()
+    } finally {
+      await smazPredmet(page.request, subjectId)
+    }
+  })
+
   test('„Všechny třídy" ukáže dlaždice i se zapamatovanou třídou', async ({ page }) => {
     const GRADE = `7. ročník ${RAZITKO}`
     const { subjectId, gradeId } = await zalozTridu(page.request, `E2E TRIDY VSECHNY ${RAZITKO}`, GRADE)

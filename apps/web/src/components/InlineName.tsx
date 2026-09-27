@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Pencil, X } from 'lucide-react'
 import { Button, Input, cn } from '@testmaker/ui'
+import { useMuzeMenit } from '@/components/Prava'
 import type { LibraryKind } from '@/lib/library'
 
 /**
@@ -38,6 +39,7 @@ export function InlineName({
   label?: string
 }) {
   const router = useRouter()
+  const muzeMenit = useMuzeMenit()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
   const [busy, setBusy] = useState(false)
@@ -77,6 +79,16 @@ export function InlineName({
     } finally {
       setBusy(false)
     }
+  }
+
+  // Náhled jen čte — bez tužky, ať z rozhraní hned poznat, že se přejmenovat
+  // nedá, ne až z odmítnutého požadavku.
+  if (!muzeMenit) {
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-1">
+        <NameTag className={cn('min-w-0 flex-1 truncate', className)}>{name}</NameTag>
+      </span>
+    )
   }
 
   if (!editing) {

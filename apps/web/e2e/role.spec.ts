@@ -16,11 +16,13 @@ test.beforeEach(({ baseURL }) => {
 
 test('náhled si knihovnu prohlíží, ale nic v ní nezaloží ani nesmaže', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('link', { name: 'Banka otázek' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
 
-  // Import a generování jsou cesty k zápisu — náhledu se vůbec nenabízejí.
+  // Import, generování a banka otázek zmizely z lišty úplně (nejen náhledu) —
+  // import a generování zůstávají jako stránky, banka se zrušila docela.
   await expect(page.getByRole('link', { name: 'Import materiálů' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Generování' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Generování', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Banka otázek' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Správa' })).toHaveCount(0)
 
   await expect(page.getByRole('button', { name: 'Založit předmět' })).toHaveCount(0)
@@ -132,6 +134,56 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   // Přepínač „Smazané“ vede k obnovení otázky — taky akce ke změně, kterou
   // náhled nemá.
   await expect(page.getByRole('button', { name: /^Smazané \(\d+\)$/ })).toHaveCount(0)
+})
+
+/**
+ * Stránka třídy (viz `tridy.spec.ts`): náhled vidí témata, ale žádné
+ * tlačítko, které by třídu nebo její témata měnilo.
+ *
+ * Vlastní zkušební třída pro tenhle test — založí ji učitelka ve vlastním
+ * kontextu, náhled si stránku jen přečte.
+ */
+test('náhled vidí témata třídy, ale žádné tlačítko, které by ji měnilo', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+  let gradeId: string
+  let gradeName: string
+  try {
+    const subject = await pisatel.request.post('/api/library', {
+      data: { kind: 'subject', name: `E2E NAHLED TRIDA ${Date.now()}` },
+    })
+    expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+    const { id: subjectId } = (await subject.json()) as { id: string }
+
+    gradeName = `Náhledový ročník ${Date.now()}`
+    const grade = await pisatel.request.post('/api/library', {
+      data: { kind: 'grade', name: gradeName, parentId: subjectId },
+    })
+    expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
+    gradeId = (await grade.json()).id as string
+
+    const topic = await pisatel.request.post('/api/library', {
+      data: { kind: 'topic', name: 'Téma pro náhled', parentId: gradeId },
+    })
+    expect(topic.ok(), 'zkušební téma se nepodařilo založit').toBe(true)
+  } finally {
+    await pisatel.close()
+  }
+
+  await page.goto(`/tridy/${gradeId}`)
+  await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
+  await expect(page.getByText('Téma pro náhled', { exact: true })).toBeVisible()
+
+  await expect(page.getByRole('button', { name: 'Přidat téma' })).toHaveCount(0)
+  await expect(page.getByLabel('Přesunout téma do jiného ročníku')).toHaveCount(0)
+  // „Vygenerovat pro celou třídu" je popisek tlačítka až uvnitř panelu
+  // hromadného generování — celý panel i jeho spouštěč zmizí zároveň.
+  await expect(page.getByRole('button', { name: 'Hromadné generování' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Přejmenovat/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Smazat ročník' })).toHaveCount(0)
 })
 
 /**

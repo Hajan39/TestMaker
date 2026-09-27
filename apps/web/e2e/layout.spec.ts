@@ -10,7 +10,6 @@ import { testTopicPath } from './fixtures'
 const PAGES = [
   { path: '/', name: 'knihovna' },
   { path: '/import', name: 'import materiálů' },
-  { path: '/questions', name: 'banka otázek' },
   { path: '/tests', name: 'testy' },
   { path: '/tests/new', name: 'nový test' },
   { path: '/templates', name: 'šablony' },
@@ -160,10 +159,7 @@ test.describe('dlaždice témat', () => {
 test.describe('telefon (390 px)', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  for (const target of [
-    { path: '/questions', name: 'banka otázek', akce: /^Akce u otázky/ },
-    { path: '/tests', name: 'testy', akce: /^Akce u testu/ },
-  ]) {
+  for (const target of [{ path: '/tests', name: 'testy', akce: /^Akce u testu/ }]) {
     test(`${target.name}: u každé položky jde otevřít nabídka akcí`, async ({ page }) => {
       if (target.path === '/tests') await zajistiTest(page)
       await page.goto(target.path)

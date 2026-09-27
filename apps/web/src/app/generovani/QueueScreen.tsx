@@ -97,8 +97,10 @@ export function QueueScreen({
         shrnuti.ton === 'chyba' ? toast.error : shrnuti.ton === 'varovani' ? toast.warning : toast.success
       hlaska(shrnuti.text, {
         duration: 12_000,
-        action:
-          created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/review') } : undefined,
+        // Kontrola konceptů přes celou knihovnu se zrušila — schvalování je
+        // teď v tématu, a po hromadném běhu jich bývá víc najednou, takže
+        // odkaz vede na úvod, odkud se dá do každého z nich doklikat.
+        action: created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/') } : undefined,
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))

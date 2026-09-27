@@ -19,7 +19,7 @@ test('nepřihlášenou uživatelku pustí jedině na přihlašovací stránku', 
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByRole('heading', { name: 'Přihlášení' })).toBeVisible()
   // Na přihlašovací stránce není navigace aplikace.
-  await expect(page.getByRole('link', { name: 'Banka otázek' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Třídy' })).toHaveCount(0)
 })
 
 test('chybné heslo vypíše hlášku a nikam nepustí', async ({ page }) => {
@@ -38,7 +38,7 @@ test('se správným heslem se přihlásí, přežije obnovení stránky a odhlá
   await page.getByRole('button', { name: 'Přihlásit se' }).click()
 
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('link', { name: 'Banka otázek' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
 
   // Cookie drží i po obnovení stránky.
   await page.reload()

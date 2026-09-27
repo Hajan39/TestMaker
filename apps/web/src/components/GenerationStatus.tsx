@@ -24,6 +24,8 @@ interface Counts {
   queued: number
   /** Nedokončená témata. Zůstávají viset i den poté, co se vyčerpal limit modelu. */
   error: number
+  /** Téma jediné běžící nebo čekající úlohy, když nic neselhalo. */
+  topicId?: string
 }
 
 /**
@@ -52,7 +54,12 @@ export function GenerationStatus({ pathname }: { pathname: string }) {
       const response = await fetch('/api/jobs')
       if (!response.ok) return null
       const data = (await response.json()) as Partial<Counts>
-      return { running: data.running ?? 0, queued: data.queued ?? 0, error: data.error ?? 0 }
+      return {
+        running: data.running ?? 0,
+        queued: data.queued ?? 0,
+        error: data.error ?? 0,
+        topicId: data.topicId,
+      }
     } catch {
       // Ukazatel v liště je doplněk; když se nenačte, nic se neděje.
       return null
@@ -90,9 +97,13 @@ export function GenerationStatus({ pathname }: { pathname: string }) {
       : `Ve frontě čeká ${pocet(counts.queued, TEMATA)}`
     : `${pocet(counts.error, TEMATA)} ${plural(counts.error, 'se nedokončilo', 'se nedokončila', 'se nedokončilo')}`
 
+  // Jde o právě jedno téma a nic neselhalo: ukazatel vede rovnou do něj,
+  // ne do obecného přehledu, kam by se pak muselo proklikávat dál.
+  const href = counts.topicId ? `/topics/${counts.topicId}` : '/generovani'
+
   return (
     <Link
-      href="/generovani"
+      href={href}
       className="flex items-center gap-1.5 rounded-[var(--radius-inner)] px-2 py-1 text-xs text-fg-muted hover:text-fg"
       title="Přehled generování"
     >

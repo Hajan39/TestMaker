@@ -17,6 +17,12 @@ export interface QueueCounts {
   running: number
   done: number
   error: number
+  /**
+   * Téma jediné běžící nebo čekající úlohy, když nic neselhalo. Ukazatel v
+   * liště jím nahradí obecný odkaz na přehled — u jednoho tématu stačí vést
+   * rovnou do něj.
+   */
+  topicId?: string
 }
 
 export interface QueueJob {
@@ -51,12 +57,25 @@ export async function countJobs(scope: Scope): Promise<QueueCounts> {
     .groupBy(generationJobs.status)
 
   const byStatus = Object.fromEntries(rows.map((row) => [row.status, row.value]))
-  return {
+  const counts: QueueCounts = {
     queued: byStatus.queued ?? 0,
     running: byStatus.running ?? 0,
     done: byStatus.done ?? 0,
     error: byStatus.error ?? 0,
   }
+
+  // Přesně jedna nedokončená úloha a nic neselhalo: ukazatel v liště může
+  // vést rovnou do jejího tématu místo do obecného přehledu.
+  if (counts.queued + counts.running === 1 && counts.error === 0) {
+    const [solo] = await db
+      .select({ topicId: generationJobs.topicId })
+      .from(generationJobs)
+      .where(and(skola(scope, generationJobs), inArray(generationJobs.status, ['queued', 'running'])))
+      .limit(1)
+    if (solo) counts.topicId = solo.topicId
+  }
+
+  return counts
 }
 
 /**

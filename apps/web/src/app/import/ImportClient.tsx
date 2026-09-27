@@ -318,7 +318,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                   key={destination.gradeId}
                   size="sm"
                   variant="outline"
-                  onClick={() => router.push(`/?grade=${destination.gradeId}`)}
+                  onClick={() => router.push(`/tridy/${destination.gradeId}`)}
                 >
                   Ročník {destination.gradeName || 'bez ročníku'}
                 </Button>

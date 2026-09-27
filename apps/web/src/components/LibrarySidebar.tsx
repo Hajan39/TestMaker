@@ -31,7 +31,7 @@ export function LibrarySidebar({
               count: grade.topics.length,
             }))}
             renderItem={(item, content, active) => (
-              <Link href={`/?grade=${item.id}`} className="block" aria-current={active ? 'page' : undefined}>
+              <Link href={`/tridy/${item.id}`} className="block" aria-current={active ? 'page' : undefined}>
                 {content}
               </Link>
             )}

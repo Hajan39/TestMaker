@@ -60,13 +60,13 @@ test.describe('obrys při procházení tabulátorem', () => {
     await page.goto('/')
 
     const restOutline = await page.evaluate(() => {
-      const link = document.querySelector('a[href="/import"]') as HTMLElement
+      const link = document.querySelector('a[href="/tests"]') as HTMLElement
       return getComputedStyle(link).outlineStyle
     })
     expect(restOutline).toBe('none')
 
-    const found = await tabUntilText(page, browserName, 'Import materiálů')
-    expect(found, 'tabulátor se na odkaz „Import materiálů“ nedostal').toBe(true)
+    const found = await tabUntilText(page, browserName, 'Testy')
+    expect(found, 'tabulátor se na odkaz „Testy“ nedostal').toBe(true)
 
     const focusOutline = await activeOutline(page)
     expect(focusOutline.style).not.toBe('none')
@@ -99,8 +99,8 @@ test.describe('obrys při procházení tabulátorem', () => {
     await page.reload()
     await expect(page.locator('html')).toHaveClass(/dark/)
 
-    const found = await tabUntilText(page, browserName, 'Import materiálů')
-    expect(found, 'tabulátor se na odkaz „Import materiálů“ v tmavém režimu nedostal').toBe(true)
+    const found = await tabUntilText(page, browserName, 'Testy')
+    expect(found, 'tabulátor se na odkaz „Testy“ v tmavém režimu nedostal').toBe(true)
 
     const focusOutline = await activeOutline(page)
     expect(focusOutline.style).not.toBe('none')
@@ -115,7 +115,7 @@ test.describe('horní lišta na telefonu (390 px)', () => {
     await page.goto('/')
 
     const header = page.locator('header')
-    for (const label of ['Knihovna', 'Import materiálů', 'Banka otázek', 'Testy', 'Šablony']) {
+    for (const label of ['Třídy', 'Testy', 'Hlavolamy', 'Šablony']) {
       await expect(header.getByRole('link', { name: label, exact: true })).toBeVisible()
     }
     for (const label of ['Světlý motiv', 'Tmavý motiv', 'Podle systému']) {

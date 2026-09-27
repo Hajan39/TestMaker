@@ -51,29 +51,74 @@ test.describe('hledání přes celou knihovnu', () => {
 
 test.describe('odhad stran pod osnovou testu', () => {
   test('se objeví po přidání otázky a roste s dalšími', async ({ page }) => {
-    await page.goto('/tests/new')
+    // Vlastní téma se dvěma schválenými otázkami — spoléhat na to, že „první
+    // rozbalené téma" v bance bude mít aspoň dvě, je křehké: pořadí témat
+    // v bance se řídí názvem předmětu a závisí na tom, co si tam nechala
+    // jiná zkouška. Otázka vytvořená přes API je rovnou schválená.
+    const razitko = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+    const subject = await page.request.post('/api/library', {
+      data: { kind: 'subject', name: `E2E ROZHRANI ${razitko}` },
+    })
+    expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+    const { id: subjectId } = (await subject.json()) as { id: string }
 
-    // Banka nabízí rovnou jen schválené otázky (server jiné neposílá), takže se
-    // nic nepřepíná. Témata jsou sbalená, otázky se ukážou až po rozbalení.
-    await page.locator('details summary').first().click()
-    // Přímí potomci: uvnitř náhledu otázky jsou další seznamy s možnostmi.
-    const questions = page.locator('details[open] > ul > li')
+    try {
+      const grade = await page.request.post('/api/library', {
+        data: { kind: 'grade', name: `Ročník ${razitko}`, parentId: subjectId },
+      })
+      expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
+      const { id: gradeId } = (await grade.json()) as { id: string }
 
-    // Přidáme první dostupnou otázku z banky.
-    const firstCheckbox = questions.first().getByRole('checkbox')
-    await firstCheckbox.waitFor({ state: 'visible' })
-    await firstCheckbox.click()
+      const topicName = `Téma pro odhad stran ${razitko}`
+      const topic = await page.request.post('/api/library', {
+        data: { kind: 'topic', name: topicName, parentId: gradeId },
+      })
+      expect(topic.ok(), 'zkušební téma se nepodařilo založit').toBe(true)
+      const { id: topicId } = (await topic.json()) as { id: string }
 
-    // Souhrn pod osnovou je definiční seznam: počet otázek, body, odhad stran.
-    const summary = page.locator('dl').filter({ hasText: 'Odhad stran:' })
-    await expect(summary).toBeVisible()
-    await expect(summary).toContainText('Otázek: 1')
-    await expect(summary).toContainText('Odhad stran:')
+      for (const prompt of ['První otázka na odhad stran', 'Druhá otázka na odhad stran']) {
+        const created = await page.request.post('/api/questions', {
+          data: {
+            topicId,
+            question: {
+              type: 'short_answer',
+              difficulty: 1,
+              points: 1,
+              blocks: [],
+              payload: { prompt, answer: 'odpověď', acceptedAnswers: [] },
+            },
+          },
+        })
+        expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
+      }
 
-    // S další otázkou počet roste a odhad zůstává vyplněný.
-    await questions.nth(1).getByRole('checkbox').click()
-    await expect(summary).toContainText('Otázek: 2')
-    await expect(summary).toContainText('Odhad stran:')
+      await page.goto('/tests/new')
+
+      // Vlastní téma je sbalené jako všechna ostatní — najdeme ho podle
+      // popisku, ne podle pořadí, a rozbalíme.
+      const topicDetails = page.locator('details').filter({ hasText: topicName })
+      await topicDetails.locator('summary').click()
+      // Přímí potomci: uvnitř náhledu otázky jsou další seznamy s možnostmi.
+      const questions = topicDetails.locator('ul > li')
+      await expect(questions).toHaveCount(2)
+
+      const firstCheckbox = questions.first().getByRole('checkbox')
+      await firstCheckbox.waitFor({ state: 'visible' })
+      await firstCheckbox.click()
+
+      // Souhrn pod osnovou je definiční seznam: počet otázek, body, odhad stran.
+      const summary = page.locator('dl').filter({ hasText: 'Odhad stran:' })
+      await expect(summary).toBeVisible()
+      await expect(summary).toContainText('Otázek: 1')
+      await expect(summary).toContainText('Odhad stran:')
+
+      // S další otázkou počet roste a odhad zůstává vyplněný.
+      await questions.nth(1).getByRole('checkbox').click()
+      await expect(summary).toContainText('Otázek: 2')
+      await expect(summary).toContainText('Odhad stran:')
+    } finally {
+      await page.request.delete(`/api/library?kind=subject&id=${encodeURIComponent(subjectId)}`)
+    }
   })
 })
 

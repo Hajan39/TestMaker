@@ -7,13 +7,11 @@ import { GenerationStatus } from '@/components/GenerationStatus'
 import { UserMenu } from '@/components/UserMenu'
 import type { Role } from '@/lib/role'
 
+// Import materiálů a přehled generování zůstávají jako stránky (odkazy z
+// úvodu, ukazatel v liště), ale v liště samotné už nejsou — obojí je jen
+// vstup do práce, kterou učitelka dělá výjimečně, ne místo, kam se vrací.
 const NAV: NavItem[] = [
-  { href: '/', label: 'Knihovna' },
-  { href: '/import', label: 'Import materiálů' },
-  // Přehled generování musí jít otevřít i ve chvíli, kdy nic neběží — ukazatel
-  // v liště sám o sobě k nedokončeným tématům druhý den nedovede.
-  { href: '/generovani', label: 'Generování' },
-  { href: '/questions', label: 'Banka otázek' },
+  { href: '/', label: 'Třídy' },
   { href: '/tests', label: 'Testy' },
   { href: '/hlavolamy', label: 'Hlavolamy' },
   { href: '/templates', label: 'Šablony' },
@@ -24,7 +22,7 @@ const NAV_SPRAVCE: NavItem[] = [{ href: '/sprava', label: 'Správa' }]
 
 /**
  * Určí href položky navigace, pod kterou patří daná cesta. Kořenová cesta „/“
- * musí být přesná shoda, jinak by Knihovna svítila na každé stránce. Ostatní
+ * musí být přesná shoda, jinak by Třídy svítily na každé stránce. Ostatní
  * položky pokrývají i své podtrasy (např. /tests/new i /tests/<id> patří pod Testy).
  */
 function findActiveHref(pathname: string, nav: NavItem[]): string {
@@ -33,8 +31,8 @@ function findActiveHref(pathname: string, nav: NavItem[]): string {
     return pathname === item.href || pathname.startsWith(`${item.href}/`)
   })
   if (match) return match.href
-  // Detail tématu (/topics/...) patří pod Knihovnu.
-  if (pathname.startsWith('/topics')) return '/'
+  // Stránka třídy (/tridy/...) i detail tématu (/topics/...) patří pod Třídy.
+  if (pathname.startsWith('/tridy') || pathname.startsWith('/topics')) return '/'
   return pathname
 }
 
@@ -48,13 +46,7 @@ export function MainNav({
   ucet: { jmeno: string; email: string; role: Role } | null
 }) {
   const pathname = usePathname()
-  // Náhled nemá co importovat ani generovat — položky, které vedou jedině
-  // k zápisu, se mu vůbec nenabízejí.
-  const zaklad =
-    ucet?.role === 'nahled'
-      ? NAV.filter((item) => item.href !== '/import' && item.href !== '/generovani')
-      : NAV
-  const nav = ucet?.role === 'spravce' ? [...zaklad, ...NAV_SPRAVCE] : zaklad
+  const nav = ucet?.role === 'spravce' ? [...NAV, ...NAV_SPRAVCE] : NAV
   const activeHref = findActiveHref(pathname, nav)
 
   return (
@@ -70,7 +62,13 @@ export function MainNav({
         </>
       }
       renderLink={(item, active) => (
-        <Link href={item.href} aria-current={active ? 'page' : undefined}>
+        // Třídy v liště vedou vždy na přehled dlaždic (`?vse=1`), i když je
+        // zapamatovaná třída — jinak by se z lišty nedalo dostat zpátky na
+        // výběr a jediná cesta ven byla odkaz „Všechny třídy“ na téže stránce.
+        <Link
+          href={item.href === '/' ? '/?vse=1' : item.href}
+          aria-current={active ? 'page' : undefined}
+        >
           {item.label}
         </Link>
       )}

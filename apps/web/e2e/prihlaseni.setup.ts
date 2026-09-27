@@ -20,8 +20,8 @@ for (const osoba of Object.keys(UCTY) as Osoba[]) {
     await page.getByLabel('Heslo').fill(HESLO)
     await page.getByRole('button', { name: 'Přihlásit se' }).click()
 
-    // Správce má v liště navíc Správu; ostatní aspoň Banku otázek.
-    await expect(page.getByRole('link', { name: 'Banka otázek' })).toBeVisible()
+    // Správce má v liště navíc Správu; ostatní aspoň položku Třídy.
+    await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
     await page.context().storageState({ path: stav(osoba) })
   })
 }

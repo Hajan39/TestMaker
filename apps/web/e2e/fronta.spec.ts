@@ -166,12 +166,53 @@ test.describe('přehled generování', () => {
     await expect(page.getByText('Nic se negeneruje')).toBeVisible()
   })
 
-  test('ukazatel v liště dovede na přehled i z jiné stránky', async ({ page, request }) => {
+  test('ukazatel s jedinou čekající úlohou vede rovnou do jejího tématu', async ({ page, request }) => {
     await clearQueue(request)
-    await enqueue(request)
+    const topicId = await enqueue(request)
 
-    await page.goto('/questions')
+    await page.goto('/')
     const ukazatel = page.getByRole('link', { name: /Ve frontě čeká|Generuji otázky/ })
+    await expect(ukazatel).toBeVisible()
+    await ukazatel.click()
+
+    // Jde o jediné téma a nic neselhalo — ukazatel vede rovnou do něj, ne do
+    // obecného přehledu, kam by se pak muselo proklikávat dál.
+    await expect(page).toHaveURL(`/topics/${topicId}`)
+  })
+
+  test('ukazatel s víc úlohami vede do přehledu, ne do jednoho tématu', async ({ page }) => {
+    await page.route(
+      (url) => url.pathname === '/api/jobs' && !url.searchParams.has('vypis'),
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ running: 1, queued: 1, done: 0, error: 0 }),
+        }),
+    )
+
+    await page.goto('/')
+    const ukazatel = page.getByRole('link', { name: /Generuji otázky/ })
+    await expect(ukazatel).toBeVisible()
+    await ukazatel.click()
+
+    await expect(page).toHaveURL(/\/generovani$/)
+    await expect(page.getByRole('heading', { name: 'Průběh generování' })).toBeVisible()
+  })
+
+  test('ukazatel s chybou vede do přehledu, i kdyby zbylo jediné čekající téma', async ({ page }) => {
+    await page.route(
+      (url) => url.pathname === '/api/jobs' && !url.searchParams.has('vypis'),
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ running: 0, queued: 1, done: 0, error: 1 }),
+        }),
+    )
+
+    await page.goto('/')
+    const ukazatel = page.getByRole('link', { name: /Ve frontě čeká/ })
     await expect(ukazatel).toBeVisible()
     await ukazatel.click()
 
@@ -195,22 +236,19 @@ test.describe('přehled generování', () => {
     await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
   })
 
-  test('po samých chybách vede do přehledu ukazatel v liště i navigace', async ({ page, request }) => {
+  test('po samých chybách vede do přehledu ukazatel v liště', async ({ page, request }) => {
     await clearQueue(request)
     // Aby si přehled o podstrčený výpis vůbec řekl, musí na začátku něco čekat;
     // podstrčená odpověď pak řekne, že zbyla jen nedokončená témata.
     await enqueue(request)
     await stubOnlyErrors(page)
 
-    await page.goto('/questions')
-    // Nic neběží, a přesto musí být kudy se k nedodělané práci dostat.
+    await page.goto('/')
+    // Nic neběží, a přesto musí být kudy se k nedodělané práci dostat. Přehled
+    // generování (`/generovani`) v liště samotné není — vede tam jen ukazatel.
     const ukazatel = page.getByRole('link', { name: '2 témata se nedokončila' })
     await expect(ukazatel).toBeVisible()
     await ukazatel.click()
-    await expect(page).toHaveURL(/\/generovani$/)
-
-    await page.goto('/questions')
-    await page.getByRole('link', { name: 'Generování', exact: true }).click()
     await expect(page).toHaveURL(/\/generovani$/)
     await expect(page.getByRole('heading', { name: 'Průběh generování' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
