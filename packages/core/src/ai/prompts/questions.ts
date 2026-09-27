@@ -47,10 +47,12 @@ export interface GenerationRequest {
 export const MAX_REPLACEMENT_NOTE_LENGTH = 300
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
-  open: 'Volná odpověď na 2–6 řádků; v `answer` uveď vzorovou odpověď, ne jen heslo.',
+  open:
+    'Jen když má materiál stručnou věcnou odpověď, ne názor. 2–6 řádků; v `answer` napiš vzorovou odpověď k opravování, ne jen heslo.',
   short_answer: 'Odpověď je jedno slovo nebo krátké sousloví z materiálu. Do `acceptedAnswers` dej běžné varianty.',
   single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
-  multi_choice: 'Správné jsou 2–3 možnosti z 4–6. Nikdy ne všechny.',
+  multi_choice:
+    '4–5 možností, aspoň 2 správné a aspoň 1 špatná — zadání musí říct, že správných je víc. Špatné možnosti věrohodné, ne nesmyslné. Žádná možnost se neopakuje.',
   true_false: '4 krátká tvrzení, zhruba půl pravdivých. Nepravdivé tvrzení vznikne malou změnou pravdivého.',
   fill_blank:
     '1–4 vynechaná slova; počet ___ v textu přesně odpovídá poli `blanks`; vynechávej klíčové pojmy z materiálu, ne nahodilá slova.',

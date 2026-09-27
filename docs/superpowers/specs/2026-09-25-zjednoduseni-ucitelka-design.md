@@ -135,7 +135,11 @@ Samostatný první krok, protože na něm stojí smysl celé přestavby.
   znaků, ne až 120 tisíc. Úseky se vybírají po celém tématu, záhlaví souboru
   se přenáší do každého úseku.
 - **Méně typů pro AI v aplikaci:** `single_choice`, `true_false`,
-  `short_answer`. Ostatní typy zůstávají pro ruční tvorbu a pro `/otazky`.
+  `short_answer`, `matching`, `ordering`, `fill_blank`, `multi_choice`,
+  `open` (osm typů; rozhodnutím majitele z 27. 9. 2026 doplněno o poslední
+  dva). `table_fill` a `label_image` zůstávají jen pro ruční tvorbu a pro
+  `/otazky` — u tabulky model plete sloupce a řádky a u popisu obrázku navíc
+  chybí samotný obrázek, který se ve fázi 1 negeneruje.
 - **Kratší prompt:** pravidla zúžit na ta, která model udrží (samostatná
   otázka, jednoznačná odpověď z materiálu, jazyk pro ročník, doslovná citace
   v `evidence`).

@@ -33,11 +33,13 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 /**
  * Typy, které generuje AI v aplikaci. Přiřazování, řazení a doplňování do
  * textu se přidaly, když generování přešlo na Gemini — ten indexy a počty
- * trefuje spolehlivě. `validateQuestionContent` malformované výsledky (index
- * mimo rozsah, opakovaná dvojice, špatný počet vynechaných slov…) i tak
- * zahazuje, takže případné selhání modelu otázku jen zahodí, ne že by prošla
- * do banky rozbitá. Tabulky, volný výběr, výběr více možností a popis
- * obrázku zůstávají pro ruční tvorbu a pro otázky z Claude Code (`/otazky`).
+ * trefuje spolehlivě. Výběr více možností a volná odpověď přibyly
+ * rozhodnutím majitele z 27. 9. 2026: `validateQuestionContent` u nich hlídá
+ * totéž, co u ostatních (index mimo rozsah, opakovaná možnost…), takže
+ * případné selhání modelu otázku jen zahodí, ne že by prošla do banky
+ * rozbitá. Tabulky a popis obrázku zůstávají pro ruční tvorbu a pro otázky
+ * z Claude Code (`/otazky`) — u tabulek model plete sloupce a řádky, popis
+ * obrázku navíc potřebuje obrázek, který se ve fázi 1 negeneruje.
  */
 export const AI_QUESTION_TYPES = [
   'single_choice',
@@ -46,6 +48,8 @@ export const AI_QUESTION_TYPES = [
   'matching',
   'ordering',
   'fill_blank',
+  'multi_choice',
+  'open',
 ] as const satisfies readonly QuestionType[]
 
 export type AiQuestionType = (typeof AI_QUESTION_TYPES)[number]
@@ -359,6 +363,10 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       if (q.payload.correctIndices.length === n) errors.push('všechny možnosti nemohou být správné')
       if (q.payload.correctIndices.length < 2) {
         errors.push('multi_choice musí mít aspoň dvě správné možnosti (jinak jde o single_choice)')
+      }
+      const normalizedOptions = q.payload.options.map((o) => o.trim().toLowerCase())
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        errors.push('možnosti se opakují')
       }
       break
     }

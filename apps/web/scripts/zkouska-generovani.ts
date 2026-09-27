@@ -34,6 +34,15 @@ function popis(q: QuestionContent): string {
       return `${q.payload.prompt}\n   Odpověď: **${q.payload.answer}**${
         q.payload.acceptedAnswers.length ? ` (také: ${q.payload.acceptedAnswers.join(', ')})` : ''
       }`
+    case 'multi_choice':
+      return [
+        q.payload.prompt,
+        ...q.payload.options.map(
+          (o, i) => `   ${q.payload.correctIndices.includes(i) ? '**✓**' : '·'} ${o}`,
+        ),
+      ].join('\n')
+    case 'open':
+      return `${q.payload.prompt}\n   Vzorová odpověď: **${q.payload.answer}** (${q.payload.lines} ř.)`
     case 'matching':
       return [
         q.payload.prompt,

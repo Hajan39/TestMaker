@@ -666,6 +666,30 @@ describe('výběr více možností vyžaduje víc než jednu správnou odpověď
     })
     expect(validateQuestionContent(parsed)).toEqual([])
   })
+
+  it('všechny možnosti správně je odmítnuto', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'multi_choice',
+      payload: { prompt: 'Vyber správné možnosti.', options: ['a', 'b', 'c'], correctIndices: [0, 1, 2] },
+    })
+    expect(validateQuestionContent(parsed)).toContain('všechny možnosti nemohou být správné')
+  })
+
+  it('opakovaná možnost je odmítnuta', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'multi_choice',
+      payload: { prompt: 'Vyber správné možnosti.', options: ['a', 'b', 'a', 'c'], correctIndices: [0, 1] },
+    })
+    expect(validateQuestionContent(parsed)).toContain('možnosti se opakují')
+  })
+
+  it('opakovaná možnost s jiným velikostí písmen nebo mezerami je taky odmítnuta', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'multi_choice',
+      payload: { prompt: 'Vyber správné možnosti.', options: ['Praha', ' praha ', 'Brno', 'Plzeň'], correctIndices: [0, 2] },
+    })
+    expect(validateQuestionContent(parsed)).toContain('možnosti se opakují')
+  })
 })
 
 describe('přiřazování nesmí použít stejnou položku napravo dvakrát', () => {
@@ -895,6 +919,21 @@ describe('možnosti vypsané v zadání', () => {
       difficulty: 2,
     })
     expect(chyby).toEqual([])
+  })
+
+  it('volná odpověď s vypsanými možnostmi v zadání neprojde', () => {
+    const chyby = validateQuestionContent({
+      type: 'open',
+      payload: {
+        prompt: 'Popiš dýchání: a) žábrami b) plícemi c) kůží — vyber a rozveď.',
+        lines: 4,
+        answer: 'x',
+      },
+      blocks: [],
+      points: 3,
+      difficulty: 2,
+    })
+    expect(chyby.join(' ')).toContain('vypsané možnosti')
   })
 })
 
