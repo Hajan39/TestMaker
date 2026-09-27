@@ -84,7 +84,7 @@ test.describe('ruční správa knihovny', () => {
       // Změna se propíše i do dlaždice na úvodu. Stejné jméno teď nese i
       // odkaz v postranním panelu, proto se hledá jen v obsahové ploše.
       await page.goto('/?vse=1')
-      const obsahUvodu = page.getByRole('region', { name: 'Obsah tématu' })
+      const obsahUvodu = page.getByRole('region', { name: 'Třídy' })
       await expect(obsahUvodu.getByText(ROCNIK_NOVY, { exact: false })).toBeVisible()
 
       // --- Dva ročníky téhož jména to odmítne a řekne proč ------------------

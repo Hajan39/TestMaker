@@ -15,11 +15,14 @@ export function LibraryPanes({
   tree,
   grade,
   activeTopicId,
+  contentLabel,
   children,
 }: {
   tree: SubjectNode[]
   grade: GradeNode | null
   activeTopicId?: string
+  /** Název obsahové plochy (i záložky na telefonu); bez něj „Obsah tématu". */
+  contentLabel?: string
   children: ReactNode
 }) {
   if (tree.length === 0) return <>{children}</>
@@ -28,6 +31,7 @@ export function LibraryPanes({
     <ThreePane
       first={<LibrarySidebar tree={tree} activeGradeId={grade?.id} />}
       second={<TopicList grade={grade} activeTopicId={activeTopicId} />}
+      contentLabel={contentLabel}
     >
       {children}
     </ThreePane>

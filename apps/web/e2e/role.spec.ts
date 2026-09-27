@@ -181,7 +181,7 @@ test('náhled vidí témata třídy, ale žádné tlačítko, které by ji měni
   await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
   // Téma je teď vidět dvakrát — v prostředním sloupci i na dlaždici v obsahu —
   // hledá se proto jen v obsahové ploše.
-  const obsah = page.getByRole('region', { name: 'Obsah tématu' })
+  const obsah = page.getByRole('region', { name: 'Obsah třídy' })
   await expect(obsah.getByText('Téma pro náhled', { exact: true })).toBeVisible()
 
   await expect(page.getByRole('button', { name: 'Přidat téma' })).toHaveCount(0)

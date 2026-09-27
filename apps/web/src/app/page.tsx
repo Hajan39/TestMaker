@@ -74,7 +74,7 @@ export default async function HomePage({
   )
 
   return (
-    <LibraryPanes tree={tree} grade={null}>
+    <LibraryPanes tree={tree} grade={null} contentLabel="Třídy">
       <div className="space-y-5">
         <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} userId={ucet.userId} />
 

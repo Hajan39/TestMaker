@@ -62,7 +62,7 @@ test.describe('rozcestník tříd', () => {
       await page.goto('/?vse=1')
       // Stejný odkaz teď vede i z postranního panelu, ne jen z dlaždice —
       // proto se hledá jen v obsahové ploše, jinak by na něj mířily dva prvky.
-      const obsah = page.getByRole('region', { name: 'Obsah tématu' })
+      const obsah = page.getByRole('region', { name: 'Třídy' })
       await obsah.locator(`a[href="/tridy/${gradeId}"]`).click()
       await expect(page).toHaveURL(`/tridy/${gradeId}`)
       await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()

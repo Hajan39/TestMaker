@@ -18,7 +18,7 @@ export default async function ClassLayout({
   const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   return (
-    <LibraryPanes tree={tree} grade={grade}>
+    <LibraryPanes tree={tree} grade={grade} contentLabel="Obsah třídy">
       {children}
     </LibraryPanes>
   )
