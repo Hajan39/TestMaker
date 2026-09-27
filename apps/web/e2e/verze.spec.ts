@@ -196,10 +196,10 @@ test.describe('verze otázky na kartě', () => {
     await expect(newRow).not.toBeInViewport()
 
     await versionLink.click()
-    await expect(newRow).toBeInViewport()
-
-    // Zvýraznění se objeví a samo zase zmizí — karta nezůstane rozsvícená napořád.
+    // Zvýraznění se objeví hned po kliknutí (ještě během plynulého posunu)
+    // a samo zase zmizí — karta nezůstane rozsvícená napořád.
     await expect(newRow).toHaveClass(/bg-brand-bg/)
+    await expect(newRow).toBeInViewport()
     await expect(newRow).not.toHaveClass(/bg-brand-bg/, { timeout: 3_000 })
 
     // I karta verze sama ukazuje řádek zpátky na svůj kořen.

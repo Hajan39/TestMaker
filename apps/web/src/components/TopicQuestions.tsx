@@ -103,7 +103,11 @@ export const TopicQuestions = forwardRef<
   const [freshVersions, setFreshVersions] = useState<Question[]>([])
   // Karta, na kterou právě odkázal řádek „Verze: …" nebo která právě vznikla
   // jako nová verze — krátce zvýrazněná, ať je vidět, že se posun povedl.
-  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  // Vedle id nese i pořadí skoku: druhý skok na tutéž kartu (třeba hned po
+  // vzniku verze, dokud ještě svítí) musí odpočet spustit znovu, jinak by
+  // zvýraznění zhaslo dřív, než se k ní pohled posune.
+  const [highlight, setHighlight] = useState<{ id: string; jump: number } | null>(null)
+  const highlightedId = highlight?.id ?? null
   // Id karty, ke které se má po překreslení posunout pohled — dvoukrokové
   // (nastavit stav, pak v efektu najít prvek v DOM), protože hned po
   // `setFreshVersions` nová karta v DOM ještě není.
@@ -112,24 +116,23 @@ export const TopicQuestions = forwardRef<
   // (nastavení `pendingScrollId`) a odpočet zvýraznění ve stejném efektu,
   // úklid po tomhle efektu (spuštěný, jakmile `pendingScrollId` doběhne zpět
   // na `null`) by smazal i právě nastavený časovač zvýraznění — karta by
-  // zůstala rozsvícená napořád, protože by se `setHighlightedId(null)` nikdy
+  // zůstala rozsvícená napořád, protože by se zvýraznění nikdy
   // nezavolalo.
   useEffect(() => {
     if (!pendingScrollId) return
     const el = document.querySelector(`[data-question-id="${pendingScrollId}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setHighlightedId(pendingScrollId)
+    setHighlight((current) => ({ id: pendingScrollId, jump: (current?.jump ?? 0) + 1 }))
     setPendingScrollId(null)
   }, [pendingScrollId])
   useEffect(() => {
-    if (!highlightedId) return
-    const id = highlightedId
+    if (!highlight) return
     const timeout = window.setTimeout(
-      () => setHighlightedId((current) => (current === id ? null : current)),
+      () => setHighlight((current) => (current === highlight ? null : current)),
       1500,
     )
     return () => window.clearTimeout(timeout)
-  }, [highlightedId])
+  }, [highlight])
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
   // Zaškrtnuté otázky do nového testu. Smazaná (i přegenerovaná) karta z výběru
   // sama zmizí — výběr se počítá jen proti otázkám, které pořád existují
