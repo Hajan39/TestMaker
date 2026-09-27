@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  plural,
   toast,
 } from '@testmaker/ui'
 import { createTestVariantStream, type TestVariantDirection, type TestVariantEvent } from '@/lib/generateClient'
@@ -80,7 +81,17 @@ export function TestVariantMenu({
           (vznikloDetail ? ` ${vznikloDetail}.` : ''),
       )
       if (hotovo.kept > 0) {
-        toast.message(`${hotovo.kept} ${hotovo.kept === 1 ? 'otázka zůstala' : 'otázek zůstalo'} původních.`)
+        // Skloňování podle počtu: „1 otázka zůstala původní“, „3 otázky
+        // zůstaly původní“, „5 otázek zůstalo původních“ — ne jen jednotné
+        // a množné, čeština má u počtů tři tvary (`plural` v `@testmaker/ui`).
+        toast.message(
+          `${hotovo.kept} ${plural(
+            hotovo.kept,
+            'otázka zůstala původní',
+            'otázky zůstaly původní',
+            'otázek zůstalo původních',
+          )}.`,
+        )
       }
       router.push(`/tests/${hotovo.testId}`)
     } catch (error) {

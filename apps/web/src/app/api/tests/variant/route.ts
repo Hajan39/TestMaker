@@ -39,8 +39,16 @@ export async function POST(request: Request) {
       const encoder = new TextEncoder()
       const stream = new ReadableStream({
         async start(controller) {
-          const send = (event: Record<string, unknown>) =>
-            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+          // Zrušený požadavek (učitelka zavřela stránku, prohlížeč odešel
+          // jinam) zavře i `controller` — `enqueue`/`close` nad ním pak
+          // zahodí, protože není kam psát, ne že by se stream nepovedl.
+          const send = (event: Record<string, unknown>) => {
+            try {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+            } catch {
+              // Stream je pryč, psát do něj dál nemá smysl.
+            }
+          }
 
           try {
             const outcome = await createTestVariant(ucet, parsed.data.testId, parsed.data.direction, {
@@ -54,7 +62,11 @@ export async function POST(request: Request) {
             const { message } = describeAiError(error)
             send({ type: 'error', message })
           } finally {
-            controller.close()
+            try {
+              controller.close()
+            } catch {
+              // Zrušený stream se nedá zavřít podruhé — už zavřený je taky dobře.
+            }
           }
         },
       })

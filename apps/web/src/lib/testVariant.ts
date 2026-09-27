@@ -77,6 +77,7 @@ export async function createTestVariant(
   let done = 0
 
   for (const item of orderedItems) {
+    if (options.signal?.aborted) break
     if (item.kind !== 'question' || !item.questionId) {
       done += 1
       options.onProgress?.(done, total)
@@ -101,9 +102,27 @@ export async function createTestVariant(
 
     let replacementId: string | null = null
     if (targetDifficulty >= 1 && targetDifficulty <= 3) {
+      // Kandidáti jsou sourozenci kořene (`loadVariantLinks`) i kořen sám —
+      // otázka v testu nemusí být kořenem svých verzí (může to být třeba
+      // těžší verze, kterou teď chceme zase zlehčit), a v tom případě je
+      // kandidátem na požadovanou obtížnost klidně kořen sám.
+      const candidates: { id: string; difficulty: number; status: string }[] = []
+      if (root !== item.questionId) {
+        const [rootRow] = await db
+          .select({ id: questions.id, difficulty: questions.difficulty, status: questions.status })
+          .from(questions)
+          .where(and(skola(scope, questions), eq(questions.id, root)))
+          .limit(1)
+        if (rootRow) candidates.push({ id: rootRow.id, difficulty: rootRow.difficulty ?? 2, status: rootRow.status })
+      }
       const links = await loadVariantLinks(scope, [root])
-      const existing = (links[root] ?? []).find(
-        (link) => link.difficulty === targetDifficulty && link.status !== 'rejected',
+      candidates.push(...(links[root] ?? []))
+
+      const existing = candidates.find(
+        (candidate) =>
+          candidate.id !== item.questionId &&
+          candidate.status !== 'rejected' &&
+          candidate.difficulty === targetDifficulty,
       )
       if (existing) {
         replacementId = existing.id
@@ -124,6 +143,9 @@ export async function createTestVariant(
         // zůstává u původní otázky a verze písemky pokračuje dál.
         kept += 1
       }
+      // Zrušení mohlo přijít až uprostřed volání modelu — nemá smysl začínat
+      // další položku, když už nikdo na výsledek nečeká.
+      if (options.signal?.aborted) break
     }
 
     if (replacementId) {

@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { QuestionContent } from '@testmaker/core/schema'
+import { parseQuestionSnapshot, type QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
 import { db, puzzles, questions, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
@@ -122,9 +122,37 @@ describe('createTestVariant', () => {
     expect(newItems.map((item) => item.questionId)).toEqual([existingVariant, expect.any(String)])
     expect(newItems[1]?.questionId).not.toBe(needsGeneration)
 
+    // Snímek nahrazené položky patří nové otázce, ne té původní — jinak by
+    // se v hotové písemce vytisklo staré zadání se zaměněným id pod ním.
+    const snapshot = parseQuestionSnapshot(newItems[0]?.questionSnapshot)
+    expect(snapshot?.payload).toMatchObject({ prompt: 'Už existující lehčí verze' })
+    expect((snapshot?.payload as { prompt?: string }).prompt).not.toBe('Otázka s hotovou verzí')
+
     // Originál zůstává nedotčený.
     const puvodniItems = await loadTestItems(UCET, testId)
     expect(puvodniItems.map((item) => item.questionId)).toEqual([original, needsGeneration])
+  })
+
+  it('test s lehčí verzí (d1), obrácený na těžší, použije kořen (d2) a model se nevolá', async () => {
+    const { topicId, gradeId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const templateId = await seedTemplate()
+    const root = await seedQuestion(topicId, { prompt: 'Kořenová otázka (d2)' })
+    await db.update(questions).set({ difficulty: 2 }).where(eq(questions.id, root))
+    const lehci = await seedQuestion(topicId, { prompt: 'Lehčí verze kořene (d1)' })
+    await db.update(questions).set({ difficulty: 1, variantOf: root }).where(eq(questions.id, lehci))
+
+    // Test drží lehčí verzi (d1), ne kořen — zpřísnění na těžší se tedy má
+    // vrátit ke kořeni (d2), aniž by se kdy sáhlo na model.
+    const testId = await seedTest(gradeId, templateId, [{ kind: 'question', questionId: lehci }])
+    const generate = vi.fn(modelVrati)
+
+    const outcome = await createTestVariant(UCET, testId, 'harder', { generate })
+    expect(outcome).toMatchObject({ replaced: 1, generated: 0, kept: 0 })
+    expect(generate).not.toHaveBeenCalled()
+
+    const [item] = await loadTestItems(UCET, outcome.testId)
+    expect(item?.questionId).toBe(root)
   })
 
   it('na hranici obtížnosti ponechá původní otázku', async () => {
@@ -163,6 +191,32 @@ describe('createTestVariant', () => {
     expect(newItems.map((item) => item.kind)).toEqual(['heading', 'puzzle', 'question'])
     expect(newItems[1]?.puzzleId).toBe(puzzleId)
     expect(newItems[2]?.questionId).toBeNull()
+  })
+
+  it('položka s questionId na natvrdo smazanou otázku zůstane beze změny', async () => {
+    const { topicId, gradeId } = await seedTopic()
+    const templateId = await seedTemplate()
+    const questionId = await seedQuestion(topicId, { prompt: 'Otázka, co zmizí z banky' })
+    const testId = await seedTest(gradeId, templateId, [{ kind: 'question', questionId }])
+    // `test_items.question_id → questions.id` je `on delete set null`: běžné
+    // smazání by položku samo odpojilo. Aby test opravdu ověřil větev kódu,
+    // co se stará o zaniklý odkaz (`questionId` je vyplněné, ale řádek v
+    // bance chybí), smaže se otázka bez spuštění cizího klíče — vypnuté jen
+    // na dobu tohoto testu, `finally` ho vrátí zpátky, i kdyby test spadl.
+    await db.run(sql`pragma foreign_keys=off`)
+    try {
+      await db.delete(questions).where(eq(questions.id, questionId))
+      const [raw] = await db.select().from(testItems).where(eq(testItems.testId, testId))
+      expect(raw?.questionId, 'předpoklad testu: odkaz zůstal nevyčištěný').toBe(questionId)
+
+      const outcome = await createTestVariant(UCET, testId, 'harder', { generate: modelVrati })
+      expect(outcome).toMatchObject({ replaced: 0, generated: 0, kept: 0 })
+
+      const [item] = await loadTestItems(UCET, outcome.testId)
+      expect(item?.questionId).toBe(questionId)
+    } finally {
+      await db.run(sql`pragma foreign_keys=on`)
+    }
   })
 
   it('zamítnutá (rejected) verze se nepoužije, vygeneruje se nová', async () => {
