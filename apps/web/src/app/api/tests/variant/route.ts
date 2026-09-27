@@ -14,8 +14,12 @@ const bodySchema = z.object({
 
 /**
  * Streamuje vytvoření lehčí nebo těžší verze celé písemky (NDJSON, stejný
- * tvar jako `/api/generate`): `start { total }`, `progress { done, total }`,
+ * tvar jako `/api/generate`): `start { total, testId }`, `progress { done, total }`,
  * `done { testId, replaced, generated, kept }`, `error { message }`.
+ *
+ * `testId` jde už v `start`: při `maxDuration` může platforma funkci ukončit
+ * uprostřed průběhu a `done` pak nepřijde nikdy. Klient díky tomu kopii najde
+ * a otevře ji s upozorněním, že je hotová jen zčásti — jinak by tiše osiřela.
  *
  * Kopie testu vzniká, až když předběžné kontroly projdou (model je
  * nakonfigurovaný, zdrojový test je vidět) — teprve pak začíná stream, aby se
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
           try {
             const outcome = await createTestVariant(ucet, parsed.data.testId, parsed.data.direction, {
               signal: request.signal,
-              onStart: (total) => send({ type: 'start', total }),
+              onStart: (total, testId) => send({ type: 'start', total, testId }),
               onProgress: (done, total) => send({ type: 'progress', done, total }),
             })
             send({ type: 'done', ...outcome })

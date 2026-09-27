@@ -37,6 +37,10 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   všechny verze pohromadě. **Vyžaduje migraci 0019** (`questions.variant_of`) —
   před nasazením spusť nad `local.db` zálohovaně:
   `cd apps/web && cp local.db local.db.pred-migraci && pnpm db:migrate`.
+  Stejnou migraci musí dostat i produkční databáze v Tursu dřív, než se
+  nasadí kód (ručně `pnpm db:migrate` proti Tursu; workflow `migrate.yml`
+  běží až po pushi do `main`, souběžně s nasazením) — jinak nasazená
+  aplikace spadne na chybějícím sloupci.
 - **Lehčí a těžší verze celé písemky.** V editoru testu vznikne soukromá
   kopie („‹název› – lehčí" / „‹název› – těžší"), ve které se každá položka
   nahradí existující verzí o stupeň jinou, nebo se vygeneruje nová. Položky

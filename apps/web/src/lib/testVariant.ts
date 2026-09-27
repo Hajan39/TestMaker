@@ -36,7 +36,8 @@ export function testVariantTitle(sourceTitle: string, direction: TestVariantDire
  * Pro každou položku druhu `question` s otázkou z banky:
  * 1. Najde se kořen (`variantOf` původní otázky, nebo otázka sama).
  * 2. Mezi verzemi kořene s obtížností `původní ± 1` a stavem jiným než
- *    `rejected` se hledá ta, která se dá použít rovnou (`replaced`).
+ *    `rejected` se hledá ta, která se dá použít rovnou (`replaced`) — a která
+ *    v kopii ještě není, aby žádná otázka nestála na papíře dvakrát.
  * 3. Když žádná není, zkusí se `createVariant` (`generated`). Selže-li —
  *    hranice obtížnosti, zaneprázdněné téma, nebo model — položka zůstane
  *    beze změny (`kept`) a pokračuje se dál.
@@ -49,7 +50,8 @@ export async function createTestVariant(
   testId: string,
   direction: TestVariantDirection,
   options: {
-    onStart?: (total: number) => void
+    /** Volá se, jakmile kopie existuje — s jejím id, aby o ni klient nepřišel, kdyby průběh spadl. */
+    onStart?: (total: number, testId: string) => void
     onProgress?: (done: number, total: number) => void
     signal?: AbortSignal
     /** Podvržené generování pro testy; v aplikaci se nepředává. */
@@ -69,7 +71,22 @@ export async function createTestVariant(
     .orderBy(asc(testItems.position))
 
   const total = orderedItems.length
-  options.onStart?.(total)
+  options.onStart?.(total, copy.id)
+
+  // Které otázky v kopii právě jsou (s počtem výskytů). Náhrada se vybírá jen
+  // z otázek, které v kopii ještě nejsou — jinak by dvě položky, třeba
+  // originál a jeho lehčí verze, skončily u téže otázky a na papíře by stála
+  // dvakrát.
+  const vKopii = new Map<string, number>()
+  const pridej = (id: string) => vKopii.set(id, (vKopii.get(id) ?? 0) + 1)
+  const uber = (id: string) => {
+    const pocet = (vKopii.get(id) ?? 0) - 1
+    if (pocet > 0) vKopii.set(id, pocet)
+    else vKopii.delete(id)
+  }
+  for (const item of orderedItems) {
+    if (item.kind === 'question' && item.questionId) pridej(item.questionId)
+  }
 
   let replaced = 0
   let generated = 0
@@ -121,6 +138,7 @@ export async function createTestVariant(
       const existing = candidates.find(
         (candidate) =>
           candidate.id !== item.questionId &&
+          !vKopii.has(candidate.id) &&
           candidate.status !== 'rejected' &&
           candidate.difficulty === targetDifficulty,
       )
@@ -149,6 +167,8 @@ export async function createTestVariant(
     }
 
     if (replacementId) {
+      uber(item.questionId)
+      pridej(replacementId)
       const snapshots = await buildQuestionSnapshots(scope, [replacementId])
       await db
         .update(testItems)

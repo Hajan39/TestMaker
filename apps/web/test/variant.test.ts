@@ -57,6 +57,9 @@ describe('verze otázky (lehčí/těžší)', () => {
     })
 
     expect(requestedDifficulty).toBe(1)
+    // Podvržený model vrací obtížnost 2 (tu původní) — uložit se musí 1.
+    expect(VERZE.difficulty).toBe(2)
+    expect(variant.difficulty).toBe(1)
     expect(variant.id).not.toBe(original)
     expect(variant.variantOf).toBe(original)
     expect(variant.status).toBe('approved')
@@ -73,6 +76,7 @@ describe('verze otázky (lehčí/těžší)', () => {
 
     const harder = await createVariant(UCET, original, 'harder', { generate: modelVrati })
     expect(harder.variantOf).toBe(original)
+    expect(harder.difficulty).toBe(3)
 
     const easierOfHarder = await createVariant(UCET, harder.id, 'easier', { generate: modelVrati })
     expect(easierOfHarder.variantOf).toBe(original)

@@ -155,6 +155,34 @@ describe('createTestVariant', () => {
     expect(item?.questionId).toBe(root)
   })
 
+  it('verze, která už v kopii je, se nepoužije podruhé — vygeneruje se nová', async () => {
+    const { topicId, gradeId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const templateId = await seedTemplate()
+    const root = await seedQuestion(topicId, { prompt: 'Kořen (d2)' })
+    await db.update(questions).set({ difficulty: 2 }).where(eq(questions.id, root))
+    const lehci = await seedQuestion(topicId, { prompt: 'Lehčí verze kořene (d1)' })
+    await db.update(questions).set({ difficulty: 1, variantOf: root }).where(eq(questions.id, lehci))
+
+    // V písemce je kořen i jeho lehčí verze. Jediný kandidát na zlehčení
+    // kořene je právě ta lehčí verze — jenže ta v kopii už stojí, takže by
+    // na papíře byla dvakrát. Místo ní se musí vygenerovat nová.
+    const testId = await seedTest(gradeId, templateId, [
+      { kind: 'question', questionId: root },
+      { kind: 'question', questionId: lehci },
+    ])
+    const generate = vi.fn(modelVrati)
+
+    const outcome = await createTestVariant(UCET, testId, 'easier', { generate })
+    expect(outcome).toMatchObject({ replaced: 0, generated: 1, kept: 1 })
+    expect(generate).toHaveBeenCalledTimes(1)
+
+    const ids = (await loadTestItems(UCET, outcome.testId)).map((item) => item.questionId)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids[0]).not.toBe(lehci)
+    expect(ids[1]).toBe(lehci)
+  })
+
   it('na hranici obtížnosti ponechá původní otázku', async () => {
     const { topicId, gradeId } = await seedTopic()
     const templateId = await seedTemplate()
@@ -373,7 +401,11 @@ describe('API verze písemky', () => {
     const response = await POST(jsonReq('/api/tests/variant', 'POST', { testId, direction: 'harder' }))
     expect(response.status).toBe(200)
     const events = await readEvents(response)
-    expect(events[0]).toMatchObject({ type: 'start', total: 1 })
+    // Id kopie jde už ve `start` — kdyby stream skončil předčasně, klient
+    // kopii i tak najde. V `done` je totéž id.
+    expect(events[0]).toMatchObject({ type: 'start', total: 1, testId: expect.any(String) })
+    expect(events[0]!.testId).not.toBe(testId)
     expect(events.at(-1)).toMatchObject({ type: 'done', replaced: 1, generated: 0, kept: 0 })
+    expect(events.at(-1)!.testId).toBe(events[0]!.testId)
   })
 })

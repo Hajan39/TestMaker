@@ -237,13 +237,17 @@ test.describe('verze písemky ve skladači', () => {
     return id
   }
 
-  /** Podvrhne NDJSON stream `/api/tests/variant`: start → progress → done, s novým id. */
-  async function mockTestVariant(page: Page, newTestId: string): Promise<void> {
+  /**
+   * Podvrhne NDJSON stream `/api/tests/variant`: start (už s id kopie) →
+   * progress → done. S `bezDone` stream skončí dřív — jako když platforma
+   * funkci ukončí po `maxDuration`.
+   */
+  async function mockTestVariant(page: Page, newTestId: string, bezDone = false): Promise<void> {
     await page.route('**/api/tests/variant', async (route) => {
       const events = [
-        { type: 'start', total: 1 },
-        { type: 'progress', done: 1, total: 1 },
-        { type: 'done', testId: newTestId, replaced: 0, generated: 1, kept: 0 },
+        { type: 'start', total: 2, testId: newTestId },
+        { type: 'progress', done: 1, total: 2 },
+        ...(bezDone ? [] : [{ type: 'done', testId: newTestId, replaced: 0, generated: 2, kept: 0 }]),
       ]
       await route.fulfill({
         status: 200,
@@ -265,6 +269,20 @@ test.describe('verze písemky ve skladači', () => {
 
     await expect(page).toHaveURL(new RegExp(`/tests/${novaId}$`))
     await expect(page.getByText('Lehčí verze písemky je hotová.')).toBeVisible()
+  })
+
+  test('stream bez závěru otevře rozpracovanou kopii s upozorněním', async ({ page }) => {
+    const title = `E2E useknutá verze ${Date.now()}`
+    const testId = await createTest(page.request, title)
+    const novaId = await createTest(page.request, `${title} – částečná kopie`)
+    await mockTestVariant(page, novaId, true)
+
+    await page.goto(`/tests/${testId}`)
+    await page.getByRole('button', { name: 'Verze písemky' }).click()
+    await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
+
+    await expect(page).toHaveURL(new RegExp(`/tests/${novaId}$`))
+    await expect(page.getByText(/dokončená jen částečně/)).toBeVisible()
   })
 
   test('neuložené změny nabídnou uložení místo požadavku', async ({ page }) => {

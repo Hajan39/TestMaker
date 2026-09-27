@@ -39,6 +39,7 @@ export function TestBuilder({
   gradeLabel,
   backTopic,
   role,
+  ai,
 }: {
   topics: PickerTopic[]
   templates: Template[]
@@ -52,6 +53,12 @@ export function TestBuilder({
   backTopic?: { id: string; name: string } | null
   /** Role přihlášené osoby — náhled verzi písemky nesmí vůbec vidět. */
   role?: Role
+  /**
+   * Je nastavené generování (`aiStatus()` ze stránky)? Bez modelu verze
+   * písemky vzniknout nemůže — nabídka to řekne místo tlačítek, která by
+   * skončila chybou.
+   */
+  ai: { configured: boolean; problems: string[] }
 }) {
   const router = useRouter()
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
@@ -383,6 +390,7 @@ export function TestBuilder({
           {savedId && role !== 'nahled' ? (
             <TestVariantMenu
               testId={savedId}
+              ai={ai}
               dirty={dirty}
               onDirty={() => setError('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
             />

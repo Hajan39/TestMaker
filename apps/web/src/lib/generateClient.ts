@@ -72,7 +72,8 @@ export async function generateQuestionsStream(
 export type TestVariantDirection = 'easier' | 'harder'
 
 export type TestVariantEvent =
-  | { type: 'start'; total: number }
+  /** `testId` je id kopie — posílá se hned, aby kopie neosiřela, kdyby stream skončil předčasně. */
+  | { type: 'start'; total: number; testId: string }
   | { type: 'progress'; done: number; total: number }
   | { type: 'done'; testId: string; replaced: number; generated: number; kept: number }
   | { type: 'error'; message: string }

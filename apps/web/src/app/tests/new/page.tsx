@@ -3,6 +3,7 @@ import { loadPickerTopics } from '@/lib/questionPicker'
 import { loadTemplates } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
 import { ucetStranky } from '@/lib/uzivatel'
+import { aiStatus } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Nový test – TestMaker' }
@@ -12,7 +13,14 @@ export default async function NewTestPage() {
   const [topics, templates] = await Promise.all([loadPickerTopics(ucet), loadTemplates(ucet)])
   return (
     <PageShell>
-      <TestBuilder topics={topics} templates={templates} test={null} items={[]} role={ucet.role} />
+      <TestBuilder
+        topics={topics}
+        templates={templates}
+        test={null}
+        items={[]}
+        role={ucet.role}
+        ai={aiStatus()}
+      />
     </PageShell>
   )
 }

@@ -1,12 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AI_QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
+import type { Question, QuestionType } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
-
-/** Zapamatovaná odpověď na „je model nakonfigurovaný?“ — ptáme se jednou za načtení stránky. */
-let configuredCache: boolean | null = null
 
 /**
  * Hlášky na hranici obtížnosti — musí souhlasit s `variantDifficultyLimitMessage`
@@ -23,40 +20,21 @@ const LIMIT_MESSAGE: Record<'easier' | 'harder', string> = {
  * u „Přegenerovat" na kartě otázky.
  *
  * Na rozdíl od přegenerování originál zůstává beze změny; verze je nová
- * karta navíc. `available` kopíruje `useRegenerateQuestion`: bez modelu nebo
- * u typu, který AI negeneruje, se akce vůbec nenabízí.
+ * karta navíc. Jestli se akce vůbec nabídne (model nastavený, typ, který AI
+ * generuje), rozhoduje `useRegenerateQuestion` v `RegenerateButton` — verze
+ * sedí v témže menu a bez něj se neukáže.
  */
 export function useQuestionVariant(
   question: { id: string; type: QuestionType; difficulty: 1 | 2 | 3 },
   onCreated?: (question: Question) => void,
 ): {
-  available: boolean
   busyDirection: 'easier' | 'harder' | null
   /** Proč v tomhle směru verze nejde vytvořit — `null`, když jde. */
   disabledReason: (direction: 'easier' | 'harder') => string | null
   create: (direction: 'easier' | 'harder') => Promise<void>
 } {
   const router = useRouter()
-  const [configured, setConfigured] = useState<boolean | null>(configuredCache)
   const [busyDirection, setBusyDirection] = useState<'easier' | 'harder' | null>(null)
-
-  useEffect(() => {
-    if (configuredCache !== null) return
-    let platne = true
-    fetch('/api/questions/regenerate')
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { configured?: boolean } | null) => {
-        if (typeof data?.configured !== 'boolean') return
-        configuredCache = data.configured
-        if (platne) setConfigured(data.configured)
-      })
-      .catch(() => {})
-    return () => {
-      platne = false
-    }
-  }, [])
-
-  const podporovanyTyp = (AI_QUESTION_TYPES as readonly string[]).includes(question.type)
 
   function disabledReason(direction: 'easier' | 'harder'): string | null {
     const cilova = question.difficulty + (direction === 'easier' ? -1 : 1)
@@ -92,5 +70,5 @@ export function useQuestionVariant(
     }
   }
 
-  return { available: configured === true && podporovanyTyp, busyDirection, disabledReason, create }
+  return { busyDirection, disabledReason, create }
 }

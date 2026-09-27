@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
   plural,
   toast,
@@ -29,10 +30,13 @@ const SMER_LABEL: Record<TestVariantDirection, string> = {
  */
 export function TestVariantMenu({
   testId,
+  ai,
   dirty,
   onDirty,
 }: {
   testId: string
+  /** Stav generování ze stránky — bez modelu nabídka jen vysvětlí proč. */
+  ai: { configured: boolean; problems: string[] }
   dirty: boolean
   /** Zavolá se, když je test rozpracovaný — verzi jde vytvořit až po uložení. */
   onDirty: () => void
@@ -48,22 +52,35 @@ export function TestVariantMenu({
     }
     setBusy(direction)
     setProgress(null)
+    // Id kopie přichází hned v události `start`. Kdyby průběh spadl dřív než
+    // `done` (server funkci po limitu ukončí, vypadne síť), kopie už existuje
+    // a jen by osiřela — učitelka se na ni proto přesměruje s upozorněním.
+    const konec: { kopie?: string; hotovo?: TestVariantEvent & { type: 'done' }; chyba?: string } = {}
+    const otevriCastecnou = (kopie: string) => {
+      // Déle než běžná hláška: přesměrování na kopii chvíli trvá a upozornění
+      // nesmí zmizet dřív, než se stránka s kopií vůbec ukáže.
+      toast.warning('Verze písemky je dokončená jen částečně — zkontroluj otázky.', { duration: 15_000 })
+      router.push(`/tests/${kopie}`)
+    }
     try {
-      const konec: { hotovo?: TestVariantEvent & { type: 'done' }; chyba?: string } = {}
       await createTestVariantStream(testId, direction, (event) => {
-        if (event.type === 'start') setProgress({ done: 0, total: event.total })
-        else if (event.type === 'progress') setProgress({ done: event.done, total: event.total })
+        if (event.type === 'start') {
+          konec.kopie = event.testId
+          setProgress({ done: 0, total: event.total })
+        } else if (event.type === 'progress') setProgress({ done: event.done, total: event.total })
         else if (event.type === 'done') konec.hotovo = event
         else if (event.type === 'error') konec.chyba = event.message
       })
 
       if (konec.chyba) {
         toast.error(konec.chyba)
+        if (konec.kopie) otevriCastecnou(konec.kopie)
         return
       }
       const hotovo = konec.hotovo
       if (!hotovo) {
-        toast.error('Verzi písemky se nepodařilo vytvořit.')
+        if (konec.kopie) otevriCastecnou(konec.kopie)
+        else toast.error('Verzi písemky se nepodařilo vytvořit.')
         return
       }
 
@@ -96,6 +113,7 @@ export function TestVariantMenu({
       router.push(`/tests/${hotovo.testId}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Verzi písemky se nepodařilo vytvořit.')
+      if (konec.kopie && !konec.hotovo) otevriCastecnou(konec.kopie)
     } finally {
       setBusy(null)
       setProgress(null)
@@ -110,9 +128,17 @@ export function TestVariantMenu({
           {!busy ? <ChevronDown className="size-3.5" /> : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className={ai.configured ? undefined : 'max-w-xs'}>
+        {/* Bez modelu verze vzniknout nemůže (vznikají i nové otázky), takže
+            se místo pádu uprostřed průběhu hned řekne proč. */}
+        {!ai.configured ? (
+          <DropdownMenuLabel className="text-xs font-normal text-fg-soft">
+            Verze písemky potřebuje generování, které není nastavené.
+            {ai.problems.length > 0 ? ` ${ai.problems.join(' ')}` : ' Správce ho zapne v nastavení AI (AI_MODELS).'}
+          </DropdownMenuLabel>
+        ) : null}
         {(['easier', 'harder'] as const).map((direction) => (
-          <DropdownMenuItem key={direction} onSelect={() => void run(direction)}>
+          <DropdownMenuItem key={direction} disabled={!ai.configured} onSelect={() => void run(direction)}>
             {SMER_LABEL[direction]}
           </DropdownMenuItem>
         ))}

@@ -502,10 +502,14 @@ export async function createVariant(
     { signal: options.signal },
   )
 
-  const variant = result.questions[0]
-  if (!variant) {
+  const generated = result.questions[0]
+  if (!generated) {
     throw new Error('Model nevrátil použitelnou verzi. Zkus to prosím znovu.')
   }
+  // Obtížnost se ukládá ta, o kterou se žádalo, ne ta, kterou model napsal —
+  // model ji občas vrátí nepozměněnou a „lehčí verze" by pak v bance stála
+  // na stejném stupni jako originál.
+  const variant = { ...generated, difficulty: targetDifficulty as 1 | 2 | 3 }
 
   // Kořen je předchůdce, ne otázka sama — verze verze se váže na kořen, jinak
   // by se verze skládaly do řetězu.

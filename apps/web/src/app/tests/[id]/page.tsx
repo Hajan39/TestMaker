@@ -6,6 +6,7 @@ import { loadPickerTopics } from '@/lib/questionPicker'
 import { loadTemplates, loadTest, loadTestItems } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
 import { skola, ucetStranky } from '@/lib/uzivatel'
+import { aiStatus } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,7 @@ export default async function TestPage({
         gradeLabel={gradeLabel}
         backTopic={backTopic}
         role={ucet.role}
+        ai={aiStatus()}
       />
     </PageShell>
   )
