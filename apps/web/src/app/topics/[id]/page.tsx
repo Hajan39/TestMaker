@@ -7,7 +7,7 @@ import { RememberClass } from '@/components/RememberClass'
 import { MATERIALY, OTAZKY, StatRow, plural } from '@testmaker/ui'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
-import { countQuestions, loadQuestions } from '@/lib/questions'
+import { countQuestions, loadQuestions, loadVariantLinks } from '@/lib/questions'
 import { loadTemplates, loadTestUsageForQuestions } from '@/lib/tests'
 import { defaultTemplateId } from '@/components/test-builder/defaults'
 import { isUsableMaterial } from '@/lib/materials'
@@ -81,6 +81,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
     questionList.items.map((question) => question.id),
   )
 
+  // Lehčí a těžší verze podle kořene — pro řádek „Verze: …" na kartě otázky.
+  // Kořeny (ne otázky samotné): karta verze potřebuje najít i verze svých
+  // sourozenců, ne jen svoje vlastní, a `loadVariantLinks` hledá podle
+  // `variantOf`, ne podle `id`.
+  const rootIds = [...new Set(questionList.items.map((question) => question.variantOf ?? question.id))]
+  const variantLinks = await loadVariantLinks(ucet, rootIds)
+
   return (
     <div className="space-y-5">
       <RememberClass gradeId={topic.gradeId} userId={ucet.userId} />
@@ -127,6 +134,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         questions={questionList.items}
         usage={usage}
         rejectedCount={rejectedCount}
+        variantLinks={variantLinks}
         listTruncated={questionList.truncated}
         listLimit={questionList.limit}
         lowContent={topic.lowContent}

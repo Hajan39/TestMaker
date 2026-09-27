@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Question, QuestionType } from '@testmaker/core/schema'
+import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
 import {
   Button,
@@ -37,6 +37,13 @@ export interface TestUsage {
   title: string
 }
 
+/** Jedna verze kořenové otázky, jak ji vrací `loadVariantLinks`. */
+export interface VariantLink {
+  id: string
+  difficulty: 1 | 2 | 3
+  status: QuestionStatus
+}
+
 export interface TopicQuestionsHandle {
   /**
    * Otevře formulář „Nová otázka" zvenčí — z prázdného stavu tématu
@@ -68,8 +75,13 @@ export const TopicQuestions = forwardRef<
      * Seznam smazaných karet se dotahuje zvlášť, až po zapnutí přepínače.
      */
     rejectedCount: number
+    /**
+     * Lehčí a těžší verze podle kořene (`loadVariantLinks`), pro řádek
+     * „Verze: …" na kartě. Klíč je id kořenové otázky, ne otázky samotné.
+     */
+    variantLinks: Record<string, VariantLink[]>
   }
->(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount }, ref) {
+>(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount, variantLinks }, ref) {
   const router = useRouter()
   const muzeMenit = useMuzeMenit()
   const [creating, setCreating] = useState(false)
@@ -83,6 +95,32 @@ export const TopicQuestions = forwardRef<
   // Otázka, u které se právě maže — chrání proti dvojímu kliknutí, než dojde
   // odpověď ze serveru (smazání je optimistické, karta zmizí ještě dřív).
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
+  // Lehčí nebo těžší verze vzniklá v téhle relaci — objeví se hned, bez
+  // čekání na `router.refresh()` (ten navíc nemusí nic nového ukázat, když
+  // se odpověď serveru v e2e testu jen podvrhuje). Otázky, které se mezitím
+  // objevily i v `questions` (po skutečném obnovení stránky), se odtud
+  // vyřadí, ať se karta nezdvojí.
+  const [freshVersions, setFreshVersions] = useState<Question[]>([])
+  // Karta, na kterou právě odkázal řádek „Verze: …" nebo která právě vznikla
+  // jako nová verze — krátce zvýrazněná, ať je vidět, že se posun povedl.
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  // Id karty, ke které se má po překreslení posunout pohled — dvoukrokové
+  // (nastavit stav, pak v efektu najít prvek v DOM), protože hned po
+  // `setFreshVersions` nová karta v DOM ještě není.
+  const [pendingScrollId, setPendingScrollId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!pendingScrollId) return
+    const id = pendingScrollId
+    setPendingScrollId(null)
+    const el = document.querySelector(`[data-question-id="${id}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedId(id)
+    const timeout = window.setTimeout(
+      () => setHighlightedId((current) => (current === id ? null : current)),
+      1500,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [pendingScrollId])
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
   // Zaškrtnuté otázky do nového testu. Smazaná (i přegenerovaná) karta z výběru
   // sama zmizí — výběr se počítá jen proti otázkám, které pořád existují
@@ -121,17 +159,73 @@ export const TopicQuestions = forwardRef<
   // přímo z něj — ten se při obnovení karty zmenšuje sám.
   const deletedCount = deletedQuestions?.length ?? rejectedCount + deletedDelta
 
+  // Verze vzniklé v téhle relaci se přidávají k otázkám ze serveru — po
+  // skutečném obnovení stránky se objeví i tam a odtud se pak vyřadí podle
+  // id, ať se karta nezdvojí.
+  const allQuestions = useMemo(() => {
+    const known = new Set(questions.map((question) => question.id))
+    return [...freshVersions.filter((question) => !known.has(question.id)), ...questions]
+  }, [questions, freshVersions])
+
   const sorted = useMemo(
     () =>
-      questions
+      allQuestions
         .slice()
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)),
-    [questions],
+    [allQuestions],
   )
 
   // Smazané (nebo přegenerované) karty se z tématu odečítají úplně — na
   // hlavičce i na nabídce typů v filtru; filtr sám počet dál nemění.
   const active = useMemo(() => sorted.filter((question) => !hiddenIds.has(question.id)), [sorted, hiddenIds])
+
+  // Kořen podle id — kartě verze dovolí najít vlastní kořen (`variantOf`) i
+  // s jeho obtížností, ať řádek „Verze: …" pozná, co je oproti ní lehčí nebo
+  // těžší. `allQuestions`, ne `active`: kořen zůstává ve hře, i kdyby jeho
+  // vlastní kartu zrovna schovalo optimistické smazání nebo přegenerování.
+  const byId = useMemo(() => new Map(allQuestions.map((question) => [question.id, question])), [allQuestions])
+
+  // `variantLinks` ze serveru (`loadVariantLinks`) doplněné o verze vzniklé
+  // v téhle relaci — ty v odpovědi serveru ještě být nemusí (u e2e testů
+  // vůbec, tam se odpověď na vytvoření verze jen podvrhuje).
+  const mergedVariantLinks = useMemo(() => {
+    const merged: Record<string, VariantLink[]> = {}
+    for (const [rootId, links] of Object.entries(variantLinks)) merged[rootId] = [...links]
+    for (const question of freshVersions) {
+      if (!question.variantOf) continue
+      const list = merged[question.variantOf] ?? (merged[question.variantOf] = [])
+      if (!list.some((link) => link.id === question.id)) {
+        list.push({ id: question.id, difficulty: question.difficulty, status: question.status })
+      }
+    }
+    return merged
+  }, [variantLinks, freshVersions])
+
+  /**
+   * Verze kořene otázky (nebo otázky samotné, je-li kořen), pro řádek
+   * „Verze: …" na kartě. Zamítnuté (smazané) verze se nenabízejí — jejich
+   * karta v seznamu není, odkaz by nikam nevedl.
+   */
+  function versionsFor(question: Question): { id: string; label: 'lehčí' | 'těžší' }[] {
+    const rootId = question.variantOf ?? question.id
+    const entries: { id: string; difficulty: 1 | 2 | 3 }[] = []
+    if (rootId !== question.id) {
+      const root = byId.get(rootId)
+      if (root) entries.push({ id: root.id, difficulty: root.difficulty })
+    }
+    for (const link of mergedVariantLinks[rootId] ?? []) {
+      if (link.id === question.id || link.status === 'rejected') continue
+      entries.push({ id: link.id, difficulty: link.difficulty })
+    }
+    return entries
+      .filter((entry) => entry.difficulty !== question.difficulty)
+      .map((entry) => ({ id: entry.id, label: entry.difficulty < question.difficulty ? 'lehčí' : 'těžší' }))
+  }
+
+  /** Posune pohled na kartu a krátce ji zvýrazní — z řádku „Verze: …" i po vytvoření nové verze. */
+  function jumpToQuestion(id: string) {
+    setPendingScrollId(id)
+  }
 
   // Filtr typu nabízí jen typy, které v tématu opravdu jsou — jinak by
   // učitelka zvolila „Doplňovačka“ a dostala prázdno, i kdyby v tématu žádná
@@ -482,7 +576,15 @@ export const TopicQuestions = forwardRef<
       ) : (
         <ul className="mt-3 divide-y divide-line-soft">
           {visible.map((question) => (
-            <li key={question.id} data-question-id={question.id} className="py-3">
+            <li
+              key={question.id}
+              data-question-id={question.id}
+              className={
+                highlightedId === question.id
+                  ? 'rounded-[var(--radius-inner)] bg-brand-bg py-3 transition-colors'
+                  : 'py-3 transition-colors'
+              }
+            >
               <QuestionCard
                 topicId={topic.id}
                 question={question}
@@ -491,6 +593,7 @@ export const TopicQuestions = forwardRef<
                 selected={selectedIds.has(question.id)}
                 busy={busyIds.has(question.id)}
                 usage={usage[question.id]}
+                versions={versionsFor(question)}
                 onEditStart={() => setEditingId(question.id)}
                 onEditCancel={() => setEditingId(null)}
                 onEditSaved={() => {
@@ -499,6 +602,11 @@ export const TopicQuestions = forwardRef<
                 }}
                 onToggleSelect={() => toggleSelection(question.id)}
                 onRegenerateDone={() => setHiddenIds((current) => new Set(current).add(question.id))}
+                onVariantCreated={(created) => {
+                  setFreshVersions((current) => [created, ...current])
+                  jumpToQuestion(created.id)
+                }}
+                onJumpToVersion={jumpToQuestion}
                 onRemove={() => void remove(question)}
               />
             </li>
@@ -536,11 +644,14 @@ export const TopicQuestions = forwardRef<
                     selected={false}
                     busy={false}
                     usage={undefined}
+                    versions={[]}
                     onEditStart={() => {}}
                     onEditCancel={() => {}}
                     onEditSaved={() => {}}
                     onToggleSelect={() => {}}
                     onRegenerateDone={() => {}}
+                    onVariantCreated={() => {}}
+                    onJumpToVersion={() => {}}
                     onRemove={() => {}}
                     deleted
                     restoring={restoringIds.has(question.id)}

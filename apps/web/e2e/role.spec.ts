@@ -129,6 +129,9 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
   await expect(page.getByRole('button', { name: 'Upravit', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Přegenerovat', exact: true })).toHaveCount(0)
+  // Šipka vedle „Přegenerovat" nese i „Lehčí verze"/„Těžší verze" — celé menu
+  // je pryč, tvorbu verzí tedy nahled nemá odkud spustit.
+  await expect(page.getByRole('button', { name: 'Přegenerovat s důvodem' })).toHaveCount(0)
 
   // Zaškrtávátko „Vybrat do testu“ a lišta výběru jsou taky akce ke změně —
   // náhled do banky nic nepřidává, ani do ní vybírat otázky nemá jak.

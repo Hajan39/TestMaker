@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import type { Question } from '@testmaker/core/schema'
 import { REGENERATE_REASONS, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
 import {
   BusyButton,
@@ -14,6 +15,7 @@ import {
   Textarea,
 } from '@testmaker/ui'
 import { useRegenerateQuestion } from '@/components/useRegenerateQuestion'
+import { useQuestionVariant } from '@/components/useQuestionVariant'
 
 const DUVODY = Object.entries(REGENERATE_REASONS) as [
   RegenerateReason,
@@ -37,14 +39,20 @@ const DUVODY = Object.entries(REGENERATE_REASONS) as [
 export function RegenerateButton({
   questionId,
   type,
+  difficulty,
   onDone,
+  onVariantCreated,
 }: {
   questionId: string
   type: QuestionType
+  difficulty: 1 | 2 | 3
   /** Zavolá se po úspěšné náhradě; bez něj se jen obnoví stránka. */
   onDone?: () => void
+  /** Zavolá se po vzniku lehčí nebo těžší verze — nová karta se má hned objevit a posunout do zorného pole. */
+  onVariantCreated?: (question: Question) => void
 }) {
   const { available, busy, run } = useRegenerateQuestion(questionId, type, onDone)
+  const variant = useQuestionVariant({ id: questionId, type, difficulty }, onVariantCreated)
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   if (!available) return null
@@ -101,6 +109,27 @@ export function RegenerateButton({
               {label}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          {(['easier', 'harder'] as const).map((direction) => {
+            const label = direction === 'easier' ? 'Lehčí verze' : 'Těžší verze'
+            const duvod = variant.disabledReason(direction)
+            return (
+              <DropdownMenuItem
+                key={direction}
+                aria-label={label}
+                disabled={duvod !== null}
+                onSelect={() => {
+                  setOpen(false)
+                  void variant.create(direction)
+                }}
+              >
+                <div className="flex flex-col">
+                  <span>{label}</span>
+                  {duvod ? <span className="text-xs text-fg-muted">{duvod}</span> : null}
+                </div>
+              </DropdownMenuItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

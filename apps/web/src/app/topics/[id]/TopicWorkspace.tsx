@@ -15,7 +15,7 @@ import { announceGeneration } from '@/components/GenerationStatus'
 import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
 import type { GroupMaterial } from '@/components/MaterialRow'
 import { MaterialsStrip, type MaterialsStripHandle } from '@/components/MaterialsStrip'
-import { TopicQuestions, type TestUsage, type TopicQuestionsHandle } from '@/components/TopicQuestions'
+import { TopicQuestions, type TestUsage, type TopicQuestionsHandle, type VariantLink } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
 import { useMuzeMenit } from '@/components/Prava'
@@ -27,6 +27,7 @@ export function TopicWorkspace({
   questions,
   usage,
   rejectedCount,
+  variantLinks,
   listTruncated,
   listLimit,
   lowContent,
@@ -44,6 +45,8 @@ export function TopicWorkspace({
   usage: Record<string, TestUsage[]>
   /** Počet smazaných (zamítnutých) otázek tématu — pro přepínač „Smazané". */
   rejectedCount: number
+  /** Lehčí a těžší verze podle kořene, pro řádek „Verze: …" na kartě otázky. */
+  variantLinks: Record<string, VariantLink[]>
   /** Seznam otázek je useknutý limitem — v tématu jich je víc, než se vypisuje. */
   listTruncated: boolean
   /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
@@ -278,6 +281,7 @@ export function TopicWorkspace({
           questions={shownQuestions}
           usage={usage}
           rejectedCount={rejectedCount}
+          variantLinks={variantLinks}
         />
       </div>
     </div>

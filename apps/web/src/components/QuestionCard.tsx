@@ -23,11 +23,14 @@ export function QuestionCard({
   selected,
   busy,
   usage,
+  versions,
   onEditStart,
   onEditCancel,
   onEditSaved,
   onToggleSelect,
   onRegenerateDone,
+  onVariantCreated,
+  onJumpToVersion,
   onRemove,
   deleted,
   restoring,
@@ -43,11 +46,19 @@ export function QuestionCard({
   busy: boolean
   /** Testy, ve kterých otázka už je — jen ty viditelné volající. */
   usage: TestUsage[] | undefined
+  /**
+   * Lehčí a těžší verze kořene, ke kterému otázka patří (nebo je jím sama) —
+   * pro řádek „Verze: …". Prázdné pole, když otázka žádné verze nemá.
+   * Vidí ho i `nahled`, jen tvorbu verzí ne.
+   */
+  versions: { id: string; label: 'lehčí' | 'těžší' }[]
   onEditStart: () => void
   onEditCancel: () => void
   onEditSaved: () => void
   onToggleSelect: () => void
   onRegenerateDone: () => void
+  onVariantCreated: (question: Question) => void
+  onJumpToVersion: (id: string) => void
   onRemove: () => void
   /**
    * Karta ze seznamu „Smazané" — tlumená podoba s jediným tlačítkem
@@ -97,13 +108,20 @@ export function QuestionCard({
       <div className="min-w-0 flex-1">
         <QuestionPreview question={question} />
         <TestUsageLabel usage={usage} />
+        <VersionsLabel versions={versions} onJump={onJumpToVersion} />
       </div>
       {muzeMenit ? (
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Button size="sm" variant="ghost" onClick={onEditStart}>
             Upravit
           </Button>
-          <RegenerateButton questionId={question.id} type={question.type} onDone={onRegenerateDone} />
+          <RegenerateButton
+            questionId={question.id}
+            type={question.type}
+            difficulty={question.difficulty}
+            onDone={onRegenerateDone}
+            onVariantCreated={onVariantCreated}
+          />
           <Button
             size="sm"
             variant="ghost"
@@ -134,6 +152,41 @@ function TestUsageLabel({ usage }: { usage: TestUsage[] | undefined }) {
         {prvni!.title}
       </Link>
       {zbytek.length > 0 ? ` a další ${zbytek.length}` : ''}
+    </p>
+  )
+}
+
+/**
+ * Drobný řádek „Verze: lehčí · těžší" pod náhledem otázky — na kartě kořene
+ * i na kartě kterékoli jeho verze. Odkazy neopouštějí stránku (verze je karta
+ * ve stejném seznamu), jen na ni posunou a krátce ji zvýrazní (`onJump`).
+ *
+ * Viditelný i pro `nahled` — na rozdíl od tlačítek, které verzi vytvářejí,
+ * tenhle řádek jen ukazuje, co už existuje.
+ */
+function VersionsLabel({
+  versions,
+  onJump,
+}: {
+  versions: { id: string; label: 'lehčí' | 'těžší' }[]
+  onJump: (id: string) => void
+}) {
+  if (versions.length === 0) return null
+  return (
+    <p className="mt-1 text-xs text-fg-muted">
+      Verze:{' '}
+      {versions.map((version, index) => (
+        <span key={version.id}>
+          {index > 0 ? ' · ' : ''}
+          <button
+            type="button"
+            className="hover:text-brand hover:underline"
+            onClick={() => onJump(version.id)}
+          >
+            {version.label}
+          </button>
+        </span>
+      ))}
     </p>
   )
 }
