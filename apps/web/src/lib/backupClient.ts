@@ -70,12 +70,13 @@ export function poctyVZaloze(zaloha: Zaloha): Record<string, number> {
   return pocty
 }
 
-/** Odkaz materiálu na originál téhož obsahu; dopisuje se, až jsou všechny materiály. */
-interface Odkaz {
-  id: string
-  duplicateOfId: string
-  duplicateScore: number | null
-}
+/**
+ * Odkaz na jiný řádek téže tabulky — materiálu na originál téhož obsahu,
+ * verze otázky na kořen. Dopisuje se, až je v cíli celá tabulka.
+ */
+type Odkaz =
+  | { id: string; duplicateOfId: string; duplicateScore: number | null }
+  | { id: string; variantOf: string }
 
 /**
  * Nahraje zálohu zpátky do knihovny. Slučuje se podle `id`, nic se nemaže,
@@ -89,7 +90,7 @@ export async function obnovZeZalohy(
   onPrubeh?: (prubeh: Prubeh) => void,
 ): Promise<Record<string, number>> {
   const navezeno: Record<string, number> = {}
-  const odkazy: Odkaz[] = []
+  const odkazy = new Map<string, Odkaz[]>()
 
   for (const [tabulka, radky] of Object.entries(zaloha.tabulky)) {
     if (!Array.isArray(radky) || radky.length === 0) {
@@ -101,16 +102,23 @@ export async function obnovZeZalohy(
     for (const davka of nakrajej(radky)) {
       const odpoved = await posli({ tabulka, radky: davka })
       hotovo += Number(odpoved.zapsano ?? 0)
-      if (Array.isArray(odpoved.odkazy)) odkazy.push(...(odpoved.odkazy as Odkaz[]))
+      if (Array.isArray(odpoved.odkazy) && odpoved.odkazy.length > 0) {
+        const tabulkove = odkazy.get(tabulka) ?? []
+        tabulkove.push(...(odpoved.odkazy as Odkaz[]))
+        odkazy.set(tabulka, tabulkove)
+      }
       onPrubeh?.({ tabulka, hotovo, celkem: radky.length })
     }
     navezeno[tabulka] = hotovo
   }
 
-  // Materiál označený jako duplicita ukazuje na jiný materiál; ten v cíli
-  // mohl při zápisu po dávkách ještě chybět, takže se odkazy dopisují až teď.
-  for (let i = 0; i < odkazy.length; i += DAVKA) {
-    await posli({ tabulka: 'materials', odkazy: odkazy.slice(i, i + DAVKA) })
+  // Materiál označený jako duplicita ukazuje na jiný materiál, verze otázky
+  // na svůj kořen; ten v cíli mohl při zápisu po dávkách ještě chybět, takže
+  // se odkazy dopisují až teď.
+  for (const [tabulka, seznam] of odkazy) {
+    for (let i = 0; i < seznam.length; i += DAVKA) {
+      await posli({ tabulka, odkazy: seznam.slice(i, i + DAVKA) })
+    }
   }
 
   return navezeno

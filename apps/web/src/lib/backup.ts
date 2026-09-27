@@ -150,12 +150,14 @@ function prepis(nazev: NazevTabulky): Record<string, SQL> {
   return set
 }
 
-/** Odkaz materiálu na originál téhož obsahu — dopisuje se až nakonec. */
-export interface OdkazDuplicity {
-  id: string
-  duplicateOfId: string
-  duplicateScore: number | null
-}
+/**
+ * Odkaz řádku na jiný řádek téže tabulky — dopisuje se až nakonec, kdy už
+ * jsou v cíli oba. Materiál ukazuje na originál téhož obsahu
+ * (`duplicate_of_id`), otázka na kořen svých verzí (`variant_of`).
+ */
+export type OdkazDuplicity =
+  | { id: string; duplicateOfId: string; duplicateScore: number | null }
+  | { id: string; variantOf: string }
 
 /**
  * Rozdělí dávku tak, aby ani jeden `insert` nebyl neúnosně velký. Počet řádků
@@ -194,8 +196,8 @@ function odhadniVelikost(row: Radek): number {
 export interface VysledekZapisu {
   zapsano: number
   /**
-   * Odkazy na duplicity, které se musí dopsat, až budou v cíli všechny
-   * materiály — viz `zapisOdkazyDuplicit`.
+   * Odkazy uvnitř tabulky (duplicity materiálů, verze otázek), které se musí
+   * dopsat, až bude v cíli celá tabulka — viz `zapisOdkazyDuplicit`.
    */
   odkazy: OdkazDuplicity[]
 }
@@ -203,9 +205,11 @@ export interface VysledekZapisu {
 /**
  * Zapíše (nebo srovná) řádky jedné tabulky.
  *
- * Materiály mají zvláštnost: `duplicate_of_id` ukazuje na jiný materiál v téže
- * tabulce, takže při zápisu po dávkách originál často ještě neexistuje. Odkazy
- * se proto v prvním průchodu vynechají a vrátí se volajícímu, aby je po
+ * Materiály a otázky mají zvláštnost: `duplicate_of_id` (materiál) a
+ * `variant_of` (verze otázky) ukazují na jiný řádek v téže tabulce, takže při
+ * zápisu po dávkách seřazených podle `id` originál často ještě neexistuje —
+ * verze, jejíž id se řadí před kořen, by spadla na cizím klíči. Odkazy se
+ * proto v prvním průchodu vynechají a vrátí se volajícímu, aby je po
  * dokončení celé tabulky dopsal.
  */
 export async function zapisRadky(
@@ -251,6 +255,10 @@ export async function zapisRadky(
         duplicateScore: typeof hodnoty.duplicateScore === 'number' ? hodnoty.duplicateScore : null,
       })
       hodnoty.duplicateOfId = null
+    }
+    if (nazev === 'questions' && typeof hodnoty.variantOf === 'string') {
+      odkazy.push({ id: hodnoty.id, variantOf: hodnoty.variantOf })
+      hodnoty.variantOf = null
     }
     return hodnoty
   })
@@ -326,19 +334,41 @@ function popisChyby(chyba: unknown): string {
 }
 
 /**
- * Dopíše odkazy materiálů na originál téhož obsahu. Odkaz na materiál, který
- * v cíli není (nepřenesl se, nebo se mezitím smazal), se tiše přeskočí —
- * lepší materiál navíc než spadlý přenos kvůli cizímu klíči.
+ * Dopíše odkazy uvnitř tabulky: materiálu na originál téhož obsahu a verze
+ * otázky na její kořen. Odkaz na řádek, který v cíli není (nepřenesl se,
+ * nebo se mezitím smazal), se tiše přeskočí — lepší materiál navíc nebo
+ * verze bez odkazu než spadlý přenos kvůli cizímu klíči.
+ *
+ * Obě strany odkazu musí patřit škole toho, kdo obnovuje: odkazy posílá
+ * prohlížeč, takže bez podmínky na školu by šlo přepsat řádek jiné školy.
  */
-export async function zapisOdkazyDuplicit(db: BackupDb, odkazy: OdkazDuplicity[]): Promise<number> {
+export async function zapisOdkazyDuplicit(
+  db: BackupDb,
+  odkazy: OdkazDuplicity[],
+  rozsah: { schoolId: string },
+): Promise<number> {
   let zapsano = 0
   for (const odkaz of odkazy) {
-    const vysledek = await db.run(sql`
-      update materials
-      set duplicate_of_id = ${odkaz.duplicateOfId}, duplicate_score = ${odkaz.duplicateScore}
-      where id = ${odkaz.id}
-        and exists (select 1 from materials as orig where orig.id = ${odkaz.duplicateOfId})
-    `)
+    const vysledek =
+      'variantOf' in odkaz
+        ? await db.run(sql`
+            update questions
+            set variant_of = ${odkaz.variantOf}
+            where id = ${odkaz.id} and school_id = ${rozsah.schoolId}
+              and exists (
+                select 1 from questions as koren
+                where koren.id = ${odkaz.variantOf} and koren.school_id = ${rozsah.schoolId}
+              )
+          `)
+        : await db.run(sql`
+            update materials
+            set duplicate_of_id = ${odkaz.duplicateOfId}, duplicate_score = ${odkaz.duplicateScore}
+            where id = ${odkaz.id} and school_id = ${rozsah.schoolId}
+              and exists (
+                select 1 from materials as orig
+                where orig.id = ${odkaz.duplicateOfId} and orig.school_id = ${rozsah.schoolId}
+              )
+          `)
     zapsano += Number(vysledek.rowsAffected ?? 0)
   }
   return zapsano

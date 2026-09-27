@@ -126,11 +126,11 @@ async function main() {
     }
     preneseno[nazev] = hotovo
     let dopsano = 0
-    if (odkazy.length > 0) dopsano = await zapisOdkazyDuplicit(cil, odkazy)
+    if (odkazy.length > 0) dopsano = await zapisOdkazyDuplicit(cil, odkazy, { schoolId: skolaId })
     if (zdrojovePocty[nazev] > 0) {
       hotovoRadek(
         `${nazev}: ${hotovo}/${zdrojovePocty[nazev]}` +
-          (odkazy.length > 0 ? ` (duplicity: ${dopsano})` : ''),
+          (odkazy.length > 0 ? ` (${nazev === 'questions' ? 'verze' : 'duplicity'}: ${dopsano})` : ''),
       )
     }
   }

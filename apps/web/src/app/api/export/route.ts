@@ -70,6 +70,17 @@ const davkaSchema = z.union([
       }),
     ),
   }),
+  // Verze otázky ukazuje na svůj kořen; stejně jako duplicity materiálů se
+  // dopisuje, až jsou v cíli všechny otázky.
+  z.object({
+    tabulka: z.literal('questions'),
+    odkazy: z.array(
+      z.object({
+        id: z.string().min(1),
+        variantOf: z.string().min(1),
+      }),
+    ),
+  }),
 ])
 
 /**
@@ -101,7 +112,7 @@ export async function POST(request: Request) {
 
   try {
     if ('odkazy' in davka) {
-      const zapsano = await zapisOdkazyDuplicit(db, davka.odkazy)
+      const zapsano = await zapisOdkazyDuplicit(db, davka.odkazy, { schoolId: ucet.schoolId })
       await zapsatAudit({
         schoolId: ucet.schoolId,
         userId: ucet.userId,

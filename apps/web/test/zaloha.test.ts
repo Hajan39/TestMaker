@@ -173,6 +173,32 @@ describe('záloha a obnova', () => {
     expect(kopie!.duplicateScore).toBeCloseTo(0.97)
   })
 
+  it('verze otázky v dřívější dávce než její kořen se obnoví i s odkazem', async () => {
+    const { topicId } = await nasypKnihovnu()
+    // Záloha i obnova jdou po dávkách seřazených podle `id`. Id verze se řadí
+    // úplně na začátek a id kořene úplně na konec, a mezi ně se vejde přes
+    // dvě stě dalších otázek — verze tak přijde v první dávce, kořen až
+    // v druhé, a bez dopisování odkazu by zápis spadl na cizím klíči.
+    for (let i = 0; i < 210; i++) await seedQuestion(topicId, { prompt: `Výplň ${i}` })
+    const korenId = await seedQuestion(topicId, { prompt: 'Kořen verzí' })
+    const verzeId = await seedQuestion(topicId, { prompt: 'Lehčí verze kořene' })
+    await db.update(questions).set({ id: '~koren' }).where(eq(questions.id, korenId))
+    await db.update(questions).set({ id: '!verze', variantOf: '~koren', difficulty: 1 }).where(eq(questions.id, verzeId))
+
+    const text = await stahni()
+    const radky = prectiZalohu(text).tabulky.questions as { id: string }[]
+    expect(radky[0]!.id).toBe('!verze')
+    expect(radky.at(-1)!.id).toBe('~koren')
+    expect(radky.length).toBeGreaterThan(200)
+
+    await vyprazdni()
+    await obnovPresApi(text)
+
+    const [verze] = await db.select().from(questions).where(eq(questions.id, '!verze'))
+    expect(verze!.variantOf).toBe('~koren')
+    expect(verze!.difficulty).toBe(1)
+  })
+
   it('opakovaná obnova nic nezdvojí', async () => {
     await nasypKnihovnu()
     const pred = await spocitej(db, { schoolId: UCET.schoolId })
