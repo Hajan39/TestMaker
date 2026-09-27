@@ -4,7 +4,7 @@ import { auditLog, db, schools, users } from '@/db'
 import { loadAiQuality } from '@/lib/aiQuality'
 import { countJobs } from '@/lib/jobs'
 import { aiStatus } from '@/lib/ai'
-import { loadPromptRules } from '@/lib/promptRules'
+import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
 import { ucetStranky } from '@/lib/uzivatel'
 import { SpravaScreen } from './SpravaScreen'
@@ -94,6 +94,7 @@ export default async function SpravaPage() {
         fronta={fronta}
         aiKvalita={aiKvalita}
         pravidla={pravidla}
+        maxPravidel={MAX_ACTIVE_PROMPT_RULES}
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
         prihlasovani={authMode()}

@@ -81,15 +81,9 @@ export function RegenerateButton({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
-          {DUVODY.map(([reason, { label }]) => (
-            <DropdownMenuItem key={reason} onSelect={() => vybratDuvod(reason)}>
-              {label}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
           <div className="px-2 py-1.5">
             <label htmlFor={`regen-poznamka-${questionId}`} className="text-xs text-fg-muted">
-              Poznámka (nepovinná)
+              Napiš poznámku a pak vyber důvod
             </label>
             <Textarea
               id={`regen-poznamka-${questionId}`}
@@ -101,6 +95,12 @@ export function RegenerateButton({
               maxLength={300}
             />
           </div>
+          <DropdownMenuSeparator />
+          {DUVODY.map(([reason, { label }]) => (
+            <DropdownMenuItem key={reason} onSelect={() => vybratDuvod(reason)}>
+              {label}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -129,7 +129,15 @@ test.describe('přegenerování s důvodem', () => {
     await row.getByRole('button', { name: 'Přegenerovat s důvodem' }).click()
     const menu = page.getByRole('menu')
     await expect(menu).toBeVisible()
-    await menu.getByLabel('Poznámka (nepovinná)').fill('Možnost B je taky správně.')
+    const poznamka = menu.getByLabel('Napiš poznámku a pak vyber důvod')
+    await poznamka.fill('Možnost B je taky správně.')
+    // Poznámka stojí nad důvody, ne pod nimi — jinak by ji učitelka psala,
+    // až když už klikla na štítek, a nikdy by k ní nedopsala nic navíc.
+    const box = await menu.boundingBox()
+    const poznamkaBox = await poznamka.boundingBox()
+    const prvniDuvod = await menu.getByRole('menuitem', { name: 'Nedává smysl' }).boundingBox()
+    expect(box && poznamkaBox && prvniDuvod).toBeTruthy()
+    expect(poznamkaBox!.y).toBeLessThan(prvniDuvod!.y)
     await menu.getByRole('menuitem', { name: 'Špatné možnosti' }).click()
 
     await expect(row).toHaveCount(0)

@@ -219,36 +219,48 @@ export function normalizeEvidence(
  * promptu srozumitelnou nápovědu (`hint`) a případně posouvá obtížnost
  * náhrady (`shift`) — „moc těžká"/„moc lehká" jsou jediné dva důvody, které
  * s obtížností hýbou, ostatní ji nechávají beze změny.
+ *
+ * `rule` je jiná věta než `hint`: `hint` mluví o *téhle* náhradě („Předchozí
+ * verze…“), zatímco `rule` je obecné, časově neurčité pravidlo pro *každé*
+ * další generování — do něj se předvyplňuje editor pravidla promptu ve
+ * Správě (`SpravaScreen`, „Udělat z toho pravidlo"), když správce z častého
+ * důvodu přegenerování udělá trvalé pravidlo školy.
  */
 export const REGENERATE_REASONS = {
   nesmysl: {
     label: 'Nedává smysl',
     hint: 'Předchozí verze nedávala smysl — zadání musí být jasné a jednoznačné.',
+    rule: 'Zadání musí být jasné a jednoznačné.',
     shift: 0,
   },
   moznosti: {
     label: 'Špatné možnosti',
     hint: 'Předchozí verze měla špatné možnosti — právě jedna musí být správná a ostatní věrohodně špatné.',
+    rule: 'Právě jedna možnost je správná, ostatní jsou věrohodně špatné.',
     shift: 0,
   },
   mimo: {
     label: 'Odpověď v materiálu není',
     hint: 'Předchozí verze se ptala na něco, co v materiálu není — drž se doslova textu.',
+    rule: 'Ptej se jen na to, co v materiálu doslova stojí.',
     shift: 0,
   },
   tezka: {
     label: 'Moc těžká',
     hint: 'Předchozí verze byla na ročník moc těžká.',
+    rule: 'Otázky drž spíš na spodní hranici náročnosti ročníku.',
     shift: -1,
   },
   lehka: {
     label: 'Moc lehká',
     hint: 'Předchozí verze byla moc lehká.',
+    rule: 'Otázky drž spíš na horní hranici náročnosti ročníku.',
     shift: 1,
   },
   cestina: {
     label: 'Špatná čeština',
     hint: 'Předchozí verze měla chyby v češtině — piš spisovně a jednoduše.',
+    rule: 'Piš spisovnou a jednoduchou češtinou bez chyb.',
     shift: 0,
   },
 } as const

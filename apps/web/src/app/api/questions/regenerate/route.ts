@@ -42,6 +42,11 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
+  // Poznámka bez důvodu nemá kam patřit — v promptu visí věta „Proč se otázka
+  // nahrazuje" jen k vybranému důvodu, samotná poznámka bez ní nedává smysl.
+  if (parsed.data.note && !parsed.data.reason) {
+    return Response.json({ error: 'Poznámka patří k důvodu — nejdřív vyber, proč se otázka nahrazuje.' }, { status: 400 })
+  }
 
   const [original] = await db
     .select({ id: questions.id, topicId: questions.topicId })

@@ -309,6 +309,17 @@ describe('zpětná vazba z přegenerování', () => {
     expect(feedback!.reason).toBe('nesmysl')
     expect(feedback!.note).toBe('Ptá se na dvě věci najednou.')
   })
+
+  it('vlastní (ne AI) otázka žádnou zpětnou vazbu nezaloží — nemá co říct o modelu', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'approved', source: 'manual' })
+
+    await regenerateQuestion(UCET, original, { generate: modelVrati })
+
+    const rows = await db.select().from(questionFeedback).where(eq(questionFeedback.questionId, original))
+    expect(rows).toHaveLength(0)
+  })
 })
 
 describe('API náhrady: neplatný důvod a role bez zápisu', () => {
@@ -322,6 +333,20 @@ describe('API náhrady: neplatný důvod a role bez zápisu', () => {
       jsonReq('/api/questions/regenerate', 'POST', { id: original, reason: 'neexistujici-duvod' }),
     )
     expect(response.status).toBe(400)
+  })
+
+  it('poznámka bez důvodu je 400 s českou hláškou — bez důvodu nemá poznámka kam patřit', async () => {
+    withKey()
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: TEXT })
+    const original = await seedQuestion(topicId, { status: 'draft' })
+
+    const response = await POST(
+      jsonReq('/api/questions/regenerate', 'POST', { id: original, note: 'Bez vybraného důvodu.' }),
+    )
+    expect(response.status).toBe(400)
+    const data = (await response.json()) as { error?: string }
+    expect(data.error).toMatch(/[Dd]ůvod/)
   })
 
   it('náhled otázku přegenerovat nesmí — 403', async () => {

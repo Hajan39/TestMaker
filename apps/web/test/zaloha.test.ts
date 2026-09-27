@@ -4,6 +4,7 @@ import {
   db,
   grades,
   materials,
+  promptRules,
   questions,
   subjects,
   templates,
@@ -14,6 +15,7 @@ import {
 import { GET, POST } from '@/app/api/export/route'
 import { PORADI, spocitej, zalohaText } from '@/lib/backup'
 import { obnovZeZalohy, poctyVZaloze, prectiZalohu } from '@/lib/backupClient'
+import { createPromptRule } from '@/lib/promptRules'
 import { jsonReq, seedMaterial, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 /**
@@ -68,6 +70,7 @@ async function vyprazdni() {
   await db.delete(testItems)
   await db.delete(tests)
   await db.delete(templates)
+  await db.delete(promptRules)
   await db.delete(questions)
   await db.delete(materials)
   await db.delete(topics)
@@ -139,6 +142,24 @@ describe('záloha a obnova', () => {
     const [polozka] = await db.select().from(testItems)
     expect(polozka!.questionSnapshot).toBe(snapshotPred)
     expect(polozka!.questionId).toBe(otazkaId)
+  })
+
+  it('pravidlo promptu přežije export i obnovu (na rozdíl od zpětné vazby z přegenerování)', async () => {
+    await nasypKnihovnu()
+    await createPromptRule(UCET, { text: 'Piš spisovnou a jednoduchou češtinou bez chyb.', reason: 'cestina' })
+    const pred = await spocitej(db, { schoolId: UCET.schoolId })
+    expect(pred.prompt_rules).toBe(1)
+
+    const text = await stahni()
+    await vyprazdni()
+    expect((await spocitej(db, { schoolId: UCET.schoolId })).prompt_rules).toBe(0)
+
+    await obnovPresApi(text)
+    expect(await spocitej(db, { schoolId: UCET.schoolId })).toEqual(pred)
+
+    const [pravidlo] = await db.select().from(promptRules)
+    expect(pravidlo!.text).toBe('Piš spisovnou a jednoduchou češtinou bez chyb.')
+    expect(pravidlo!.reason).toBe('cestina')
   })
 
   it('materiál označený jako duplicita si po obnově drží odkaz na originál', async () => {

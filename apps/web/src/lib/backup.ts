@@ -27,7 +27,10 @@ export type Radek = Record<string, unknown>
  * Tabulky v pořadí, ve kterém se smějí zapisovat: co na co odkazuje, to už
  * v cíli musí být. Fronta generování (`generation_jobs`) se nepřenáší —
  * je to pracovní stav jednoho počítače, ne obsah knihovny, a na druhé straně
- * by jen strašila záznamy o bězích, které se tam nikdy nekonaly.
+ * by jen strašila záznamy o bězích, které se tam nikdy nekonaly. Zpětná vazba
+ * z přegenerování (`question_feedback`) se nepřenáší ze stejného důvodu —
+ * je to telemetrie k přehledu „AI kvalita", ne obsah knihovny, a po obnově
+ * by stejně ukazovala na jiná (nově vzniklá) id otázek.
  */
 /**
  * Rozsah zálohy a obnovy: vždy jedna škola. Filtrovat po učitelkách nemá
@@ -50,6 +53,7 @@ export const TABULKY = {
   questions: schema.questions,
   puzzles: schema.puzzles,
   templates: schema.templates,
+  prompt_rules: schema.promptRules,
   tests: schema.tests,
   test_items: schema.testItems,
 } as const

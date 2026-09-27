@@ -395,17 +395,22 @@ export async function regenerateQuestion(
     .where(and(skola(scope, questions), eq(questions.id, questionId)))
 
   // Zpětná vazba vzniká vždycky, i bez důvodu — jinak by nešlo spočítat podíl
-  // přegenerovaných otázek podle modelu, který je vytvořil.
-  await db.insert(questionFeedback).values({
-    id: newId(),
-    schoolId: scope.schoolId,
-    questionId,
-    replacementId,
-    model: original.model ?? null,
-    reason: options.reason ?? null,
-    note: options.note?.trim() || null,
-    createdBy: scope.userId,
-  })
+  // přegenerovaných otázek podle modelu, který je vytvořil. Výjimka je vlastní
+  // (`manual`) otázka: tu nenapsal žádný model, takže by řádek jen zašuměl
+  // přehled „AI kvalita" pod „neznámý model", aniž by o kvalitě nějakého
+  // modelu vypovídal.
+  if (original.source === 'ai') {
+    await db.insert(questionFeedback).values({
+      id: newId(),
+      schoolId: scope.schoolId,
+      questionId,
+      replacementId,
+      model: original.model ?? null,
+      reason: options.reason ?? null,
+      note: options.note?.trim() || null,
+      createdBy: scope.userId,
+    })
+  }
 
   const [row] = await db
     .select()

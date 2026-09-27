@@ -67,6 +67,7 @@ export function SpravaScreen({
   aiProblems,
   prihlasovani,
   pravidla,
+  maxPravidel,
 }: {
   ja: string
   skola: string
@@ -81,6 +82,8 @@ export function SpravaScreen({
   prihlasovani: 'zapnuto' | 'vypnuto' | 'chybne-nastaveno'
   /** Pravidla promptu školy — nejnovější první. */
   pravidla: PromptRule[]
+  /** Kolik aktivních pravidel smí být nejvýš (`MAX_ACTIVE_PROMPT_RULES`). */
+  maxPravidel: number
 }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -101,34 +104,43 @@ export function SpravaScreen({
   async function ulozitPravidlo() {
     if (!novePravidlo) return
     setPravidloBusy(true)
-    const response = await fetch('/api/prompt-rules', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: novePravidlo.text, reason: novePravidlo.reason }),
-    })
-    setPravidloBusy(false)
-    const data = (await response.json()) as { error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Pravidlo se nepodařilo uložit.')
-      return
+    try {
+      const response = await fetch('/api/prompt-rules', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: novePravidlo.text, reason: novePravidlo.reason }),
+      })
+      const data = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        toast.error(data.error ?? 'Pravidlo se nepodařilo uložit.')
+        return
+      }
+      toast.success('Pravidlo uloženo a hned se použije při dalším generování.')
+      setNovePravidlo(null)
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Pravidlo se nepodařilo uložit.')
+    } finally {
+      setPravidloBusy(false)
     }
-    toast.success('Pravidlo uloženo a hned se použije při dalším generování.')
-    setNovePravidlo(null)
-    router.refresh()
   }
 
   async function prepnoutPravidlo(id: string, active: boolean) {
-    const response = await fetch('/api/prompt-rules', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, active }),
-    })
-    const data = (await response.json()) as { error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Změna se nepovedla.')
-      return
+    try {
+      const response = await fetch('/api/prompt-rules', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, active }),
+      })
+      const data = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        toast.error(data.error ?? 'Změna se nepovedla.')
+        return
+      }
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Změna se nepovedla.')
     }
-    router.refresh()
   }
 
   async function zalozit(event: React.FormEvent) {
@@ -175,7 +187,7 @@ export function SpravaScreen({
       <div>
         <h1 className="ui-page-title">Správa — {skola}</h1>
         <p className="mt-1 max-w-3xl text-sm text-fg-soft">
-          Účty učitelek, záznam událostí a stav provozu. Knihovna i banka otázek jsou společné pro
+          Účty učitelek, záznam událostí a stav provozu. Třídy i otázky v nich jsou společné pro
           celou školu; písemky a hlavolamy patří té, kdo je vytvořila.
         </p>
       </div>
@@ -377,10 +389,11 @@ export function SpravaScreen({
         <TabsContent value="ai-kvalita" className="space-y-4">
           <p className="max-w-3xl text-sm text-fg-soft">
             Za posledních devadesát dní: kolik otázek který model vygeneroval a kolik jich učitelky
-            nakonec přegenerovaly, i s nejčastějšími důvody.
+            nakonec přegenerovaly, i s nejčastějšími důvody. „Přegenerováno" počítá jen náhrady přes
+            tlačítko Přegenerovat — smazání ani ruční úpravu otázky nezahrnuje.
           </p>
 
-          {aiKvalita.reasons.length === 0 ? (
+          {aiKvalita.models.length === 0 ? (
             <Card className="p-4 text-sm text-fg-soft">Zatím žádná zpětná vazba.</Card>
           ) : (
             <>
@@ -409,35 +422,37 @@ export function SpravaScreen({
                 })}
               </Card>
 
-              <Card className="divide-y divide-line">
-                <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
-                  Nejčastější důvody přegenerování
-                </p>
-                {aiKvalita.reasons.map((row) => (
-                  <div
-                    key={row.reason ?? 'bez-duvodu'}
-                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
-                  >
-                    <span className="text-fg">
-                      {row.reason ? REGENERATE_REASONS[row.reason].label : 'bez udání důvodu'}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span className="ui-numeric text-fg-soft">{row.count}×</span>
-                      {row.reason ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setNovePravidlo({ reason: row.reason!, text: REGENERATE_REASONS[row.reason!].hint })
-                          }
-                        >
-                          Udělat z toho pravidlo
-                        </Button>
-                      ) : null}
+              {aiKvalita.reasons.length > 0 ? (
+                <Card className="divide-y divide-line">
+                  <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                    Nejčastější důvody přegenerování
+                  </p>
+                  {aiKvalita.reasons.map((row) => (
+                    <div
+                      key={row.reason ?? 'bez-duvodu'}
+                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm"
+                    >
+                      <span className="text-fg">
+                        {row.reason ? REGENERATE_REASONS[row.reason].label : 'bez udání důvodu'}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="ui-numeric text-fg-soft">{row.count}×</span>
+                        {row.reason ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setNovePravidlo({ reason: row.reason!, text: REGENERATE_REASONS[row.reason!].rule })
+                            }
+                          >
+                            Udělat z toho pravidlo
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </Card>
+                  ))}
+                </Card>
+              ) : null}
 
               {novePravidlo ? (
                 <Card className="space-y-2 p-4">
@@ -490,7 +505,7 @@ export function SpravaScreen({
 
           <Card className="divide-y divide-line">
             <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
-              Pravidla promptu školy ({pravidla.filter((p) => p.active).length}/10 aktivních)
+              Pravidla promptu školy ({pravidla.filter((p) => p.active).length}/{maxPravidel} aktivních)
             </p>
             {pravidla.length === 0 ? (
               <p className="p-3 text-sm text-fg-soft">

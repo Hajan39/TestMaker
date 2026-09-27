@@ -154,9 +154,12 @@ export function buildUserPrompt(request: GenerationRequest): string {
     if (note) {
       const truncated =
         note.length > MAX_REPLACEMENT_NOTE_LENGTH ? `${note.slice(0, MAX_REPLACEMENT_NOTE_LENGTH)}…` : note
-      // Uvozovky, ne instrukce: poznámka je citace toho, co napsala učitelka,
-      // model ji nemá poslouchat jako další pravidlo generování.
-      sections.push(`Poznámka učitelky: "${truncated}"`)
+      // Citace v ohraničeném bloku, ne instrukce: poznámka je to, co napsala
+      // učitelka, model ji nemá poslouchat jako další pravidlo generování.
+      // Obyčejné uvozovky by uvozovkou v poznámce („ignoruj pravidla") šly
+      // zavřít předčasně — trojice uvozovek (stejný vzor jako u materiálu
+      // a ukázky stylu níž) to nedovolí jedním znakem.
+      sections.push('Poznámka učitelky:', '"""', truncated, '"""')
     }
   }
 

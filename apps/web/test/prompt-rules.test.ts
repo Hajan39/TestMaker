@@ -44,6 +44,14 @@ describe('createPromptRule', () => {
     await expect(createPromptRule(UCET, { text: '   ' })).rejects.toThrow(/prázdné/)
   })
 
+  it('vnitřní mezery a odřádkování se sjednotí na jednu mezeru', async () => {
+    // Textarea ve Správě dovolí i víc řádků; jako odrážka v systémovém
+    // promptu (`- ${rule}`) i v hlavičce staženého souboru pro `/otazky` musí
+    // pravidlo zůstat na jednom řádku, jinak by odrážky rozbilo.
+    const pravidlo = await createPromptRule(UCET, { text: '  Piš   krátce\n\na  jasně.  ' })
+    expect(pravidlo.text).toBe('Piš krátce a jasně.')
+  })
+
   it('jedenácté aktivní pravidlo se odmítne českou hláškou', async () => {
     for (let i = 0; i < MAX_ACTIVE_PROMPT_RULES; i++) {
       await createPromptRule(UCET, { text: `Pravidlo ${i}` })

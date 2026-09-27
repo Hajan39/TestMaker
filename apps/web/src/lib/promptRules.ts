@@ -89,7 +89,10 @@ export async function createPromptRule(
   scope: Scope,
   input: { text: string; reason?: RegenerateReason | null },
 ): Promise<PromptRule> {
-  const text = input.text.trim().slice(0, MAX_PROMPT_RULE_LENGTH)
+  // Sjednocené na jednu mezeru — pravidlo je odrážka v systémovém promptu
+  // (`- ${rule}`) i v hlavičce staženého souboru pro `/otazky`; víc mezer
+  // nebo odřádkování z Textarey by tam obojí rozbilo na víc řádků.
+  const text = input.text.trim().replace(/\s+/g, ' ').slice(0, MAX_PROMPT_RULE_LENGTH)
   if (!text) throw new Error('Pravidlo nemůže být prázdné.')
   if ((await countActive(scope)) >= MAX_ACTIVE_PROMPT_RULES) throw new PrilisMnohoPravidel()
 

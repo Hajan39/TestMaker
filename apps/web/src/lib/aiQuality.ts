@@ -64,6 +64,10 @@ export async function loadAiQuality(scope: Scope, options: { since?: string } = 
     .from(questions)
     .where(and(skola(scope, questions), eq(questions.source, 'ai'), gte(questions.createdAt, since)))
 
+  // Obnovení přegenerované (zamítnuté) otázky zpátky na schválenou nijak
+  // nemaže její řádek tady — přegenerování se stalo a učitelka si to jen
+  // rozmyslela; číslo v přehledu proto zůstává, jako by šlo o přijaté
+  // rozhodnutí.
   const feedbackRows = await db
     .select({ model: questionFeedback.model, reason: questionFeedback.reason })
     .from(questionFeedback)

@@ -73,11 +73,16 @@ test('správce udělá z důvodu pravidlo promptu a pak ho vypne', async ({ page
   await radekDuvodu.getByRole('button', { name: 'Udělat z toho pravidlo' }).click()
 
   await expect(page.getByRole('heading', { name: /Nové pravidlo z důvodu/ })).toBeVisible()
+  // Editor je předvyplněný obecným pravidlem pro každé další generování
+  // (`rule`), ne větou o týhle konkrétní náhradě (`hint`, ta mluví o
+  // „předchozí verzi" a do trvalého pravidla nepatří).
+  await expect(page.getByRole('textbox')).toHaveValue('Otázky drž spíš na spodní hranici náročnosti ročníku.')
   await page.getByRole('button', { name: 'Uložit pravidlo' }).click()
 
   const radekPravidla = page.locator('[data-slot="card"]').filter({ hasText: 'Pravidla promptu školy' })
   await expect(radekPravidla).toContainText('1/10 aktivních')
   await expect(radekPravidla).toContainText('Aktivní')
+  await expect(radekPravidla).toContainText('Otázky drž spíš na spodní hranici náročnosti ročníku.')
 
   await radekPravidla.getByRole('button', { name: 'Vypnout' }).click()
   await expect(radekPravidla).toContainText('0/10 aktivních')
