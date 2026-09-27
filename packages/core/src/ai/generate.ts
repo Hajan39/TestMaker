@@ -11,6 +11,7 @@ import {
 import { objectCall, rawTextOf, startLadder } from './ladder'
 import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompts/questions'
 import { readAiLadder, type AiConfig } from './provider'
+import { referencesSource } from './sourceReference'
 import { AI_SETTINGS } from './settings'
 
 const responseSchema = z.object({
@@ -202,6 +203,7 @@ export function withDefaultPoints(question: QuestionContent): QuestionContent {
 }
 
 export const EVIDENCE_NOT_FOUND = 'citace v evidence se v materiálu nenašla'
+export const REFERENCES_SOURCE = 'otázka odkazuje na materiál místo toho, aby stála sama'
 
 /**
  * Text pro porovnání citace s materiálem: bez rozdílu velikosti písmen,
@@ -270,6 +272,7 @@ export function selectChunks(chunks: string[], count: number, offset: number, fo
 export function checkQuestion(question: QuestionContent, source: string): string[] {
   const errors = validateQuestionContent(question)
   if (!evidenceMatches(question, source)) errors.push(EVIDENCE_NOT_FOUND)
+  if (referencesSource(question)) errors.push(REFERENCES_SOURCE)
   return errors
 }
 

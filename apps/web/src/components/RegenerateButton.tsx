@@ -25,7 +25,7 @@ const DUVODY = Object.entries(REGENERATE_REASONS) as [
  * otázek, kde je na akce místo v celé ploše.
  *
  * Hlavní část přegeneruje hned, beze změny dosavadního chování (jedno
- * kliknutí, žádný důvod). Šipka vedle ní otevře nabídku šesti důvodů
+ * kliknutí, žádný důvod). Šipka vedle ní otevře nabídku sedmi důvodů
  * s nepovinnou poznámkou — výběr štítku rovnou přegeneruje s tím důvodem
  * (poznámka jde vyplnit ještě předtím).
  *

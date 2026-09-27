@@ -92,7 +92,8 @@ export function buildSystemPrompt(gradeName?: string | null, schoolRules?: strin
     '1. Vycházej výhradně z dodaného materiálu. Každá otázka má jednu správnou odpověď, která v materiálu opravdu stojí.',
     '2. Piš jednoduchou spisovnou češtinou. Zadání je jedna krátká věta.',
     '3. Ptej se na hlavní myšlenky, ne na okrajové podrobnosti.',
-    '4. Otázka musí být samostatná: nepiš "podle materiálu", "jak je uvedeno výše" ani nic podobného.',
+    '4. Otázka musí být samostatná: nepiš "podle materiálu", "jak je uvedeno výše" ani nic podobného ' +
+      '(✗ „Kteří zástupci jsou uvedeni v materiálu?" → ✓ „Kteří z těchto živočichů patří mezi obojživelníky?").',
     '5. Možnosti výběru patří jen do pole `options`, nikdy do textu zadání. Špatné možnosti jsou věrohodné, ale jednoznačně špatné.',
     '6. Do `evidence` napiš název souboru ze záhlaví `=== … ===` a jednu větu z materiálu doslova, beze změny slov. Otázka s citací, která v materiálu není, se zahodí.',
     '7. Do `explanation` napiš jednu větu pro učitele, proč je odpověď správná.',

@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 /**
  * Přegenerování otázky s důvodem: rozdělené tlačítko v kartě otázky — hlavní
- * část přegeneruje hned (beze změny chování), šipka otevře nabídku šesti
+ * část přegeneruje hned (beze změny chování), šipka otevře nabídku sedmi
  * důvodů s nepovinnou poznámkou.
  *
  * Model se nevolá — odpověď na `/api/questions/regenerate` je podvržená

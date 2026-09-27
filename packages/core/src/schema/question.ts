@@ -263,6 +263,12 @@ export const REGENERATE_REASONS = {
     rule: 'Piš spisovnou a jednoduchou češtinou bez chyb.',
     shift: 0,
   },
+  odkaz: {
+    label: 'Odkazuje na materiál',
+    hint: 'Předchozí verze odkazovala na materiál — otázka musí stát sama, bez zmínky o textu nebo zdroji.',
+    rule: 'Otázka nikdy neodkazuje na materiál, text ani zdroj; stojí sama.',
+    shift: 0,
+  },
 } as const
 
 export type RegenerateReason = keyof typeof REGENERATE_REASONS
