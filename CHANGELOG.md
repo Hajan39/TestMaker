@@ -6,6 +6,20 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
 ### Přidáno
 
+- **Nová navigace: Třídy místo Knihovny.** Úvod aplikace ukazuje dlaždice tříd
+  (ročníky v předmětech) seskupené podle předmětu. Poslední otevřená třída se
+  pamatuje a otevře automaticky. Lišta zůstává jednoduchou: Třídy · Testy ·
+  Hlavolamy · Šablony (+ Správa pro správce).
+- **Třída má vlastní stránku** se seznamem témat, počtem materiálů a otázek,
+  a ukazatelem běžícího generování. Přidat, přejmenovat, přesunout a smazat
+  téma / předmět / ročník jde přímo tady.
+- **Obnovení smazaných otázek v tématu.** Filtr „Smazané (N)" nabídne vrácení
+  smazaných otázek zpět do seznamu bez dalšího importu či generování.
+- **Přegenerování s důvodem.** Na kartě otázky se nabídne nepovinný důvod
+  (Nedává smysl, Špatné možnosti, Odpověď v materiálu není, Moc těžká,
+  Moc lehká, Špatná čeština) a volitelná poznámka; selhání nebo těžké otázky
+  posunují obtížnost náhrady.
+
 - **Otázky z Claude Code.** Na stránce tématu jde **stáhnout materiály** jako
   jeden textový soubor (s ročníkem a otázkami, které už v tématu jsou),
   v Claude Code z nich příkazem `/otazky` nechat napsat otázky a soubor
@@ -104,6 +118,15 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   variantami A/B. Test může být i bez známek.
 - **Tři vestavěné šablony** (Klasická, Kompaktní, Pracovní list) uložené jako
   nastavení, ne jako kód. Náhled šablony je skutečná stránka PDF.
+
+### Odebráno
+
+- **Stránka Kontrola (Review).** Otázky se schvalují jen implicitně — vygenerovaná
+  otázka je hned použitelná; upraví se nebo se smaže, až když je potřeba.
+- **Banka otázek jako samostatná stránka.** Otázky se spravují přímo v tématu,
+  kde se generují. Filtr „Smazané" umožňuje obnovit smazané otázky bez dalšího
+  importu.
+- **Staré adresy `/questions` a `/review` se přesměrují na `/` (úvod).**
 
 ### Opraveno
 

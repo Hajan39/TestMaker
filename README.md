@@ -3,15 +3,21 @@
 Nástroj pro učitele: z výukových materiálů vytvoří banku otázek a poskládá z nich
 písemku do PDF na A4.
 
-Postup je vždy stejný: naimportuj složku s materiály → nech si vygenerovat otázky
-→ projdi je a schval → poskládej test → stáhni PDF.
+Postup je jednoduchý: vyber si třídu → vyber téma → naimportuj materiály nebo nech si
+generovat otázky → upravuj je → poskládej test → stáhni PDF.
+
+## Uspořádání aplikace
+
+Aplikace začíná **úvodem s třídami** (ročníky v jednotlivých předmětech) seskupené
+podle předmětu. Každá třída má vlastní stránku se **seznamem témat**, kde se všechno
+dělá: nahrávají se materiály, generují otázky, upravují se a vybírají do testů.
 
 ## Co umí
 
 - **Import celé složky.** Text z PDF, prezentací (ODP), dokumentů (ODT, DOCX),
   HTML i prostého textu se vytáhne přímo v prohlížeči. Na server jde jen text,
-  ne soubory, takže velikost ani počet nevadí. Struktura složek se použije jako
-  Předmět → Ročník → Téma.
+  ne soubory, takže velikost ani počet nevadí. Import lze spustit z úvodu
+  (Hromadný import) nebo přímo v tématu.
 - **Skupiny materiálů.** Soubory patřící k téže lekci se spojí do jedné skupiny
   a otázky se generují ze všech naráz — jeden soubor na písemku obvykle nestačí.
   Skupinu lze přejmenovat, sloučit s jinou nebo z ní soubor vyjmout.

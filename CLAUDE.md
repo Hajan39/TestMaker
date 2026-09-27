@@ -27,7 +27,7 @@ Komponenty v `packages/ui/src/ui/` pocházejí z shadcn/ui, ale jakmile jednou
 proběhnou přes `shadcn add`, jsou to soubory v tomto repozitáři jako kterékoli
 jiné — commitují se, upravují se, nikdo je znovu negeneruje samovolně. Nad nimi
 stojí doménové komponenty (`AppShell`, `ThreePane`, `NavList`, `StatRow`,
-`ReviewQueue`, `EmptyState`, `QuestionPreview`), které skládají vzhled aplikace
+`EmptyState`, `QuestionPreview`), které skládají vzhled aplikace
 z těchto základních dílů.
 
 Tmavý režim je jen druhá sada hodnot týchž tokenů (`:root.dark` ve stejném

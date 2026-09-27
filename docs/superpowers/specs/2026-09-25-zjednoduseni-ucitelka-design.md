@@ -28,17 +28,25 @@ generování prvním krokem.
 
 ## Lišta a úvodní obrazovka
 
-- Ze lišty mizí Import materiálů, Generování, Kontrola a Banka otázek.
-- Staré adresy přesměrují: `/questions` a `/review` na úvod; `/import`
-  a `/generovani` na téma, pokud ho adresa nese (`?topic=`), jinak na úvod.
-- Úvod ukazuje dlaždice tříd seskupené podle předmětu, u každé počet témat
-  a otázek. Aplikace si pamatuje naposledy otevřenou třídu (v prohlížeči)
-  a otevře ji rovnou.
-- Seznam témat třídy: název, počet materiálů a otázek, ukazatel běžícího
-  generování. Přidat, přejmenovat a přesunout téma jde přímo tady (přebírá
-  to, co dnes umí Knihovna).
-- Globální ukazatel generování v liště zůstává, ale vede do konkrétního
-  tématu.
+Nová navigace: **Třídy** (úvod s dlaždicemi) · **Testy** · **Hlavolamy** · **Šablony**
+(+ **Správa** pro správce). Zrušeny: Import materiálů, Generování, Kontrola, Banka otázek.
+
+- Staré adresy přesměrují: `/questions` a `/review` na `/` (úvod); `/import`
+  a `/generovani` zůstávají dostupné, ale ne v navigaci (vede na ně adresa
+  nebo odkaz z tématu/generování).
+- **Úvod (`/`):** dlaždice tříd seskupené podle předmětu, u každé počet témat
+  a otázek. Tlačítka: „Hromadný import" (import složky), „Založit předmět",
+  „Nový test" (vede do editoru), vyhledávání v knihovně. Aplikace si pamatuje
+  naposledy otevřenou třídu (v prohlížeči) a otevře ji rovnou.
+- **Třída (`/tridy/[id]`):** seznam témat s počtem materiálů a otázek,
+  ukazatel běžícího generování (když právě jedno běží). Přidat, přejmenovat,
+  přesunout a smazat téma / předmět / ročník jde přímo tady (přebírá to, co
+  dnes umí Knihovna; smazat ročník jde jen správcům).
+- **Ukazatel generování v liště:** vede do tématu, když běží právě jedno
+  generování, jinak na `/generovani` (přehled fronty). Do tématu se dostane i
+  z přehledu kliknutím na řádek úlohy.
+- **V prázdné knihovně** (bez tříd) se nabídnou stejné akce jako na úvodu
+  (Hromadný import, Založit předmět).
 
 ## Stránka tématu (`topics/[id]`)
 
@@ -60,8 +68,9 @@ tlačítko skryté a stránka vysvětlí proč (platí dosavadní pravidlo).
 **Otázky:** seznam karet, nejnovější nahoře. Karta ukazuje náhled otázky jako
 na papíře (`QuestionPreview`), typ, body a obtížnost. Kliknutí kartu rozbalí
 do editace na místě (`QuestionEditor`) s Uložit / Zrušit. Akce u karty:
-Upravit, Přegenerovat, Smazat. Smazání jde vrátit („Otázka smazána · Vrátit
-zpět"). Filtr nahoře: typ, obtížnost, „ještě nepoužité v testu". Otázka
+Upravit, Přegenerovat (s nepovinným důvodem), Smazat. Smazání jde vrátit
+(„Otázka smazána · Vrátit zpět"). Filtr nahoře: typ, obtížnost, „ještě nepoužité
+v testu", **„Smazané (N)"** (obnovuje smazané otázky zpět do seznamu). Otázka
 použitá v testu nese štítek s názvem testu.
 
 **Výběr do testu:** zaškrtávátko u každé karty; při výběru se dole objeví
