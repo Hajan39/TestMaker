@@ -82,7 +82,7 @@ export function RegenerateButton({
             size="icon-sm"
             variant="ghost"
             className="rounded-l-none border-l"
-            disabled={busy}
+            disabled={busy || variant.busyDirection !== null}
             aria-label="Přegenerovat s důvodem"
           >
             <ChevronDown className="size-4" />
@@ -112,20 +112,30 @@ export function RegenerateButton({
           <DropdownMenuSeparator />
           {(['easier', 'harder'] as const).map((direction) => {
             const label = direction === 'easier' ? 'Lehčí verze' : 'Těžší verze'
+            const busyLabel = direction === 'easier' ? 'Vytvářím lehčí verzi…' : 'Vytvářím těžší verzi…'
             const duvod = variant.disabledReason(direction)
+            const isBusy = variant.busyDirection === direction
+            const hintId = `verze-hint-${direction}-${questionId}`
             return (
               <DropdownMenuItem
                 key={direction}
-                aria-label={label}
-                disabled={duvod !== null}
-                onSelect={() => {
-                  setOpen(false)
-                  void variant.create(direction)
+                aria-describedby={duvod ? hintId : undefined}
+                disabled={duvod !== null || variant.busyDirection !== null}
+                onSelect={(event) => {
+                  // Menu zůstává otevřené, dokud verze nevznikne (nebo
+                  // neselže) — jinak by byl text „Vytvářím…" i disabled
+                  // druhé položky vidět jen bleskově, než se menu zavře.
+                  event.preventDefault()
+                  void variant.create(direction).then(() => setOpen(false))
                 }}
               >
                 <div className="flex flex-col">
-                  <span>{label}</span>
-                  {duvod ? <span className="text-xs text-fg-muted">{duvod}</span> : null}
+                  <span>{isBusy ? busyLabel : label}</span>
+                  {duvod ? (
+                    <span id={hintId} className="text-xs text-fg-muted">
+                      {duvod}
+                    </span>
+                  ) : null}
                 </div>
               </DropdownMenuItem>
             )

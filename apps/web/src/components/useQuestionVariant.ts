@@ -65,6 +65,10 @@ export function useQuestionVariant(
   }
 
   async function create(direction: 'easier' | 'harder') {
+    // Dvojí kliknutí (nebo kliknutí na druhý směr, dokud první ještě běží)
+    // by poslalo dva požadavky najednou — než první doběhne, druhý se
+    // vůbec nezakládá.
+    if (busyDirection !== null) return
     if (disabledReason(direction)) return
     setBusyDirection(direction)
     try {

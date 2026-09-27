@@ -167,6 +167,15 @@ test.describe('verze otázky na kartě', () => {
     const topicId = await ensureTopic(page.request)
     const prompt = `Otázka na řádek verzí ${Date.now()}`
     const originalId = await pridatOtazku(page.request, topicId, prompt, 2)
+
+    // Dost otázek navíc (vzniklých až po originálu, tedy nad ním), ať
+    // originál po načtení stránky není v zorném poli — jinak by test na
+    // posun a zvýraznění nic neověřil, protože by cíl byl vidět tak jako
+    // tak, i bez jakéhokoli posunu.
+    for (let i = 0; i < 20; i += 1) {
+      await pridatOtazku(page.request, topicId, `Otázka na vycpávku ${Date.now()}-${i}`, 2)
+    }
+
     await mockVariant(page, topicId, originalId, prompt)
 
     await page.goto(`/topics/${topicId}`)
@@ -177,11 +186,23 @@ test.describe('verze otázky na kartě', () => {
     const newRow = page.locator('li[data-question-id]', { hasText: `${prompt} (těžší)` })
     await expect(newRow).toBeVisible()
 
-    // Původní karta teď ukazuje řádek s odkazem na svoji těžší verzi.
+    // Původní karta teď ukazuje řádek s odkazem na svoji těžší verzi. Scroll
+    // na tenhle odkaz schválně přesune pohled pryč z nové karty (ta je mezi
+    // vycpávkami nahoře, originál dole) — teprve pak má smysl ověřovat, že
+    // klik na odkaz pohled zase posune zpátky.
     const versionLink = originalRow.getByRole('button', { name: 'těžší' })
+    await versionLink.scrollIntoViewIfNeeded()
     await expect(versionLink).toBeVisible()
-    await versionLink.click()
+    await expect(newRow).not.toBeInViewport()
 
+    await versionLink.click()
     await expect(newRow).toBeInViewport()
+
+    // Zvýraznění se objeví a samo zase zmizí — karta nezůstane rozsvícená napořád.
+    await expect(newRow).toHaveClass(/bg-brand-bg/)
+    await expect(newRow).not.toHaveClass(/bg-brand-bg/, { timeout: 3_000 })
+
+    // I karta verze sama ukazuje řádek zpátky na svůj kořen.
+    await expect(newRow.getByRole('button', { name: 'lehčí' })).toBeVisible()
   })
 })

@@ -108,19 +108,28 @@ export const TopicQuestions = forwardRef<
   // (nastavit stav, pak v efektu najít prvek v DOM), protože hned po
   // `setFreshVersions` nová karta v DOM ještě není.
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null)
+  // Posun a rozsvícení jsou dva samostatné efekty schválně: kdyby byl posun
+  // (nastavení `pendingScrollId`) a odpočet zvýraznění ve stejném efektu,
+  // úklid po tomhle efektu (spuštěný, jakmile `pendingScrollId` doběhne zpět
+  // na `null`) by smazal i právě nastavený časovač zvýraznění — karta by
+  // zůstala rozsvícená napořád, protože by se `setHighlightedId(null)` nikdy
+  // nezavolalo.
   useEffect(() => {
     if (!pendingScrollId) return
-    const id = pendingScrollId
-    setPendingScrollId(null)
-    const el = document.querySelector(`[data-question-id="${id}"]`)
+    const el = document.querySelector(`[data-question-id="${pendingScrollId}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setHighlightedId(id)
+    setHighlightedId(pendingScrollId)
+    setPendingScrollId(null)
+  }, [pendingScrollId])
+  useEffect(() => {
+    if (!highlightedId) return
+    const id = highlightedId
     const timeout = window.setTimeout(
       () => setHighlightedId((current) => (current === id ? null : current)),
       1500,
     )
     return () => window.clearTimeout(timeout)
-  }, [pendingScrollId])
+  }, [highlightedId])
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
   // Zaškrtnuté otázky do nového testu. Smazaná (i přegenerovaná) karta z výběru
   // sama zmizí — výběr se počítá jen proti otázkám, které pořád existují
@@ -204,26 +213,39 @@ export const TopicQuestions = forwardRef<
   /**
    * Verze kořene otázky (nebo otázky samotné, je-li kořen), pro řádek
    * „Verze: …" na kartě. Zamítnuté (smazané) verze se nenabízejí — jejich
-   * karta v seznamu není, odkaz by nikam nevedl.
+   * karta v seznamu není, odkaz by nikam nevedl. Stejně tak se vynechá
+   * cokoli mimo `byId` (otázka, která v tomhle tématu vůbec není — cizí
+   * téma, nebo se ještě nenačetla) a cokoli v `hiddenIds` (smazaná nebo
+   * přegenerovaná karta zrovna teď mizí ze seznamu, ale server o tom
+   * ještě neví) — odkaz by v obou případech nikam nevedl.
    */
   function versionsFor(question: Question): { id: string; label: 'lehčí' | 'těžší' }[] {
     const rootId = question.variantOf ?? question.id
     const entries: { id: string; difficulty: 1 | 2 | 3 }[] = []
-    if (rootId !== question.id) {
+    if (rootId !== question.id && !hiddenIds.has(rootId)) {
       const root = byId.get(rootId)
       if (root) entries.push({ id: root.id, difficulty: root.difficulty })
     }
     for (const link of mergedVariantLinks[rootId] ?? []) {
-      if (link.id === question.id || link.status === 'rejected') continue
-      entries.push({ id: link.id, difficulty: link.difficulty })
+      if (link.id === question.id || link.status === 'rejected' || hiddenIds.has(link.id)) continue
+      const sibling = byId.get(link.id)
+      if (!sibling) continue
+      entries.push({ id: link.id, difficulty: sibling.difficulty })
     }
     return entries
       .filter((entry) => entry.difficulty !== question.difficulty)
       .map((entry) => ({ id: entry.id, label: entry.difficulty < question.difficulty ? 'lehčí' : 'těžší' }))
   }
 
-  /** Posune pohled na kartu a krátce ji zvýrazní — z řádku „Verze: …" i po vytvoření nové verze. */
+  /**
+   * Posune pohled na kartu a krátce ji zvýrazní — z řádku „Verze: …" i po
+   * vytvoření nové verze. Když cíl zrovna schovává filtr (typ, obtížnost,
+   * „jen nepoužité"), filtr se nejdřív zruší — jinak by se posun neměl kam
+   * posunout, karta by v DOM vůbec nebyla.
+   */
   function jumpToQuestion(id: string) {
+    const jeSchovanyFiltrem = !visible.some((question) => question.id === id) && active.some((question) => question.id === id)
+    if (jeSchovanyFiltrem) resetFilters()
     setPendingScrollId(id)
   }
 
