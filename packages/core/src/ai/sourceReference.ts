@@ -12,6 +12,14 @@ import type { QuestionContent } from '../schema/question'
  * podstatné jméno — "stavební materiál" nebo "Ze kterého materiálu se
  * vyrábí sklo?" jsou běžné otázky na látku/hmotu a odkazem na zdroj nejsou.
  */
+/**
+ * Podstatná jména, kterými se v tomto kontextu myslí *materiál k písemce*, ne
+ * ledajaký text. Bez tohohle omezení by "uveden… v" a "zmíněn… v" chytily i
+ * "Který rok je uveden v Ústavě…" nebo "Jaké zvíře je zmíněno v básni Máj?" —
+ * to jsou běžné otázky na obsah díla, ne odkaz na materiál k písemce.
+ */
+const SOURCE_NOUN = '(material(u|ech)|text(u|ech)|clanku|ukazce|zdroji|prezentaci)'
+
 const REFERENCE_PATTERNS: RegExp[] = [
   /\bve?\s+material(u|ech)\b/,
   /\bz\s+material(u|ech)\b/,
@@ -24,14 +32,20 @@ const REFERENCE_PATTERNS: RegExp[] = [
   /\bv\s+ukazce\b/,
   /\bve?\s+zdroji\b/,
   /\bv\s+prezentaci\b/,
-  /\bna\s+obrazku\b/,
   /\bv\s+tabulce\s+vyse\b/,
   /\bvyse\s+uveden\w*\b/,
-  /\buveden\w*\s+v\b/,
-  /\bzmine\w*\s+v\b/,
+  new RegExp(`\\buveden\\w*\\s+ve?\\s+${SOURCE_NOUN}\\b`),
+  new RegExp(`\\bzmine\\w*\\s+ve?\\s+${SOURCE_NOUN}\\b`),
   /\bjak\s+je\s+uvedeno\b/,
   /\bviz\s+vyse\b/,
 ]
+
+/**
+ * "Na obrázku" je odkaz na materiál, jen když otázka vlastní obrázek nemá —
+ * s vlastním obrázkem (`blocks`, `kind: 'image'`) je to normální zadání
+ * ("Co je znázorněno na obrázku?" k obrázku hned pod otázkou).
+ */
+const IMAGE_REFERENCE_PATTERN = /\bna\s+obrazku\b/
 
 /** Bez diakritiky a velkých písmen — vzory výše ji tak nemusí řešit. */
 function normalize(text: string): string {
@@ -42,9 +56,10 @@ function normalize(text: string): string {
 }
 
 /** Odkazuje tenhle text (zadání, možnost, tvrzení…) na materiál/text/zdroj? */
-function textReferencesSource(text: string): boolean {
+function textReferencesSource(text: string, hasImageBlock: boolean): boolean {
   const normalized = normalize(text)
-  return REFERENCE_PATTERNS.some((pattern) => pattern.test(normalized))
+  if (REFERENCE_PATTERNS.some((pattern) => pattern.test(normalized))) return true
+  return !hasImageBlock && IMAGE_REFERENCE_PATTERN.test(normalized)
 }
 
 /** Text z blocku (obrázek, tabulka), který žák u otázky vidí. */
@@ -101,5 +116,6 @@ function pupilVisibleTexts(question: QuestionContent): string[] {
  * odkazovala jediná jeho část (třeba jedno tvrzení v pravda/nepravda).
  */
 export function referencesSource(question: QuestionContent): boolean {
-  return pupilVisibleTexts(question).some(textReferencesSource)
+  const hasImageBlock = question.blocks.some((block) => block.kind === 'image')
+  return pupilVisibleTexts(question).some((text) => textReferencesSource(text, hasImageBlock))
 }

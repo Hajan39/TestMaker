@@ -20,6 +20,14 @@ const trueFalse = (statements: { text: string; isTrue: boolean }[]): QuestionCon
   difficulty: 2,
 })
 
+const singleWithImage = (prompt: string, options: string[] = ['A', 'B', 'C', 'D']): QuestionContent => ({
+  type: 'single_choice',
+  payload: { prompt, options, correctIndex: 0 },
+  blocks: [{ kind: 'image', assetId: 'bunka.png', widthPercent: 100 }],
+  points: 1,
+  difficulty: 2,
+})
+
 describe('referencesSource', () => {
   it('chytí příklad z hlášení chyby (uvedeno v materiálu)', () => {
     expect(referencesSource(single('Kteří ze zástupců jsou uvedeni v materiálu?'))).toBe(true)
@@ -60,6 +68,36 @@ describe('referencesSource', () => {
 
   it('nechytí běžnou samostatnou otázku', () => {
     expect(referencesSource(single('Kteří z těchto živočichů patří mezi obojživelníky?'))).toBe(false)
+  })
+
+  // Fix round 1: "uveden… v" a "zmíněn… v" musely dřív odmítnout i běžné
+  // otázky na obsah díla nebo dokumentu, ne jen na materiál k písemce.
+  it('nechytí "je uveden v Ústavě" (odkaz na jiný dokument, ne na materiál)', () => {
+    expect(referencesSource(single('Který rok je uveden v Ústavě jako datum přijetí?'))).toBe(false)
+  })
+
+  it('nechytí "je zmíněno v básni" (odkaz na jiné dílo, ne na materiál)', () => {
+    expect(referencesSource(single('Jaké zvíře je zmíněno v básni Máj?'))).toBe(false)
+  })
+
+  it('nechytí "je uvedeno v zákoně"', () => {
+    expect(referencesSource(single('Co je uvedeno v zákoně o pobytu cizinců?'))).toBe(false)
+  })
+
+  it('nechytí "uvedeny v ceníku"', () => {
+    expect(referencesSource(single('Jaké ceny jsou uvedeny v ceníku od ledna?'))).toBe(false)
+  })
+
+  it('chytí "zmíněno v textu učebnice" (materiál je text)', () => {
+    expect(referencesSource(single('Které město je zmíněno v textu učebnice jako hlavní?'))).toBe(true)
+  })
+
+  it('chytí "uvedeno na obrázku" bez vlastního obrázku otázky', () => {
+    expect(referencesSource(single('Co je uvedeno na obrázku buňky?'))).toBe(true)
+  })
+
+  it('nechytí "na obrázku", má-li otázka vlastní obrázek', () => {
+    expect(referencesSource(singleWithImage('Co je uvedeno na obrázku buňky?'))).toBe(false)
   })
 })
 
