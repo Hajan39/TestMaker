@@ -324,8 +324,8 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                 </Button>
               ),
             )}
-            <Button size="sm" variant="ghost" onClick={() => router.push('/')}>
-              Přehled knihovny
+            <Button size="sm" variant="ghost" onClick={() => router.push('/?vse=1')}>
+              Všechny třídy
             </Button>
           </div>
         </Card>

@@ -98,6 +98,42 @@ describe('stránkování fronty kurzorem', () => {
   })
 })
 
+describe('panel „Smazané" — řazení od nejnovějších s víc než dvaceti položkami', () => {
+  it('seřadí podle reviewedAt sestupně a kurzor projde celý seznam bez opakování', async () => {
+    const { topicId } = await seedTopic()
+    // 22 smazaných otázek, každá s vlastním `reviewedAt` — index 0 je
+    // nejstarší zásah, index 21 nejnovější, takže očekávané pořadí je
+    // sestupně 21, 20, …, 0.
+    const ids: string[] = []
+    for (let i = 0; i < 22; i += 1) {
+      ids.push(
+        await seedQuestion(topicId, {
+          prompt: `Smazaná otázka ${i}`,
+          status: 'rejected',
+          reviewedAt: new Date(2026, 0, 1, 0, 0, i).toISOString(),
+        }),
+      )
+    }
+
+    const first = await page(`/api/questions?status=rejected&topicId=${topicId}&order=desc`)
+    expect(first.total).toBe(22)
+    expect(first.items).toHaveLength(20)
+    expect(first.items[0].id).toBe(ids[21])
+    expect(first.items[19].id).toBe(ids[2])
+    expect(first.nextCursor).toBeTruthy()
+
+    const rest = await page(
+      `/api/questions?status=rejected&topicId=${topicId}&order=desc&cursor=${encodeURIComponent(first.nextCursor!)}`,
+    )
+    expect(rest.items.map((item) => item.id)).toEqual([ids[1], ids[0]])
+    expect(rest.nextCursor).toBeNull()
+
+    const seen = [...first.items, ...rest.items].map((item) => item.id)
+    expect(new Set(seen).size).toBe(22)
+    expect(seen).toEqual([...ids].reverse())
+  })
+})
+
 describe('hromadné schválení celého tématu', () => {
   it('změní jen koncepty daného tématu a vrátí jejich id pro vzetí zpět', async () => {
     const mine = await seedTopic()

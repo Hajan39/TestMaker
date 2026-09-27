@@ -105,7 +105,7 @@ export function GenerationStatus({ pathname }: { pathname: string }) {
     <Link
       href={href}
       className="flex items-center gap-1.5 rounded-[var(--radius-inner)] px-2 py-1 text-xs text-fg-muted hover:text-fg"
-      title="Přehled generování"
+      title={counts.topicId ? 'Otevřít téma' : 'Přehled generování'}
     >
       {/* Kolečko patří jen k práci, která opravdu běží. U nedokončených témat
           by se točilo nad něčím, co stojí. */}

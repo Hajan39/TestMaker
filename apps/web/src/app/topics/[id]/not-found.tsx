@@ -10,10 +10,10 @@ export default function TopicNotFound() {
     <div className="p-5">
       <EmptyState
         title="Téma už neexistuje"
-        hint="Nejspíš se smazalo nebo sloučilo s jiným. V knihovně najdeš, kam se jeho materiály poděly."
+        hint="Nejspíš se smazalo nebo sloučilo s jiným. Najdeš ho přes jeho třídu."
         action={
-          <Link href="/">
-            <Button>Zpět do knihovny</Button>
+          <Link href="/?vse=1">
+            <Button>Všechny třídy</Button>
           </Link>
         }
       />

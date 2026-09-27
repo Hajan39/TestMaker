@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet } from '@testmaker/ui'
-import { useMuzeMenit } from '@/components/Prava'
+import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet, toast } from '@testmaker/ui'
+import { useMuzeSpravovat } from '@/components/Prava'
 
 type Kind = 'subject' | 'grade' | 'topic'
 
@@ -68,11 +68,12 @@ export function DeleteFromLibrary({
   /** Kam odejít po smazání; bez toho se jen obnoví stránka. */
   redirectTo?: string
 }) {
-  // Náhled nemaže: tlačítko se mu vůbec nenabízí. Hlídka je až za hooky,
-  // aby se jich v každém vykreslení volal stejný počet.
-  const muzeMenit = useMuzeMenit()
+  // Mazání v knihovně smí jen správce (`DELETE /api/library`) — tlačítko se
+  // ucitelce ani náhledu vůbec nenabízí. Hlídka je až za hooky, aby se jich
+  // v každém vykreslení volal stejný počet.
+  const muzeSpravovat = useMuzeSpravovat()
   const router = useRouter()
-  if (!muzeMenit) return null
+  if (!muzeSpravovat) return null
 
   return (
     <DeleteButton
@@ -88,7 +89,20 @@ export function DeleteFromLibrary({
         return describeImpact((await response.json()) as Impact)
       }}
       onConfirm={async () => {
-        await fetch(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        // Chyba se nechává probublat dál — `DeleteButton` na ni čeká, aby
+        // dialog nezavřel a nepředstíral úspěch, který nenastal.
+        try {
+          const response = await fetch(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+          })
+          if (!response.ok) {
+            const detail = (await response.json().catch(() => ({}))) as { error?: string }
+            throw new Error(detail.error ?? `Mazání se nepodařilo (${response.status})`)
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Mazání se nepodařilo')
+          throw error
+        }
         if (redirectTo) router.push(redirectTo)
         router.refresh()
       }}

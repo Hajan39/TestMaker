@@ -139,6 +139,10 @@ export async function seedQuestion(
     status?: 'draft' | 'approved' | 'rejected'
     /** Typ otázky — kvůli filtru podle typu; payload zůstává jednoduchý. */
     type?: QuestionType
+    /** Ruční nastavení časů — testy řazení „od nejnovějších" potřebují jistotu pořadí. */
+    createdAt?: string
+    reviewedAt?: string | null
+    source?: 'ai' | 'manual'
   } = {},
 ): Promise<string> {
   const id = newId()
@@ -158,10 +162,12 @@ export async function seedQuestion(
     blocks: [],
     points: 1,
     difficulty: 2,
-    source: 'ai',
+    source: options.source ?? 'ai',
     status: options.status ?? 'approved',
     // Stejně jako v aplikaci: text pro hledání se plní při zápisu otázky.
     searchText: searchTextFor({ payload }),
+    ...(options.createdAt ? { createdAt: options.createdAt } : {}),
+    ...(options.reviewedAt !== undefined ? { reviewedAt: options.reviewedAt } : {}),
   })
   return id
 }

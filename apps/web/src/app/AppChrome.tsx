@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { MainNav } from '@/components/MainNav'
 import { PravaProvider } from '@/components/Prava'
 import type { Role } from '@/lib/role'
+import { roleMuzeSpravovat } from '@/lib/role'
 
 /**
  * Stránky pro nepřihlášenou uživatelku (skupina tras `(auth)`). Navigaci
@@ -28,10 +29,11 @@ export function AppChrome({
   const pathname = usePathname()
   // Bez přihlašování (lokální běh) se pracuje pod správcem, tedy naplno.
   const muzeMenit = ucet === null || ucet.role !== 'nahled'
+  const muzeSpravovat = ucet === null || roleMuzeSpravovat(ucet.role)
   // Na přihlašovací stránce ani při vynucené změně hesla nemá lišta co dělat.
   if (BEZ_NAVIGACE.includes(pathname)) return <>{children}</>
   return (
-    <PravaProvider muzeMenit={muzeMenit}>
+    <PravaProvider muzeMenit={muzeMenit} muzeSpravovat={muzeSpravovat}>
       <MainNav ucet={ucet}>{children}</MainNav>
     </PravaProvider>
   )

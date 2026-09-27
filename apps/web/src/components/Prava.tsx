@@ -9,17 +9,31 @@ import { createContext, useContext } from 'react'
  * polovina té dvojice.
  */
 const MuzeMenitContext = createContext(true)
+// Kdo smí do správy (účty, zálohy, mazání v knihovně) — jen `spravce`. Stejný
+// důvod jako u `MuzeMenitContext`: tlačítko musí zmizet, ne se nabídnout
+// a pak tiše selhat na bráně.
+const MuzeSpravovatContext = createContext(true)
 
 export function PravaProvider({
   muzeMenit,
+  muzeSpravovat,
   children,
 }: {
   muzeMenit: boolean
+  muzeSpravovat: boolean
   children: React.ReactNode
 }) {
-  return <MuzeMenitContext.Provider value={muzeMenit}>{children}</MuzeMenitContext.Provider>
+  return (
+    <MuzeMenitContext.Provider value={muzeMenit}>
+      <MuzeSpravovatContext.Provider value={muzeSpravovat}>{children}</MuzeSpravovatContext.Provider>
+    </MuzeMenitContext.Provider>
+  )
 }
 
 export function useMuzeMenit(): boolean {
   return useContext(MuzeMenitContext)
+}
+
+export function useMuzeSpravovat(): boolean {
+  return useContext(MuzeSpravovatContext)
 }

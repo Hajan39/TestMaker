@@ -28,10 +28,14 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
 
   async function ensureLoaded() {
     if (grades !== null) return
-    const response = await fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
-    if (!response.ok) return
-    const data = (await response.json()) as { grades: { id: string; name: string }[] }
-    setGrades(data.grades)
+    try {
+      const response = await fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
+      if (!response.ok) throw new Error('Ročníky se nepodařilo načíst.')
+      const data = (await response.json()) as { grades: { id: string; name: string }[] }
+      setGrades(data.grades)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Ročníky se nepodařilo načíst.')
+    }
   }
 
   async function move(gradeName: string) {
@@ -47,6 +51,7 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
         toast.error(detail.error ?? 'Přesun se nepovedl, zkus to prosím znovu.')
         return
       }
+      toast.success(`Téma přesunuto do ${gradeName || 'Bez ročníku'}`)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Přesun se nepovedl, zkus to prosím znovu.')

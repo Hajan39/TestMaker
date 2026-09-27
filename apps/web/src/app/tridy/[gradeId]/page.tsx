@@ -21,7 +21,7 @@ export default async function ClassPage({ params }: { params: Promise<{ gradeId:
 
   return (
     <>
-      <RememberClass gradeId={classInfo.gradeId} />
+      <RememberClass gradeId={classInfo.gradeId} userId={ucet.userId} />
       <ClassTopics classInfo={classInfo} ai={aiStatus()} />
     </>
   )

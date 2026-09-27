@@ -83,7 +83,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="space-y-5">
-      <RememberClass gradeId={topic.gradeId} />
+      <RememberClass gradeId={topic.gradeId} userId={ucet.userId} />
       <div>
         <p className="text-sm text-fg-muted">
           <Link href={`/tridy/${topic.gradeId}`} className="hover:text-brand">

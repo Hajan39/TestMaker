@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 import { AI_SETTINGS } from '@testmaker/core/ai'
 import {
   normalizeEvidence,
@@ -54,8 +54,8 @@ export interface QuestionList {
   items: Question[]
   /**
    * Otázek bylo víc, než se vešlo do limitu — vrácený seznam tedy není úplný.
-   * Volající to musí dát najevo: mlčky useknutý seznam vypadá jako celá banka
-   * a učitelka by marně hledala otázku, která v něm prostě není.
+   * Volající to musí dát najevo: mlčky useknutý seznam vypadá jako všechny
+   * otázky a učitelka by marně hledala tu, která v něm prostě není.
    */
   truncated: boolean
   /** Limit, o který se seznam usekl — do hlášky pro učitelku. */
@@ -294,10 +294,10 @@ export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Pr
 }
 
 /**
- * Filtr pro stránkovanou frontu (banka, `/review`). Na rozdíl od `QuestionFilter` výš míří na
- * jedno patro knihovny (téma, ročník, předmět), ne na výčet témat — obrazovka
- * kontroly se zužuje právě takhle a seznam témat celého předmětu by se do
- * adresy nevešel.
+ * Filtr pro stránkovanou frontu (`GET /api/questions` — dnes hlavně panel
+ * „Smazané" v tématu). Na rozdíl od `QuestionFilter` výš míří na jedno patro
+ * knihovny (téma, ročník, předmět), ne na výčet témat — seznam témat celého
+ * předmětu by se do adresy nevešel.
  */
 export interface QuestionQuery {
   statuses?: QuestionStatus[]
@@ -313,26 +313,28 @@ export interface QuestionQuery {
 export const QUESTION_PAGE_SIZE = 20
 
 export interface QuestionCursor {
-  createdAt: string
+  /** Hodnota řadicího sloupce poslední přečtené položky — `createdAt` (výchozí
+   *  řazení) nebo `reviewedAt`/`createdAt` u řazení „Smazané" od nejnovějších. */
+  at: string
   id: string
 }
 
 /**
- * Kurzor je poslední přečtená dvojice (createdAt, id) v base64. Stránkuje se
- * kurzorem, ne offsetem: schválením otázka z výsledku vypadne a offset by o
- * tolik položek přeskočil dál — učitelka by je nikdy neuviděla.
+ * Kurzor je poslední přečtená dvojice (řadicí sloupec, id) v base64. Stránkuje
+ * se kurzorem, ne offsetem: schválením otázka z výsledku vypadne a offset by
+ * o tolik položek přeskočil dál — učitelka by je nikdy neuviděla.
  *
  * Oddělovačem je svislítko: v čase ve tvaru ISO ani v id (nanoid) se nevyskytuje.
  */
 export function encodeCursor(cursor: QuestionCursor): string {
-  return Buffer.from(`${cursor.createdAt}|${cursor.id}`, 'utf8').toString('base64url')
+  return Buffer.from(`${cursor.at}|${cursor.id}`, 'utf8').toString('base64url')
 }
 
 export function decodeCursor(value: string | null | undefined): QuestionCursor | null {
   if (!value) return null
-  const [createdAt, id] = Buffer.from(value, 'base64url').toString('utf8').split('|')
-  if (!createdAt || !id) return null
-  return { createdAt, id }
+  const [at, id] = Buffer.from(value, 'base64url').toString('utf8').split('|')
+  if (!at || !id) return null
+  return { at, id }
 }
 
 /** Podmínky filtru; patro knihovny nad tématem se řeší poddotazem nad `topics`. */
@@ -382,24 +384,38 @@ export async function countQuestions(scope: Scope, query: QuestionQuery = {}): P
 }
 
 /**
- * Jedna stránka fronty. Řadí se podle `createdAt` a `id` vzestupně: dvojice je
- * jednoznačná (v jedné milisekundě může vzniknout otázek víc najednou), takže
- * se při posunu kurzorem žádná otázka nezopakuje ani nevynechá.
+ * Jedna stránka fronty. Řadí se podle `createdAt` a `id` vzestupně (výchozí),
+ * dvojice je jednoznačná (v jedné milisekundě může vzniknout otázek víc
+ * najednou), takže se při posunu kurzorem žádná otázka nezopakuje ani
+ * nevynechá.
+ *
+ * `order: 'desc'` řadí od nejnovějších podle toho, kdy se s otázkou naposledy
+ * něco dělo (`reviewedAt`, u otázek bez zásahu `createdAt`) — používá to panel
+ * „Smazané" v tématu, kde má být nahoře to, co učitelka smazala jako poslední.
  */
 export async function loadQuestionPage(
   scope: Scope,
   query: QuestionQuery = {},
-  options: { limit?: number; cursor?: string | null } = {},
+  options: { limit?: number; cursor?: string | null; order?: 'asc' | 'desc' } = {},
 ): Promise<{ items: Question[]; nextCursor: string | null }> {
   const limit = Math.min(Math.max(options.limit ?? QUESTION_PAGE_SIZE, 1), 200)
+  const order = options.order ?? 'asc'
   const conditions = queryConditions(scope, query)
+
+  // Vzestupné řazení (fronta) stojí čistě na `createdAt`; sestupné (panel
+  // „Smazané") na okamžiku poslední změny stavu, s `createdAt` jako náhradou
+  // pro otázky, které ještě žádný zásah nemají.
+  const sortColumn: SQL<string> =
+    order === 'desc'
+      ? sql<string>`coalesce(${questions.reviewedAt}, ${questions.createdAt})`
+      : sql<string>`${questions.createdAt}`
 
   const cursor = decodeCursor(options.cursor)
   if (cursor) {
-    const after = or(
-      gt(questions.createdAt, cursor.createdAt),
-      and(eq(questions.createdAt, cursor.createdAt), gt(questions.id, cursor.id)),
-    )
+    const after =
+      order === 'desc'
+        ? or(lt(sortColumn, cursor.at), and(eq(sortColumn, cursor.at), lt(questions.id, cursor.id)))
+        : or(gt(sortColumn, cursor.at), and(eq(sortColumn, cursor.at), gt(questions.id, cursor.id)))
     if (after) conditions.push(after)
   }
 
@@ -408,14 +424,18 @@ export async function loadQuestionPage(
     .select()
     .from(questions)
     .where(and(...conditions))
-    .orderBy(asc(questions.createdAt), asc(questions.id))
+    .orderBy(
+      order === 'desc' ? desc(sortColumn) : asc(sortColumn),
+      order === 'desc' ? desc(questions.id) : asc(questions.id),
+    )
     .limit(limit + 1)
 
   const page = rows.slice(0, limit)
   const last = page[page.length - 1]
+  const lastAt = last ? (order === 'desc' ? (last.reviewedAt ?? last.createdAt) : last.createdAt) : null
   return {
     items: page.map(toQuestion),
-    nextCursor: rows.length > limit && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null,
+    nextCursor: rows.length > limit && last && lastAt ? encodeCursor({ at: lastAt, id: last.id }) : null,
   }
 }
 

@@ -8,6 +8,7 @@ import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 import { RememberClass } from '@/components/RememberClass'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
+import { roleMuzeMenit } from '@/lib/role'
 import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
@@ -27,23 +28,30 @@ export default async function HomePage({
   // Stará adresa knihovny s ročníkem v dotazu (`/?grade=<id>`) vede na jeho
   // novou stránku třídy — jinak by se staré odkazy z rozhraní i uložené
   // v prohlížeči rozsypaly. Existenci třídy ověří až stránka třídy sama.
-  if (grade) redirect(`/tridy/${grade}`)
+  if (grade) redirect(`/tridy/${encodeURIComponent(grade)}`)
 
   const ucet = await ucetStranky()
   const tree = await loadLibraryTree(ucet)
+  const muzeMenit = roleMuzeMenit(ucet.role)
 
   if (tree.length === 0) {
     return (
       <EmptyState
         title="Knihovna je zatím prázdná"
-        hint="Naimportuj složku s materiály — z každého souboru se vytáhne text a vznikne téma. Nebo si založ prázdný předmět a otázky si napiš sama."
+        hint={
+          muzeMenit
+            ? 'Naimportuj složku s materiály — z každého souboru se vytáhne text a vznikne téma. Nebo si založ prázdný předmět a otázky si napiš sama.'
+            : 'Zatím v ní nic není.'
+        }
         action={
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Link href="/import">
-              <Button>Hromadný import</Button>
-            </Link>
-            <NewLibraryItem kind="subject" label="Založit předmět" size="default" />
-          </div>
+          muzeMenit ? (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Link href="/import">
+                <Button>Hromadný import</Button>
+              </Link>
+              <NewLibraryItem kind="subject" label="Založit předmět" size="default" />
+            </div>
+          ) : undefined
         }
       />
     )
@@ -65,7 +73,7 @@ export default async function HomePage({
 
   return (
     <div className="space-y-5">
-      <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} />
+      <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} userId={ucet.userId} />
 
       <div className="max-w-md">
         <LibrarySearch />
@@ -82,21 +90,25 @@ export default async function HomePage({
             z hlavičky — `main` vodorovné rolování skrývá, takže tlačítko za
             okrajem by bylo nedosažitelné. */}
         <div className="flex flex-wrap items-center gap-2">
-          <BulkGenerate
-            ai={aiStatus()}
-            // Rod předmětu se z názvu složky uhodnout nedá („Celý MATEMATIKA“),
-            // tak se do názvu tlačítka přídavné jméno vůbec nedává.
-            scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
-          />
-          <NewLibraryItem kind="subject" label="Založit předmět" />
-          <Link href="/import">
-            <Button size="sm" variant="outline">
-              Hromadný import
-            </Button>
-          </Link>
-          <Link href="/tests/new">
-            <Button size="sm">Nový test</Button>
-          </Link>
+          {muzeMenit ? (
+            <>
+              <BulkGenerate
+                ai={aiStatus()}
+                // Rod předmětu se z názvu složky uhodnout nedá („Celý MATEMATIKA“),
+                // tak se do názvu tlačítka přídavné jméno vůbec nedává.
+                scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
+              />
+              <NewLibraryItem kind="subject" label="Založit předmět" />
+              <Link href="/import">
+                <Button size="sm" variant="outline">
+                  Hromadný import
+                </Button>
+              </Link>
+              <Link href="/tests/new">
+                <Button size="sm">Nový test</Button>
+              </Link>
+            </>
+          ) : null}
         </div>
       </div>
 

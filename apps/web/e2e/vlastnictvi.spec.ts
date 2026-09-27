@@ -47,7 +47,7 @@ test('cizí písemka není v seznamu, na adrese ani v PDF', async ({ browser, ba
     await strankaB.goto('/tests')
     await expect(strankaB.getByText(nazev)).toHaveCount(0)
     await strankaB.goto(`/tests/${id}`)
-    await expect(strankaB.getByText(/Stránka nenalezena|404/i).first()).toBeVisible()
+    await expect(strankaB.getByText(/Stránka neexistuje|Stránka nenalezena|404/i).first()).toBeVisible()
 
     // A nedostane ani PDF, i když si adresu složí sama.
     const pdf = await kontextB.request.get(`/api/tests/${id}/pdf`)

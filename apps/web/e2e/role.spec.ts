@@ -27,6 +27,10 @@ test('náhled si knihovnu prohlíží, ale nic v ní nezaloží ani nesmaže', a
 
   await expect(page.getByRole('button', { name: 'Založit předmět' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
+  // Import a nový test jsou taky akce ke změně — na úvodu se náhledu
+  // nenabízejí, byť stránky `/import` a `/tests/new` samy zůstávají.
+  await expect(page.getByRole('button', { name: 'Hromadný import' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Nový test' })).toHaveCount(0)
 })
 
 test('zápis odmítne i server, ne jen skryté tlačítko', async ({ page }) => {
@@ -210,4 +214,47 @@ test('náhled vidí pruh materiálů, ale bez nahrávání, přepínače a mazá
   await expect(page.getByRole('checkbox', { name: /Použít pro generování/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Upravit téma', exact: true })).toHaveCount(0)
+})
+
+/**
+ * Mazání v knihovně (`DELETE /api/library`) smí jen správce — ucitelka smí
+ * měnit obsah (přejmenovat, přesunout, generovat), ale tlačítka „Smazat
+ * ročník"/„Smazat téma"/„Smazat předmět" se jí vůbec nenabízejí, jinak by
+ * narazila na tichou 403 (viz `DeleteFromLibrary`).
+ */
+test.describe('ucitelka nemaže v knihovně — to smí jen správce', () => {
+  test.use({ storageState: 'e2e/.auth/ucitelkaA.json' })
+
+  test('stránka třídy ucitelce nenabídne „Smazat ročník"', async ({ page, request }) => {
+    const subject = await request.post('/api/library', {
+      data: { kind: 'subject', name: `E2E UCITELKA MAZANI ${Date.now()}` },
+    })
+    expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+    const { id: subjectId } = (await subject.json()) as { id: string }
+
+    const gradeName = `Ucitelčin ročník ${Date.now()}`
+    const grade = await request.post('/api/library', {
+      data: { kind: 'grade', name: gradeName, parentId: subjectId },
+    })
+    expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
+    const { id: gradeId } = (await grade.json()) as { id: string }
+
+    await page.goto(`/tridy/${gradeId}`)
+    await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Smazat ročník' })).toHaveCount(0)
+    // Ostatní akce ke změně (přejmenování, přidání tématu) jí zůstávají.
+    await expect(page.getByRole('button', { name: 'Přidat téma' })).toBeVisible()
+  })
+
+  test('úvod ucitelce nenabídne „Smazat předmět"', async ({ page, request }) => {
+    const subjectName = `E2E UCITELKA PREDMET ${Date.now()}`
+    const subject = await request.post('/api/library', { data: { kind: 'subject', name: subjectName } })
+    expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+
+    await page.goto('/?vse=1')
+    await expect(page.getByText(subjectName)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
+    // Přejmenovat a přidat ročník ucitelce zůstávají — jen mazání je pryč.
+    await expect(page.getByRole('button', { name: /Založit předmět/ })).toBeVisible()
+  })
 })

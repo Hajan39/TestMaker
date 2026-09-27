@@ -133,11 +133,15 @@ test.describe('rozcestník tříd', () => {
     await expect(page.locator('a[href^="/tridy/"]').first()).toBeVisible()
   })
 
-  test('cizí nebo neexistující třída vede na 404', async ({ page }) => {
+  test('cizí nebo neexistující třída vede na českou hlášku „Třída už neexistuje"', async ({ page }) => {
     // Ve vývojovém serveru Next.js vrací stránku `notFound()` se stavem 200
     // (dorovná se to až v produkčním sestavení) — ověřuje se proto obsah.
     await page.goto('/tridy/neexistujici-trida-xyz')
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
+    await expect(page.getByText('Třída už neexistuje')).toBeVisible()
+    const zpet = page.getByRole('link', { name: 'Všechny třídy' })
+    await expect(zpet).toBeVisible()
+    await zpet.click()
+    await expect(page).toHaveURL('/?vse=1')
   })
 })
 
@@ -173,12 +177,49 @@ test.describe('správa tématu na stránce třídy', () => {
       await presun.click()
       await page.getByRole('option', { name: GRADE_2, exact: true }).click()
 
+      await expect(page.getByText(`Téma přesunuto do ${GRADE_2}`)).toBeVisible()
+
       // Téma zmizí ze staré třídy...
       await expect(page.getByText(TEMA, { exact: true })).toHaveCount(0)
 
       // ...a objeví se v nové.
       await page.goto(`/tridy/${gradeId2}`)
       await expect(page.getByText(TEMA, { exact: true }).first()).toBeVisible()
+    } finally {
+      await smazPredmet(page.request, subjectId)
+    }
+  })
+})
+
+test.describe('staré adresy', () => {
+  test('/?grade=<id> s neplatnými znaky v id se nerozbije na přesměrování', async ({ page }) => {
+    // `encodeURIComponent` v cíli přesměrování — bez něj by id se
+    // svislítkem nebo otazníkem propadlo do dotazu jiné cesty.
+    await page.goto(`/?grade=${encodeURIComponent('divne/id?a=b')}`)
+    await expect(page).toHaveURL(/\/tridy\/divne%2Fid%3Fa%3Db$/)
+  })
+
+  test('/questions a /review s topicId vedou na dané téma, bez něj na úvod', async ({ page }) => {
+    const subjectName = `E2E STARE ADRESY ${RAZITKO}`
+    const { subjectId, gradeId } = await zalozTridu(page.request, subjectName, `Ročník ${RAZITKO}`)
+    try {
+      const topic = await page.request.post('/api/library', {
+        data: { kind: 'topic', name: 'Téma pro starou adresu', parentId: gradeId },
+      })
+      expect(topic.ok(), 'zkušební téma se nepodařilo založit').toBe(true)
+      const { id: topicId } = (await topic.json()) as { id: string }
+
+      await page.goto(`/questions?topicId=${topicId}`)
+      await expect(page).toHaveURL(`/topics/${topicId}`)
+
+      await page.goto(`/review?topicId=${topicId}`)
+      await expect(page).toHaveURL(`/topics/${topicId}`)
+
+      await page.goto('/questions')
+      await expect(page).toHaveURL('/')
+
+      await page.goto('/review')
+      await expect(page).toHaveURL('/')
     } finally {
       await smazPredmet(page.request, subjectId)
     }

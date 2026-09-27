@@ -95,6 +95,11 @@ export const TopicQuestions = forwardRef<
   const [showDeleted, setShowDeleted] = useState(false)
   const [deletedQuestions, setDeletedQuestions] = useState<Question[] | null>(null)
   const [loadingDeleted, setLoadingDeleted] = useState(false)
+  // Kurzor za poslední načtenou smazanou otázkou — `null` znamená „další
+  // stránka není" (buď se ještě nenačetlo nic, nebo je to konec seznamu;
+  // rozlišuje to `deletedQuestions === null`).
+  const [deletedCursor, setDeletedCursor] = useState<string | null>(null)
+  const [loadingMoreDeleted, setLoadingMoreDeleted] = useState(false)
   // Otázka, u které se právě obnovuje stav — chrání proti dvojímu kliknutí
   // na „Obnovit", stejně jako `busyIds` u mazání.
   const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set())
@@ -271,16 +276,22 @@ export const TopicQuestions = forwardRef<
     }
   }
 
-  /** Dotáhne smazané (zamítnuté) otázky tématu — jen jednou, při prvním zapnutí. */
+  /**
+   * Dotáhne smazané (zamítnuté) otázky tématu — jen jednou, při prvním
+   * zapnutí. Řadí se od nejnovějších (`order=desc`), ať je nahoře to, co
+   * učitelka smazala naposled; stránka se bere jen jedna, další přes
+   * „Načíst další" (`loadMoreDeleted`).
+   */
   async function loadDeleted() {
     setLoadingDeleted(true)
     try {
       const response = await fetch(
-        `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected`,
+        `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected&order=desc`,
       )
       if (!response.ok) throw new Error('Smazané otázky se nepodařilo načíst.')
-      const data = (await response.json()) as { items: Question[] }
+      const data = (await response.json()) as { items: Question[]; nextCursor: string | null }
       setDeletedQuestions(data.items)
+      setDeletedCursor(data.nextCursor)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Smazané otázky se nepodařilo načíst.')
       setShowDeleted(false)
@@ -289,10 +300,37 @@ export const TopicQuestions = forwardRef<
     }
   }
 
+  /** Dotáhne další stránku smazaných otázek za kurzorem z předchozího načtení. */
+  async function loadMoreDeleted() {
+    if (!deletedCursor) return
+    setLoadingMoreDeleted(true)
+    try {
+      const response = await fetch(
+        `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected&order=desc&cursor=${encodeURIComponent(deletedCursor)}`,
+      )
+      if (!response.ok) throw new Error('Další smazané otázky se nepodařilo načíst.')
+      const data = (await response.json()) as { items: Question[]; nextCursor: string | null }
+      setDeletedQuestions((current) => [...(current ?? []), ...data.items])
+      setDeletedCursor(data.nextCursor)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Další smazané otázky se nepodařilo načíst.')
+    } finally {
+      setLoadingMoreDeleted(false)
+    }
+  }
+
+  // Panel smazaných je dole pod dlouhým seznamem otázek — bez posunu na
+  // pohled by po zapnutí přepínače nebylo v dlouhém tématu vůbec vidět, že se
+  // něco stalo.
+  const deletedPanelRef = useRef<HTMLDivElement>(null)
+
   function toggleShowDeleted() {
     setShowDeleted((current) => {
       const next = !current
       if (next && deletedQuestions === null) void loadDeleted()
+      if (next) {
+        requestAnimationFrame(() => deletedPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      }
       return next
     })
   }
@@ -480,7 +518,7 @@ export const TopicQuestions = forwardRef<
       ) : null}
 
       {showDeleted && muzeMenit ? (
-        <div className="mt-4 border-t border-line-soft pt-3">
+        <div ref={deletedPanelRef} className="mt-4 border-t border-line-soft pt-3">
           <h3 className="text-sm font-semibold text-fg-soft">Smazané otázky</h3>
           {loadingDeleted ? (
             <p className="mt-2 text-sm text-fg-muted">Načítám…</p>
@@ -512,6 +550,18 @@ export const TopicQuestions = forwardRef<
               ))}
             </ul>
           )}
+          {deletedCursor ? (
+            <div className="mt-3 flex justify-center">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loadingMoreDeleted}
+                onClick={() => void loadMoreDeleted()}
+              >
+                {loadingMoreDeleted ? 'Načítám…' : 'Načíst další'}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </Card>

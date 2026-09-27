@@ -179,7 +179,7 @@ vytvořila** — cizí se nezobrazí ani nevytisknou, dokud je autorka nenasdíl
 
 | Role | Co smí |
 | --- | --- |
-| `ucitelka` | všechno s obsahem: import, generování, kontrola, testy, hlavolamy |
+| `ucitelka` | všechno s obsahem: import, generování, testy, hlavolamy |
 | `spravce` | navíc účty, zálohy školy, záznam událostí a chyb; jako jediný smí mazat předmět, ročník a téma |
 | `nahled` | jen čte a tiskne |
 

@@ -51,23 +51,30 @@ const bulkTopicSchema = z.object({
 /** Stránka fronty: filtr, velikost a kurzor za poslední přečtenou otázkou. */
 const listSchema = z.object({
   statuses: z.array(z.enum(QUESTION_STATUSES)).optional(),
-  /** Typy otázek — banka se jimi zužuje, fronta na `/review` je neposílá. */
+  /** Typy otázek; filtr přes ně dnes posílá jen přímé volání API, ne aplikace. */
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
   topicId: z.string().optional(),
   gradeId: z.string().optional(),
   subjectId: z.string().optional(),
-  /** Hledaný text; porovnává se se sloupcem `search_text`, ne v prohlížeči. */
+  /**
+   * Hledaný text; porovnává se se sloupcem `search_text`, ne v prohlížeči.
+   * Aplikace tenhle parametr sama nepoužívá — otázky se hledají jen uvnitř
+   * tématu (`topicId`); zůstává pro přímé volání API a testy.
+   */
   q: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(QUESTION_PAGE_SIZE),
   cursor: z.string().optional(),
+  /** `desc` = od nejnovějších podle poslední změny stavu — panel „Smazané". */
+  order: z.enum(['asc', 'desc']).optional().default('asc'),
 })
 
 /**
- * Stránka otázek pro obrazovku kontroly. Stránkuje se kurzorem, ne offsetem:
- * schválená otázka z výsledku vypadne a offset by o tolik položek přeskočil
- * dál — učitelka by je nikdy neuviděla.
+ * Stránka otázek tématu — dnes hlavně panel „Smazané" (`status=rejected`).
+ * Stránkuje se kurzorem, ne offsetem: otázka, která z filtru mezitím vypadne
+ * (obnoví se, schválí se jinde), by offset o tolik položek přeskočil dál a
+ * učitelka by ji nikdy neuviděla.
  *
- * Vrací i `total`, aby šlo nad frontou ukázat, kolik práce ještě zbývá.
+ * Vrací i `total`, aby šlo ukázat, kolik otázek filtru odpovídá celkem.
  */
 export async function GET(request: Request) {
   return sRozsahem(async (ucet) => {
@@ -81,6 +88,7 @@ export async function GET(request: Request) {
     subjectId: params.get('subjectId') ?? undefined,
     limit: params.get('limit') ?? undefined,
     cursor: params.get('cursor') ?? undefined,
+    order: params.get('order') ?? undefined,
   })
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
@@ -96,7 +104,11 @@ export async function GET(request: Request) {
   }
 
   const [page, total] = await Promise.all([
-    loadQuestionPage(ucet, query, { limit: parsed.data.limit, cursor: parsed.data.cursor }),
+    loadQuestionPage(ucet, query, {
+      limit: parsed.data.limit,
+      cursor: parsed.data.cursor,
+      order: parsed.data.order,
+    }),
     countQuestions(ucet, query),
   ])
 

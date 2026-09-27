@@ -29,7 +29,9 @@ generování prvním krokem.
 ## Lišta a úvodní obrazovka
 
 Nová navigace: **Třídy** (úvod s dlaždicemi) · **Testy** · **Hlavolamy** · **Šablony**
-(+ **Správa** pro správce). Zrušeny: Import materiálů, Generování, Kontrola, Banka otázek.
+(+ **Správa** pro správce). Zrušeny (stránky mizí docela): Kontrola, Banka
+otázek. Import materiálů a Generování z lišty jen mizí — stránky `/import`
+a `/generovani` samy zůstávají, jen na ně nevede odkaz v liště.
 
 - Staré adresy přesměrují: `/questions` a `/review` na `/` (úvod); `/import`
   a `/generovani` zůstávají dostupné, ale ne v navigaci (vede na ně adresa
@@ -38,11 +40,13 @@ Nová navigace: **Třídy** (úvod s dlaždicemi) · **Testy** · **Hlavolamy** 
   a otázek. Tlačítka: „Hromadný import" (import složky), „Založit předmět",
   „Nový test" (vede do editoru), vyhledávání v knihovně. Aplikace si pamatuje
   naposledy otevřenou třídu (v prohlížeči) a otevře ji rovnou.
-- **Třída (`/tridy/[id]`):** seznam témat s počtem materiálů a otázek,
-  ukazatel běžícího generování (když právě jedno běží). Přidat, přejmenovat,
-  přesunout a smazat téma / předmět / ročník jde přímo tady (přebírá to, co
-  dnes umí Knihovna; smazat ročník jde jen správcům).
-- **Ukazatel generování v liště:** vede do tématu, když běží právě jedno
+- **Třída (`/tridy/[id]`):** seznam témat s počtem materiálů a otázek; u
+  každého tématu zvlášť jeho vlastní stav generování („Generuje se…" /
+  „Čeká ve frontě"), bez ohledu na to, kolik úloh běží celkem. Přidat,
+  přejmenovat, přesunout a smazat téma / předmět / ročník jde přímo tady
+  (přebírá to, co dnes umí Knihovna; smazat ročník jde jen správcům).
+- **Ukazatel generování v liště:** pravidlo „právě jedna úloha" platí jen
+  pro tenhle ukazatel — vede do tématu, když běží nebo čeká právě jedno
   generování, jinak na `/generovani` (přehled fronty). Do tématu se dostane i
   z přehledu kliknutím na řádek úlohy.
 - **V prázdné knihovně** (bez tříd) se nabídnou stejné akce jako na úvodu
@@ -170,10 +174,11 @@ Každý krok jde nasadit samostatně a aplikace mezi nimi funguje.
    podle třídy v editoru testu.
 4. Materiály a generování v tématu: pruh materiálů, zjednodušený dialog,
    průběh nad seznamem.
-5. Úvod Třídy a úklid: nová úvodní obrazovka, lišta, přesměrování, smazání
-   stránek `/import`, `/generovani`, `/review`, `/questions` a komponent,
-   které používaly jen ony (`ReviewPanel`, `BulkGenerate` a další podle
-   skutečných importů).
+5. Úvod Třídy a úklid: nová úvodní obrazovka, lišta jen s Třídy · Testy ·
+   Hlavolamy · Šablony (+ Správa), přesměrování `/review` a `/questions` na
+   `/`, smazání stránek Kontrola a Banka otázek a komponent, které používaly
+   jen ony (`ReviewPanel` a další podle skutečných importů). `/import` a
+   `/generovani` zůstávají jako stránky — jen mizí z lišty.
 6. Přegenerování s důvodem a přehled chyb podle modelu (kapitola výše).
 7. Lehčí / těžší verze otázek a písemky.
 

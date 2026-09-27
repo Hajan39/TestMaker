@@ -15,11 +15,11 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   téma / předmět / ročník jde přímo tady.
 - **Obnovení smazaných otázek v tématu.** Filtr „Smazané (N)" nabídne vrácení
   smazaných otázek zpět do seznamu bez dalšího importu či generování.
-- **Přegenerování s důvodem.** Na kartě otázky se nabídne nepovinný důvod
-  (Nedává smysl, Špatné možnosti, Odpověď v materiálu není, Moc těžká,
-  Moc lehká, Špatná čeština) a volitelná poznámka; selhání nebo těžké otázky
-  posunují obtížnost náhrady.
-
+- **Přegenerování s důvodem.** Na kartě otázky se nabídne nepovinný důvod jako
+  štítek (Nedává smysl, Špatné možnosti, Odpověď v materiálu není, Moc těžká,
+  Moc lehká, Špatná čeština) a volitelná poznámka navíc; jen „Moc těžká" a
+  „Moc lehká" posunují obtížnost náhrady o stupeň, ostatní důvody ji nechávají
+  beze změny.
 - **Otázky z Claude Code.** Na stránce tématu jde **stáhnout materiály** jako
   jeden textový soubor (s ročníkem a otázkami, které už v tématu jsou),
   v Claude Code z nich příkazem `/otazky` nechat napsat otázky a soubor
@@ -127,6 +127,9 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   kde se generují. Filtr „Smazané" umožňuje obnovit smazané otázky bez dalšího
   importu.
 - **Staré adresy `/questions` a `/review` se přesměrují na `/` (úvod).**
+- **Hledání v textu otázek napříč celou knihovnou.** Hledání na úvodu najde
+  jen předmět, ročník nebo téma podle názvu; smazanou otázku jde najít a
+  obnovit jen uvnitř jejího tématu (filtr „Smazané").
 
 ### Opraveno
 

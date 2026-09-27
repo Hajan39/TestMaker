@@ -1,17 +1,16 @@
-import { Delayed, LoadingHeading, LoadingList, LoadingTiles, ThreePane } from '@testmaker/ui'
+import { Delayed, LoadingHeading, LoadingTiles, Skeleton } from '@testmaker/ui'
 
 /**
- * Přechod na knihovnu. Rám tří sloupců se vykreslí hned a kostra vyplní jen
- * jejich obsah — sloupce tak zůstanou na místě a po načtení se přepíše jen to,
- * co se doopravdy mění.
+ * Přechod na úvod. Úvod je od úklidu lišty jednosloupcový (dlaždice tříd bez
+ * `ThreePane`) — kostra proto kopíruje jen tenhle jeden sloupec: hledání
+ * nahoře, nadpis se statistikou a mřížka dlaždic.
  */
-export default function LibraryLoading() {
+export default function HomeLoading() {
   return (
-    <ThreePane first={<LoadingList items={8} />} second={<LoadingList items={10} />}>
-      <Delayed label="Načítám knihovnu…" className="space-y-5">
-        <LoadingHeading />
-        <LoadingTiles count={6} />
-      </Delayed>
-    </ThreePane>
+    <Delayed label="Načítám třídy…" className="space-y-5">
+      <Skeleton className="h-9 max-w-md" />
+      <LoadingHeading stats />
+      <LoadingTiles count={6} />
+    </Delayed>
   )
 }

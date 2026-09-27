@@ -398,6 +398,44 @@ test.describe('otázky v tématu', () => {
     // Karta je zpátky v běžném seznamu.
     await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
   })
+
+  test('přes dvacet smazaných: nejnovější první a „Načíst další" dotáhne zbytek', async ({ page }) => {
+    // Vlastní izolované téma — stejný důvod jako u „téma bez otázek" níž:
+    // ať počet smazaných nezávisí na tom, co v tématu nechaly ostatní testy.
+    const topicId = await ensureTopic(
+      page.request,
+      `E2E izolovane smazane ${Date.now().toString(36)}`,
+    )
+    const marker = Date.now()
+    const ids: string[] = []
+    for (let i = 0; i < 22; i += 1) {
+      ids.push(await pridatOtazku(page.request, topicId, { prompt: `Smazaná ${marker} ${i}`, difficulty: 1 }))
+    }
+    // Zamítnutí jedno po druhém — `reviewedAt` se tak liší a pořadí „od
+    // nejnovějších" jde ověřit: index 21 se smaže poslední, takže je nahoře.
+    for (const id of ids) {
+      const rejected = await page.request.put('/api/questions', { data: { ids: [id], status: 'rejected' } })
+      expect(rejected.ok(), 'zamítnutí zkušební otázky se nepodařilo').toBe(true)
+    }
+
+    await page.goto(`/topics/${topicId}`)
+    const toggle = page.getByRole('button', { name: /^Smazané \(\d+\)$/ })
+    await expect.poll(() => readDeletedCount(toggle)).toBe(22)
+    await toggle.click()
+
+    const rows = page.locator('li[data-question-id]')
+    await expect(rows).toHaveCount(20)
+    await expect(rows.first()).toContainText(`Smazaná ${marker} 21`)
+    await expect(rows.last()).toContainText(`Smazaná ${marker} 2`)
+
+    const loadMore = page.getByRole('button', { name: 'Načíst další' })
+    await expect(loadMore).toBeVisible()
+    await loadMore.click()
+
+    await expect(rows).toHaveCount(22)
+    await expect(rows.last()).toContainText(`Smazaná ${marker} 0`)
+    await expect(loadMore).toHaveCount(0)
+  })
 })
 
 test.describe('téma bez otázek', () => {

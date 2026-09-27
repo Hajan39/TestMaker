@@ -99,8 +99,10 @@ export function QueueScreen({
         duration: 12_000,
         // Kontrola konceptů přes celou knihovnu se zrušila — schvalování je
         // teď v tématu, a po hromadném běhu jich bývá víc najednou, takže
-        // odkaz vede na úvod, odkud se dá do každého z nich doklikat.
-        action: created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/') } : undefined,
+        // odkaz vede na dlaždice všech tříd (`?vse=1` — jinak by ho úvod
+        // přesměroval rovnou na naposledy otevřenou třídu), odkud se dá do
+        // každého z nich doklikat.
+        action: created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/?vse=1') } : undefined,
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -218,11 +220,11 @@ export function QueueScreen({
       {jobs.length === 0 ? (
         <EmptyState
           title="Nic se negeneruje"
-          hint="Otázky se sem dostanou z tématu tlačítkem „Vygenerovat z tématu“ nebo hromadným generováním v knihovně."
+          hint="Otázky se sem dostanou z tématu tlačítkem „Vygenerovat z tématu“ nebo hromadným generováním ve třídě."
           action={
             <Link href="/">
               <Button size="sm" variant="outline">
-                Do knihovny
+                Do tříd
               </Button>
             </Link>
           }
