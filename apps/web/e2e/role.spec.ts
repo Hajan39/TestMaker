@@ -23,7 +23,7 @@ test('náhled si knihovnu prohlíží, ale nic v ní nezaloží ani nesmaže', a
   await expect(page.getByRole('link', { name: 'Generování' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Správa' })).toHaveCount(0)
 
-  await expect(page.getByRole('button', { name: /Nový předmět/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Založit předmět' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
 })
 

@@ -1,26 +1,30 @@
 import Link from 'next/link'
-import { Button, Card, EmptyState, MATERIALY, OTAZKY, TEMATA, ThreePane, pocet } from '@testmaker/ui'
+import { Button, EmptyState, OTAZKY, TEMATA, pocet } from '@testmaker/ui'
 import { BulkGenerate } from '@/components/BulkGenerate'
-import { LibrarySidebar } from '@/components/LibrarySidebar'
-import { TopicList } from '@/components/TopicList'
-import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
-import { NewLibraryItem, RenameLibraryItem } from '@/components/LibraryItemDialogs'
-import { TopicTile } from '@/components/TopicTile'
+import { ClassTiles } from '@/components/ClassTiles'
+import { LibrarySearch } from '@/components/LibrarySearch'
+import { NewLibraryItem } from '@/components/LibraryItemDialogs'
+import { RememberClass } from '@/components/RememberClass'
 import { aiStatus } from '@/lib/ai'
-import { loadLibraryTree, type GradeNode, type SubjectNode } from '@/lib/library'
+import { loadLibraryTree } from '@/lib/library'
 import { ucetStranky } from '@/lib/uzivatel'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LibraryPage({
+/**
+ * Úvod: rozcestník na třídy, ne strom knihovny. Kdo má naposledy otevřenou
+ * třídu zapamatovanou (`RememberClass`), je do ní rovnou přesměrován —
+ * dlaždice se ukážou jen prázdné knihovně, cestě „Všechny třídy" (`?vse=1`)
+ * a chvíli, než se přesměrování na klientovi stihne spustit.
+ */
+export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ grade?: string }>
+  searchParams: Promise<{ vse?: string }>
 }) {
   const ucet = await ucetStranky()
-  const { grade: gradeId } = await searchParams
+  const { vse } = await searchParams
   const tree = await loadLibraryTree(ucet)
-  const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   if (tree.length === 0) {
     return (
@@ -30,7 +34,7 @@ export default async function LibraryPage({
         action={
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Link href="/import">
-              <Button>Importovat materiály</Button>
+              <Button>Hromadný import</Button>
             </Link>
             <NewLibraryItem kind="subject" label="Založit předmět" size="default" />
           </div>
@@ -39,40 +43,33 @@ export default async function LibraryPage({
     )
   }
 
-  return (
-    <ThreePane
-      first={<LibrarySidebar tree={tree} activeGradeId={gradeId} />}
-      second={<TopicList grade={grade} />}
-    >
-      {grade ? <GradeOverview grade={grade} /> : <LibraryOverview tree={tree} />}
-    </ThreePane>
-  )
-}
-
-/** Souhrn celé knihovny a rozcestník na jednotlivé ročníky. */
-function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
+  const knownGradeIds = tree.flatMap((subject) => subject.grades.map((grade) => grade.id))
   const totals = tree.reduce(
     (acc, subject) => {
       for (const grade of subject.grades) {
         for (const topic of grade.topics) {
           acc.topics += 1
-          acc.materials += topic.materialCount
           acc.questions += topic.questionCount
         }
       }
       return acc
     },
-    { topics: 0, materials: 0, questions: 0 },
+    { topics: 0, questions: 0 },
   )
 
   return (
     <div className="space-y-5">
+      <RememberClass knownGradeIds={knownGradeIds} escape={vse === '1'} />
+
+      <div className="max-w-md">
+        <LibrarySearch />
+      </div>
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="ui-page-title">Přehled knihovny</h1>
+          <h1 className="ui-page-title">Třídy</h1>
           <p className="mt-1 text-sm text-fg-soft">
-            {pocet(totals.topics, TEMATA)} · {pocet(totals.materials, MATERIALY)} ·{' '}
-            {pocet(totals.questions, OTAZKY)}
+            {pocet(totals.topics, TEMATA)} · {pocet(totals.questions, OTAZKY)}
           </p>
         </div>
         {/* Na úzké obrazovce se akce zalomí pod sebe místo toho, aby vytekly
@@ -85,9 +82,10 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
             // tak se do názvu tlačítka přídavné jméno vůbec nedává.
             scopes={tree.map((subject) => ({ label: `Předmět ${subject.name}`, subjectId: subject.id }))}
           />
+          <NewLibraryItem kind="subject" label="Založit předmět" />
           <Link href="/import">
             <Button size="sm" variant="outline">
-              Přidat materiály
+              Hromadný import
             </Button>
           </Link>
           <Link href="/tests/new">
@@ -96,72 +94,7 @@ function LibraryOverview({ tree }: { tree: SubjectNode[] }) {
         </div>
       </div>
 
-      {tree.map((subject) => (
-        <section key={subject.id}>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="ui-label">{subject.name}</h2>
-            <div className="flex items-center gap-1">
-              <RenameLibraryItem kind="subject" id={subject.id} name={subject.name} iconOnly />
-              <NewLibraryItem kind="grade" parentId={subject.id} iconOnly variant="ghost" />
-              <DeleteFromLibrary kind="subject" id={subject.id} iconOnly />
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {subject.grades.map((gradeNode) => (
-              <Link key={gradeNode.id} href={`/?grade=${gradeNode.id}`}>
-                <Card className="p-4 hover:border-brand">
-                  <h3 className="min-w-0 flex-1 text-sm font-medium text-fg">
-                    {gradeNode.name || 'Bez ročníku'}
-                  </h3>
-                  <p className="mt-1 text-sm text-fg-muted">{pocet(gradeNode.topics.length, TEMATA)}</p>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
-  )
-}
-
-/** Dlaždice témat zvoleného ročníku s počty a hromadným generováním. */
-function GradeOverview({ grade }: { grade: GradeNode }) {
-  const questionCount = grade.topics.reduce((sum, topic) => sum + topic.questionCount, 0)
-
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="ui-page-title">{grade.name || 'Bez ročníku'}</h1>
-          <p className="mt-1 text-sm text-fg-soft">
-            {pocet(grade.topics.length, TEMATA)} · {pocet(questionCount, OTAZKY)}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <BulkGenerate
-            ai={aiStatus()}
-            scopes={[{ label: 'Generovat pro celý ročník', gradeId: grade.id }]}
-          />
-          <NewLibraryItem kind="topic" parentId={grade.id} iconOnly variant="ghost" />
-          <RenameLibraryItem kind="grade" id={grade.id} name={grade.name} iconOnly />
-          <DeleteFromLibrary kind="grade" id={grade.id} iconOnly redirectTo="/" />
-        </div>
-      </div>
-
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {grade.topics.map((topic) => (
-          <li key={topic.id}>
-            {/* Přejmenování je uvnitř dlaždice u názvu, ne vedle ní. */}
-            <TopicTile
-              id={topic.id}
-              name={topic.name}
-              materialCount={topic.materialCount}
-              questionCount={topic.questionCount}
-              lowContent={topic.lowContent}
-            />
-          </li>
-        ))}
-      </ul>
+      <ClassTiles tree={tree} />
     </div>
   )
 }

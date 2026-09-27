@@ -33,7 +33,7 @@ export async function testTopicPath(request: APIRequestContext): Promise<string>
   return `/topics/${topicId}`
 }
 
-/** Ročník, ve kterém zkušební téma leží. Vrací cestu `/?grade=<id>`. */
+/** Třída (ročník), ve které zkušební téma leží. Vrací cestu `/tridy/<id>`. */
 export async function testGradeQuery(request: APIRequestContext): Promise<string> {
   const topicId = await ensureTopic(request)
   const response = await request.get(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
@@ -45,7 +45,7 @@ export async function testGradeQuery(request: APIRequestContext): Promise<string
   }
   const grade = grades.find((row) => row.name === currentGrade) ?? grades[0]
   expect(grade, 'zkušební ročník se nenašel').toBeTruthy()
-  return `/?grade=${grade!.id}`
+  return `/tridy/${grade!.id}`
 }
 
 /** Importuje zkušební materiál (opakovaně tentýž) a vrátí id jeho tématu. */

@@ -92,7 +92,9 @@ test.describe('nabídka generování', () => {
       await expect(page.getByText('chybí přístupový klíč')).toHaveCount(0)
     }
 
-    await page.goto('/')
+    // `?vse=1`: test před tím otevřel téma, takže by se `/` jinak tiše
+    // přesměroval na jeho třídu místo úvodu s dlaždicemi.
+    await page.goto('/?vse=1')
     if (configured) await expect(bulkButton).toBeVisible()
     else await expect(bulkButton).toHaveCount(0)
   })

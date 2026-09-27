@@ -1,7 +1,7 @@
 import 'server-only'
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { findMatchingTopic, preferredTopicName } from '@testmaker/core/extract'
-import { db, grades, materials, questions, subjects, topics } from '@/db'
+import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
 import { skola, type Scope } from './uzivatel'
 import { newId } from './ids'
 
@@ -97,6 +97,102 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
     name: subject.name,
     grades: gradesBySubject.get(subject.id) ?? [],
   }))
+}
+
+/** Stav generování tématu ve frontě — jen to, co stránka třídy potřebuje ukázat. */
+export type TopicJobState = 'queued' | 'running' | null
+
+export interface ClassTopicNode extends TopicNode {
+  jobState: TopicJobState
+}
+
+export interface ClassInfo {
+  gradeId: string
+  gradeName: string
+  subjectId: string
+  subjectName: string
+  topics: ClassTopicNode[]
+}
+
+/**
+ * Data stránky třídy: název třídy (předmět + ročník) a jeho témata i s
+ * počty a stavem generování. Cizí nebo neexistující ročník vrací `null` —
+ * stránka na to odpoví `notFound()`, ne chybou.
+ */
+export async function loadClassTopics(scope: Scope, gradeId: string): Promise<ClassInfo | null> {
+  const [grade] = await db
+    .select({ id: grades.id, name: grades.name, subjectId: grades.subjectId, subjectName: subjects.name })
+    .from(grades)
+    .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+    .where(and(skola(scope, grades), eq(grades.id, gradeId)))
+    .limit(1)
+  if (!grade) return null
+
+  const topicRows = await db
+    .select({ id: topics.id, name: topics.name, lowContent: topics.lowContent })
+    .from(topics)
+    .where(and(skola(scope, topics), eq(topics.gradeId, gradeId)))
+    .orderBy(asc(topics.position), asc(topics.name))
+  const topicIds = topicRows.map((topic) => topic.id)
+
+  const [materialCounts, questionCounts, jobRows] = await Promise.all([
+    topicIds.length
+      ? db
+          .select({ topicId: materials.topicId, value: count() })
+          .from(materials)
+          .where(and(skola(scope, materials), inArray(materials.topicId, topicIds)))
+          .groupBy(materials.topicId)
+      : Promise.resolve([]),
+    topicIds.length
+      ? db
+          .select({
+            topicId: questions.topicId,
+            total: sql<number>`sum(case when ${questions.status} != 'rejected' then 1 else 0 end)`,
+          })
+          .from(questions)
+          .where(and(skola(scope, questions), inArray(questions.topicId, topicIds)))
+          .groupBy(questions.topicId)
+      : Promise.resolve([]),
+    topicIds.length
+      ? db
+          .select({ topicId: generationJobs.topicId, status: generationJobs.status })
+          .from(generationJobs)
+          .where(
+            and(
+              skola(scope, generationJobs),
+              inArray(generationJobs.topicId, topicIds),
+              inArray(generationJobs.status, ['queued', 'running']),
+            ),
+          )
+      : Promise.resolve([]),
+  ])
+
+  const materialsByTopic = new Map(materialCounts.map((row) => [row.topicId, row.value]))
+  const questionsByTopic = new Map(questionCounts.map((row) => [row.topicId, Number(row.total)]))
+
+  // Běžící úloha má přednost před čekající, kdyby snad obojí ukazovalo na
+  // totéž téma — ale i to čekající se počítá, dokud nic neběží.
+  const jobByTopic = new Map<string, TopicJobState>()
+  for (const job of jobRows) {
+    if (job.status === 'running' || jobByTopic.get(job.topicId) !== 'running') {
+      jobByTopic.set(job.topicId, job.status as TopicJobState)
+    }
+  }
+
+  return {
+    gradeId: grade.id,
+    gradeName: grade.name,
+    subjectId: grade.subjectId,
+    subjectName: grade.subjectName,
+    topics: topicRows.map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+      materialCount: materialsByTopic.get(topic.id) ?? 0,
+      questionCount: questionsByTopic.get(topic.id) ?? 0,
+      lowContent: topic.lowContent,
+      jobState: jobByTopic.get(topic.id) ?? null,
+    })),
+  }
 }
 
 export interface LibrarySearchResult {

@@ -1,8 +1,11 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { Loader2 } from 'lucide-react'
 import { Badge, Card, MATERIALY, OTAZKY, Tooltip, TooltipContent, TooltipTrigger, pocet } from '@testmaker/ui'
 import { InlineName } from '@/components/InlineName'
+import type { TopicJobState } from '@/lib/library'
 
 /**
  * Dlaždice tématu v přehledu ročníku. Názvy bývají dlouhé a bez mezer
@@ -25,6 +28,8 @@ export function TopicTile({
   materialCount,
   questionCount,
   lowContent,
+  jobState,
+  actions,
 }: {
   id: string
   name: string
@@ -32,6 +37,10 @@ export function TopicTile({
   questionCount: number
   /** Použitelného textu je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
   lowContent?: boolean
+  /** Fronta generování na stránce třídy — jinde se nezjišťuje. */
+  jobState?: TopicJobState
+  /** Doplňková akce u tématu (na stránce třídy „Přesunout do…“). */
+  actions?: ReactNode
 }) {
   return (
     <Card className="gap-1.5 p-3 hover:border-brand">
@@ -60,12 +69,21 @@ export function TopicTile({
         </p>
       </Link>
 
-      {questionCount === 0 || lowContent ? (
+      {questionCount === 0 || lowContent || jobState ? (
         <Link href={`/topics/${id}`} className="flex flex-wrap items-center gap-1">
+          {jobState === 'running' ? (
+            <Badge variant="status">
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+              Generuje se…
+            </Badge>
+          ) : null}
+          {jobState === 'queued' ? <Badge variant="status">Čeká ve frontě</Badge> : null}
           {questionCount === 0 ? <Badge variant="status">bez otázek</Badge> : null}
           {lowContent ? <Badge variant="status">málo textu</Badge> : null}
         </Link>
       ) : null}
+
+      {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
     </Card>
   )
 }

@@ -4,6 +4,7 @@ import { DELETE, GET, PATCH, POST } from '@/app/api/library/route'
 import { POST as createTest } from '@/app/api/tests/route'
 import { db, grades, materials, questions, subjects, testItems, topics } from '@/db'
 import { loadLibraryTree } from '@/lib/library'
+import type { Scope } from '@/lib/uzivatel'
 import { jsonReq, req, seedMaterial, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
 
 interface Impact {
@@ -23,6 +24,23 @@ async function impactOf(kind: string, id: string): Promise<{ status: number; bod
 async function remove(kind: string, id: string): Promise<Response> {
   return DELETE(req(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }))
 }
+
+/**
+ * Bod revize 5 (úvod „Třídy" bez dat): učitelka, jejíž škola v knihovně
+ * ještě nic nemá, má na úvodu vidět výzvu k importu, ne prázdné dlaždice bez
+ * vysvětlení. To v `page.tsx` rozhoduje jediná podmínka — `tree.length === 0`
+ * — a nad ní stojí `EmptyState` s „Hromadný import" a „Založit předmět“.
+ * V e2e sadě nejde tenhle stav rozumně připravit (všechny zkušební účty
+ * sdílejí jednu naseedovanou školu), takže se ověřuje aspoň tady: nad
+ * školou bez jediného řádku vrátí `loadLibraryTree` prázdné pole.
+ */
+describe('úvod „Třídy" bez dat', () => {
+  it('loadLibraryTree u školy bez knihovny vrátí prázdné pole', async () => {
+    const prazdnaSkola: Scope = { schoolId: 'skola-bez-knihovny-test', userId: UCET.userId, role: 'ucitelka' }
+    const tree = await loadLibraryTree(prazdnaSkola)
+    expect(tree).toEqual([])
+  })
+})
 
 describe('náhled dopadu smazání', () => {
   it('u tématu spočítá materiály i otázky', async () => {

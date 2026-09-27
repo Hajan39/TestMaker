@@ -33,9 +33,8 @@ test.describe('ruční správa knihovny', () => {
     try {
       await page.goto('/')
 
-      // --- Nový předmět z postranního panelu -------------------------------
-      const panel = page.getByRole('complementary', { name: 'Předměty a ročníky' })
-      await panel.getByRole('button', { name: 'Nový předmět' }).click()
+      // --- Nový předmět z úvodu -------------------------------------------
+      await page.getByRole('button', { name: 'Založit předmět' }).click()
 
       const zalozeni = page.waitForResponse(
         (response) => response.url().includes('/api/library') && response.request().method() === 'POST',
@@ -45,7 +44,6 @@ test.describe('ruční správa knihovny', () => {
 
       const nadpisPredmetu = page.getByRole('heading', { name: PREDMET, exact: true })
       await expect(nadpisPredmetu).toBeVisible()
-      await expect(panel.getByText(PREDMET, { exact: true })).toBeVisible()
 
       // --- Nový ročník v tom předmětu --------------------------------------
       // `.last()` je nejvnitřnější sekce; panely rozvržení jsou taky `section`.
@@ -53,13 +51,13 @@ test.describe('ruční správa knihovny', () => {
       await sekce.getByRole('button', { name: 'Nový ročník' }).click()
       await vyplnDialog(page, 'Název ročníku', ROCNIK, 'Založit')
 
-      // Po založení se rovnou přejde do nového ročníku.
-      await expect(page).toHaveURL(/\?grade=/)
+      // Po založení se rovnou přejde do nové třídy.
+      await expect(page).toHaveURL(/\/tridy\//)
       await expect(page.getByRole('heading', { name: ROCNIK, exact: true })).toBeVisible()
-      const adresaRocniku = page.url()
+      const adresaTridy = page.url()
 
       // --- Nové téma v ročníku ---------------------------------------------
-      await page.getByRole('button', { name: 'Nové téma' }).click()
+      await page.getByRole('button', { name: 'Přidat téma' }).click()
       await vyplnDialog(page, 'Název tématu', TEMA, 'Založit')
 
       // A rovnou se otevře, aby se do něj dalo psát.
@@ -69,7 +67,7 @@ test.describe('ruční správa knihovny', () => {
       await expect(page.getByText('materiálů', { exact: false }).first()).toBeVisible()
 
       // --- Přejmenování tématu (na místě, bez dialogu) ---------------------
-      await page.goto(adresaRocniku)
+      await page.goto(adresaTridy)
       await expect(page.getByText(TEMA, { exact: true }).first()).toBeVisible()
       await page.getByRole('button', { name: 'Přejmenovat téma' }).first().click()
       const poleTematu = page.getByRole('textbox', { name: 'Přejmenovat téma' })
@@ -82,14 +80,18 @@ test.describe('ruční správa knihovny', () => {
       await page.getByRole('button', { name: 'Přejmenovat ročník' }).click()
       await vyplnDialog(page, 'Název ročníku', ROCNIK_NOVY, 'Uložit')
       await expect(page.getByRole('heading', { name: ROCNIK_NOVY, exact: true })).toBeVisible()
-      // Změna se propíše i do postranního panelu.
-      await expect(panel.getByText(ROCNIK_NOVY, { exact: true })).toBeVisible()
+
+      // Změna se propíše i do dlaždice na úvodu.
+      await page.goto('/?vse=1')
+      await expect(page.getByText(ROCNIK_NOVY, { exact: false })).toBeVisible()
 
       // --- Dva ročníky téhož jména to odmítne a řekne proč ------------------
-      await panel.getByText(PREDMET, { exact: true }).waitFor()
-      const blokPredmetu = panel.locator('div').filter({ hasText: PREDMET }).first()
-      await blokPredmetu.getByRole('button', { name: 'Nový ročník' }).click()
+      const nadpisPredmetuZnovu = page.getByRole('heading', { name: PREDMET, exact: true })
+      await expect(nadpisPredmetuZnovu).toBeVisible()
+      const sekceDruha = page.locator('section', { has: nadpisPredmetuZnovu }).last()
+      await sekceDruha.getByRole('button', { name: 'Nový ročník' }).click()
       await vyplnDialog(page, 'Název ročníku', ROCNIK_DRUHY, 'Založit')
+      await expect(page).toHaveURL(/\/tridy\//)
       await expect(page.getByRole('heading', { name: ROCNIK_DRUHY, exact: true })).toBeVisible()
 
       await page.getByRole('button', { name: 'Přejmenovat ročník' }).click()
@@ -102,7 +104,8 @@ test.describe('ruční správa knihovny', () => {
       await expect(page.getByRole('heading', { name: ROCNIK_DRUHY, exact: true })).toBeVisible()
 
       // --- Přejmenování předmětu -------------------------------------------
-      await page.goto('/')
+      // `?vse=1`, jinak by úvod přesměroval rovnou na naposledy otevřenou třídu.
+      await page.goto('/?vse=1')
       const sekceZnovu = page.locator('section', { has: nadpisPredmetu }).last()
       await sekceZnovu.getByRole('button', { name: 'Přejmenovat předmět' }).click()
       await vyplnDialog(page, 'Název předmětu', PREDMET_NOVY, 'Uložit')

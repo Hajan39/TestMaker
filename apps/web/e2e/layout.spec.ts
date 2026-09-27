@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { testTopicPath } from './fixtures'
 
 /**
  * Rozvržení a přetékání. Přesně tyhle vady prošly všemi kontrolami kódu,
@@ -75,15 +76,17 @@ for (const size of WIDTHS) {
 }
 
 test.describe('sloupce knihovny', () => {
+  // Ta stará strom-po-ročnících třípane už je jen na stránce tématu — úvod
+  // je teď jednosloupcové dlaždice tříd (viz `tridy.spec.ts`).
   test('nad 1280 px jsou tři sloupce', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/')
+    await page.goto(await testTopicPath(page.request))
     await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
   })
 
   test('pod 1024 px se přepíná záložkami a navigace je dostupná', async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 800 })
-    await page.goto('/')
+    await page.goto(await testTopicPath(page.request))
     const tab = page.getByRole('tab', { name: 'Předměty a ročníky' })
     await expect(tab).toBeVisible()
     await tab.click()
@@ -94,9 +97,9 @@ test.describe('sloupce knihovny', () => {
 test.describe('rolování', () => {
   test('dlouhý seznam témat jde doscrollovat', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 700 })
-    // Ročník s nejvíc tématy — obsah je spolehlivě delší než okno.
+    // Třída s nejvíc tématy (přes čtyřicet) — obsah je spolehlivě delší než okno.
     await page.goto('/')
-    await page.getByRole('link', { name: '6. ročník' }).first().click()
+    await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
     await page.waitForLoadState('networkidle')
 
     // Najdeme plochu, která se roluje, a ověříme, že se v ní dá pohnout dolů.
@@ -116,8 +119,9 @@ test.describe('rolování', () => {
 test.describe('dlaždice témat', () => {
   test('dlouhé názvy bez mezer se vejdou do dlaždice', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
+    // Dlouhý bezmezerový název je v seedu jen v „6. ročník" u PŘÍRODOPISU.
     await page.goto('/')
-    await page.getByRole('link', { name: '6. ročník' }).first().click()
+    await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
     await page.waitForLoadState('networkidle')
 
     // V knihovně jsou názvy jako `prirodopis-6_pl-bezobratli-vztahy._test_2018`.

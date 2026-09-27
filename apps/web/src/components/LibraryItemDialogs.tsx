@@ -199,7 +199,7 @@ export function NewLibraryItem({
         // Po založení je užitečné rovnou být tam, kde se dá pokračovat:
         // v novém tématu se píšou otázky, v novém ročníku se zakládají témata.
         if (kind === 'topic') router.push(`/topics/${id}`)
-        else if (kind === 'grade') router.push(`/?grade=${id}`)
+        else if (kind === 'grade') router.push(`/tridy/${id}`)
         router.refresh()
         return null
       }}

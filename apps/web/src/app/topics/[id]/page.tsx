@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { InlineName } from '@/components/InlineName'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
+import { RememberClass } from '@/components/RememberClass'
 import { MATERIALY, OTAZKY, StatRow, plural } from '@testmaker/ui'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
@@ -82,12 +83,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="space-y-5">
+      <RememberClass gradeId={topic.gradeId} />
       <div>
         <p className="text-sm text-fg-muted">
-          <Link href="/" className="hover:text-brand">
-            {topic.subjectName}
+          <Link href={`/tridy/${topic.gradeId}`} className="hover:text-brand">
+            ← {topic.subjectName}
+            {topic.gradeName ? ` · ${topic.gradeName}` : ''}
           </Link>
-          {topic.gradeName ? ` · ${topic.gradeName}` : ''}
         </p>
         {/* Název a akce k němu na jednom řádku; čísla o téma níž, na jediném
             místě — dřív se počty materiálů a otázek opakovaly v každé kartě. */}

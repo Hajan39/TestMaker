@@ -57,10 +57,10 @@ test.describe('hromadný výběr', () => {
 test.describe('dlaždice tématu', () => {
   test('má název na prvním řádku a stav na druhém', async ({ page }) => {
     await page.goto('/')
-    // Otevřeme první ročník, ať se dlaždice témat ukážou ve třetím sloupci.
-    await page.locator('a[href^="/?grade="]').first().click()
+    // Otevřeme první třídu, ať se dlaždice jejích témat ukážou.
+    await page.locator('a[href^="/tridy/"]').first().click()
 
-    const tile = page.getByRole('region', { name: 'Obsah tématu' }).locator('a[href^="/topics/"]').first()
+    const tile = page.locator('main a[href^="/topics/"]').first()
     await expect(tile).toBeVisible()
     await expect(tile).toContainText(/materiál|bez materiálů/)
   })

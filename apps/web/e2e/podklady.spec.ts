@@ -36,10 +36,14 @@ test.describe('upozornění na chudé téma', () => {
   test('dlaždice i detail tématu naznačí, že materiálů je málo', async ({ page }) => {
     await createLowContentTopic(page.request)
 
+    // `?vse=1` u každé návštěvy úvodu: test tématum jinak jinou z jejich
+    // tříd navštíví (píše se do prohlížeče jako naposledy otevřená) a další
+    // `/` by na ni tiše přesměroval, místo aby ukázal dlaždice.
+    //
     // Přes hledání v knihovně dojdeme rovnou do detailu nově vzniklého tématu.
     // `fill()` ve WebKitu nevyvolá u tohohle pole React onChange, proto se
     // hledaný výraz píše po znacích jako od učitelky.
-    await page.goto('/')
+    await page.goto('/?vse=1')
     await page.getByPlaceholder('Hledat v celé knihovně…').pressSequentially('Chudé téma')
     const result = page.getByRole('button', { name: /Chudé téma/ })
     await expect(result).toBeVisible()
@@ -51,7 +55,7 @@ test.describe('upozornění na chudé téma', () => {
     await expect(page.getByRole('button', { name: 'Generovat otázky' })).toBeVisible()
 
     // A tatáž klidná poznámka je vidět na dlaždici v přehledu ročníku.
-    await page.goto('/')
+    await page.goto('/?vse=1')
     // Ročník se hledá v sekci vlastního předmětu — „první 9. ročník na stránce"
     // by se trefil do cizího předmětu, jakmile je v knihovně něco dalšího.
     const podkladyOverview = page
@@ -61,7 +65,7 @@ test.describe('upozornění na chudé téma', () => {
     await expect(page.getByText('málo textu', { exact: true }).first()).toBeVisible()
 
     // Uklidit po sobě — test si založil vlastní předmět, do skutečné knihovny nepatří.
-    await page.goto('/')
+    await page.goto('/?vse=1')
     const podkladySection = page
       .locator('section', { has: page.locator('h2', { hasText: 'PODKLADY' }) })
       .last()
@@ -107,7 +111,7 @@ test.describe('stejný soubor ve dvou tématech', () => {
     // Obě témata jsou k nalezení a v obou je soubor vidět jako plnohodnotný
     // materiál, ne jako odložená duplicita.
     for (const grade of ['7. ročník', '8. ročník']) {
-      await page.goto('/')
+      await page.goto('/?vse=1')
       await page.getByPlaceholder('Hledat v celé knihovně…').pressSequentially('Sdílené téma')
       const result = page.getByRole('button', { name: new RegExp(`Sdílené téma.*${grade}`, 's') })
       await expect(result).toBeVisible()
@@ -123,7 +127,7 @@ test.describe('stejný soubor ve dvou tématech', () => {
     }
 
     // Uklidit po sobě — testovací předmět do skutečné knihovny nepatří.
-    await page.goto('/')
+    await page.goto('/?vse=1')
     const podkladySection = page
       .locator('section', { has: page.locator('h2', { hasText: 'PODKLADY' }) })
       .last()
