@@ -314,6 +314,13 @@ export interface QuestionMeta {
   source: 'ai' | 'manual'
   status: QuestionStatus
   createdAt: string
+  /**
+   * Kořenová otázka, ze které tahle vznikla jako lehčí nebo těžší verze.
+   * `null` u kořenové otázky samotné. Verze verze se váže vždycky na kořen,
+   * ne na svého bezprostředního předchůdce — jinak by se verze skládaly do
+   * řetězu a karta otázky by neuměla ukázat všechny verze pohromadě.
+   */
+  variantOf: string | null
 }
 
 export type Question = QuestionContent & QuestionMeta

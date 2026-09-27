@@ -8,12 +8,23 @@ import {
   type QuestionType,
   type RegenerateReason,
 } from '@testmaker/core/schema'
-import { db, generationJobs, grades, materials, questionFeedback, questions, subjects, topics, users } from '@/db'
+import {
+  db,
+  generationJobs,
+  grades,
+  materials,
+  questionFeedback,
+  questions,
+  subjects,
+  topics,
+  users,
+  type QuestionRow,
+} from '@/db'
 import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 import { MIN_GENERATE_CHARS } from '@/lib/materials'
 import { loadActivePromptRules } from '@/lib/promptRules'
-import { insertQuestions, loadAvoidPrompts, toQuestion } from './questions'
+import { insertQuestions, loadAvoidPrompts, questionPrompt, toQuestion } from './questions'
 
 export interface GenerateParams {
   count: number
@@ -294,6 +305,51 @@ function clampDifficulty(value: number): 1 | 2 | 3 {
   return Math.min(3, Math.max(1, value)) as 1 | 2 | 3
 }
 
+/** Společný podklad pro přegenerování i verzi otázky. */
+interface RegenerationContext {
+  original: QuestionRow
+  topicId: string
+  source: NonNullable<Awaited<ReturnType<typeof loadTopicSource>>>
+  avoid: string[]
+  schoolRules: string[]
+}
+
+/**
+ * Načte otázku a vše, co potřebuje generování náhrady i verze: kontrolu, že
+ * otázka patří k tématu a téma zrovna nezpracovává dávkové generování, že jde
+ * o typ, který model umí, i podklady pro prompt (zdrojový text, seznam
+ * „vyhni se", pravidla školy). Sdíleno mezi `regenerateQuestion` a
+ * `createVariant`, aby se tahle sada kontrol neopakovala na dvou místech.
+ */
+async function loadRegenerationContext(scope: Scope, questionId: string): Promise<RegenerationContext> {
+  const [original] = await db
+    .select()
+    .from(questions)
+    .where(and(skola(scope, questions), eq(questions.id, questionId)))
+    .limit(1)
+  if (!original) throw new Error('Otázka nenalezena')
+  if (!original.topicId) throw new Error('Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada')
+
+  const topicId = original.topicId
+  const busy = await isTopicBusy(scope, topicId)
+  if (busy) throw new Error(topicBusyMessage(busy.kdo))
+
+  if (!AI_QUESTION_TYPES.includes(original.type as (typeof AI_QUESTION_TYPES)[number])) {
+    throw new Error('Tenhle typ otázky model generovat neumí, uprav ji prosím ručně')
+  }
+
+  const source = await loadTopicSource(scope, topicId)
+  if (!source) throw new Error('Téma nenalezeno')
+  if (source.text.trim().length < MIN_GENERATE_CHARS) {
+    throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
+  }
+
+  const avoid = await loadAvoidPrompts(scope, topicId)
+  const schoolRules = await loadActivePromptRules(scope)
+
+  return { original, topicId, source, avoid, schoolRules }
+}
+
 /**
  * Nahradí jednu otázku novou od modelu.
  *
@@ -322,33 +378,8 @@ export async function regenerateQuestion(
     note?: string
   } = {},
 ): Promise<Question> {
-  const [original] = await db
-    .select()
-    .from(questions)
-    .where(and(skola(scope, questions), eq(questions.id, questionId)))
-    .limit(1)
-  if (!original) throw new Error('Otázka nenalezena')
-  if (!original.topicId) throw new Error('Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada')
-
-  const topicId = original.topicId
-  const busy = await isTopicBusy(scope, topicId)
-  if (busy) throw new Error(topicBusyMessage(busy.kdo))
-
+  const { original, topicId, source, avoid, schoolRules } = await loadRegenerationContext(scope, questionId)
   const type = original.type
-  if (!AI_QUESTION_TYPES.includes(type as (typeof AI_QUESTION_TYPES)[number])) {
-    throw new Error('Tenhle typ otázky model generovat neumí, uprav ji prosím ručně')
-  }
-
-  const source = await loadTopicSource(scope, topicId)
-  if (!source) throw new Error('Téma nenalezeno')
-  if (source.text.trim().length < MIN_GENERATE_CHARS) {
-    throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
-  }
-
-  // Nahrazovaná otázka je v seznamu „vyhni se" taky — jinak by model klidně
-  // vrátil tutéž otázku, kterou učitelka právě zavrhla.
-  const avoid = await loadAvoidPrompts(scope, topicId)
-  const schoolRules = await loadActivePromptRules(scope)
 
   // Důvod dodává modelu nápovědu do promptu a u „moc těžká"/„moc lehká" i
   // posouvá obtížnost náhrady — ořezanou zpátky na 1–3, aby se nepřehoupla
@@ -418,5 +449,78 @@ export async function regenerateQuestion(
     .where(and(skola(scope, questions), eq(questions.id, replacementId!)))
     .limit(1)
   if (!row) throw new Error('Náhradu se nepodařilo uložit')
+  return toQuestion(row)
+}
+
+/** Hláška, když už není kam obtížnost verze posunout. */
+export function variantDifficultyLimitMessage(direction: 'easier' | 'harder'): string {
+  return direction === 'easier' ? 'Otázka je už nejlehčí.' : 'Otázka je už nejtěžší.'
+}
+
+/**
+ * Vytvoří lehčí nebo těžší verzi otázky na stejnou látku — ne totéž jinými
+ * slovy. Na rozdíl od `regenerateQuestion` originál nezamítá a nezakládá
+ * zpětnou vazbu: verze je otázka navíc vedle původní, ne její náhrada.
+ *
+ * Kořen verze je `original.variantOf ?? original.id` — lehčí verze těžší
+ * verze se naváže na *původní* otázku, ne do řetězu, aby karta otázky mohla
+ * nabídnout všechny verze kořene pohromadě (`loadVariantLinks`).
+ *
+ * `generate` se dá podstrčit v testech; v aplikaci se nepředává.
+ */
+export async function createVariant(
+  scope: Scope,
+  questionId: string,
+  direction: 'easier' | 'harder',
+  options: { signal?: AbortSignal; generate?: typeof generateQuestions } = {},
+): Promise<Question> {
+  const { original, topicId, source, avoid, schoolRules } = await loadRegenerationContext(scope, questionId)
+  const type = original.type
+
+  const originalDifficulty = (original.difficulty as 1 | 2 | 3) ?? 2
+  const targetDifficulty = originalDifficulty + (direction === 'easier' ? -1 : 1)
+  if (targetDifficulty < 1 || targetDifficulty > 3) {
+    throw new Error(variantDifficultyLimitMessage(direction))
+  }
+
+  const generate = options.generate ?? generateQuestions
+  const result = await generate(
+    {
+      text: source.text,
+      topicName: source.topicName,
+      subjectName: source.subjectName,
+      gradeName: source.gradeName || null,
+      count: 1,
+      types: [type as (typeof AI_QUESTION_TYPES)[number]],
+      difficulty: targetDifficulty as 1 | 2 | 3,
+      avoid,
+      schoolRules,
+      // Verze vzniká ze stejné pasáže jako originál — stejná látka, jiná otázka.
+      ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
+      variantOf: { direction, originalPrompt: questionPrompt(original) },
+    },
+    { signal: options.signal },
+  )
+
+  const variant = result.questions[0]
+  if (!variant) {
+    throw new Error('Model nevrátil použitelnou verzi. Zkus to prosím znovu.')
+  }
+
+  // Kořen je předchůdce, ne otázka sama — verze verze se váže na kořen, jinak
+  // by se verze skládaly do řetězu.
+  const root = original.variantOf ?? original.id
+  const [variantId] = await insertQuestions(scope, [variant], { topicId, source: 'ai', variantOf: root })
+  const usedModel = result.models[0]
+  if (variantId && usedModel) {
+    await db.update(questions).set({ model: usedModel }).where(eq(questions.id, variantId))
+  }
+
+  const [row] = await db
+    .select()
+    .from(questions)
+    .where(and(skola(scope, questions), eq(questions.id, variantId!)))
+    .limit(1)
+  if (!row) throw new Error('Verzi se nepodařilo uložit')
   return toQuestion(row)
 }

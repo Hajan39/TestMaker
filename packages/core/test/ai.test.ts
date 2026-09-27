@@ -155,6 +155,34 @@ describe('prompty', () => {
     expect(prompt).not.toContain('Poznámka učitelky')
   })
 
+  it('žádost o lehčí/těžší verzi obsahuje původní zadání i směr, ne jen přegenerování', () => {
+    const lehci = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['single_choice'],
+      difficulty: 1,
+      variantOf: { direction: 'easier', originalPrompt: 'Čím je poháněn koloběh vody?' },
+    })
+    expect(lehci).toContain('Vytvoř lehčí verzi této otázky na stejnou látku')
+    expect(lehci).toContain('ne tutéž otázku jinými slovy')
+    expect(lehci).toContain('Čím je poháněn koloběh vody?')
+
+    const tezsi = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['single_choice'],
+      difficulty: 3,
+      variantOf: { direction: 'harder', originalPrompt: 'Čím je poháněn koloběh vody?' },
+    })
+    expect(tezsi).toContain('Vytvoř těžší verzi této otázky na stejnou látku')
+  })
+
   it('pokryje všechny typy, které smí AI generovat', () => {
     const prompt = buildUserPrompt({
       text: 'x',
@@ -687,6 +715,38 @@ describe('přiřazování nesmí použít stejnou položku napravo dvakrát', ()
       payload: { prompt: 'Přiřaď.', left: ['a', 'b'], right: ['x', 'y'], pairs: [[0, 0], [0, 1]] },
     })
     expect(validateQuestionContent(parsed)).toContain('levý sloupec se v pairs opakuje')
+  })
+
+  it('položka vlevo bez dvojice (osiřelý řádek) je odmítnuta', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'matching',
+      payload: {
+        prompt: 'Přiřaď.',
+        left: ['a', 'b', 'c', 'd'],
+        right: ['x', 'y'],
+        pairs: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+    })
+    expect(validateQuestionContent(parsed)).toContain('každá položka vlevo musí mít dvojici')
+  })
+
+  it('víc položek vpravo než vlevo (distraktory) v pořádku projde', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'matching',
+      payload: {
+        prompt: 'Přiřaď.',
+        left: ['a', 'b'],
+        right: ['x', 'y', 'z', 'w'],
+        pairs: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+    })
+    expect(validateQuestionContent(parsed)).toEqual([])
   })
 })
 

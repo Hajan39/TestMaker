@@ -304,6 +304,12 @@ export const questions = sqliteTable(
     reviewedAt: text('reviewed_at'),
     topicId: text('topic_id').references(() => topics.id, { onDelete: 'cascade' }),
     materialId: text('material_id').references(() => materials.id, { onDelete: 'set null' }),
+    /**
+     * Kořenová otázka, ze které tahle vznikla jako lehčí nebo těžší verze.
+     * `null` u kořene i u otázek bez verze. Smazání kořene verzi neodnese —
+     * jen ztratí odkaz (`set null`), verze samotná v bance zůstává.
+     */
+    variantOf: text('variant_of').references((): AnySQLiteColumn => questions.id, { onDelete: 'set null' }),
     type: text('type').notNull().$type<QuestionContent['type']>(),
     payload: text('payload', { mode: 'json' }).notNull().$type<QuestionContent['payload']>(),
     blocks: text('blocks', { mode: 'json' }).notNull().default(sql`'[]'`).$type<Block[]>(),
@@ -350,6 +356,8 @@ export const questions = sqliteTable(
      */
     index('questions_topic_status_idx').on(table.topicId, table.status),
     index('questions_material_idx').on(table.materialId),
+    /** Všechny verze kořenové otázky — karta otázky je nabízí pohromadě. */
+    index('questions_variant_of_idx').on(table.variantOf),
     index('questions_school_status_idx').on(table.schoolId, table.status),
     index('questions_school_created_by_idx').on(table.schoolId, table.createdBy),
     /**

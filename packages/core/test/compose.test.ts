@@ -22,6 +22,7 @@ function q(
     id,
     topicId,
     materialId: null,
+    variantOf: null,
     source: 'ai',
     status: extra.status ?? 'approved',
     createdAt: '2026-01-01T00:00:00.000Z',

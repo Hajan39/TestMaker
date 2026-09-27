@@ -7,6 +7,7 @@ const question: Question = {
   id: 'q1',
   topicId: 't1',
   materialId: null,
+  variantOf: null,
   source: 'ai',
   status: 'approved',
   createdAt: '2026-01-01T00:00:00.000Z',

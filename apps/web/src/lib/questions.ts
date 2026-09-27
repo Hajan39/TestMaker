@@ -25,6 +25,7 @@ export function toQuestion(row: QuestionRow): Question {
     id: row.id,
     topicId: row.topicId,
     materialId: row.materialId,
+    variantOf: row.variantOf,
     source: row.source,
     status: row.status,
     createdAt: row.createdAt,
@@ -146,6 +147,40 @@ export async function loadAvoidPrompts(
   return rows.map((row) => questionPrompt(row))
 }
 
+/** Jedna verze kořenové otázky, jak ji potřebuje karta otázky v přehledu. */
+export interface VariantLink {
+  id: string
+  difficulty: 1 | 2 | 3
+  status: QuestionStatus
+}
+
+/**
+ * Verze (lehčí/těžší) otázek zadaných v `questionIds`, podle kořene.
+ *
+ * Otázka může být sama kořenem svých verzí i mít verze cizí — proto se ptá na
+ * `variantOf` napříč celou otázkou, ne jen na to, čí je `questionIds` sama.
+ * Karta otázky nad kořenem pak vidí všechny své verze pohromadě, ať se dívá
+ * na kořen nebo na jednu z jeho verzí.
+ */
+export async function loadVariantLinks(
+  scope: Scope,
+  questionIds: string[],
+): Promise<Record<string, VariantLink[]>> {
+  if (questionIds.length === 0) return {}
+  const rows = await db
+    .select({ id: questions.id, variantOf: questions.variantOf, difficulty: questions.difficulty, status: questions.status })
+    .from(questions)
+    .where(and(skola(scope, questions), inArray(questions.variantOf, questionIds)))
+
+  const result: Record<string, VariantLink[]> = {}
+  for (const row of rows) {
+    if (!row.variantOf) continue
+    const list = result[row.variantOf] ?? (result[row.variantOf] = [])
+    list.push({ id: row.id, difficulty: (row.difficulty as 1 | 2 | 3) ?? 2, status: row.status })
+  }
+  return result
+}
+
 /**
  * Materiály tématu podle názvu souboru, pro dohledání původu otázky.
  *
@@ -176,7 +211,14 @@ async function materialsByFileName(
 export async function insertQuestions(
   scope: Scope,
   items: QuestionContent[],
-  context: { topicId: string; materialId?: string | null; source?: 'ai' | 'manual'; status?: QuestionStatus },
+  context: {
+    topicId: string
+    materialId?: string | null
+    source?: 'ai' | 'manual'
+    status?: QuestionStatus
+    /** Kořen, jehož je vkládaná otázka lehčí nebo těžší verzí. */
+    variantOf?: string | null
+  },
 ): Promise<string[]> {
   if (items.length === 0) return []
   // Materiál od volajícího má přednost; jinak se hledá podle dokladu původu.
@@ -194,6 +236,7 @@ export async function insertQuestions(
       // ne ten, kdo zrovna otevřel okno.
       createdBy: scope.userId,
       topicId: context.topicId,
+      variantOf: context.variantOf ?? null,
       // Podle `item.evidence`, ne podle `evidence`: bez citace se doklad
       // normalizuje na null, ale název souboru v něm pořád je a na dohledání
       // materiálu stačí.

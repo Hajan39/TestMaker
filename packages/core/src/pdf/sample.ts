@@ -10,6 +10,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     materialId: null,
     source: 'ai',
     status: 'approved',
+    variantOf: null,
     createdAt: '',
     type: 'single_choice',
     payload: {
@@ -28,6 +29,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     materialId: null,
     source: 'ai',
     status: 'approved',
+    variantOf: null,
     createdAt: '',
     type: 'open',
     payload: {
@@ -45,6 +47,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     materialId: null,
     source: 'ai',
     status: 'approved',
+    variantOf: null,
     createdAt: '',
     type: 'true_false',
     payload: {
@@ -64,6 +67,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     materialId: null,
     source: 'ai',
     status: 'approved',
+    variantOf: null,
     createdAt: '',
     type: 'matching',
     payload: {

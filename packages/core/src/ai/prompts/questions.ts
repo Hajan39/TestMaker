@@ -29,6 +29,13 @@ export interface GenerationRequest {
    */
   replacementReason?: { hint: string; note?: string }
   /**
+   * Žádost o lehčí nebo těžší verzi existující otázky, ne o přegenerování.
+   * Model musí vytvořit jinou otázku na stejnou látku — proto dostává i
+   * zadání původní otázky jako srovnání, aby nevznikla tatáž otázka jinými
+   * slovy.
+   */
+  variantOf?: { direction: 'easier' | 'harder'; originalPrompt: string }
+  /**
    * Pravidla, která si škola sama přidala ve Správě (`promptRules`, jen
    * aktivní). Vznikají výslovným uložením správce z opakujícího se důvodu
    * přegenerování — nikdy se nepřidávají automaticky.
@@ -164,6 +171,14 @@ export function buildUserPrompt(request: GenerationRequest): string {
       // a ukázky stylu níž) to nedovolí jedním znakem.
       sections.push('Poznámka učitelky:', '"""', truncated, '"""')
     }
+  }
+
+  if (request.variantOf) {
+    const slovo = request.variantOf.direction === 'easier' ? 'lehčí' : 'těžší'
+    sections.push(
+      '',
+      `Vytvoř ${slovo} verzi této otázky na stejnou látku — ne tutéž otázku jinými slovy: ${request.variantOf.originalPrompt}`,
+    )
   }
 
   if (request.styleSample) {
