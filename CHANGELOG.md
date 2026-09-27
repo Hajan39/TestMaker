@@ -29,6 +29,25 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
   výsledek se zapíše do Markdownu k ručnímu hodnocení a srovnání modelů.
 - **Kontrola citace.** Každá vygenerovaná otázka musí doslova citovat větu
   z materiálu; otázka s citací, která v materiálu není, se zahodí.
+- **Lehčí a těžší verze otázky.** Z nabídky Přegenerovat jde místo nahrazení
+  vytvořit novou otázku ze stejné pasáže s obtížností o stupeň jinou; původní
+  otázka zůstává a karta ukáže odkaz na obě verze. Tlačítko je vypnuté na
+  krajní obtížnosti (1 nebo 3). Lehčí verze těžší verze se váže na původní
+  (kořenovou) otázku, ne na řetěz mezi sebou — karta tak vždycky ukazuje
+  všechny verze pohromadě. **Vyžaduje migraci 0019** (`questions.variant_of`) —
+  před nasazením spusť nad `local.db` zálohovaně:
+  `cd apps/web && cp local.db local.db.pred-migraci && pnpm db:migrate`.
+- **Lehčí a těžší verze celé písemky.** V editoru testu vznikne soukromá
+  kopie („‹název› – lehčí" / „‹název› – těžší"), ve které se každá položka
+  nahradí existující verzí o stupeň jinou, nebo se vygeneruje nová. Položky
+  bez otázky v bance, hlavolamy, otázky na kraji obtížnosti a otázky, u
+  kterých se generování nepovedlo, zůstanou beze změny; výsledek řekne,
+  kolik jich zůstalo původních. Neuložené změny v editoru si aplikace nechá
+  nejdřív uložit.
+- **AI teď generuje osm typů otázek** místo tří — přibyly přiřazování dvojic,
+  řazení, doplňování do textu, výběr více možností i volná odpověď. Tabulku
+  a popis obrázku model dál nezvládá; zůstávají na ruční psaní nebo na
+  `/otazky`.
 
 - **Předmět, ročník i téma jde založit a přejmenovat ručně**, bez importu
   materiálů. Do prázdného tématu si tak jde rovnou psát vlastní otázky a název
@@ -174,9 +193,11 @@ Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 - **Odebrána Ollama, Groq, Mistral, DeepInfra, Together i vlastní adresa
   (`custom`).** Zůstali tři poskytovatelé: Google Gemini, OpenRouter
   a Anthropic (jen s API klíčem).
-- **Model generuje jen tři typy otázek** — výběr jedné možnosti,
-  pravda/nepravda a krátkou odpověď. Ostatní typy psal nespolehlivě; dají se
-  dál psát ručně nebo přes `/otazky`.
+- **Model generuje osm typů otázek** — výběr jedné i více možností,
+  pravda/nepravda, krátkou i volnou odpověď, přiřazování dvojic, řazení
+  a doplňování do textu. Zpočátku uměl jen tři, ostatní přibyly postupně.
+  Doplňovací tabulku a popis obrázku psal nespolehlivě; zůstávají na ruční
+  psaní nebo na `/otazky`.
 - **Model dostává materiál po úsecích do 8 000 znaků** místo celého tématu
   naráz; úseky se vybírají rovnoměrně po tématu, další dogenerování bere jiné
   části a náhrada otázky vzniká z téže pasáže jako původní.

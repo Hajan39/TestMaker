@@ -184,7 +184,18 @@ Každý krok jde nasadit samostatně a aplikace mezi nimi funguje.
    jen ony (`ReviewPanel` a další podle skutečných importů). `/import` a
    `/generovani` zůstávají jako stránky — jen mizí z lišty.
 6. Přegenerování s důvodem a přehled chyb podle modelu (kapitola výše).
-7. Lehčí / těžší verze otázek a písemky.
+7. **Hotovo (2026-09-27).** Lehčí / těžší verze otázek a písemky: karta
+   otázky nabízí v menu Přegenerovat „Lehčí verze" / „Těžší verze" (vypnuté
+   na krajní obtížnosti), vytvoří novou otázku ze stejné pasáže a naváže ji
+   na kořenovou otázku (verze verze se váže na kořen, ne na řetěz); karta
+   ukazuje řádek „Verze: lehčí · těžší" s odkazem na obě a přeskočí na ně
+   se zvýrazněním. Role `nahled` řádek vidí, ale nevytvoří. V editoru testu
+   „Lehčí/Těžší verze písemky" založí soukromou kopii (`<název> – lehčí/těžší`)
+   a každou položku nahradí existující verzí o stupeň jinou nebo nově
+   vygenerovanou; položky bez otázky v bance, hlavolamy a položky na kraji
+   obtížnosti nebo s neúspěšným generováním zůstanou beze změny a výsledek
+   řekne, kolik jich zůstalo původních. Přidán sloupec `questions.variant_of`
+   (migrace 0019).
 
 ## Testování
 

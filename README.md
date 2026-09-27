@@ -27,6 +27,10 @@ dělá: nahrávají se materiály, generují otázky, upravují se a vybírají 
   možností, pravda/nepravda, doplňování do textu, přiřazování dvojic, řazení,
   doplňovací tabulka a popis obrázku. Učitel může kteroukoli upravit nebo napsat
   vlastní, včetně tabulek jako přílohy otázky.
+- **Lehčí a těžší verze.** Z karty otázky jde jedním tlačítkem vytvořit lehčí
+  nebo těžší verzi téže otázky (originál zůstává, verze se na něj naváže),
+  a stejně tak v editoru testu vzniká lehčí nebo těžší kopie celé písemky se
+  všemi položkami přeobtížněnými naráz.
 - **Skládání testu napříč knihovnou.** Do jednoho testu jdou otázky z různých
   témat, ročníků i předmětů — hodí se na čtvrtletky a opakování z loňska. Test
   má vlastní strukturu: nadpisy částí, pokyny, zalomení stránky, libovolný počet
