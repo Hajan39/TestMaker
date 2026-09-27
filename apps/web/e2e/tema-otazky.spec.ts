@@ -306,7 +306,7 @@ test.describe('otázky v tématu', () => {
     await page.goto(`/topics/${topicId}`)
     const row = page.locator('li[data-question-id]', { hasText: prompt })
     await expect(row).toBeVisible()
-    await row.getByRole('button', { name: 'Přegenerovat' }).click()
+    await row.getByRole('button', { name: 'Přegenerovat', exact: true }).click()
 
     await expect(row).toHaveCount(0)
   })

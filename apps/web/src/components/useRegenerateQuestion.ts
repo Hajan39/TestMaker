@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AI_QUESTION_TYPES, type QuestionType } from '@testmaker/core/schema'
+import { AI_QUESTION_TYPES, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
 
 /** Zapamatovaná odpověď na „je model nakonfigurovaný?“ — ptáme se jednou za načtení stránky. */
@@ -21,7 +21,7 @@ export function useRegenerateQuestion(
   questionId: string,
   type: QuestionType,
   onDone?: () => void,
-): { available: boolean; busy: boolean; run: () => Promise<void> } {
+): { available: boolean; busy: boolean; run: (reason?: RegenerateReason, note?: string) => Promise<void> } {
   const router = useRouter()
   const [configured, setConfigured] = useState<boolean | null>(configuredCache)
   const [busy, setBusy] = useState(false)
@@ -44,13 +44,13 @@ export function useRegenerateQuestion(
 
   const podporovanyTyp = (AI_QUESTION_TYPES as readonly string[]).includes(type)
 
-  async function run() {
+  async function run(reason?: RegenerateReason, note?: string) {
     setBusy(true)
     try {
       const response = await fetch('/api/questions/regenerate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: questionId }),
+        body: JSON.stringify({ id: questionId, reason, note }),
       })
       const data = (await response.json()) as { error?: string }
       if (!response.ok) {
