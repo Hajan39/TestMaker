@@ -59,6 +59,7 @@ export default async function TestPage({
         gradeId={test.gradeId}
         gradeLabel={gradeLabel}
         backTopic={backTopic}
+        role={ucet.role}
       />
     </PageShell>
   )

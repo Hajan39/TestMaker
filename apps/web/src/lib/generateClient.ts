@@ -69,6 +69,62 @@ export async function generateQuestionsStream(
   if (buffer.trim()) onEvent(JSON.parse(buffer) as GenerateEvent)
 }
 
+export type TestVariantDirection = 'easier' | 'harder'
+
+export type TestVariantEvent =
+  | { type: 'start'; total: number }
+  | { type: 'progress'; done: number; total: number }
+  | { type: 'done'; testId: string; replaced: number; generated: number; kept: number }
+  | { type: 'error'; message: string }
+
+/**
+ * Vytvoří lehčí nebo těžší verzi celé písemky a předává postup ze streamu —
+ * stejný tvar jako `generateQuestionsStream`, jen nad jinou routou a jiným
+ * tvarem události `done`.
+ */
+export async function createTestVariantStream(
+  testId: string,
+  direction: TestVariantDirection,
+  onEvent: (event: TestVariantEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch('/api/tests/variant', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ testId, direction }),
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    // Server posílá vysvětlení česky (bez modelu, cizí test); holé číslo
+    // stavu učitelce nic neřekne.
+    const detail = await response.text()
+    const message = (() => {
+      try {
+        const parsed = JSON.parse(detail) as { error?: string }
+        return parsed.error ?? detail
+      } catch {
+        return detail
+      }
+    })()
+    throw new Error(message.slice(0, 300) || `Vytvoření verze selhalo (${response.status})`)
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += value
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.trim()) onEvent(JSON.parse(line) as TestVariantEvent)
+    }
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer) as TestVariantEvent)
+}
+
 /** Zpracuje frontu hromadného generování voláním runneru, dokud něco zbývá. */
 export async function drainQueue(
   /**

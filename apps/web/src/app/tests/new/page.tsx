@@ -12,7 +12,7 @@ export default async function NewTestPage() {
   const [topics, templates] = await Promise.all([loadPickerTopics(ucet), loadTemplates(ucet)])
   return (
     <PageShell>
-      <TestBuilder topics={topics} templates={templates} test={null} items={[]} />
+      <TestBuilder topics={topics} templates={templates} test={null} items={[]} role={ucet.role} />
     </PageShell>
   )
 }

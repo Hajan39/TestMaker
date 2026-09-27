@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { testHeaderConfigSchema } from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { buildPuzzleSnapshots, buildQuestionSnapshots, resolveGradeId, testConditions } from '@/lib/tests'
-import { skola, sRozsahem, viditelnyTest, vlastni, type Prihlaseny } from '@/lib/uzivatel'
+import { buildPuzzleSnapshots, buildQuestionSnapshots, copyTest, resolveGradeId, testConditions } from '@/lib/tests'
+import { skola, sRozsahem, vlastni, type Prihlaseny } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -75,72 +75,11 @@ export async function GET(request: Request) {
   })
 }
 
-/**
- * Kopie hotového testu.
- *
- * Loňskou písemku chce učitelka použít znovu, ne přepsat — proto kopie, a ne
- * úprava originálu. Přebírají se i **zmrazené snímky otázek**: kdyby se
- * pořizovaly znovu z banky, dostala by kopie dnešní znění otázek místo toho,
- * co se tehdy tisklo, a k loňské písemce by už nešlo vyrobit stejný klíč.
- */
-async function copyTest(ucet: Prihlaseny, sourceId: string): Promise<Response> {
-  // Kopírovat jde i nasdílená písemka kolegyně; kopie je pak moje a soukromá.
-  const [source] = await db
-    .select()
-    .from(tests)
-    .where(and(eq(tests.id, sourceId), viditelnyTest(ucet, tests)))
-    .limit(1)
-  if (!source) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
-
-  const items = await db
-    .select()
-    .from(testItems)
-    .where(and(skola(ucet, testItems), eq(testItems.testId, sourceId)))
-    .orderBy(asc(testItems.position))
-
-  const id = newId()
-  const now = new Date().toISOString()
-  await db.insert(tests).values({
-    id,
-    schoolId: ucet.schoolId,
-    ownerId: ucet.userId,
-    visibility: 'soukrome',
-    title: `${source.title} (kopie)`,
-    description: source.description,
-    graded: source.graded,
-    templateId: source.templateId,
-    // Ročník kopírovaného testu už při jeho uložení prošel ověřením proti
-    // škole; kopie ho přebírá beze změny stejně jako ostatní pole.
-    gradeId: source.gradeId,
-    header: source.header,
-    variants: source.variants,
-    showKey: source.showKey,
-    createdAt: now,
-    updatedAt: now,
-  })
-
-  if (items.length > 0) {
-    await db.insert(testItems).values(
-      items.map((item) => ({
-        id: newId(),
-        schoolId: ucet.schoolId,
-        testId: id,
-        position: item.position,
-        kind: item.kind,
-        questionId: item.questionId,
-        text: item.text,
-        pointsOverride: item.pointsOverride,
-        linesOverride: item.linesOverride,
-        // Snímek se přebírá tak, jak je — kopie musí vypadat jako originál,
-        // i když se otázka v bance mezitím změnila nebo úplně zmizela.
-        questionSnapshot: item.questionSnapshot,
-        puzzleId: item.puzzleId,
-        puzzleSnapshot: item.puzzleSnapshot,
-      })),
-    )
-  }
-
-  return Response.json({ id, copiedFrom: sourceId, items: items.length })
+/** Odpověď na `?copyOf=`: kopie testu z `lib/tests.ts`, nebo 404, když zdroj není vidět. */
+async function copyTestResponse(ucet: Prihlaseny, sourceId: string): Promise<Response> {
+  const result = await copyTest(ucet, sourceId)
+  if (!result) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
+  return Response.json({ id: result.id, copiedFrom: result.copiedFrom, items: result.items.length })
 }
 
 /** Založí test i s položkami; s `?copyOf=<id>` udělá kopii existujícího. */
@@ -150,7 +89,7 @@ export async function POST(request: Request) {
       const copyOf = new URL(request.url).searchParams.get('copyOf')
       // Kopie se pozná podle adresy a tělo požadavku nemá — čte se proto až
       // tady, po odbočce.
-      if (copyOf) return copyTest(ucet, copyOf)
+      if (copyOf) return copyTestResponse(ucet, copyOf)
 
       const parsed = testSchema.safeParse(await request.json())
       if (!parsed.success) {

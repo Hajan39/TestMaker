@@ -11,8 +11,9 @@ import {
   type Template,
   type Test,
 } from '@testmaker/core/schema'
-import { db, assets, grades, puzzles, questions, subjects, templates, testItems, tests } from '@/db'
+import { db, assets, grades, puzzles, questions, subjects, templates, testItems, tests, type TestItemRow } from '@/db'
 import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
+import { newId } from './ids'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
 
@@ -118,6 +119,100 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
     showKey: row.showKey,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  }
+}
+
+/** Jedna zkopírovaná položka testu — vše, co `createTestVariant` potřebuje dál upravit. */
+export interface CopiedTestItem {
+  id: string
+  kind: TestItemRow['kind']
+  questionId: string | null
+}
+
+export interface CopyTestResult {
+  id: string
+  copiedFrom: string
+  items: CopiedTestItem[]
+}
+
+/**
+ * Kopie hotového testu.
+ *
+ * Loňskou písemku chce učitelka použít znovu, ne přepsat — proto kopie, a ne
+ * úprava originálu. Přebírají se i **zmrazené snímky otázek**: kdyby se
+ * pořizovaly znovu z banky, dostala by kopie dnešní znění otázek místo toho,
+ * co se tehdy tisklo, a k loňské písemce by už nešlo vyrobit stejný klíč.
+ *
+ * Kopírovat jde i nasdílená písemka kolegyně; kopie je pak moje a soukromá.
+ * Vrací `null`, když zdrojový test není vidět (cizí, nebo neexistuje) —
+ * volající si sám vybere, jestli z toho udělá 404, nebo ho beze slova
+ * proklikne dál.
+ *
+ * `title` mění výchozí název kopie (`"<název> (kopie)"`) — verze písemky ho
+ * potřebuje jiný (`"<název> – lehčí"`), a nejde ho spočítat dřív, než se
+ * zdrojový test načte, proto je to funkce nad jeho názvem, ne hotový řetězec.
+ */
+export async function copyTest(
+  scope: Scope,
+  sourceId: string,
+  options: { title?: (sourceTitle: string) => string } = {},
+): Promise<CopyTestResult | null> {
+  const [source] = await db
+    .select()
+    .from(tests)
+    .where(and(eq(tests.id, sourceId), viditelnyTest(scope, tests)))
+    .limit(1)
+  if (!source) return null
+
+  const items = await db
+    .select()
+    .from(testItems)
+    .where(and(skola(scope, testItems), eq(testItems.testId, sourceId)))
+    .orderBy(asc(testItems.position))
+
+  const id = newId()
+  const now = new Date().toISOString()
+  await db.insert(tests).values({
+    id,
+    schoolId: scope.schoolId,
+    ownerId: scope.userId,
+    visibility: 'soukrome',
+    title: options.title ? options.title(source.title) : `${source.title} (kopie)`,
+    description: source.description,
+    graded: source.graded,
+    templateId: source.templateId,
+    // Ročník kopírovaného testu už při jeho uložení prošel ověřením proti
+    // škole; kopie ho přebírá beze změny stejně jako ostatní pole.
+    gradeId: source.gradeId,
+    header: source.header,
+    variants: source.variants,
+    showKey: source.showKey,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  const newItems = items.map((item) => ({
+    id: newId(),
+    schoolId: scope.schoolId,
+    testId: id,
+    position: item.position,
+    kind: item.kind,
+    questionId: item.questionId,
+    text: item.text,
+    pointsOverride: item.pointsOverride,
+    linesOverride: item.linesOverride,
+    // Snímek se přebírá tak, jak je — kopie musí vypadat jako originál,
+    // i když se otázka v bance mezitím změnila nebo úplně zmizela.
+    questionSnapshot: item.questionSnapshot,
+    puzzleId: item.puzzleId,
+    puzzleSnapshot: item.puzzleSnapshot,
+  }))
+  if (newItems.length > 0) await db.insert(testItems).values(newItems)
+
+  return {
+    id,
+    copiedFrom: sourceId,
+    items: newItems.map((item) => ({ id: item.id, kind: item.kind, questionId: item.questionId })),
   }
 }
 

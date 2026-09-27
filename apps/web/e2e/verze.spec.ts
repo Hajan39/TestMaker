@@ -206,3 +206,92 @@ test.describe('verze otázky na kartě', () => {
     await expect(newRow.getByRole('button', { name: 'lehčí' })).toBeVisible()
   })
 })
+
+/**
+ * Lehčí/těžší verze celé písemky (skladač, `/tests/[id]`) — tlačítko
+ * v hlavičce. Model se nevolá, `/api/tests/variant` je podvržený NDJSON
+ * stream (`page.route`), stejně jako u verze jedné otázky výš v souboru.
+ */
+test.describe('verze písemky ve skladači', () => {
+  async function createTest(request: APIRequestContext, title: string): Promise<string> {
+    const bank = await request.get('/api/questions?status=approved&limit=1')
+    expect(bank.ok()).toBe(true)
+    const { items } = (await bank.json()) as { items: { id: string }[] }
+    expect(items.length, 'v knihovně nejsou schválené otázky').toBeGreaterThan(0)
+
+    const created = await request.post('/api/tests', {
+      data: {
+        title,
+        description: null,
+        graded: true,
+        templateId: 'builtin-klasicka',
+        gradeId: null,
+        header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+        variants: 1,
+        showKey: true,
+        items: [{ kind: 'question', questionId: items[0]!.id }],
+      },
+    })
+    expect(created.ok(), 'zkušební test se nepodařilo založit').toBe(true)
+    const { id } = (await created.json()) as { id: string }
+    return id
+  }
+
+  /** Podvrhne NDJSON stream `/api/tests/variant`: start → progress → done, s novým id. */
+  async function mockTestVariant(page: Page, newTestId: string): Promise<void> {
+    await page.route('**/api/tests/variant', async (route) => {
+      const events = [
+        { type: 'start', total: 1 },
+        { type: 'progress', done: 1, total: 1 },
+        { type: 'done', testId: newTestId, replaced: 0, generated: 1, kept: 0 },
+      ]
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/x-ndjson; charset=utf-8',
+        body: events.map((event) => JSON.stringify(event)).join('\n') + '\n',
+      })
+    })
+  }
+
+  test('tlačítko s podvrženým streamem otevře novou písemku', async ({ page }) => {
+    const title = `E2E verze písemky ${Date.now()}`
+    const testId = await createTest(page.request, title)
+    const novaId = await createTest(page.request, `${title} – cíl přesměrování`)
+    await mockTestVariant(page, novaId)
+
+    await page.goto(`/tests/${testId}`)
+    await page.getByRole('button', { name: 'Verze písemky' }).click()
+    await page.getByRole('menuitem', { name: 'Lehčí verze písemky' }).click()
+
+    await expect(page).toHaveURL(new RegExp(`/tests/${novaId}$`))
+    await expect(page.getByText('Lehčí verze písemky je hotová.')).toBeVisible()
+  })
+
+  test('neuložené změny nabídnou uložení místo požadavku', async ({ page }) => {
+    const title = `E2E neuložená verze ${Date.now()}`
+    const testId = await createTest(page.request, title)
+    let dotazu = 0
+    await page.route('**/api/tests/variant', async (route) => {
+      dotazu += 1
+      await route.abort()
+    })
+
+    await page.goto(`/tests/${testId}`)
+    // Rozdělá se neuložená změna — přejmenování názvu bez uložení. Píše se
+    // po znacích (`pressSequentially`) do vybraného textu, ne `.fill()`: to
+    // ve webkitu na téhle stránce (test s položkou, tedy s `SortableContext`
+    // z dnd-kit) nastaví hodnotu, aniž by se React dozvěděl o změně přes
+    // `onChange`.
+    const upraveny = `${title} (upraveno)`
+    const titleInput = page.getByLabel('Název písemky')
+    await titleInput.selectText()
+    await titleInput.pressSequentially(upraveny)
+    await expect(titleInput).toHaveValue(upraveny)
+
+    await page.getByRole('button', { name: 'Verze písemky' }).click()
+    await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
+
+    await expect(page.getByText(/Nejdřív ulož písemku/)).toBeVisible()
+    expect(dotazu).toBe(0)
+  })
+})

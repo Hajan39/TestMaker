@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
 import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
+import type { Role } from '@/lib/role'
 import type { PickerTopic } from '@/lib/questionPicker'
 import { PrintMenu } from '@/components/PrintMenu'
+import { TestVariantMenu } from '@/components/TestVariantMenu'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestPage } from '@/components/test-builder/TestPage'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
@@ -36,6 +38,7 @@ export function TestBuilder({
   gradeId,
   gradeLabel,
   backTopic,
+  role,
 }: {
   topics: PickerTopic[]
   templates: Template[]
@@ -47,6 +50,8 @@ export function TestBuilder({
   gradeLabel?: string | null
   /** Téma, ze kterého test vznikl (`?tema=`) — jen když patří škole. */
   backTopic?: { id: string; name: string } | null
+  /** Role přihlášené osoby — náhled verzi písemky nesmí vůbec vidět. */
+  role?: Role
 }) {
   const router = useRouter()
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
@@ -373,6 +378,15 @@ export function TestBuilder({
             jednou a obě čísla se musela hlídat, aby si neodporovala. */}
         <div className="flex flex-wrap items-center gap-2">
           {savedId ? <PrintMenu testId={savedId} variants={settings.variants} /> : null}
+          {/* Verze písemky vzniká z uložené podoby — bez uloženého testu (nový
+              test, role náhled) nemá tlačítko co dělat. */}
+          {savedId && role !== 'nahled' ? (
+            <TestVariantMenu
+              testId={savedId}
+              dirty={dirty}
+              onDirty={() => setError('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
+            />
+          ) : null}
           <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />
           <TestSettings value={settings} templates={templates} onChange={setSettings} />
           <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
