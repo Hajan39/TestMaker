@@ -45,8 +45,10 @@ export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
   multi_choice: 'Správné jsou 2–3 možnosti z 4–6. Nikdy ne všechny.',
   true_false: '4 krátká tvrzení, zhruba půl pravdivých. Nepravdivé tvrzení vznikne malou změnou pravdivého.',
-  fill_blank: 'Souvislý text s ___ na místě vynechaných výrazů. Počet ___ musí přesně odpovídat poli `blanks`.',
-  matching: 'Dva sloupce stejné délky (4–6 položek). `pairs` obsahuje dvojice indexů.',
+  fill_blank:
+    '1–4 vynechaná slova; počet ___ v textu přesně odpovídá poli `blanks`; vynechávej klíčové pojmy z materiálu, ne nahodilá slova.',
+  matching:
+    '4–6 dvojic; levý a pravý sloupec stejně dlouhé; `pairs` obsahuje dvojice indexů [levý, pravý], každý index právě jednou; pravý sloupec vypiš v jiném pořadí než levý.',
   ordering:
     'Posloupnost, vývoj, cesta látky. `items` vypiš v libovolném pořadí a do `correctOrder` dej indexy do `items` udávající skutečně správné pořadí — odděl si tak "co vypsat" od "v jakém pořadí to patří za sebe". Aplikace položky pro tisk stejně zamíchá.',
   table_fill: 'Tabulka s hlavičkou; buňky k doplnění zapiš jako null a jejich správné hodnoty dej do `answers` po řádcích.',

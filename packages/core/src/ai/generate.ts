@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
+  normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
   validateQuestionContent,
@@ -380,7 +381,7 @@ export async function generateQuestions(
           rejected.push({ index: accepted.length + i, errors })
           continue
         }
-        const normalized = withDefaultPoints(normalizeOrderingPayload(question))
+        const normalized = withDefaultPoints(normalizeMatchingPayload(normalizeOrderingPayload(question)))
         if (isDuplicate(normalized)) continue
         batch.push(normalized)
       }

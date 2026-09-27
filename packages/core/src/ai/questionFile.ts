@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { normalizeOrderingPayload, questionContentSchema, type QuestionContent } from '../schema/question'
+import { normalizeMatchingPayload, normalizeOrderingPayload, questionContentSchema, type QuestionContent } from '../schema/question'
 import { checkQuestion, duplicateCheck, withDefaultPoints } from './generate'
 import { buildSystemPrompt, QUESTION_TYPE_HINTS } from './prompts/questions'
 
@@ -165,7 +165,7 @@ export function readQuestionFile(
       rejected.push({ index, errors })
       return
     }
-    const question = withDefaultPoints(normalizeOrderingPayload(parsed.data))
+    const question = withDefaultPoints(normalizeMatchingPayload(normalizeOrderingPayload(parsed.data)))
     if (isDuplicate(question)) {
       rejected.push({ index, errors: ['stejná otázka už v tématu nebo v souboru je'] })
       return

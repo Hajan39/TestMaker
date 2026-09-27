@@ -15,6 +15,7 @@ import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
   normalizeEvidence,
+  normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
   validateQuestionContent,
@@ -668,6 +669,92 @@ describe('přiřazování nesmí použít stejnou položku napravo dvakrát', ()
           [1, 1],
         ],
       },
+    })
+    expect(validateQuestionContent(parsed)).toEqual([])
+  })
+
+  it('index mimo rozsah levého nebo pravého sloupce je odmítnut', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'matching',
+      payload: { prompt: 'Přiřaď.', left: ['a', 'b'], right: ['x', 'y'], pairs: [[0, 0], [2, 1]] },
+    })
+    expect(validateQuestionContent(parsed)).toContain('pairs odkazují mimo rozsah')
+  })
+
+  it('opakovaný levý index je odmítnut', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'matching',
+      payload: { prompt: 'Přiřaď.', left: ['a', 'b'], right: ['x', 'y'], pairs: [[0, 0], [0, 1]] },
+    })
+    expect(validateQuestionContent(parsed)).toContain('levý sloupec se v pairs opakuje')
+  })
+})
+
+describe('přiřazování: pravý sloupec ve stejném pořadí jako levý se před uložením zamíchá', () => {
+  it('identická mapa [0,0],[1,1],[2,2] se posune, ne zůstane triviální', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'matching',
+      payload: {
+        prompt: 'Přiřaď.',
+        left: ['jedna', 'dva', 'tři'],
+        right: ['jedna', 'dva', 'tři'],
+        pairs: [
+          [0, 0],
+          [1, 1],
+          [2, 2],
+        ],
+      },
+    })
+    const normalized = normalizeMatchingPayload(parsed)
+    expect(normalized.type).toBe('matching')
+    if (normalized.type !== 'matching' || parsed.type !== 'matching') return
+    // Pravý sloupec už není ve stejném pořadí jako levý.
+    expect(normalized.payload.right).not.toEqual(parsed.payload.left)
+    expect(normalized.payload.pairs.every(([l, r]) => l !== r)).toBe(true)
+    // Věcné dvojice zůstávají stejné — jen přehozené na jiné místo v poli.
+    for (const [l, r] of normalized.payload.pairs) {
+      expect(normalized.payload.right[r]).toBe(parsed.payload.left[l])
+    }
+  })
+
+  it('je deterministická — stejný vstup dá stejný výstup', () => {
+    const q: QuestionContent = questionContentSchema.parse({
+      type: 'matching',
+      payload: { prompt: 'Přiřaď.', left: ['a', 'b', 'c', 'd'], right: ['a', 'b', 'c', 'd'], pairs: [[0, 0], [1, 1], [2, 2], [3, 3]] },
+    })
+    expect(normalizeMatchingPayload(q)).toEqual(normalizeMatchingPayload(q))
+  })
+
+  it('neidentickou mapu nechá beze změny', () => {
+    const q: QuestionContent = questionContentSchema.parse({
+      type: 'matching',
+      payload: { prompt: 'Přiřaď.', left: ['a', 'b'], right: ['x', 'y'], pairs: [[0, 1], [1, 0]] },
+    })
+    expect(normalizeMatchingPayload(q)).toEqual(q)
+  })
+})
+
+describe('doplňování do textu: počet vynechaných míst musí odpovídat blanks', () => {
+  it('víc ___ než blanks je odmítnuto', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'fill_blank',
+      payload: { prompt: 'Doplň.', text: 'Voda vře při ___ °C a mrzne při ___ °C.', blanks: ['100'] },
+    })
+    expect(validateQuestionContent(parsed).length).toBeGreaterThan(0)
+  })
+
+  it('méně ___ než blanks je odmítnuto', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'fill_blank',
+      payload: { prompt: 'Doplň.', text: 'Voda vře při ___ °C.', blanks: ['100', '0'] },
+    })
+    expect(validateQuestionContent(parsed).length).toBeGreaterThan(0)
+  })
+
+  it('shodný počet projde bez chyby', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'fill_blank',
+      payload: { prompt: 'Doplň.', text: 'Voda vře při ___ °C a mrzne při ___ °C.', blanks: ['100', '0'] },
     })
     expect(validateQuestionContent(parsed)).toEqual([])
   })

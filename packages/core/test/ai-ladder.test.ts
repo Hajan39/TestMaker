@@ -225,8 +225,8 @@ describe('typy otázek pro AI', () => {
       prompty.push(prompt)
       return { questions: [otazka(prompty.length)] }
     }
-    await generateQuestions({ ...ZADANI, count: 2, types: ['matching', 'short_answer'] }, { models: [PRVNI], callModel: call })
-    expect(prompty.join('\n')).not.toContain('matching')
+    await generateQuestions({ ...ZADANI, count: 2, types: ['table_fill', 'short_answer'] }, { models: [PRVNI], callModel: call })
+    expect(prompty.join('\n')).not.toContain('table_fill')
     expect(prompty.join('\n')).toContain('short_answer')
   })
 
@@ -236,8 +236,8 @@ describe('typy otázek pro AI', () => {
       prompty.push(prompt)
       return { questions: [otazka(prompty.length)] }
     }
-    await generateQuestions({ ...ZADANI, count: 3, types: ['matching'] }, { models: [PRVNI], callModel: call })
-    expect(prompty.join('\n')).not.toContain('matching')
+    await generateQuestions({ ...ZADANI, count: 3, types: ['table_fill'] }, { models: [PRVNI], callModel: call })
+    expect(prompty.join('\n')).not.toContain('table_fill')
     expect(prompty.join('\n')).toContain('single_choice')
   })
 })

@@ -31,12 +31,22 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 }
 
 /**
- * Typy, které generuje AI v aplikaci. Jen jednoduché: u přiřazování, řazení,
- * tabulek a doplňování se menší modely pletou v indexech a počtech a vzniká
- * klíč, který nedává smysl. Ostatní typy zůstávají pro ruční tvorbu a pro
- * otázky z Claude Code (`/otazky`).
+ * Typy, které generuje AI v aplikaci. Přiřazování, řazení a doplňování do
+ * textu se přidaly, když generování přešlo na Gemini — ten indexy a počty
+ * trefuje spolehlivě. `validateQuestionContent` malformované výsledky (index
+ * mimo rozsah, opakovaná dvojice, špatný počet vynechaných slov…) i tak
+ * zahazuje, takže případné selhání modelu otázku jen zahodí, ne že by prošla
+ * do banky rozbitá. Tabulky, volný výběr, výběr více možností a popis
+ * obrázku zůstávají pro ruční tvorbu a pro otázky z Claude Code (`/otazky`).
  */
-export const AI_QUESTION_TYPES = ['single_choice', 'true_false', 'short_answer'] as const satisfies readonly QuestionType[]
+export const AI_QUESTION_TYPES = [
+  'single_choice',
+  'true_false',
+  'short_answer',
+  'matching',
+  'ordering',
+  'fill_blank',
+] as const satisfies readonly QuestionType[]
 
 export type AiQuestionType = (typeof AI_QUESTION_TYPES)[number]
 
@@ -191,6 +201,26 @@ export function normalizeOrderingPayload(q: QuestionContent): QuestionContent {
   // Platnost correctOrder jako permutace indexů items ověřuje validateQuestionContent
   // dřív, než se sem vůbec dostane — tady už jde jen o přeuspořádání.
   return { ...q, payload: { ...rest, items: correctOrder.map((i) => rest.items[i] as string) } }
+}
+
+/**
+ * Když model vrátí přiřazování s pravým sloupcem ve stejném pořadí jako
+ * levý (dvojice `[0,0], [1,1], …`), na papíře by šlo přiřadit bez čtení —
+ * stačí spojit řádek s řádkem naproti. Tahle funkce takový případ pozná
+ * a pravý sloupec deterministicky posune o jednu pozici (cyklicky), takže
+ * žádná položka nezůstane na svém původním místě, ale dvojice pořád
+ * odkazují na tytéž věcné páry. Nejde o náhodu — stejný vstup musí dát
+ * pokaždé stejný výstup, jinak by se testy i ruční ověření neshodovaly.
+ */
+export function normalizeMatchingPayload(q: QuestionContent): QuestionContent {
+  if (q.type !== 'matching') return q
+  const { left, right, pairs } = q.payload
+  const n = left.length
+  const isIdentity = right.length === n && pairs.length === n && pairs.every(([l, r]) => l === r)
+  if (!isIdentity) return q
+  const newRight = Array.from({ length: n }, (_, i) => right[(i + 1) % n] as string)
+  const newPairs: [number, number][] = Array.from({ length: n }, (_, l) => [l, (l - 1 + n) % n])
+  return { ...q, payload: { ...q.payload, right: newRight, pairs: newPairs } }
 }
 
 /**

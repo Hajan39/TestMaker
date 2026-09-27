@@ -34,6 +34,17 @@ function popis(q: QuestionContent): string {
       return `${q.payload.prompt}\n   Odpověď: **${q.payload.answer}**${
         q.payload.acceptedAnswers.length ? ` (také: ${q.payload.acceptedAnswers.join(', ')})` : ''
       }`
+    case 'matching':
+      return [
+        q.payload.prompt,
+        ...q.payload.pairs.map(
+          ([l, r]) => `   ${q.payload.left[l] ?? '?'} — ${q.payload.right[r] ?? '?'}`,
+        ),
+      ].join('\n')
+    case 'ordering':
+      return [q.payload.prompt, ...q.payload.items.map((item, i) => `   ${i + 1}. ${item}`)].join('\n')
+    case 'fill_blank':
+      return `${q.payload.prompt}\n   ${q.payload.text}\n   Doplnit: ${q.payload.blanks.join(', ')}`
     default:
       return `\`\`\`json\n${JSON.stringify(q.payload, null, 2)}\n\`\`\``
   }
