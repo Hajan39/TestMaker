@@ -17,6 +17,7 @@
     "generate:bulk": "tsx --conditions=react-server scripts/generate-bulk.ts",
     "otazky:pravidla": "tsx scripts/otazky-pravidla.ts",
     "otazky:over": "tsx scripts/otazky-over.ts",
+    "otazky:smazat": "tsx scripts/smazat-otazky.ts",
     "push:remote": "tsx scripts/push-remote.ts",
     "e2e": "playwright test",
     "e2e:db": "tsx --conditions=react-server scripts/seed-e2e.ts",
