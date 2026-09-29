@@ -12,7 +12,7 @@ jobs:
       DATABASE_URL: file:./ci.db
     steps:
       - name: Stáhnout repozitář
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Zjistit verzi pnpm z package.json
         id: pnpm-version
@@ -24,7 +24,7 @@ jobs:
           version: ${{ steps.pnpm-version.outputs.version }}
 
       - name: Nainstalovat Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
