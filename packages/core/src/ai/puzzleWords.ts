@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { puzzleEntrySchema, wordSearchPayloadSchema, type PuzzleEntry } from '../schema/puzzle'
+import {
+  PUZZLE_CLUE_MAX,
+  PUZZLE_WORD_MAX,
+  wordSearchPayloadSchema,
+  type PuzzleEntry,
+} from '../schema/puzzle'
 import { phraseWords, splitWord } from '../puzzle/letters'
 import { chunkText, pickChunks } from './generate'
 import { objectCall, startLadder } from './ladder'
@@ -88,9 +93,9 @@ const responseSchema = z.object({
 /** Meze slova do hlavolamu: kratší se nedá hledat, delší se nevejde do mřížky. */
 export const MIN_LETTERS = S.minLetters
 /** Nejdelší slovo, které schéma hlavolamu vůbec pustí. */
-const SCHEMA_MAX_LETTERS = puzzleEntrySchema.shape.word.maxLength ?? 24
+const SCHEMA_MAX_LETTERS = PUZZLE_WORD_MAX
 /** Nejdelší nápověda, kterou schéma hlavolamu pustí. */
-export const CLUE_MAX_LENGTH = puzzleEntrySchema.shape.clue.maxLength ?? 200
+export const CLUE_MAX_LENGTH = PUZZLE_CLUE_MAX
 /** Výchozí mřížka osmisměrky — tatáž, kterou doplní schéma. */
 const DEFAULT_GRID = wordSearchPayloadSchema.parse({})
 

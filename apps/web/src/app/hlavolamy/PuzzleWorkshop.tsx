@@ -9,8 +9,13 @@ import {
   puzzleProblems,
   MAX_GRID_SIZE,
   MIN_GRID_SIZE,
+  PUZZLE_CLUE_MAX,
+  PUZZLE_ENTRIES_MAX,
+  PUZZLE_ENTRIES_MIN,
   PUZZLE_KIND_LABELS,
   PUZZLE_KINDS,
+  PUZZLE_PHRASE_MAX,
+  PUZZLE_WORD_MAX,
   type PuzzleContent,
   type PuzzleKind,
   type TemplateConfig,
@@ -72,13 +77,13 @@ const DEFAULT_WORD_COUNT = 12
  * slov. Rozhraní je hlídá dřív, než se hlavolam pošle na server, aby
  * učitelka viděla u řádku, co opravit, místo obecného „neplatná data".
  */
-const MIN_WORDS = 2
-const MAX_WORDS = 40
-const MAX_WORD_LENGTH = 24
-const MAX_CLUE_LENGTH = 200
+const MIN_WORDS = PUZZLE_ENTRIES_MIN
+const MAX_WORDS = PUZZLE_ENTRIES_MAX
+const MAX_WORD_LENGTH = PUZZLE_WORD_MAX
+const MAX_CLUE_LENGTH = PUZZLE_CLUE_MAX
 const MAX_TITLE_LENGTH = 200
 const MAX_INSTRUCTIONS_LENGTH = 500
-const MAX_PHRASE_LENGTH = 120
+const MAX_PHRASE_LENGTH = PUZZLE_PHRASE_MAX
 
 /** Hláška, když server odpoví chybou bez vysvětlení (spadl, vypršel čas…). */
 const SERVER_TROUBLE = 'Server teď neodpověděl, jak měl. Zkus to za chvíli znovu; když to nepomůže, obnov stránku.'
@@ -491,6 +496,16 @@ export function PuzzleWorkshop({
               .map((entry) => entry.word.trim())
               .filter(Boolean)
               .slice(0, MAX_WORDS),
+            // Tajenka potřebuje slova s písmeny své věty, osmisměrka slova,
+            // která se vejdou do mřížky — obojí server hlídá podle těchto polí.
+            ...(draft.kind === 'cryptogram'
+              ? draft.phrase.trim()
+                ? { phrase: draft.phrase.trim().slice(0, MAX_PHRASE_LENGTH) }
+                : {}
+              : {
+                  ...(parseWhole(draft.cols) !== null ? { cols: parseWhole(draft.cols) } : {}),
+                  ...(parseWhole(draft.rows) !== null ? { rows: parseWhole(draft.rows) } : {}),
+                }),
           }),
         },
         'Slova se nepodařilo vytáhnout.',
@@ -519,6 +534,11 @@ export function PuzzleWorkshop({
         toast.warning(`Přibylo jen ${pocet(entries.length, SLOVA)} z ${requested} požadovaných.`, {
           description:
             `Materiály tématu jich víc asi nenabízejí. Zkus to znovu, nebo zbytek doplň ručně. ${rejectedNote}`.trim(),
+        })
+      } else if (typeof data.warning === 'string' && data.warning) {
+        // Server ví víc než počty — třeba že tajence pořád chybí písmena.
+        toast.warning(`Přibylo ${pocet(entries.length, SLOVA)}.`, {
+          description: `${data.warning} ${rejectedNote}`.trim(),
         })
       } else {
         toast.success(`Přibylo ${pocet(entries.length, SLOVA)}.`, { description: rejectedNote || undefined })

@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured, isNearDuplicate } from '@testmaker/core/ai'
 import {
-  cryptogramPayloadSchema,
   MAX_GRID_SIZE,
   MIN_GRID_SIZE,
   PUZZLE_KINDS,
+  PUZZLE_PHRASE_MAX,
   type PuzzleEntry,
 } from '@testmaker/core/schema'
 import { loadPuzzleWordDraft, savePuzzleWordDraft, suggestPuzzleWords } from '@/lib/puzzles'
@@ -23,7 +23,7 @@ const bodySchema = z.object({
    * Věta tajenky. Bez ní model neví, která písmena mají slova obsahovat.
    * Nepovinná kvůli starším klientům; prázdná věta = žádná.
    */
-  phrase: z.string().max(cryptogramPayloadSchema.shape.phrase.maxLength ?? 120).optional(),
+  phrase: z.string().max(PUZZLE_PHRASE_MAX).optional(),
   /** Velikost mřížky osmisměrky; podle ní se hlídá nejdelší slovo. Mimo meze se ořízne. */
   cols: z.number().int().optional(),
   rows: z.number().int().optional(),
