@@ -1,6 +1,14 @@
 import type { PuzzleContent } from '@testmaker/core/schema'
 import { puzzleInstructions } from '@testmaker/core/schema'
-import { buildPuzzle, describePlacement, markedOffsets, solutionGrid, type BuiltPuzzle } from '@testmaker/core/puzzle'
+import { buildPuzzle, describePlacement, solutionGrid, type BuiltPuzzle } from '@testmaker/core/puzzle'
+import {
+  CRYPTOGRAM_NUMBER_WIDTH,
+  WORD_LIST_COLUMNS,
+  cellSize,
+  cryptogramLayout,
+  cryptogramPhraseCells,
+  placedEntries,
+} from '@testmaker/core/pdf/layout'
 import { cn } from './cn'
 
 /**
@@ -13,17 +21,12 @@ import { cn } from './cn'
  * s papírem: kde leží slovo na obrazovce, tam leží i na papíře.
  *
  * Rozměry se zapisují v bodech PDF (pt) přes `--paper-pt`, kterou nastavuje
- * `PaperSheet` — stejně jako u `PaperQuestion`.
+ * `PaperSheet` — stejně jako u `PaperQuestion`. Velikost buněk, políček
+ * a počet sloupců seznamu bere z `@testmaker/core/pdf/layout`, odkud je bere
+ * i tisk.
  */
 
 const pt = (value: number): string => `calc(${value} * var(--paper-pt, 1.3333px))`
-
-/** Táž šířka, do které mřížku vejde tisk (`cellSize` v core/pdf). */
-const USABLE_WIDTH = 480
-
-export function cellSize(cols: number): number {
-  return Math.max(11, Math.min(20, Math.floor(USABLE_WIDTH / Math.max(cols, 1))))
-}
 
 export function PaperPuzzle({
   puzzle,
@@ -91,12 +94,17 @@ function WordSearchView({
         ))}
       </div>
 
+      {/* Jen slova, která v mřížce opravdu jsou — a ve třech sloupcích jako na papíře. */}
       <ul
-        className="mt-2 grid gap-x-3 sm:grid-cols-2"
-        style={{ fontSize: pt(9) }}
+        className="grid gap-x-3"
+        style={{
+          fontSize: pt(9),
+          marginTop: pt(8),
+          gridTemplateColumns: `repeat(${WORD_LIST_COLUMNS}, minmax(0, 1fr))`,
+        }}
         data-slot="puzzle-words"
       >
-        {puzzle.entries.map((entry, i) => (
+        {placedEntries(puzzle, built).map((entry, i) => (
           <li key={i} className="min-w-0 whitespace-normal break-words">
             {entry.word.toUpperCase()}
             {showClues ? ` – ${entry.clue}` : ''}
@@ -108,6 +116,11 @@ function WordSearchView({
         <ul className="mt-2 opacity-70" style={{ fontSize: pt(8) }}>
           {result.placements.map((placement, i) => (
             <li key={i}>{describePlacement(placement)}</li>
+          ))}
+          {result.unplaced.map((word, i) => (
+            <li key={`x-${i}`} className="text-danger" data-slot="puzzle-unplaced">
+              {word}: v mřížce není
+            </li>
           ))}
         </ul>
       ) : null}
@@ -123,25 +136,29 @@ function CryptogramView({
   solved: boolean
 }) {
   const result = built.cryptogram
-  const box = 14
-  // Odsazení řádků, aby vyznačená políčka stála pod sebou — stejně jako na papíře.
-  const offsets = markedOffsets(result.rows)
-  const gridWidth = Math.max(...result.rows.map((row, i) => (offsets[i] ?? 0) + row.letters.length), 1) * box
+  // Odsazení řádků (vyznačená políčka pod sebou) i velikost políčka jako na papíře.
+  const { offsets, widthInBoxes, boxSize: box } = cryptogramLayout(result)
+  const gridWidth = widthInBoxes * box
+  const numberWidth = CRYPTOGRAM_NUMBER_WIDTH
 
   return (
     <div style={{ marginTop: pt(6) }} data-slot="puzzle-rows">
       <div style={{ marginBottom: pt(8) }}>
         <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Tajenka:</div>
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {result.phraseWords.map((word, w) => (
+          {cryptogramPhraseCells(result).map((word, w) => (
             <span key={w} className="flex">
-              {word.map((letter, i) => (
+              {word.map((cell, i) => (
                 <span
                   key={i}
-                  className="flex items-center justify-center border border-paper-line"
+                  // Písmeno, na které nepřipadl žádný řádek, je předvyplněné — jako v PDF.
+                  className={cn(
+                    'flex items-center justify-center border border-paper-line',
+                    !cell.row && 'bg-paper-shade',
+                  )}
                   style={{ width: pt(box), height: pt(box), fontSize: pt(box * 0.58) }}
                 >
-                  {solved ? letter : ''}
+                  {solved || !cell.row ? cell.letter : ''}
                 </span>
               ))}
             </span>
@@ -156,9 +173,14 @@ function CryptogramView({
             key={row.number}
             data-slot="puzzle-row"
             className="flex items-center"
-            style={{ width: pt(gridWidth + 16), marginBottom: pt(3) }}
+            style={{ width: pt(gridWidth + numberWidth), marginBottom: pt(3) }}
           >
-            <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
+            <span
+              className="shrink-0 text-right leading-none"
+              style={{ width: pt(numberWidth), paddingRight: pt(4), fontSize: pt(9) }}
+            >
+              {row.number}.
+            </span>
             <span className="flex">
               <span style={{ width: pt((offsets[rowIndex] ?? 0) * box) }} />
               {row.letters.map((letter, i) => (
@@ -181,7 +203,9 @@ function CryptogramView({
       <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Otázky:</div>
       {result.rows.map((row) => (
         <div key={row.number} className="flex items-start gap-2" style={{ marginBottom: pt(3) }}>
-          <span style={{ width: pt(16), fontSize: pt(9) }}>{row.number}.</span>
+          <span className="shrink-0" style={{ width: pt(numberWidth), fontSize: pt(9) }}>
+            {row.number}.
+          </span>
           <span className="min-w-0 flex-1 whitespace-normal break-words" style={{ fontSize: pt(9) }}>
             {row.clue}
           </span>
