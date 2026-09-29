@@ -2,6 +2,7 @@ import { BUILT_IN_TEMPLATES, type QuestionType } from '@testmaker/core/schema'
 import { db, grades, materials, questions, subjects, templates, topics, users } from '@/db'
 import { newId } from '@/lib/ids'
 import { searchTextFor } from '@/lib/questions'
+import type { Role } from '@/lib/role'
 import type { Prihlaseny } from '@/lib/uzivatel'
 import { TEST_SKOLA_ID, TEST_UCET_ID } from './setup'
 
@@ -16,12 +17,13 @@ export const UCET: Prihlaseny = {
   jmeno: 'Testovací správce',
   email: 'test@localhost',
   skola: 'Testovací škola',
+  domovskaSkolaId: TEST_SKOLA_ID,
   sid: 'bez-prihlaseni',
   mustChangePassword: false,
 }
 
 /** Účet druhé učitelky — pro testy, že cizí obsah není vidět. */
-export async function seedUcet(options: { role?: 'ucitelka' | 'spravce' | 'nahled' } = {}): Promise<Prihlaseny> {
+export async function seedUcet(options: { role?: Role } = {}): Promise<Prihlaseny> {
   const id = newId()
   await db.insert(users).values({
     id,
@@ -37,6 +39,7 @@ export async function seedUcet(options: { role?: 'ucitelka' | 'spravce' | 'nahle
     jmeno: `Učitelka ${id}`,
     email: `${id}@localhost`,
     skola: 'Testovací škola',
+    domovskaSkolaId: TEST_SKOLA_ID,
     sid: 'bez-prihlaseni',
     mustChangePassword: false,
   }

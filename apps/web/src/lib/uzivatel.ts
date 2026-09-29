@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { and, asc, eq, gt, isNull, or } from 'drizzle-orm'
 import { auditLog, db, schools, sessions, users } from '@/db'
 import { newId } from '@/lib/ids'
-import { roleMuzeMenit, roleMuzeSpravovat, type Role } from '@/lib/role'
+import { roleJeAdministrator, roleMuzeMenit, roleMuzeSpravovat, type Role } from '@/lib/role'
 import { VYCHOZI_UCET_ID } from '@/lib/vychozi'
 import {
   RELACE_MAX_MS,
@@ -34,7 +34,13 @@ export interface Scope {
 export interface Prihlaseny extends Scope {
   jmeno: string
   email: string
+  /** Název školy, ve které se právě pracuje (u administrátora té vybrané). */
   skola: string
+  /**
+   * Škola, ke které účet patří. U administrátora se může lišit od `schoolId`,
+   * když se přepnul jinam; u ostatních rolí je vždycky stejná.
+   */
+  domovskaSkolaId: string
   sid: string
   mustChangePassword: boolean
 }
@@ -81,6 +87,7 @@ export const aktualniUzivatel = cache(async (): Promise<Prihlaseny | null> => {
       sessionVersion: users.sessionVersion,
       mustChangePassword: users.mustChangePassword,
       status: users.status,
+      activeSchoolId: users.activeSchoolId,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -104,17 +111,40 @@ export const aktualniUzivatel = cache(async (): Promise<Prihlaseny | null> => {
     .set({ lastSeenAt: new Date().toISOString() })
     .where(eq(sessions.id, relace.sid))
 
+  const vybrana = await vybranaSkola(row)
   return {
-    schoolId: row.schoolId,
+    schoolId: vybrana?.id ?? row.schoolId,
     userId: row.userId,
     role: row.role,
     jmeno: row.jmeno,
     email: row.email,
-    skola: row.skola,
+    skola: vybrana?.name ?? row.skola,
+    domovskaSkolaId: row.schoolId,
     sid: relace.sid,
     mustChangePassword: row.mustChangePassword,
   }
 })
+
+/**
+ * Škola, do které se administrátor přepnul. `null` znamená pracovat
+ * v domovské — u jiné role vždycky, u administrátora bez výběru, a taky když
+ * vybraná škola mezitím zmizela (cizí klíč ji nuluje, ale jistota je jistota).
+ */
+async function vybranaSkola(row: {
+  role: Role
+  schoolId: string
+  activeSchoolId: string | null
+}): Promise<{ id: string; name: string } | null> {
+  if (!roleJeAdministrator(row.role) || !row.activeSchoolId || row.activeSchoolId === row.schoolId) {
+    return null
+  }
+  const [skola] = await db
+    .select({ id: schools.id, name: schools.name })
+    .from(schools)
+    .where(eq(schools.id, row.activeSchoolId))
+    .limit(1)
+  return skola ?? null
+}
 
 /**
  * Bez přihlašování (lokální `next dev`, testy v prohlížeči) se pracuje pod
@@ -134,6 +164,7 @@ async function vychoziUzivatel(): Promise<Prihlaseny | null> {
     jmeno: users.name,
     email: users.email,
     skola: schools.name,
+    activeSchoolId: users.activeSchoolId,
   }
 
   const [pevny] = await db
@@ -142,7 +173,7 @@ async function vychoziUzivatel(): Promise<Prihlaseny | null> {
     .innerJoin(schools, eq(schools.id, users.schoolId))
     .where(eq(users.id, id))
     .limit(1)
-  if (pevny) return { ...pevny, sid: 'bez-prihlaseni', mustChangePassword: false }
+  if (pevny) return bezPrihlaseni(pevny)
 
   /*
    * Databáze ze seedu má účet s pevným id; ta, která vznikla migrací z verze
@@ -158,7 +189,28 @@ async function vychoziUzivatel(): Promise<Prihlaseny | null> {
     .orderBy(asc(users.createdAt))
     .limit(1)
   if (!prvniSpravce) return null
-  return { ...prvniSpravce, sid: 'bez-prihlaseni', mustChangePassword: false }
+  return bezPrihlaseni(prvniSpravce)
+}
+
+async function bezPrihlaseni(row: {
+  userId: string
+  schoolId: string
+  role: Role
+  jmeno: string
+  email: string
+  skola: string
+  activeSchoolId: string | null
+}): Promise<Prihlaseny> {
+  const { activeSchoolId: _vybrana, ...zbytek } = row
+  const vybrana = await vybranaSkola(row)
+  return {
+    ...zbytek,
+    schoolId: vybrana?.id ?? row.schoolId,
+    skola: vybrana?.name ?? row.skola,
+    domovskaSkolaId: row.schoolId,
+    sid: 'bez-prihlaseni',
+    mustChangePassword: false,
+  }
 }
 
 /** Přihlášená osoba, nebo výjimka, kterou route handler přeloží na 401. */
@@ -342,19 +394,25 @@ export function skola(scope: Scope, tabulka: { schoolId: AnyColumn }) {
   return eq(tabulka.schoolId, scope.schoolId)
 }
 
-/** Podmínka „je to moje“ — škola a zároveň vlastník. */
+/**
+ * Podmínka „je to moje“ — škola a zároveň vlastník. Administrátor má ve
+ * vybrané škole plná práva, takže u něj platí jen podmínka na školu.
+ */
 export function vlastni(scope: Scope, tabulka: { schoolId: AnyColumn; ownerId: AnyColumn }) {
+  if (roleJeAdministrator(scope.role)) return eq(tabulka.schoolId, scope.schoolId)
   return and(eq(tabulka.schoolId, scope.schoolId), eq(tabulka.ownerId, scope.userId))
 }
 
 /**
  * Písemka, na kterou je vidět: vlastní, nebo nasdílená kolegyním. Správce
- * cizí písemky nedostává — má je jen v záloze celé školy.
+ * cizí písemky nedostává — má je jen v záloze celé školy. Administrátor vidí
+ * ve vybrané škole všechny.
  */
 export function viditelnyTest(
   scope: Scope,
   tabulka: { schoolId: AnyColumn; ownerId: AnyColumn; visibility: AnyColumn },
 ) {
+  if (roleJeAdministrator(scope.role)) return eq(tabulka.schoolId, scope.schoolId)
   return and(
     eq(tabulka.schoolId, scope.schoolId),
     or(eq(tabulka.ownerId, scope.userId), eq(tabulka.visibility, 'skola')),

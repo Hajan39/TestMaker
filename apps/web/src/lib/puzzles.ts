@@ -92,7 +92,16 @@ export async function loadPuzzleWordDraft(
   const [row] = await db
     .select({ entries: puzzleWordDrafts.entries })
     .from(puzzleWordDrafts)
-    .where(and(vlastni(scope, puzzleWordDrafts), eq(puzzleWordDrafts.topicId, topicId), eq(puzzleWordDrafts.kind, kind)))
+    // Rozpracovaná slova jsou osobní i pro administrátora — jinak by si
+    // načetl cizí koncept a uložením by vedle něj vznikl druhý.
+    .where(
+      and(
+        skola(scope, puzzleWordDrafts),
+        eq(puzzleWordDrafts.ownerId, scope.userId),
+        eq(puzzleWordDrafts.topicId, topicId),
+        eq(puzzleWordDrafts.kind, kind),
+      ),
+    )
     .limit(1)
   return row?.entries ?? []
 }

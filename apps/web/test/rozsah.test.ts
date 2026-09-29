@@ -40,6 +40,7 @@ async function ciziSkola(): Promise<Prihlaseny> {
     jmeno: 'Cizí učitelka',
     email: `${id}@jina.cz`,
     skola: 'Jiná škola',
+    domovskaSkolaId: CIZI_SKOLA,
     sid: 'bez-prihlaseni',
     mustChangePassword: false,
   }
