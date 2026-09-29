@@ -6,6 +6,7 @@ import { displayOrder } from './shuffle'
 export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
   switch (question.type) {
     case 'open':
+    case 'draw':
     case 'short_answer':
       return question.payload.answer
 

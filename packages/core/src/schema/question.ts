@@ -4,6 +4,7 @@ import { blockSchema } from './blocks'
 /** Typy otázek podporované aplikací. */
 export const QUESTION_TYPES = [
   'open',
+  'draw',
   'short_answer',
   'single_choice',
   'multi_choice',
@@ -19,6 +20,7 @@ export type QuestionType = (typeof QUESTION_TYPES)[number]
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   open: 'Volná odpověď',
+  draw: 'Nakresli a popiš',
   short_answer: 'Krátká odpověď',
   single_choice: 'Výběr jedné možnosti',
   multi_choice: 'Výběr více možností',
@@ -60,6 +62,19 @@ export const openPayloadSchema = z.object({
   prompt: z.string().min(3),
   /** Počet linek na odpověď. */
   lines: z.number().int().min(1).max(20).default(4),
+  answer: z.string().min(1),
+})
+
+/**
+ * Nakresli a popiš — jako volná odpověď, jen se místo linek tiskne prázdné
+ * místo na kresbu. Výška místa se udává v řádcích (`lines` × výška linky
+ * z šablony), aby šla v písemce přepsat týmž `linesOverride` jako u `open`.
+ */
+export const drawPayloadSchema = z.object({
+  prompt: z.string().min(3),
+  /** Výška prázdného místa v řádcích. */
+  lines: z.number().int().min(1).max(30).default(8),
+  /** Co má kresba obsahovat a jak ji popsat — do klíče. */
   answer: z.string().min(1),
 })
 
@@ -176,6 +191,7 @@ const baseFields = {
 
 export const questionContentSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('open'), payload: openPayloadSchema, ...baseFields }),
+  z.object({ type: z.literal('draw'), payload: drawPayloadSchema, ...baseFields }),
   z.object({ type: z.literal('short_answer'), payload: shortAnswerPayloadSchema, ...baseFields }),
   z.object({ type: z.literal('single_choice'), payload: singleChoicePayloadSchema, ...baseFields }),
   z.object({ type: z.literal('multi_choice'), payload: multiChoicePayloadSchema, ...baseFields }),
@@ -332,6 +348,7 @@ export type Question = QuestionContent & QuestionMeta
 /** Výchozí počet bodů podle typu otázky. */
 export const DEFAULT_POINTS: Record<QuestionType, number> = {
   open: 3,
+  draw: 3,
   short_answer: 1,
   single_choice: 1,
   multi_choice: 2,
@@ -442,6 +459,7 @@ export function validateQuestionContent(q: QuestionContent): string[] {
 /** Typy, u kterých se možnosti vypisují zvlášť, takže v zadání nemají co dělat. */
 const TYPES_WITHOUT_INLINE_OPTIONS = new Set<QuestionType>([
   'open',
+  'draw',
   'short_answer',
   'true_false',
   'fill_blank',

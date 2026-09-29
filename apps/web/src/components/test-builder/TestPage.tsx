@@ -387,7 +387,7 @@ function PageRow({
         ) : null}
         {/* Kolik místa žák potřebuje, záleží na písemce, ne na otázce —
             proto se počet linek nastavuje tady, ne u otázky v bance. */}
-        {item.kind === 'question' && question?.type === 'open' ? (
+        {item.kind === 'question' && (question?.type === 'open' || question?.type === 'draw') ? (
           <label className="flex items-center gap-1 text-xs text-fg-muted">
             řádků
             <Input
@@ -397,7 +397,7 @@ function PageRow({
               max={30}
               step={1}
               aria-label="Řádků na odpověď"
-              value={item.linesOverride ?? (question.payload as { lines?: number }).lines ?? 4}
+              value={item.linesOverride ?? (question.payload as { lines?: number }).lines ?? (question.type === 'draw' ? 8 : 4)}
               onChange={(event) => onPatch(item.key, { linesOverride: Math.max(1, Number(event.target.value) || 1) })}
             />
           </label>

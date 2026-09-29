@@ -15,6 +15,21 @@ describe('estimateHeight', () => {
     )
   })
 
+  it('nakresli a popiš zabere místo podle počtu řádků, stejně jako volná odpověď', () => {
+    const item = (type: 'open' | 'draw'): ResolvedTestItem => ({
+      id: 'i1',
+      testId: 't',
+      order: 0,
+      kind: 'question',
+      questionId: 'q1',
+      text: null,
+      pointsOverride: null,
+      linesOverride: null,
+      question: makeQuestion({ type, points: 1, payload: { prompt: 'Nakresli buňku.', lines: 8, answer: 'x' } }),
+    })
+    expect(estimateHeight(item('draw'), template.config)).toBe(estimateHeight(item('open'), template.config))
+  })
+
   it('zalomení strany nemá výšku', () => {
     const brk = { id: 'b', testId: 't', order: 0, kind: 'page_break' as const, questionId: null, text: null, pointsOverride: null }
     expect(estimateHeight(brk, template.config)).toBe(0)

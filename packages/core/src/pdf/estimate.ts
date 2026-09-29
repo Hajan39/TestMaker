@@ -125,6 +125,7 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
   let body: number
   switch (question.type) {
     case 'open':
+    case 'draw':
       body = answerLines(question, item.linesOverride) * style.answerLineHeight
       break
     case 'short_answer':

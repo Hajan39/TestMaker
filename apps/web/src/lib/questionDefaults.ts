@@ -5,6 +5,8 @@ export function emptyPayload(type: QuestionType): Record<string, unknown> {
   switch (type) {
     case 'open':
       return { prompt: '', lines: 4, answer: '' }
+    case 'draw':
+      return { prompt: '', lines: 8, answer: '' }
     case 'short_answer':
       return { prompt: '', answer: '', acceptedAnswers: [] }
     case 'single_choice':

@@ -72,6 +72,34 @@ export function PayloadFields({
         </div>
       )
 
+    case 'draw':
+      return (
+        <div className="space-y-3">
+          {prompt}
+          <div className="flex gap-3">
+            <div className="w-32">
+              <Label htmlFor={id('lines')}>Místo (řádků)</Label>
+              <Input
+                id={id('lines')}
+                type="number"
+                min={1}
+                max={30}
+                value={Number(payload.lines ?? 8)}
+                onChange={(event) => set('lines', Number(event.target.value) || 1)}
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor={id('draw-answer')}>Co má kresba obsahovat (do klíče)</Label>
+            <Textarea
+              id={id('draw-answer')}
+              value={str('answer')}
+              onChange={(event) => set('answer', event.target.value)}
+            />
+          </div>
+        </div>
+      )
+
     case 'short_answer':
       return (
         <div className="space-y-3">

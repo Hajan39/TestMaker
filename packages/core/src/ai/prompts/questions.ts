@@ -49,6 +49,8 @@ export const MAX_REPLACEMENT_NOTE_LENGTH = 300
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   open:
     'Jen když má materiál stručnou věcnou odpověď, ne názor. 2–6 řádků; v `answer` napiš vzorovou odpověď k opravování, ne jen heslo.',
+  draw:
+    'Jen když jde látku nakreslit a popsat (stavba, schéma, pokus, mapa). Zadání řekne, co nakreslit a které části popsat. 6–12 řádků místa; v `answer` vypiš, co musí kresba obsahovat a které popisky.',
   short_answer: 'Odpověď je jedno slovo nebo krátké sousloví z materiálu. Do `acceptedAnswers` dej běžné varianty.',
   single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
   multi_choice:

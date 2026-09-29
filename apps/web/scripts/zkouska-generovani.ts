@@ -43,6 +43,8 @@ function popis(q: QuestionContent): string {
       ].join('\n')
     case 'open':
       return `${q.payload.prompt}\n   Vzorová odpověď: **${q.payload.answer}** (${q.payload.lines} ř.)`
+    case 'draw':
+      return `${q.payload.prompt}\n   Kresba má obsahovat: **${q.payload.answer}** (${q.payload.lines} ř.)`
     case 'matching':
       return [
         q.payload.prompt,

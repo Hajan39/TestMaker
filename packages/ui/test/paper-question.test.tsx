@@ -75,6 +75,20 @@ describe('PaperQuestion', () => {
     expect(container.querySelectorAll('[data-slot="paper-line"]')).toHaveLength(9)
   })
 
+  it('nakresli a popiš nechá prázdné místo bez linek a neprozradí klíč', () => {
+    const { container } = render(
+      <PaperQuestion
+        question={question({
+          type: 'draw',
+          payload: { prompt: 'Nakresli a popiš květ.', lines: 8, answer: 'Kalich, koruna, tyčinky, pestík.' },
+        })}
+      />,
+    )
+    expect(container.querySelectorAll('[data-slot="paper-line"]')).toHaveLength(0)
+    expect(container.querySelector('[data-slot="paper-draw"]')).toBeInTheDocument()
+    expect(screen.queryByText(/Kalich/)).not.toBeInTheDocument()
+  })
+
   it('výběr jedné možnosti očísluje písmeny a neprozradí správnou', () => {
     render(
       <PaperQuestion

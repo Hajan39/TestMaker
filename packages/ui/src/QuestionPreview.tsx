@@ -66,6 +66,11 @@ function Body({
         <Answer label={`Vzorová odpověď (${question.payload.lines} ř.)`}>{question.payload.answer}</Answer>
       ) : null
 
+    case 'draw':
+      return showAnswers ? (
+        <Answer label={`Co má kresba obsahovat (${question.payload.lines} ř. místa)`}>{question.payload.answer}</Answer>
+      ) : null
+
     case 'short_answer':
       return showAnswers ? <Answer label="Odpověď">{question.payload.answer}</Answer> : null
 

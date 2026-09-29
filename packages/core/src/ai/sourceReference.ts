@@ -79,6 +79,7 @@ function pupilVisibleTexts(question: QuestionContent): string[] {
   const texts: string[] = [question.payload.prompt, ...blockTexts(question)]
   switch (question.type) {
     case 'open':
+    case 'draw':
     case 'short_answer':
       break
     case 'single_choice':

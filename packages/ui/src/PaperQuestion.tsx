@@ -161,6 +161,14 @@ function PaperAnswerArea({
         </div>
       )
 
+    case 'draw':
+      return (
+        <div
+          data-slot="paper-draw"
+          style={{ marginTop: pt(6), height: pt(answerLines(question, lines ?? null) * style.answerLineHeight) }}
+        />
+      )
+
     case 'short_answer':
       return (
         <div className="flex items-end" style={{ marginTop: pt(6) }}>

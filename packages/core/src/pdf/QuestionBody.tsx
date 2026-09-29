@@ -111,6 +111,14 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
         <Lines count={answerLines(question, linesOverride ?? null)} height={style.answerLineHeight} />
       )
 
+    case 'draw':
+      // Prázdné místo bez linek — žák do něj kreslí.
+      return (
+        <View
+          style={{ marginTop: 6, height: answerLines(question, linesOverride ?? null) * style.answerLineHeight }}
+        />
+      )
+
     case 'short_answer':
       return (
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 6 }}>
