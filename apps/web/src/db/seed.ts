@@ -3,10 +3,10 @@
  * a výchozí účet, pod kterým se pracuje lokálně a v testech v prohlížeči.
  * Spustitelné opakovaně.
  */
-import { eq } from 'drizzle-orm'
 import { BUILT_IN_TEMPLATES } from '@testmaker/core/schema'
 import { VYCHOZI_UCET_ID } from '../lib/vychozi'
-import { db, schools, templates, users } from './index'
+import { db, schools, users } from './index'
+import { nasaditSablony } from './sablony'
 
 /** Škola, do které patří data lokálního vývoje a testů v prohlížeči. */
 export const VYVOJ_SKOLA_ID = 'skola-vyvoj'
@@ -31,32 +31,13 @@ async function main() {
     })
     .onConflictDoNothing()
 
-  for (const [index, template] of BUILT_IN_TEMPLATES.entries()) {
-    await db
-      .insert(templates)
-      .values({
-        id: `builtin-${template.slug}`,
-        schoolId: VYVOJ_SKOLA_ID,
-        slug: template.slug,
-        name: template.name,
-        description: template.description,
-        config: template.config,
-        builtIn: true,
-        position: index,
-      })
-      .onConflictDoUpdate({
-        target: [templates.schoolId, templates.slug],
-        set: {
-          name: template.name,
-          description: template.description,
-          config: template.config,
-          position: index,
-        },
-      })
-  }
-
-  const [pocet] = await db.select({ id: templates.id }).from(templates).where(eq(templates.builtIn, true))
-  console.log(`Nasazeno ${BUILT_IN_TEMPLATES.length} vestavěných šablon${pocet ? '' : ''}.`)
+  // Šablony dostane každá škola, ne jen vývojová: bez nich v ní nejde uložit
+  // písemku, a po přidání nové vestavěné šablony ji tak dostanou všechny.
+  const vsechnySkoly = await db.select({ id: schools.id }).from(schools)
+  for (const skola of vsechnySkoly) await nasaditSablony(db, skola.id)
+  console.log(
+    `Nasazeno ${BUILT_IN_TEMPLATES.length} vestavěných šablon do ${vsechnySkoly.length} škol.`,
+  )
 }
 
 main()

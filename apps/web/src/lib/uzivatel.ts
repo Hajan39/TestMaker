@@ -333,6 +333,7 @@ export interface AuditZaznam {
  */
 export async function zapsatAudit(zaznam: AuditZaznam): Promise<void> {
   try {
+    const detail = await sPriznakemAdministratora(zaznam)
     await db.insert(auditLog).values({
       id: newId(),
       schoolId: zaznam.schoolId ?? null,
@@ -340,13 +341,31 @@ export async function zapsatAudit(zaznam: AuditZaznam): Promise<void> {
       action: zaznam.action,
       entity: zaznam.entity ?? null,
       entityId: zaznam.entityId ?? null,
-      detail: zaznam.detail ?? null,
+      detail,
       severity: zaznam.severity ?? 'info',
       ip: zaznam.ip ?? null,
     })
   } catch (error) {
     console.error('Událost se nepodařilo zapsat:', error)
   }
+}
+
+/**
+ * Když událost zapisuje administrátor mimo svou domovskou školu, dostane
+ * příznak — správce té školy pak v záznamu vidí, že na věc sáhl někdo zvenku.
+ * Pozná se to z účtu, ne od volajícího, aby na to žádné místo nezapomnělo.
+ */
+async function sPriznakemAdministratora(zaznam: AuditZaznam): Promise<unknown> {
+  const detail = zaznam.detail ?? null
+  if (!zaznam.userId || !zaznam.schoolId) return detail
+  const [autor] = await db
+    .select({ role: users.role, schoolId: users.schoolId })
+    .from(users)
+    .where(eq(users.id, zaznam.userId))
+    .limit(1)
+  if (!autor || !roleJeAdministrator(autor.role) || autor.schoolId === zaznam.schoolId) return detail
+  const zaklad = detail && typeof detail === 'object' && !Array.isArray(detail) ? detail : detail === null ? {} : { hodnota: detail }
+  return { ...zaklad, administrator: true }
 }
 
 /** Adresa volajícího z hlaviček za Vercelem; pro počítadlo pokusů a záznam. */
