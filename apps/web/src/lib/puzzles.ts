@@ -1,6 +1,7 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
 import { generatePuzzleWords } from '@testmaker/core/ai'
+import { buildPuzzle, puzzleProblems, type PuzzleProblem } from '@testmaker/core/puzzle'
 import {
   puzzleContentSchema,
   puzzleInstructions,
@@ -62,7 +63,8 @@ export async function loadPuzzleList(
       updatedAt: puzzles.updatedAt,
     })
     .from(puzzles)
-    .leftJoin(topics, eq(topics.id, puzzles.topicId))
+    // Název tématu jen z vlastní školy — cizí téma se ani jménem neprozradí.
+    .leftJoin(topics, and(eq(topics.id, puzzles.topicId), skola(scope, topics)))
     .where(and(vlastni(scope, puzzles), options.topicId ? eq(puzzles.topicId, options.topicId) : undefined))
     .orderBy(desc(puzzles.updatedAt))
 
@@ -135,6 +137,58 @@ export async function loadPuzzleTopics(scope: Scope): Promise<PuzzleTopic[]> {
     id: row.id,
     label: [row.subjectName, row.gradeName, row.name].filter(Boolean).join(' · '),
   }))
+}
+
+/**
+ * Patří téma škole přihlášené osoby? Hlavolam se smí navázat jen na
+ * vlastní téma; cizí se tváří jako neexistující, stejně jako chybějící.
+ */
+export async function topicExists(scope: Scope, topicId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(skola(scope, topics), eq(topics.id, topicId)))
+    .limit(1)
+  return Boolean(row)
+}
+
+/** Hláška pro chybějící nebo cizí téma — učitelka se dozví, co s tím dělat. */
+export const TOPIC_NOT_FOUND_MESSAGE =
+  'Vybrané téma se nenašlo — možná ho mezitím někdo smazal. Vyber jiné téma, nebo hlavolam ulož bez tématu.'
+
+/**
+ * Potíže hlavolamu, kvůli kterým se nedá vytisknout ani zařadit do písemky
+ * (slovo se nevešlo do mřížky, tajence chybí písmeno…). Počítá je týž
+ * `buildPuzzle` z core, ze kterého kreslí náhled i papír.
+ */
+export function puzzleBlockingProblems(content: PuzzleContent): PuzzleProblem[] {
+  return puzzleProblems(buildPuzzle(content))
+}
+
+/**
+ * Chyby ze zod na českou větu pro učitelku. Popisuje první potíž tak, aby
+ * bylo jasné, které pole opravit; technické detaily zůstávají v `detail`.
+ */
+export function describePuzzleIssues(issues: readonly { path: readonly PropertyKey[] }[]): string {
+  const issue = issues[0]
+  if (!issue) return 'Hlavolam se nedá uložit. Zkontroluj slova a nastavení a zkus to znovu.'
+  const path = issue.path.map(String)
+  const field = path.at(-1)
+  const inPuzzle = path[0] === 'puzzle' ? path.slice(1) : path
+  if (inPuzzle[0] === 'entries' && inPuzzle.length === 1) {
+    return 'Hlavolam potřebuje aspoň 2 a nejvýš 40 slov. Uprav seznam slov a ulož znovu.'
+  }
+  if (inPuzzle[0] === 'entries') {
+    const row = Number(inPuzzle[1]) + 1
+    if (field === 'word') return `Slovo na ${row}. řádku musí mít 2 až 24 znaků. Oprav ho a ulož znovu.`
+    if (field === 'clue') return `Nápověda na ${row}. řádku musí mít 2 až 200 znaků. Oprav ji a ulož znovu.`
+  }
+  if (field === 'title') return 'Doplň název hlavolamu (nejvýš 200 znaků).'
+  if (field === 'instructions') return 'Pokyn pro žáky je delší než 500 znaků — zkrať ho.'
+  if (field === 'cols' || field === 'rows') return 'Mřížka musí mít 6 až 20 sloupců i řádků.'
+  if (field === 'phrase') return 'Tajená věta musí mít 2 až 120 znaků.'
+  if (field === 'topicId') return 'Téma hlavolamu je neplatné. Vyber téma znovu.'
+  return 'Hlavolam se nedá uložit. Zkontroluj slova a nastavení a zkus to znovu.'
 }
 
 export async function loadPuzzle(scope: Scope, id: string): Promise<Puzzle | null> {
@@ -309,7 +363,7 @@ export async function suggestPuzzleWords(
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
     .where(and(skola(scope, topics), eq(topics.id, topicId)))
     .limit(1)
-  if (!meta) throw new Error('Téma nenalezeno')
+  if (!meta) throw new Error(TOPIC_NOT_FOUND_MESSAGE)
 
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
@@ -329,7 +383,9 @@ export async function suggestPuzzleWords(
     .join('\n\n')
     .trim()
   if (text.length < 200) {
-    throw new Error('Materiály tématu obsahují příliš málo textu na vytažení slov')
+    throw new Error(
+      'Materiály tématu obsahují příliš málo textu na vytažení slov. Nahraj k tématu další materiál s textem, nebo slova napiš ručně.',
+    )
   }
 
   const generate = options.generate ?? generatePuzzleWords

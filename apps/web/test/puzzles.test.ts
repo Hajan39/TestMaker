@@ -2,14 +2,20 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import type { generatePuzzleWords } from '@testmaker/core/ai'
 import { buildPuzzle, readCryptogram } from '@testmaker/core/puzzle'
-import { db, materials, puzzles, testItems } from '@/db'
+import { db, grades, materials, puzzles, schools, subjects, testItems, topics } from '@/db'
 import { GET as listPuzzles, POST as createPuzzle } from '@/app/api/puzzles/route'
-import { DELETE as deletePuzzleRoute, PUT as updatePuzzleRoute } from '@/app/api/puzzles/[id]/route'
+import {
+  DELETE as deletePuzzleRoute,
+  GET as getPuzzleRoute,
+  PUT as updatePuzzleRoute,
+} from '@/app/api/puzzles/[id]/route'
+import { GET as puzzlePdf } from '@/app/api/puzzles/[id]/pdf/route'
+import { newId } from '@/lib/ids'
 import { POST as createTest } from '@/app/api/tests/route'
 import { POST as addToTest } from '@/app/api/puzzles/[id]/to-test/route'
 import { loadTestItems } from '@/lib/tests'
 import { insertPuzzle, loadRenderablePuzzle, suggestPuzzleWords } from '@/lib/puzzles'
-import { jsonReq, req, seedMaterial, seedTemplate, seedTopic, UCET } from './helpers'
+import { jsonReq, req, seedMaterial, seedTemplate, seedTopic, seedUcet, UCET } from './helpers'
 
 /** Materiál musí mít dost textu, jinak se vytažení slov odmítne ještě před modelem. */
 const TEXT =
@@ -85,7 +91,18 @@ describe('hlavolamy v knihovně', () => {
     )
     expect(response.status).toBe(400)
     const { error } = (await response.json()) as { error: string }
-    expect(error).toContain('Neplatná data')
+    // Česká věta, ze které je poznat, co opravit — ne obecné „neplatná data".
+    expect(error).toContain('aspoň 2')
+    expect(error).not.toContain('Neplatná data')
+  })
+
+  it('neexistující téma se odmítne česky, ne pádem na cizím klíči', async () => {
+    const response = await createPuzzle(
+      jsonReq('/api/puzzles', 'POST', { topicId: 'neexistuje', puzzle: OSMISMERKA }),
+    )
+    expect(response.status).toBe(404)
+    const { error } = (await response.json()) as { error: string }
+    expect(error).toContain('téma se nenašlo')
   })
 
   it('hlavolam k tisku se skládá z jediné položky druhu puzzle', async () => {
@@ -231,5 +248,109 @@ describe('slova od modelu', () => {
 
     expect(poslanyText).toContain('pouzity.txt')
     expect(poslanyText).not.toContain('vynechany.txt')
+  })
+})
+
+/** Téma v úplně jiné škole — z téhle školy nesmí být vidět ani jménem. */
+async function seedCiziTema(): Promise<string> {
+  const schoolId = 'skola-hlavolamu-jinde'
+  await db.insert(schools).values({ id: schoolId, name: 'Jiná škola', slug: 'jinde' }).onConflictDoNothing()
+  const subjectId = newId()
+  const gradeId = newId()
+  const topicId = newId()
+  await db.insert(subjects).values({ id: subjectId, schoolId, name: 'Cizí předmět' })
+  await db.insert(grades).values({ id: gradeId, schoolId, subjectId, name: '6. ročník' })
+  await db.insert(topics).values({ id: topicId, schoolId, gradeId, name: 'Tajné cizí téma' })
+  return topicId
+}
+
+describe('rozsah hlavolamů v API', () => {
+  it('hlavolam kolegyně se tváří jako neexistující ve všech cestách', async () => {
+    const templateId = await seedTemplate()
+    const kolegyne = await seedUcet()
+    const cizi = await insertPuzzle(kolegyne, OSMISMERKA, { topicId: null })
+    const params = () => ({ params: Promise.resolve({ id: cizi.id }) })
+
+    expect((await getPuzzleRoute(req(`/api/puzzles/${cizi.id}`), params())).status).toBe(404)
+    expect(
+      (await updatePuzzleRoute(jsonReq(`/api/puzzles/${cizi.id}`, 'PUT', { puzzle: OSMISMERKA }), params()))
+        .status,
+    ).toBe(404)
+    expect(
+      (await deletePuzzleRoute(req(`/api/puzzles/${cizi.id}`, { method: 'DELETE' }), params())).status,
+    ).toBe(404)
+    expect((await puzzlePdf(req(`/api/puzzles/${cizi.id}/pdf`), params())).status).toBe(404)
+
+    const created = await createTest(
+      jsonReq('/api/tests', 'POST', { title: 'Moje písemka', templateId, header: {}, items: [] }),
+    )
+    const { id: testId } = (await created.json()) as { id: string }
+    expect(
+      (await addToTest(jsonReq(`/api/puzzles/${cizi.id}/to-test`, 'POST', { testId }), params())).status,
+    ).toBe(404)
+    expect(await loadTestItems(UCET, testId)).toEqual([])
+
+    // Hlavolam kolegyně zůstal, jak byl.
+    const [row] = await db.select().from(puzzles).where(eq(puzzles.id, cizi.id))
+    expect(row?.title).toBe(OSMISMERKA.title)
+  })
+
+  it('téma jiné školy se k hlavolamu nepřipojí a jeho název neprosákne', async () => {
+    const ciziTema = await seedCiziTema()
+
+    const created = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: ciziTema, puzzle: OSMISMERKA }))
+    expect(created.status).toBe(404)
+
+    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId: null })
+    const updated = await updatePuzzleRoute(
+      jsonReq(`/api/puzzles/${saved.id}`, 'PUT', { puzzle: OSMISMERKA, topicId: ciziTema }),
+      { params: Promise.resolve({ id: saved.id }) },
+    )
+    expect(updated.status).toBe(404)
+    const [row] = await db.select().from(puzzles).where(eq(puzzles.id, saved.id))
+    expect(row?.topicId).toBeNull()
+
+    // I kdyby vazba v databázi vznikla jinudy, seznam název cizího tématu nevydá.
+    await db.update(puzzles).set({ topicId: ciziTema }).where(eq(puzzles.id, saved.id))
+    const listed = await listPuzzles(req('/api/puzzles'))
+    const { puzzles: list } = (await listed.json()) as { puzzles: { id: string; topicName: string | null }[] }
+    expect(list.find((item) => item.id === saved.id)?.topicName).toBeNull()
+  })
+})
+
+describe('rozbitý hlavolam se netiskne ani nezařazuje', () => {
+  /** Slovo delší než mřížka: uložit jde, vytisknout ne. */
+  const ROZBITA = {
+    ...OSMISMERKA,
+    entries: [
+      { word: 'fotosyntéza', clue: 'Děj v zelených listech' },
+      { word: 'list', clue: 'Zelený orgán' },
+    ],
+    payload: { cols: 6, rows: 6, seed: 'rozbita', showClues: false },
+  }
+
+  it('uložit jako rozpracovaný jde', async () => {
+    const response = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: null, puzzle: ROZBITA }))
+    expect(response.status).toBe(200)
+  })
+
+  it('tisk i zařazení odmítne s českým vysvětlením', async () => {
+    const templateId = await seedTemplate()
+    const saved = await insertPuzzle(UCET, ROZBITA, { topicId: null })
+    const params = () => ({ params: Promise.resolve({ id: saved.id }) })
+
+    const pdf = await puzzlePdf(req(`/api/puzzles/${saved.id}/pdf`), params())
+    expect(pdf.status).toBe(422)
+    expect(await pdf.text()).toContain('nevejde')
+
+    const created = await createTest(
+      jsonReq('/api/tests', 'POST', { title: 'Cíl', templateId, header: {}, items: [] }),
+    )
+    const { id: testId } = (await created.json()) as { id: string }
+    const response = await addToTest(jsonReq(`/api/puzzles/${saved.id}/to-test`, 'POST', { testId }), params())
+    expect(response.status).toBe(422)
+    const { error } = (await response.json()) as { error: string }
+    expect(error).toContain('nevejde')
+    expect(await loadTestItems(UCET, testId)).toEqual([])
   })
 })

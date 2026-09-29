@@ -1,5 +1,5 @@
 import { renderTestToBuffer } from '@testmaker/core/pdf/node'
-import { loadRenderablePuzzle } from '@/lib/puzzles'
+import { loadPuzzle, loadRenderablePuzzle, puzzleBlockingProblems } from '@/lib/puzzles'
 import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -18,6 +18,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const withKey = new URL(request.url).searchParams.get('key') === '1'
 
   // Bez kontroly vlastníka by stačilo uhodnout id a cizí hlavolam si vytisknout.
+  const puzzle = await loadPuzzle(ucet, id)
+  if (!puzzle) return new Response('Hlavolam nenalezen', { status: 404 })
+  // Rozbitý hlavolam se netiskne — na papíře by chybělo, co žák hledá.
+  const problems = puzzleBlockingProblems(puzzle)
+  if (problems.length > 0) {
+    return new Response(
+      `Hlavolam se zatím nedá vytisknout: ${problems[0]!.message} Oprav ho v Hlavolamech a ulož.`,
+      { status: 422, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+    )
+  }
+
   const renderable = await loadRenderablePuzzle(ucet, id, { withKey })
   if (!renderable) return new Response('Hlavolam nenalezen', { status: 404 })
 
