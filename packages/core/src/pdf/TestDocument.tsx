@@ -361,6 +361,12 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string 
         flexDirection: 'row',
         justifyContent: 'space-between',
         paddingHorizontal: 40,
+        // Výška řádku zděděná ze stránky se u textu s `render` při každém
+        // přepočtu stránky znovu násobí velikostí písma (react-pdf 4.9 převádí
+        // už převedené body jako násobek). Číslo strany pak narostlo do tisíců
+        // bodů a celé zápatí odjelo mimo papír. Prázdná hodnota znamená
+        // přirozenou výšku z metrik fontu a přepočet ji nemění.
+        lineHeight: '',
       }}
     >
       <Text style={{ fontSize: 8, color: '#777' }}>
@@ -368,7 +374,8 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string 
       </Text>
       <Text
         style={{ fontSize: 8, color: '#777' }}
-        render={({ pageNumber, totalPages }) => `strana ${pageNumber} / ${totalPages}`}
+        // Počítá se jen v rámci písemky — stránky klíče za ní se do „z celkem" nepřičítají.
+        render={({ subPageNumber, subPageTotalPages }) => `strana ${subPageNumber} / ${subPageTotalPages}`}
       />
     </View>
   )
