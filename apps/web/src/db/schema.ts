@@ -46,7 +46,12 @@ export const schools = sqliteTable(
     googleAutoJoin: integer('google_auto_join', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull().default(now),
   },
-  (table) => [uniqueIndex('schools_slug_idx').on(table.slug)],
+  (table) => [
+    uniqueIndex('schools_slug_idx').on(table.slug),
+    // Přihlášení Googlem hledá školu podle domény — dvě školy s toutéž by
+    // nevěděly, kam učitelku zařadit. Víc škol bez domény (NULL) nevadí.
+    uniqueIndex('schools_google_domain_idx').on(table.googleDomain),
+  ],
 )
 
 export const users = sqliteTable(
@@ -86,6 +91,14 @@ export const users = sqliteTable(
     lastLoginAt: text('last_login_at'),
     createdAt: text('created_at').notNull().default(now),
     createdBy: text('created_by').references((): AnySQLiteColumn => users.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * Škola, do které se administrátor přepnul v liště. Prázdné znamená
+     * domovskou (`schoolId`); ostatní role ho nepoužívají. Patří k účtu, ne
+     * k relaci, aby platilo i bez přihlašování (lokálně a v testech).
+     */
+    activeSchoolId: text('active_school_id').references((): AnySQLiteColumn => schools.id, {
       onDelete: 'set null',
     }),
   },
