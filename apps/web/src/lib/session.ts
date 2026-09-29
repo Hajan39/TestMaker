@@ -12,7 +12,7 @@
  * u účtu (odhlášení ze všech). Obojí se kontroluje až na serveru
  * v `lib/uzivatel.ts`.
  */
-import type { Role } from './role'
+import { roleJeAdministrator, roleMuzeSpravovat, type Role } from './role'
 
 export type { Role } from './role'
 
@@ -180,7 +180,8 @@ export function jeVolnaCesta(pathname: string): boolean {
 /**
  * Hrubé rozhodnutí podle role, které zvládne i proxy bez databáze:
  *
- * - do správy smí jedině správce,
+ * - do správy školy smí správce a administrátor, do administrace škol jedině
+ *   administrátor,
  * - náhled smí číst a tisknout (tisk je `GET`), ale nic nemění,
  * - kdo má vynucenou změnu hesla, nesmí zatím nikam jinam.
  *
@@ -194,11 +195,18 @@ export function maPravo(relace: Relace, pathname: string, method: string): boole
   if (relace.zh) {
     return pathname === '/zmena-hesla' || pathname === '/api/zmena-hesla' || pathname === '/api/logout'
   }
-  if (pathname === '/sprava' || pathname.startsWith('/sprava/') || pathname.startsWith('/api/sprava/')) {
-    return relace.role === 'spravce'
+  if (jeCesta(pathname, '/administrace') || pathname.startsWith('/api/administrace/')) {
+    return roleJeAdministrator(relace.role)
+  }
+  if (jeCesta(pathname, '/sprava') || pathname.startsWith('/api/sprava/')) {
+    return roleMuzeSpravovat(relace.role)
   }
   if (relace.role === 'nahled') return cteni
   return true
+}
+
+function jeCesta(pathname: string, zaklad: string): boolean {
+  return pathname === zaklad || pathname.startsWith(`${zaklad}/`)
 }
 
 /** Porovnání nezávislé na délce shodné předpony, ať se podpis nedá uhodnout po znacích. */

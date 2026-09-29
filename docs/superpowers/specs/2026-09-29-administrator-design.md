@@ -49,19 +49,22 @@ na tyto funkce.
 (`users.school_id` je `NOT NULL` a ukazují na něj cizí klíče). Do ostatních
 škol se přepíná.
 
-**Vybraná škola v relaci.** Tabulka `sessions` dostane sloupec
+**Vybraná škola u účtu.** Tabulka `users` dostane sloupec
 `active_school_id` (text, nullable, cizí klíč na `schools.id`,
-`on delete set null`). Prázdný znamená domovskou školu. Ručně psaná migrace
-dostane i snímek v `apps/web/drizzle/meta`; po ní `pnpm db:generate` nesmí
-hlásit změnu.
+`on delete set null`). Prázdný znamená domovskou školu. Volba se ukládá
+k účtu, ne k relaci: funguje tak stejně i bez přihlašování (lokální běh,
+testy), cookie se nemusí převydávat a pole `sch` v ní dál nese domovskou
+školu, kterou nikdo nečte. Přepnutí na jednom zařízení platí i na ostatních —
+u jednoho či dvou administrátorů to nevadí. Migrace vznikne přes
+`pnpm db:generate`, takže dostane i snímek v `apps/web/drizzle/meta`.
 
-**Cookie.** Pole `sch` v podepsané relaci nese vybranou školu. Přepnutí vydá
-novou cookie stejnou cestou jako přihlášení.
-
-**`aktualniUzivatel()`** u administrátora vezme školu ze
-`sessions.active_school_id`, u ostatních rolí z `users.school_id`. Když vybraná
-škola neexistuje, použije se domovská. Do `Prihlaseny` přibude
+**`aktualniUzivatel()`** (i výchozí účet bez přihlašování) u administrátora
+vezme školu z `users.active_school_id`, u ostatních rolí z `users.school_id`.
+Když vybraná škola neexistuje, použije se domovská. Do `Prihlaseny` přibude
 `domovskaSkolaId`, aby lišta poznala cizí školu.
+
+**Změna role skriptem** odhlásí účet ze všech zařízení: role se nese
+v podepsané cookie a brána by jinak do odhlášení pouštěla podle staré.
 
 **Rozsah.** Tvar `Scope` se nemění: `schoolId` je vybraná škola, `role` je
 `administrator`.
@@ -87,9 +90,8 @@ Ukazuje název vybrané školy; rozbalí se na seznam všech škol a odkaz
 „Cizí škola".
 
 Volba pošle `POST /api/administrace/skola` s `{ schoolId }`. Server zapíše
-`sessions.active_school_id`, vydá novou cookie, zapíše událost a klient obnoví
-stránku (`router.refresh()`), s přesměrováním na `/`, protože otevřená stránka
-(téma, písemka) ve druhé škole neexistuje.
+`users.active_school_id`, zapíše událost a klient přejde na `/` a obnoví
+stránku, protože otevřená stránka (téma, písemka) ve druhé škole neexistuje.
 
 ### `/administrace`
 
@@ -124,8 +126,12 @@ Pro správce i administrátora, vždy nad vybranou školou.
 - `/sprava`, `/api/sprava/*` — `spravce` a `administrator`.
 - `/administrace`, `/api/administrace/*` — jen `administrator`.
 
-Každý endpoint si roli ověří znovu ze `Scope` nad databází. Kdo na
-`/api/administrace/*` nemá právo, dostane 404.
+Každý endpoint si roli ověří znovu ze `Scope` nad databází. Brána odmítne
+cizí roli na `/api/administrace/*` stejně jako dnes na `/api/sprava/*`
+(403, stránka přesměruje na `/`); samotný handler vrací 404.
+
+`/zaloha`, export a obnova knihovny a pravidla promptu, dnes vyhrazené
+správci, pustí i administrátora.
 
 ## Záznam událostí
 
@@ -137,16 +143,19 @@ Přes stávající `zapsatAudit`:
 | `skola-zalozena` | nová | založení v `/administrace` |
 | `skola-upravena` | upravená | úprava v `/administrace` nebo `/sprava` |
 
-Každá změnová akce, kterou administrátor provede ve škole, která není jeho
-domovská, dostane v `detail` příznak `administrator: true`. Záznam v `/sprava`
-ho ukáže štítkem „Administrátor", aby správce školy viděl, kdo na co sáhl.
+`zapsatAudit` sám pozná, že událost zapisuje administrátor mimo svou
+domovskou školu, a přidá do `detail` příznak `administrator: true`. Platí to
+pro všechny události, které se dnes zapisují (účty, přihlášení, záloha…).
+Úpravy obsahu (písemky, otázky) se dnes do záznamu nepíšou a tahle změna to
+nemění. Záznam v `/sprava` událost s příznakem ukáže štítkem
+„Administrátor", aby správce školy viděl, kdo na co sáhl.
 Čtení se nezapisuje.
 
 ## Chybové stavy
 
 Hlášky česky a s tím, co dělat:
 
-- Přepnutí na neexistující školu — 404, zůstává původní škola.
+- Přepnutí na neexistující školu — 404 „Škola se nenašla.", zůstává původní.
 - Vybraná škola mezitím zmizela — tichý návrat do domovské.
 - Obsazená doména — „Doména skola.cz už patří škole X. Nejdřív ji tam
   odeberte."
@@ -168,8 +177,8 @@ Hlášky česky a s tím, co dělat:
 `e2e.db`). `scripts/seed-e2e.ts` dostane druhou školu s učitelkou, soukromou
 písemkou a správcem a jednoho administrátora.
 
-- Administrátor přepne do druhé školy, vidí soukromou písemku učitelky, upraví
-  ji; správce druhé školy pak změnu vidí v záznamu se štítkem.
+- Administrátor přepne do druhé školy a vidí soukromou písemku tamní
+  učitelky; správce druhé školy vidí přepnutí v záznamu se štítkem.
 - Administrátor založí školu, ta má vestavěné šablony a jde v ní uložit
   písemka.
 - Správce upraví název a doménu své školy; na `/administrace` dostane 404;

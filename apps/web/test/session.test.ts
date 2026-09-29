@@ -61,11 +61,24 @@ describe('co která role smí', () => {
   const ucitelka = { ...relace(), v: 1 } as Relace
   const spravce = { ...relace({ role: 'spravce' }), v: 1 } as Relace
   const nahled = { ...relace({ role: 'nahled' }), v: 1 } as Relace
+  const administrator = { ...relace({ role: 'administrator' }), v: 1 } as Relace
 
-  it('do správy pustí jen správce', () => {
+  it('do správy pustí jen správce a administrátora', () => {
     expect(maPravo(spravce, '/sprava/uzivatele', 'GET')).toBe(true)
+    expect(maPravo(administrator, '/sprava', 'GET')).toBe(true)
+    expect(maPravo(administrator, '/api/sprava/skola', 'PATCH')).toBe(true)
     expect(maPravo(ucitelka, '/sprava/uzivatele', 'GET')).toBe(false)
     expect(maPravo(ucitelka, '/api/sprava/uzivatele', 'POST')).toBe(false)
+    // Podobný začátek cesty není správa.
+    expect(maPravo(ucitelka, '/spravana', 'GET')).toBe(true)
+  })
+
+  it('do administrace škol pustí jedině administrátora', () => {
+    expect(maPravo(administrator, '/administrace', 'GET')).toBe(true)
+    expect(maPravo(administrator, '/api/administrace/skoly', 'POST')).toBe(true)
+    expect(maPravo(spravce, '/administrace', 'GET')).toBe(false)
+    expect(maPravo(spravce, '/api/administrace/skola', 'POST')).toBe(false)
+    expect(maPravo(ucitelka, '/api/administrace/skoly', 'GET')).toBe(false)
   })
 
   it('náhled smí číst a tisknout, ale nic měnit', () => {

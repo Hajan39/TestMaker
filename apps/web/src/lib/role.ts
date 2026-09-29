@@ -9,15 +9,25 @@
  * - `ucitelka` — plná práce s obsahem: import, generování, kontrola, testy.
  * - `spravce` — navíc účty, zálohy, nastavení a záznam událostí.
  * - `nahled` — jen čte a tiskne; nic nemění.
+ * - `administrator` — nad školami: zakládá je, přepíná se mezi nimi a v každé
+ *   smí všechno včetně soukromých písemek. Přiděluje ho jen skript
+ *   `scripts/uzivatel.ts`, v aplikaci se nenabízí.
  */
-export type Role = 'ucitelka' | 'spravce' | 'nahled'
+export type Role = 'ucitelka' | 'spravce' | 'nahled' | 'administrator'
 
-export const ROLES: readonly Role[] = ['ucitelka', 'spravce', 'nahled']
+export const ROLES: readonly Role[] = ['ucitelka', 'spravce', 'nahled', 'administrator']
+
+/** Role, které smí přidělit správce v aplikaci. Administrátora mezi nimi není. */
+export const ROLES_PRIDELITELNE: readonly Role[] = ['ucitelka', 'spravce', 'nahled']
+
+/** Kdo se dostane do správy školy. */
+export const ROLE_SPRAVY: Role[] = ['spravce', 'administrator']
 
 export const ROLE_LABELS: Record<Role, string> = {
   ucitelka: 'Učitelka',
   spravce: 'Správce',
   nahled: 'Náhled',
+  administrator: 'Administrátor',
 }
 
 /**
@@ -40,5 +50,10 @@ export function roleMuzeMenit(role: Role): boolean {
 
 /** Kdo smí do správy: účty, zálohy, události. */
 export function roleMuzeSpravovat(role: Role): boolean {
-  return role === 'spravce'
+  return role === 'spravce' || role === 'administrator'
+}
+
+/** Kdo smí nad školy: zakládat je a přepínat se mezi nimi. */
+export function roleJeAdministrator(role: Role): boolean {
+  return role === 'administrator'
 }
