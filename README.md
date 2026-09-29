@@ -177,8 +177,9 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://<adresa>/api/jobs/run
 
 ## Účty a role
 
-Aplikaci používá sborovna jedné školy. Knihovna (předměty, ročníky, témata,
-materiály a otázky) je **společná**; **písemky a hlavolamy patří té, kdo je
+Každá škola má vlastní knihovnu, účty i písemky; do cizí školy nikdo nevidí.
+Knihovna (předměty, ročníky, témata, materiály a otázky) je v rámci školy
+**společná**; **písemky a hlavolamy patří té, kdo je
 vytvořila** — cizí se nezobrazí ani nevytisknou, dokud je autorka nenasdílí.
 
 | Role | Co smí |
@@ -186,6 +187,13 @@ vytvořila** — cizí se nezobrazí ani nevytisknou, dokud je autorka nenasdíl
 | `ucitelka` | všechno s obsahem: import, generování, testy, hlavolamy |
 | `spravce` | navíc účty, zálohy školy, záznam událostí a chyb; jako jediný smí mazat předmět, ročník a téma |
 | `nahled` | jen čte a tiskne |
+| `administrator` | nad školami: zakládá je a upravuje v **Administraci**, přepíná se mezi nimi v liště a v každé smí všechno včetně soukromých písemek a hlavolamů |
+
+Správce si ve **Správě** upraví i svou školu: název, doménu Google a to, jestli
+se nové účty z domény evidují ke schválení. Roli `administrator` přiděluje
+jedině skript níže — v aplikaci se nenabízí, takže se na ni uniklý účet
+správce nepovýší. Co administrátor udělá v cizí škole, má v záznamu událostí
+té školy štítek „Administrátor".
 
 Přihlašování zapíná proměnná `AUTH_SECRET`. Lokálně (`pnpm dev`) se bez ní
 běží bez přihlášení pod výchozím účtem ze seedu; v nasazení na Vercelu se
@@ -197,8 +205,14 @@ později odemčení účtu, do kterého se nikdo nedostane) vyřídí skript:
 
 ```bash
 pnpm --filter @testmaker/web uzivatel -- --email jana@skola.cz --jmeno "Jana" --role spravce
+pnpm --filter @testmaker/web uzivatel -- --email ja@skola.cz --role administrator
+pnpm --filter @testmaker/web uzivatel -- --email eva@jina.cz --skola jina-skola --role spravce
 pnpm --filter @testmaker/web uzivatel -- --vypis
 ```
+
+Nový účet vznikne ve škole podle `--skola` (slug nebo id, vypíše je
+`--vypis`), bez něj v nejstarší. Změna role skriptem účet odhlásí ze všech
+zařízení.
 
 Heslo se nepíše do příkazu, ale zadává se po spuštění; když se nezadá,
 vygeneruje se a vypíše. Nově založený účet si heslo při prvním přihlášení
@@ -208,8 +222,9 @@ změní — to, co správce nadiktoval, zná zbytečně někdo druhý.
 
 Učitelé mívají školní účty Google; přihlášení jde zapnout vedle hesla, ne
 místo něj. Potřebuje proměnné `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-`GOOGLE_REDIRECT_URI` a doménu školy (`GOOGLE_HD` nebo sloupec
-`schools.google_domain`). Bez `GOOGLE_CLIENT_ID` se tlačítko na přihlašovací
+`GOOGLE_REDIRECT_URI` a doménu školy (nastaví ji správce ve Správě,
+případně `GOOGLE_HD` pro jedinou školu). Jedna doména patří nejvýš jedné
+škole. Bez `GOOGLE_CLIENT_ID` se tlačítko na přihlašovací
 stránce vůbec nenabídne.
 
 V Google Cloudu: nový projekt → *OAuth consent screen* typu **Internal**
