@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { THEME_INIT_SCRIPT, Toaster, TooltipProvider } from '@testmaker/ui'
 import { authMode } from '@/lib/session'
+import { roleJeAdministrator } from '@/lib/role'
+import { seznamSkol } from '@/lib/skoly'
 import { aktualniUzivatel } from '@/lib/uzivatel'
 import { AppChrome } from './AppChrome'
 import './globals.css'
@@ -14,8 +16,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Jméno v liště dává smysl jen tam, kde se opravdu přihlašuje; lokální běh
   // pracuje pod výchozím účtem a nemá koho ukazovat.
   const uzivatel = authMode() === 'zapnuto' ? await aktualniUzivatel() : null
+  // Administrátor má v liště přepínač škol; ostatním se seznam nenačítá.
+  const skoly =
+    uzivatel && roleJeAdministrator(uzivatel.role)
+      ? ((await seznamSkol(uzivatel)) ?? []).map((skola) => ({ id: skola.id, name: skola.name }))
+      : []
   const ucet = uzivatel
-    ? { jmeno: uzivatel.jmeno, email: uzivatel.email, role: uzivatel.role }
+    ? {
+        jmeno: uzivatel.jmeno,
+        email: uzivatel.email,
+        role: uzivatel.role,
+        skola: { id: uzivatel.schoolId, name: uzivatel.skola },
+        domovskaSkolaId: uzivatel.domovskaSkolaId,
+        skoly,
+      }
     : null
 
   return (

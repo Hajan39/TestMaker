@@ -63,7 +63,11 @@ export default async function SpravaPage() {
       .orderBy(desc(auditLog.at), desc(auditLog.id))
       .limit(UDALOSTI),
     db
-      .select({ name: schools.name, googleDomain: schools.googleDomain })
+      .select({
+        name: schools.name,
+        googleDomain: schools.googleDomain,
+        googleAutoJoin: schools.googleAutoJoin,
+      })
       .from(schools)
       .where(eq(schools.id, ucet.schoolId))
       .limit(1),
@@ -79,6 +83,7 @@ export default async function SpravaPage() {
         ja={ucet.userId}
         skola={skola?.name ?? ''}
         googleDomain={skola?.googleDomain ?? null}
+        googleAutoJoin={skola?.googleAutoJoin ?? false}
         uzivatele={uzivatele.map((row) => ({
           id: row.id,
           email: row.email,

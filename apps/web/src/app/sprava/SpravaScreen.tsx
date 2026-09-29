@@ -21,6 +21,7 @@ import {
   toast,
 } from '@testmaker/ui'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
+import { SkolaFormular } from '@/components/SkolaFormular'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
 import {
@@ -62,10 +63,16 @@ function kdy(hodnota: string | null): string {
   return Number.isNaN(datum.getTime()) ? hodnota : datum.toLocaleString('cs-CZ')
 }
 
+/** Událost zapsal administrátor zvenku — `zapsatAudit` jí dal příznak. */
+function odAdministratora(detail: unknown): boolean {
+  return typeof detail === 'object' && detail !== null && (detail as { administrator?: unknown }).administrator === true
+}
+
 export function SpravaScreen({
   ja,
   skola,
   googleDomain,
+  googleAutoJoin,
   uzivatele,
   udalosti,
   fronta,
@@ -79,6 +86,7 @@ export function SpravaScreen({
   ja: string
   skola: string
   googleDomain: string | null
+  googleAutoJoin: boolean
   uzivatele: UcetRadek[]
   udalosti: UdalostRadek[]
   fronta: { queued: number; running: number; done: number; error: number }
@@ -170,6 +178,26 @@ export function SpravaScreen({
     router.refresh()
   }
 
+  async function ulozitSkolu(nastaveni: {
+    name: string
+    googleDomain: string
+    googleAutoJoin: boolean
+  }): Promise<boolean> {
+    const response = await fetch('/api/sprava/skola', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(nastaveni),
+    })
+    const data = (await response.json().catch(() => ({}))) as { error?: string }
+    if (!response.ok) {
+      toast.error(data.error ?? 'Školu se nepodařilo uložit.')
+      return false
+    }
+    toast.success('Škola uložena.')
+    router.refresh()
+    return true
+  }
+
   async function upravit(id: string, zmeny: Record<string, unknown>, hlaska: string) {
     const response = await fetch('/api/sprava/uzivatele', {
       method: 'PATCH',
@@ -222,6 +250,19 @@ export function SpravaScreen({
               </Button>
             </Card>
           ) : null}
+
+          <Card className="p-4">
+            <h2 className="font-medium text-fg">Škola</h2>
+            <p className="mt-1 mb-3 max-w-3xl text-sm text-fg-soft">
+              S doménou se učitelky přihlásí školním účtem Google. Když je zapnuté evidování, účet
+              z domény, který tu ještě není, se zaeviduje a čeká, až mu přidělíš roli.
+            </p>
+            <SkolaFormular
+              vychozi={{ name: skola, googleDomain: googleDomain ?? '', googleAutoJoin }}
+              tlacitko="Uložit školu"
+              onUlozit={ulozitSkolu}
+            />
+          </Card>
 
           <Card className="p-4">
             <h2 className="font-medium text-fg">Nový účet</h2>
@@ -362,6 +403,7 @@ export function SpravaScreen({
                     {udalost.action}
                   </span>
                   <span className="text-fg-soft">{udalost.kdo ?? 'bez přihlášení'}</span>
+                  {odAdministratora(udalost.detail) ? <Badge variant="secondary">Administrátor</Badge> : null}
                   {udalost.detail ? (
                     <span className="text-xs text-fg-muted">{JSON.stringify(udalost.detail)}</span>
                   ) : null}

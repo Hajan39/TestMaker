@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { AppShell, type NavItem } from '@testmaker/ui'
 import { GenerationStatus } from '@/components/GenerationStatus'
+import { SkolaPrepinac } from '@/components/SkolaPrepinac'
 import { UserMenu } from '@/components/UserMenu'
-import { roleMuzeSpravovat, type Role } from '@/lib/role'
+import { roleJeAdministrator, roleMuzeSpravovat, type Role } from '@/lib/role'
 
 // Import materiálů a přehled generování zůstávají jako stránky (odkazy z
 // úvodu, ukazatel v liště), ale v liště samotné už nejsou — obojí je jen
@@ -36,6 +37,18 @@ function findActiveHref(pathname: string, nav: NavItem[]): string {
   return pathname
 }
 
+/** Kdo je přihlášený, jak ho ukazuje lišta. */
+export interface UcetVListe {
+  jmeno: string
+  email: string
+  role: Role
+  /** Škola, ve které se právě pracuje. */
+  skola: { id: string; name: string }
+  domovskaSkolaId: string
+  /** Všechny školy — jen u administrátora, jinak prázdné. */
+  skoly: { id: string; name: string }[]
+}
+
 /** Klientská skořápka aplikace: určí aktivní položku navigace podle aktuální cesty. */
 export function MainNav({
   children,
@@ -43,7 +56,7 @@ export function MainNav({
 }: {
   children: React.ReactNode
   /** Bez přihlašování (lokální běh) se jméno v liště neukazuje. */
-  ucet: { jmeno: string; email: string; role: Role } | null
+  ucet: UcetVListe | null
 }) {
   const pathname = usePathname()
   const nav = ucet && roleMuzeSpravovat(ucet.role) ? [...NAV, ...NAV_SPRAVCE] : NAV
@@ -58,6 +71,9 @@ export function MainNav({
       status={
         <>
           <GenerationStatus pathname={pathname} />
+          {ucet && roleJeAdministrator(ucet.role) ? (
+            <SkolaPrepinac skola={ucet.skola} domovskaSkolaId={ucet.domovskaSkolaId} skoly={ucet.skoly} />
+          ) : null}
           {ucet ? <UserMenu jmeno={ucet.jmeno} email={ucet.email} role={ucet.role} /> : null}
         </>
       }

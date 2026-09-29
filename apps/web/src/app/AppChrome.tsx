@@ -1,9 +1,8 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { MainNav } from '@/components/MainNav'
+import { MainNav, type UcetVListe } from '@/components/MainNav'
 import { PravaProvider } from '@/components/Prava'
-import type { Role } from '@/lib/role'
 import { roleMuzeSpravovat } from '@/lib/role'
 
 /**
@@ -24,7 +23,7 @@ export function AppChrome({
 }: {
   children: React.ReactNode
   /** Přihlášená osoba; bez přihlašování (lokální běh) `null`. */
-  ucet: { jmeno: string; email: string; role: Role } | null
+  ucet: UcetVListe | null
 }) {
   const pathname = usePathname()
   // Bez přihlašování (lokální běh) se pracuje pod správcem, tedy naplno.
