@@ -4,7 +4,8 @@ import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import type { RenderableTest, ResolvedTestItem } from '../schema/test'
 import { formatAnswer } from './answerKey'
-import { formatPoints } from './layout'
+import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
+import { formatPoints, puzzleForVariant } from './layout'
 import { QuestionBody } from './QuestionBody'
 import { PuzzleBody } from './PuzzleBody'
 import { buildVariant } from './shuffle'
@@ -16,7 +17,10 @@ const LIGHT = '0.6pt solid #999'
 /** Jeden generický dokument řízený `template.config` — žádná šablona není hard-coded. */
 export function TestDocument({ test, template, items, variant, withKey, assets }: RenderableTest) {
   const config = template.config
-  const ordered = buildVariant(items, variant, test.id)
+  // Hlavolam ve variantě B dostane jiný seed — mřížka i klíč pak berou tentýž.
+  const ordered = buildVariant(items, variant, test.id).map((item) =>
+    item.kind === 'puzzle' && item.puzzle ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) } : item,
+  )
   const questions = ordered.filter((i) => i.kind === 'question' && i.question)
   const total = questions.reduce(
     (sum, i) => sum + (i.pointsOverride ?? i.question?.points ?? 0),
@@ -24,6 +28,12 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
   )
 
   let questionIndex = -1
+  // Samostatný hlavolam (viz `loadRenderablePuzzle`) žádnou variantu nemá —
+  // „varianta A“ v klíči i v patičce by jen mátla.
+  const standalonePuzzle = ordered.length === 1 && ordered[0]?.kind === 'puzzle' && test.variants === 1
+  const variantLabel = standalonePuzzle && variant === 'A' ? null : variant
+  const firstContent = ordered.findIndex((item) => item.kind !== 'page_break')
+  const heading = { title: test.title, description: test.description }
 
   return (
     <Document title={test.title} author={test.header.teacher || undefined}>
@@ -41,7 +51,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
           <Header test={test} config={config} totalPoints={total} variant={variant} />
         ) : null}
 
-        {ordered.map((item) => {
+        {ordered.map((item, index) => {
           if (item.kind === 'question' && item.question) {
             questionIndex += 1
             return (
@@ -58,7 +68,21 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
             )
           }
           if (item.kind === 'puzzle' && item.puzzle) {
-            return <PuzzleView key={item.id} puzzle={item.puzzle} config={config} />
+            return (
+              <PuzzleView
+                key={item.id}
+                puzzle={item.puzzle}
+                config={config}
+                // Co už řekla hlavička, hlavolam neopakuje (samostatný hlavolam
+                // má v hlavičce svůj nadpis i pokyn).
+                showTitle={puzzleHeadShown(item.puzzle, config, heading).title}
+                showInstructions={puzzleHeadShown(item.puzzle, config, heading).instructions}
+                // První položka hned pod hlavičkou se drží pohromadě jen po
+                // řádcích — celá by se mohla přesunout na druhou stranu a na
+                // první by zůstala jen hlavička.
+                keepTogether={index !== firstContent && puzzleKeepsTogether(item, config, heading)}
+              />
+            )
           }
           if (item.kind === 'heading') {
             return (
@@ -88,7 +112,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
           return <View key={item.id} break />
         })}
 
-        {config.footer ? <Footer variant={variant} testTitle={test.title} /> : null}
+        {config.footer ? <Footer variant={variantLabel} testTitle={test.title} /> : null}
       </Page>
 
       {withKey ? (
@@ -97,6 +121,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
           config={config}
           items={ordered}
           variant={variant}
+          variantLabel={variantLabel}
           totalPoints={total}
         />
       ) : null}
@@ -255,18 +280,54 @@ function QuestionView({
 }
 
 /**
- * Hlavolam v písemce. Celý blok má `wrap={false}`: rozpůlená mřížka přes
- * zlom stránky je nepoužitelná, takže se radši celá přesune na další stranu.
+ * Hlavolam v písemce. Nadpis, pokyn a mřížka (u tajenky políčka věty) jsou
+ * vždy nerozdělitelné — rozpůlená mřížka přes zlom stránky je nepoužitelná.
+ * Když se hlavolam podle odhadu vejde na stranu (`keepTogether`), drží se
+ * pohromadě celý a případně se přesune na další stranu. Vyšší hlavolam se
+ * láme po řádcích seznamu slov, doplňovačky a otázek; celý nerozdělitelný by
+ * ho react-pdf slisoval do jedné strany.
  */
-function PuzzleView({ puzzle, config }: { puzzle: PuzzleContent; config: TemplateConfig }) {
-  return (
+export function PuzzleView({
+  puzzle,
+  config,
+  showTitle,
+  showInstructions,
+  keepTogether,
+}: {
+  puzzle: PuzzleContent
+  config: TemplateConfig
+  showTitle: boolean
+  showInstructions: boolean
+  keepTogether: boolean
+}) {
+  const body = (
+    <PuzzleBody
+      puzzle={puzzle}
+      // Když se drží pohromadě celý, mezeru nad sebou nese obal. Bez nadpisu
+      // i pokynu (samostatný hlavolam je má v hlavičce) stačí mezera pod hlavičkou.
+      spacingBefore={keepTogether || (!showTitle && !showInstructions) ? 0 : config.sectionStyle.spacingBefore}
+      head={
+        <>
+          {showTitle ? (
+            <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold' }}>
+              {sanitizeText(puzzle.title)}
+            </Text>
+          ) : null}
+          {showInstructions ? (
+            <Text style={{ fontStyle: 'italic', color: '#333' }}>{sanitizeText(puzzleInstructions(puzzle))}</Text>
+          ) : null}
+        </>
+      }
+    />
+  )
+  // Rozdělitelný hlavolam se vrací jako plochý seznam bloků přímo do stránky
+  // (viz `PuzzleBody`) — žádný obalový `View`.
+  return keepTogether ? (
     <View style={{ marginTop: config.sectionStyle.spacingBefore }} wrap={false}>
-      <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold' }}>
-        {sanitizeText(puzzle.title)}
-      </Text>
-      <Text style={{ fontStyle: 'italic', color: '#333' }}>{sanitizeText(puzzleInstructions(puzzle))}</Text>
-      <PuzzleBody puzzle={puzzle} />
+      {body}
     </View>
+  ) : (
+    body
   )
 }
 
@@ -275,12 +336,14 @@ function KeyPage({
   config,
   items,
   variant,
+  variantLabel,
   totalPoints,
 }: {
   test: RenderableTest['test']
   config: TemplateConfig
   items: ResolvedTestItem[]
   variant: 'A' | 'B'
+  variantLabel: 'A' | 'B' | null
   totalPoints: number
 }) {
   let index = -1
@@ -296,7 +359,8 @@ function KeyPage({
       }}
     >
       <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 2 }}>
-        Klíč – {sanitizeText(test.title)} (varianta {variant})
+        Klíč – {sanitizeText(test.title)}
+        {variantLabel ? ` (varianta ${variantLabel})` : ''}
       </Text>
       {test.graded ? (
         <Text style={{ fontSize: 9, color: '#555', marginBottom: 10 }}>
@@ -316,12 +380,15 @@ function KeyPage({
         }
         if (item.kind === 'puzzle' && item.puzzle) {
           return (
-            <View key={item.id} style={{ marginTop: 8 }} wrap={false}>
-              <Text style={{ fontWeight: 'bold' }}>
-                {sanitizeText(`Řešení – ${item.puzzle.title}`)}
-              </Text>
-              <PuzzleBody puzzle={item.puzzle} solved />
-            </View>
+            // Nerozdělitelný je jen nadpis s mřížkou; popis, kde které slovo
+            // leží, se u velké osmisměrky smí přelomit na další stranu.
+            <PuzzleBody
+              key={item.id}
+              puzzle={item.puzzle}
+              solved
+              spacingBefore={8}
+              head={<Text style={{ fontWeight: 'bold' }}>{sanitizeText(`Řešení – ${item.puzzle.title}`)}</Text>}
+            />
           )
         }
         if (item.kind !== 'question' || !item.question) return null
@@ -349,7 +416,7 @@ function KeyPage({
   )
 }
 
-function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string }) {
+function Footer({ variant, testTitle }: { variant: 'A' | 'B' | null; testTitle: string }) {
   return (
     <View
       fixed
@@ -370,7 +437,8 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B'; testTitle: string 
       }}
     >
       <Text style={{ fontSize: 8, color: '#777' }}>
-        {sanitizeText(testTitle)} · varianta {variant}
+        {sanitizeText(testTitle)}
+        {variant ? ` · varianta ${variant}` : ''}
       </Text>
       <Text
         style={{ fontSize: 8, color: '#777' }}

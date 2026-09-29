@@ -98,6 +98,10 @@ export function TestPage({
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
         question: item.question,
+        // Bez obsahu hlavolamu by mu odhad přidělil nulovou výšku a náhled by
+        // měl méně stran než PDF.
+        puzzleId: item.puzzleId,
+        puzzle: item.puzzle,
       })),
     [items],
   )
@@ -109,7 +113,9 @@ export function TestPage({
    * odebrat ani přesunout.
    */
   const pages = useMemo(() => {
-    const broken = template ? paginate(resolved, template.config) : [resolved]
+    // Nadpis a popis patří do hlavičky na první straně; odhad podle nich
+    // pozná i hlavolam, který svůj nadpis neopakuje.
+    const broken = template ? paginate(resolved, template.config, { title, description }) : [resolved]
     const pageOfKey = new Map<string, number>()
     broken.forEach((page, index) => page.forEach((item) => pageOfKey.set(item.id, index)))
 
@@ -124,7 +130,7 @@ export function TestPage({
       groups[page]?.push({ item, index, number: item.kind === 'question' ? questionNumber : null })
     })
     return groups
-  }, [items, resolved, template])
+  }, [items, resolved, template, title, description])
 
   /**
    * Táž otázka smí být v testu víckrát. Aby se poznalo, který výskyt je
