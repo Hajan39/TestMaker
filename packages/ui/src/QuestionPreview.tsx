@@ -1,5 +1,6 @@
 import type { Question, QuestionContent } from '@testmaker/core/schema'
 import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
+import { displayOrder } from '@testmaker/core/pdf/layout'
 import { Badge } from './ui/badge'
 import { cn } from './cn'
 
@@ -160,12 +161,17 @@ function Body({
       )
 
     case 'ordering':
+      // Položky v zamíchaném pořadí jako na papíře (varianta A); s odpověďmi
+      // se u každé ukáže, kolikátá ve správném pořadí je.
       return (
-        <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-fg-soft">
-          {question.payload.items.map((item, i) => (
-            <li key={i}>{item}</li>
+        <ul className="mt-1.5 space-y-0.5 text-fg-soft">
+          {displayOrder(question, 'A').map((sourceIndex) => (
+            <li key={sourceIndex}>
+              {showAnswers ? <span className="mr-1.5 font-medium text-brand">{sourceIndex + 1}.</span> : null}
+              {question.payload.items[sourceIndex]}
+            </li>
           ))}
-        </ol>
+        </ul>
       )
 
     case 'table_fill':

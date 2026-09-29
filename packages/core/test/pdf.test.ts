@@ -5,6 +5,7 @@ import { TestDocument } from '../src/pdf/TestDocument'
 import { registerServerFonts } from '../src/pdf/node'
 import { buildVariant, displayOrder, shuffleQuestion } from '../src/pdf/shuffle'
 import { formatAnswer } from '../src/pdf/answerKey'
+import { questionContentSchema } from '../src/schema/question'
 import { sanitizeText } from '../src/pdf/text'
 import { extractPdf } from '../src/extract/pdf'
 import { makeItems, makeQuestion, makeTemplate, makeTest, sampleQuestions, TALL_IMAGE_DATA_URL } from './fixtures'
@@ -465,5 +466,23 @@ describe('řazení nezávisí na tom, jestli otázka zůstala v bance', () => {
       const source = Number(part.split('->')[1]!.trim())
       expect(onPaper[i]).toBe(ordering.payload.items[source - 1])
     })
+  })
+})
+
+describe('pořadí položek u řazení', () => {
+  it('na papíře nikdy nevyjde ve správném pořadí', () => {
+    const words = ['vejce', 'larva', 'kukla', 'dospělec', 'nos', 'hrtan', 'průdušnice', 'průdušky', 'sklípky', 'pravěk', 'starověk', 'středověk']
+    for (let n = 3; n <= 5; n += 1) {
+      for (let start = 0; start + n <= words.length; start += 1) {
+        const question = questionContentSchema.parse({
+          type: 'ordering',
+          payload: { prompt: 'Seřaď.', items: words.slice(start, start + n) },
+        })
+        for (const variant of ['A', 'B'] as const) {
+          const order = displayOrder(question, variant)
+          expect(order.every((sourceIndex, i) => sourceIndex === i), `${n}/${start}/${variant}`).toBe(false)
+        }
+      }
+    }
   })
 })

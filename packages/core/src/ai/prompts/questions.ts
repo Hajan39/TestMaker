@@ -61,7 +61,7 @@ export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   matching:
     '4–6 dvojic; levý a pravý sloupec stejně dlouhé; `pairs` obsahuje dvojice indexů [levý, pravý], každý index právě jednou; pravý sloupec vypiš v jiném pořadí než levý.',
   ordering:
-    'Posloupnost, vývoj, cesta látky. `items` vypiš v libovolném pořadí a do `correctOrder` dej indexy do `items` udávající skutečně správné pořadí — odděl si tak "co vypsat" od "v jakém pořadí to patří za sebe". Aplikace položky pro tisk stejně zamíchá.',
+    'Posloupnost, vývoj, cesta látky. 3–5 položek, počet mezi otázkami střídej. `items` vypiš v libovolném pořadí a do `correctOrder` dej indexy do `items` udávající skutečně správné pořadí — odděl si tak "co vypsat" od "v jakém pořadí to patří za sebe". Aplikace položky pro tisk stejně zamíchá.',
   table_fill: 'Tabulka s hlavičkou; buňky k doplnění zapiš jako null a jejich správné hodnoty dej do `answers` po řádcích.',
   label_image: 'Nepoužívej — obrázky se ve fázi 1 negenerují.',
 }
