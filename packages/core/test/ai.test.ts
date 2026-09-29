@@ -872,8 +872,22 @@ describe('vysvětlení chyb od modelu', () => {
     expect(failure.message).toContain('.env.local')
   })
 
-  it('neznámou chybu nechá být, jen ji zkrátí', () => {
-    const failure = describeAiError(new Error('x'.repeat(500)))
+  it('neznámou anglickou chybu nahradí českou radou', () => {
+    const failure = describeAiError(new Error('Something odd happened '.repeat(20)))
+    expect(failure.message).not.toContain('Something')
+    expect(failure.message).toContain('AI_MODELS')
+    expect(failure.retryable).toBe(true)
+  })
+
+  it('odpověď mimo schéma vysvětlí česky', () => {
+    const failure = describeAiError(new Error('No object generated: response did not match schema.'))
+    expect(failure.message).toContain('jiném tvaru')
+    expect(failure.retryable).toBe(true)
+  })
+
+  it('českou hlášku z vlastní kontroly nechá být, jen ji zkrátí', () => {
+    const failure = describeAiError(new Error(`Téma nenalezeno ${'x'.repeat(500)}`))
+    expect(failure.message.startsWith('Téma nenalezeno')).toBe(true)
     expect(failure.message.length).toBe(300)
   })
 })
