@@ -14,8 +14,12 @@
  * nejde.
  */
 
-/** Znaky, které se do buňky vůbec nezapisují (mezery, spojovníky, tečky). */
-const SEPARATORS = /[\s ‐-―_.,;:!?'"()]+/u
+/**
+ * Znaky, které se do buňky vůbec nezapisují (mezery, spojovníky, pomlčky,
+ * tečky, uvozovky). Obyčejný spojovník z klávesnice `-` je tu zvlášť — rozsah
+ * U+2010 až U+2015 pokrývá jen typografické pomlčky a spojovníky.
+ */
+const SEPARATORS = /[\s ‐-―\-_.,;:!?'"()„“”‚‘’«»]+/u
 
 /** Je to písmeno, které se dá zapsat do buňky? */
 export function isPuzzleLetter(char: string): boolean {
@@ -30,7 +34,10 @@ export function isPuzzleLetter(char: string): boolean {
 export function splitWord(word: string): { letters: string[]; unusable: string[] } {
   const letters: string[] = []
   const unusable: string[] = []
-  for (const part of word.trim().split(SEPARATORS)) {
+  // Text vložený z macOS nebo z PDF bývá v rozloženém tvaru (NFD): „ř" je
+  // tam „r" a samostatný háček. Bez sjednocení by z něj bylo „R" a háček by
+  // skončil mezi nepoužitelnými znaky.
+  for (const part of word.normalize('NFC').trim().split(SEPARATORS)) {
     // `Intl`-nezávislé velké písmeno: čeština si vystačí s výchozím pravidlem.
     for (const char of part.toUpperCase()) {
       if (isPuzzleLetter(char)) letters.push(char)
@@ -51,11 +58,45 @@ export function puzzleLetters(word: string): string[] {
  * po slovech, jinak by ji žák po vyluštění nepřečetl.
  */
 export function phraseWords(phrase: string): string[][] {
-  return phrase
-    .trim()
-    .split(/[\s ]+/u)
-    .map((word) => puzzleLetters(word))
-    .filter((letters) => letters.length > 0)
+  return splitPhrase(phrase).words
+}
+
+/**
+ * Věta tajenky po slovech i se znaky, které se do políček zapsat nedají
+ * (číslice, značky). Ty se do tajenky nedostanou — volající je musí ohlásit,
+ * jinak by z „Rok 1348" potichu zbylo jen „ROK".
+ */
+export function splitPhrase(phrase: string): { words: string[][]; unusable: string[] } {
+  const words: string[][] = []
+  const unusable: string[] = []
+  for (const part of phrase.normalize('NFC').trim().split(/\s+/u)) {
+    const split = splitWord(part)
+    unusable.push(...split.unusable)
+    if (split.letters.length > 0) words.push(split.letters)
+  }
+  return { words, unusable }
+}
+
+/** Písmena bez háčků a čárek — pro porovnání, které diakritiku nerozlišuje. */
+function baseLetters(text: string): string {
+  return puzzleLetters(text).join('').normalize('NFD').replace(/\p{M}/gu, '')
+}
+
+/**
+ * Prozrazuje nápověda odpověď? Porovnává se bez ohledu na velikost písmen
+ * a diakritiku („KOREN" v nápovědě ke „kořen" se počítá). U slov od čtyř
+ * písmen stačí, když slovo nápovědy odpovědí začíná („lesníkem" ke
+ * „lesník"); kratší se musí shodovat celé, jinak by „les" prozradilo
+ * i „lesklý".
+ */
+export function clueRevealsWord(word: string, clue: string): boolean {
+  const answer = baseLetters(word)
+  if (answer.length < 2) return false
+  return clue
+    .normalize('NFC')
+    .split(/[^\p{L}\p{M}]+/u)
+    .map(baseLetters)
+    .some((token) => (answer.length >= 4 ? token.startsWith(answer) : token === answer))
 }
 
 /** Co se má popsat učitelce, když se něco nepovedlo. */

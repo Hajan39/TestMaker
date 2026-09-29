@@ -1,6 +1,6 @@
 import type { PuzzleEntry } from '../schema/puzzle'
 import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
-import { phraseWords, splitWord, type PuzzleProblem } from './letters'
+import { clueRevealsWord, splitPhrase, splitWord, type PuzzleProblem } from './letters'
 
 /**
  * Tajenka: žák doplní slova podle nápověd a z písmen ve vyznačených
@@ -52,10 +52,16 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
   const rand = seededRandom(hashSeed(`tajenka:${input.seed}:${input.phrase}`))
   const problems: PuzzleProblem[] = []
 
-  const words = phraseWords(input.phrase)
+  const { words, unusable: phraseUnusable } = splitPhrase(input.phrase)
   const letters = words.flat()
+  if (phraseUnusable.length > 0) {
+    problems.push({
+      message: `Tajenka „${input.phrase}" obsahuje znaky, které se do políček zapsat nedají (${phraseUnusable.join(' ')}), a v tajence by chyběly. Napiš čísla slovy, nebo je z věty vynech.`,
+    })
+  }
 
   const usable: { entry: PuzzleEntry; letters: string[] }[] = []
+  const seen = new Set<string>()
   for (const entry of input.entries) {
     const split = splitWord(entry.word)
     if (split.unusable.length > 0) {
@@ -77,6 +83,23 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
         message: `Slovo „${entry.word}" nemá nápovědu; bez ní žák neví, co má do řádku napsat.`,
       })
       continue
+    }
+    // Totéž slovo ve dvou řádcích by se u tabule nedalo odlišit — kterou
+    // nápovědu žák luští, by poznal jen podle pořadí.
+    const key = split.letters.join('')
+    if (seen.has(key)) {
+      problems.push({
+        subject: entry.word,
+        message: `Slovo „${entry.word}" je v seznamu podruhé; do tajenky se použije jen jednou. Nahraď ho jiným slovem.`,
+      })
+      continue
+    }
+    seen.add(key)
+    if (clueRevealsWord(entry.word, entry.clue)) {
+      problems.push({
+        subject: entry.word,
+        message: `Nápověda ke slovu „${entry.word}" obsahuje samo slovo — žák ho jen opíše. Přepiš nápovědu tak, aby slovo neprozradila.`,
+      })
     }
     usable.push({ entry, letters: split.letters })
   }

@@ -17,11 +17,37 @@ export const PUZZLE_KIND_LABELS: Record<PuzzleKind, string> = {
   cryptogram: 'Tajenka',
 }
 
-/** Slovo do hlavolamu i s nápovědou, kterou žák dostane na papíře. */
+/**
+ * Meze zadání hlavolamu. Jsou vyvedené jako konstanty, aby se jich držel
+ * i prompt pro model a formulář dílny — co model nebo učitelka napíše delší,
+ * schéma stejně odmítne.
+ */
+export const PUZZLE_WORD_MIN = 2
+export const PUZZLE_WORD_MAX = 24
+/** Nejkratší nápověda tam, kde je povinná (tajenka). */
+export const PUZZLE_CLUE_MIN = 2
+export const PUZZLE_CLUE_MAX = 200
+export const PUZZLE_ENTRIES_MIN = 2
+export const PUZZLE_ENTRIES_MAX = 40
+export const PUZZLE_PHRASE_MIN = 2
+export const PUZZLE_PHRASE_MAX = 120
+
+/**
+ * Slovo do hlavolamu i s nápovědou, kterou žák dostane na papíře.
+ *
+ * Nápověda je tady nepovinná (chybějící = prázdná): osmisměrka tiskne slova
+ * a nápovědu jen na přání, takže se slovo bez nápovědy nesmí zahodit. Tajenka
+ * bez nápovědy luštit nejde — ta používá přísnější `cryptogramEntrySchema`.
+ */
 export const puzzleEntrySchema = z.object({
-  word: z.string().min(2).max(24),
+  word: z.string().min(PUZZLE_WORD_MIN).max(PUZZLE_WORD_MAX),
   /** Krátká školní nápověda; u osmisměrky se tiskne jen na přání. */
-  clue: z.string().min(2).max(200),
+  clue: z.string().max(PUZZLE_CLUE_MAX).default(''),
+})
+
+/** Slovo do tajenky — nápověda je povinná, podle ní žák slovo doplňuje. */
+export const cryptogramEntrySchema = puzzleEntrySchema.extend({
+  clue: z.string().min(PUZZLE_CLUE_MIN).max(PUZZLE_CLUE_MAX),
 })
 
 export type PuzzleEntry = z.infer<typeof puzzleEntrySchema>
@@ -44,7 +70,7 @@ export const wordSearchPayloadSchema = z.object({
 
 export const cryptogramPayloadSchema = z.object({
   /** Věta, která se má složit z označených písmen. */
-  phrase: z.string().min(2).max(120),
+  phrase: z.string().min(PUZZLE_PHRASE_MIN).max(PUZZLE_PHRASE_MAX),
   seed: z.string().min(1).max(40).default('1'),
 })
 
@@ -52,12 +78,21 @@ const baseFields = {
   title: z.string().min(1).max(200),
   /** Pokyn pro žáka nad hlavolamem; prázdný = použije se výchozí podle druhu. */
   instructions: z.string().max(500).default(''),
-  entries: z.array(puzzleEntrySchema).min(2).max(40),
 }
 
 export const puzzleContentSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('wordsearch'), payload: wordSearchPayloadSchema, ...baseFields }),
-  z.object({ kind: z.literal('cryptogram'), payload: cryptogramPayloadSchema, ...baseFields }),
+  z.object({
+    kind: z.literal('wordsearch'),
+    payload: wordSearchPayloadSchema,
+    ...baseFields,
+    entries: z.array(puzzleEntrySchema).min(PUZZLE_ENTRIES_MIN).max(PUZZLE_ENTRIES_MAX),
+  }),
+  z.object({
+    kind: z.literal('cryptogram'),
+    payload: cryptogramPayloadSchema,
+    ...baseFields,
+    entries: z.array(cryptogramEntrySchema).min(PUZZLE_ENTRIES_MIN).max(PUZZLE_ENTRIES_MAX),
+  }),
 ])
 
 export type PuzzleContent = z.infer<typeof puzzleContentSchema>

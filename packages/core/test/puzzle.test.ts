@@ -9,10 +9,35 @@ import {
   puzzleLetters,
   readCryptogram,
   solutionGrid,
+  splitWord,
+  WORD_SEARCH_BLOCKLIST,
   WORD_SEARCH_DIRECTIONS,
+  type WordSearchPlacement,
 } from '../src/puzzle/index'
 import { generatePuzzleWords, type PuzzleWordsCall } from '../src/ai/puzzleWords'
-import { puzzleContentSchema, type PuzzleEntry } from '../src/schema/puzzle'
+import {
+  PUZZLE_CLUE_MAX,
+  PUZZLE_ENTRIES_MAX,
+  PUZZLE_WORD_MAX,
+  puzzleContentSchema,
+  type PuzzleEntry,
+} from '../src/schema/puzzle'
+
+/** Buňky, na kterých umístění leží, jako „řádek,sloupec". */
+function cellsOf(placement: WordSearchPlacement): string[] {
+  return placement.letters.map(
+    (_, i) => `${placement.row + placement.direction.dr * i},${placement.col + placement.direction.dc * i}`,
+  )
+}
+
+/** Text bez háčků a čárek — tak sprosté slovo přečte i dítě. */
+function bezDiakritiky(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}/gu, '')
+}
+
+function slova(words: string[]): PuzzleEntry[] {
+  return words.map((word) => ({ word, clue: `nápověda k ${word}` }))
+}
 
 const SLOVA: PuzzleEntry[] = [
   { word: 'kořen', clue: 'Poutá rostlinu v půdě' },
@@ -35,6 +60,15 @@ describe('písmena do buněk', () => {
 
   it('mezery a spojovníky se do mřížky nezapisují', () => {
     expect(puzzleLetters('oxid uhličitý').join('')).toBe('OXIDUHLIČITÝ')
+    // Obyčejný spojovník z klávesnice, ne jen typografické pomlčky.
+    expect(splitWord('Česko-Slovensko')).toEqual({ letters: puzzleLetters('ČESKOSLOVENSKO'), unusable: [] })
+    expect(splitWord('severo–západ').unusable).toEqual([])
+  })
+
+  it('rozložený zápis (NFD) dá stejná písmena jako složený', () => {
+    const rozlozene = 'řeka'.normalize('NFD')
+    expect(splitWord(rozlozene)).toEqual({ letters: ['Ř', 'E', 'K', 'A'], unusable: [] })
+    expect(phraseWords('Úhoř'.normalize('NFD'))).toEqual([['Ú', 'H', 'O', 'Ř']])
   })
 
   it('věta tajenky se dělí na slova, aby šla přečíst', () => {
@@ -126,6 +160,68 @@ describe('osmisměrka', () => {
     expect(result.problems.map((problem) => problem.message).join(' ')).toContain('podruhé')
   })
 
+  it('krátké slovo nikdy neleží celé uvnitř delšího', () => {
+    const result = buildWordSearch({ entries: slova(['lesník', 'les']), cols: 10, rows: 10, seed: '12' })
+    const lesnik = result.placements.find((p) => p.word === 'lesník')
+    const les = result.placements.find((p) => p.word === 'les')
+    expect(lesnik && les).toBeTruthy()
+    const bunkyLesniku = new Set(cellsOf(lesnik!))
+    expect(cellsOf(les!).every((cell) => bunkyLesniku.has(cell))).toBe(false)
+    // Žák najde „les" i uvnitř „lesníku" — to se učitelce musí říct.
+    expect(result.problems.map((problem) => problem.message).join(' ')).toContain('lesník')
+  })
+
+  it('slovo a jeho obrácení neleží na týchž buňkách', () => {
+    for (let seed = 0; seed < 30; seed += 1) {
+      const result = buildWordSearch({ entries: slova(['ret', 'ter']), cols: 8, rows: 8, seed: String(seed) })
+      const [a, b] = result.placements
+      expect(new Set([...cellsOf(a!), ...cellsOf(b!)]).size, `seed ${seed}`).toBeGreaterThan(3)
+    }
+  })
+
+  it('slovo ze seznamu je v mřížce jen jednou (ani výplň ho nevytvoří podruhé)', () => {
+    const words = ['oko', 'nos', 'ucho', 'kost', 'sval', 'krev', 'žebro', 'plíce', 'srdce', 'lebka']
+    for (let seed = 0; seed < 60; seed += 1) {
+      const result = buildWordSearch({ entries: slova(words), cols: 16, rows: 16, seed: String(seed) })
+      expect(result.unplaced).toEqual([])
+      for (const placement of result.placements) {
+        const palindrom = placement.letters.join('') === [...placement.letters].reverse().join('')
+        expect(findWord(result.grid, placement.word).length, `${placement.word}, seed ${seed}`).toBe(
+          palindrom ? 2 : 1,
+        )
+      }
+    }
+  })
+
+  it('výplň nevytvoří sprosté slovo v žádném směru', () => {
+    const words = ['kurz', 'pivo', 'hora', 'kolo', 'debata', 'sova', 'pára', 'kotel']
+    for (let seed = 0; seed < 300; seed += 1) {
+      const result = buildWordSearch({ entries: slova(words), cols: 14, rows: 14, seed: String(seed) })
+      const grid = result.grid.map((row) => row.map(bezDiakritiky))
+      for (const vulgar of WORD_SEARCH_BLOCKLIST) {
+        expect(findWord(grid, bezDiakritiky(vulgar)), `${vulgar}, seed ${seed}`).toEqual([])
+      }
+    }
+  })
+
+  it('výplň z malého počtu písmen bere celou českou abecedu i s Ď a Ů', () => {
+    const counts = new Map<string, number>()
+    for (let seed = 0; seed < 80; seed += 1) {
+      const result = buildWordSearch({ entries: slova(['ďas', 'dům']), cols: 12, rows: 12, seed: String(seed) })
+      const solution = solutionGrid(result)
+      result.grid.forEach((row, r) =>
+        row.forEach((cell, c) => {
+          if (solution[r]?.[c] === null) counts.set(cell, (counts.get(cell) ?? 0) + 1)
+        }),
+      )
+    }
+    expect(counts.get('Ď') ?? 0).toBeGreaterThan(0)
+    expect(counts.get('Ů') ?? 0).toBeGreaterThan(0)
+    // Běžná písmena jsou častější než vzácná — výplň vypadá jako čeština.
+    expect(counts.get('O') ?? 0).toBeGreaterThan(counts.get('Ď') ?? 0)
+    expect(counts.get('E') ?? 0).toBeGreaterThan(counts.get('Ů') ?? 0)
+  })
+
   it('klíč pro učitelku ukazuje jen písmena hledaných slov', () => {
     const result = buildWordSearch({ entries: SLOVA, cols: 12, rows: 12, seed: 'klic' })
     const solution = solutionGrid(result)
@@ -173,6 +269,40 @@ describe('tajenka', () => {
     const result = buildCryptogram({ entries: SLOVNIK, phrase: 'voda', seed: '7' })
     const words = result.rows.map((row) => row.word)
     expect(new Set(words).size).toBe(words.length)
+  })
+
+  it('číslice ve větě tajenky se ohlásí, ne tiše zahodí', () => {
+    const result = buildCryptogram({ entries: SLOVNIK, phrase: 'Rok 1348', seed: '1' })
+    const zprava = result.problems.map((problem) => problem.message).join(' ')
+    expect(zprava).toContain('1 3 4 8')
+  })
+
+  it('totéž slovo zadané víckrát se ohlásí a použije se jen jednou', () => {
+    const result = buildCryptogram({
+      entries: [
+        { word: 'les', clue: 'Roste v něm hodně stromů' },
+        { word: 'LES', clue: 'Totéž podruhé' },
+        { word: 'les', clue: 'A potřetí' },
+      ],
+      phrase: 'les',
+      seed: '1',
+    })
+    expect(result.rows.length).toBeLessThanOrEqual(1)
+    expect(result.problems.map((problem) => problem.message).join(' ')).toContain('podruhé')
+  })
+
+  it('nápověda, která obsahuje samo slovo, se ohlásí', () => {
+    const result = buildCryptogram({
+      entries: [
+        { word: 'kořen', clue: 'KOREN drží rostlinu v půdě' },
+        { word: 'stonek', clue: 'Nese listy a květy' },
+      ],
+      phrase: 'ko',
+      seed: '1',
+    })
+    const potize = result.problems.filter((problem) => problem.subject === 'kořen')
+    expect(potize.map((problem) => problem.message).join(' ')).toContain('nápověd')
+    expect(result.problems.some((problem) => problem.subject === 'stonek')).toBe(false)
   })
 
   it('týž seed dá tutéž tajenku', () => {
@@ -253,6 +383,41 @@ describe('hlavolam ze schématu', () => {
     if (built.kind === 'wordsearch') {
       expect(built.wordSearch.placements).toHaveLength(SLOVA.length)
     }
+  })
+
+  it('u osmisměrky nápověda není povinná, u tajenky ano', () => {
+    const osmismerka = puzzleContentSchema.safeParse({
+      kind: 'wordsearch',
+      title: 'Bez nápověd',
+      entries: [{ word: 'kořen' }, { word: 'list', clue: '' }],
+      payload: {},
+    })
+    expect(osmismerka.success).toBe(true)
+    if (osmismerka.success) expect(osmismerka.data.entries.map((entry) => entry.clue)).toEqual(['', ''])
+
+    const tajenka = puzzleContentSchema.safeParse({
+      kind: 'cryptogram',
+      title: 'Bez nápověd',
+      entries: [
+        { word: 'kořen', clue: '' },
+        { word: 'list', clue: 'Zelený' },
+      ],
+      payload: { phrase: 'ko' },
+    })
+    expect(tajenka.success).toBe(false)
+  })
+
+  it('meze slov a nápověd jsou k dispozici jako konstanty', () => {
+    expect(PUZZLE_CLUE_MAX).toBe(200)
+    expect(PUZZLE_WORD_MAX).toBe(24)
+    expect(PUZZLE_ENTRIES_MAX).toBe(40)
+    const prilisDlouha = puzzleContentSchema.safeParse({
+      kind: 'wordsearch',
+      title: 'x',
+      entries: [{ word: 'kořen', clue: 'a'.repeat(PUZZLE_CLUE_MAX + 1) }, { word: 'list' }],
+      payload: {},
+    })
+    expect(prilisDlouha.success).toBe(false)
   })
 
   it('tajenka se ze schématu složí stejně jako přímým voláním', () => {
