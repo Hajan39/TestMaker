@@ -20,7 +20,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { paginate } from '@testmaker/core/pdf/estimate'
 import { formatAnswer, questionLabel } from '@testmaker/core/pdf/layout'
 import { resolveQuestionStyle, type ResolvedTestItem, type Template, type TestHeaderConfig } from '@testmaker/core/schema'
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useId, useMemo, useState } from 'react'
 import {
   Badge,
   Button,
@@ -150,6 +150,9 @@ export function TestPage({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+  // dnd-kit si bez `id` čísluje `aria-describedby` počítadlem, které na serveru
+  // a v prohlížeči běží jinak — stránka pak hlásí nesoulad při hydrataci.
+  const dndId = useId()
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -188,6 +191,7 @@ export function TestPage({
       {template ? (
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-outer)] bg-surface-muted p-3">
           <DndContext
+            id={dndId}
             sensors={sensors}
             collisionDetection={closestCenter}
             modifiers={[restrictToVerticalAxis]}

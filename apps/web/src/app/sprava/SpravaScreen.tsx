@@ -389,7 +389,7 @@ export function SpravaScreen({
         <TabsContent value="ai-kvalita" className="space-y-4">
           <p className="max-w-3xl text-sm text-fg-soft">
             Za posledních devadesát dní: kolik otázek který model vygeneroval a kolik jich učitelky
-            nakonec přegenerovaly, i s nejčastějšími důvody. „Přegenerováno" počítá jen náhrady přes
+            nakonec přegenerovaly, i s nejčastějšími důvody. „Přegenerováno“ počítá jen náhrady přes
             tlačítko Přegenerovat — smazání ani ruční úpravu otázky nezahrnuje.
           </p>
 
@@ -457,7 +457,7 @@ export function SpravaScreen({
               {novePravidlo ? (
                 <Card className="space-y-2 p-4">
                   <h3 className="font-medium text-fg">
-                    Nové pravidlo z důvodu „{REGENERATE_REASONS[novePravidlo.reason].label}"
+                    Nové pravidlo z důvodu „{REGENERATE_REASONS[novePravidlo.reason].label}“
                   </h3>
                   <p className="text-sm text-fg-soft">
                     Text se připojí ke každému dalšímu generování otázek pro tuhle školu, dokud ho
@@ -520,7 +520,7 @@ export function SpravaScreen({
                   <div className="flex-1">
                     <p className="text-fg">{p.text}</p>
                     {p.reason ? (
-                      <p className="text-xs text-fg-muted">z důvodu „{REGENERATE_REASONS[p.reason].label}"</p>
+                      <p className="text-xs text-fg-muted">z důvodu „{REGENERATE_REASONS[p.reason].label}“</p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">

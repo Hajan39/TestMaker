@@ -142,7 +142,7 @@ test.describe('verze otázky na kartě', () => {
     const promptLehka = `Otázka nejlehčí ${Date.now()}`
     const promptTezka = `Otázka nejtěžší ${Date.now()}`
     const idLehka = await pridatOtazku(page.request, topicId, promptLehka, 1)
-    const idTezka = await pridatOtazku(page.request, topicId, promptTezka, 3)
+    await pridatOtazku(page.request, topicId, promptTezka, 3)
     await mockVariant(page, topicId, idLehka, promptLehka)
 
     await page.goto(`/topics/${topicId}`)

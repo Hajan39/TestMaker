@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Badge,
   Checkbox,
@@ -59,7 +59,13 @@ export function MaterialRow({
   // Když server odmítne, vrátí se zpátky a učitelka se to dozví hláškou —
   // jinak by checkbox tiše zůstal v poloze, která se neuložila.
   const [excludedOverride, setExcludedOverride] = useState(material.excluded)
-  useEffect(() => setExcludedOverride(material.excluded), [material.excluded])
+  // Když přijde nová hodnota ze serveru, převezme se hned při vykreslení —
+  // přes efekt by se stránka vykreslila dvakrát a checkbox by na chvíli blikl.
+  const [lastExcluded, setLastExcluded] = useState(material.excluded)
+  if (material.excluded !== lastExcluded) {
+    setLastExcluded(material.excluded)
+    setExcludedOverride(material.excluded)
+  }
 
   async function toggleExcluded() {
     const next = !excludedOverride
