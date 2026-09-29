@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { loadPuzzle } from '@/lib/puzzles'
+import { loadPuzzle, puzzleBlockingProblems } from '@/lib/puzzles'
 import { buildPuzzleSnapshots } from '@/lib/tests'
 import { skola, sRozsahem, vlastni } from '@/lib/uzivatel'
 
@@ -21,18 +21,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return sRozsahem(
     async (ucet) => {
   const { id } = await params
-  const parsed = bodySchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Chybí písemka' }, { status: 400 })
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null))
+  if (!parsed.success) return Response.json({ error: 'Vyber písemku, do které se má hlavolam zařadit.' }, { status: 400 })
 
   const puzzle = await loadPuzzle(ucet, id)
-  if (!puzzle) return Response.json({ error: 'Hlavolam se nenašel' }, { status: 404 })
+  if (!puzzle) return Response.json({ error: 'Hlavolam se nenašel — možná už je smazaný. Obnov stránku.' }, { status: 404 })
+
+  // Rozbitý hlavolam (slovo se nevešlo, tajence chybí písmeno) do písemky
+  // nesmí: žák by hledal, co na papíře není.
+  const problems = puzzleBlockingProblems(puzzle)
+  if (problems.length > 0) {
+    return Response.json(
+      {
+        error: `Hlavolam se do písemky zařadit nedá: ${problems[0]!.message} Oprav ho v Hlavolamech, ulož a zkus to znovu.`,
+        problems,
+      },
+      { status: 422 },
+    )
+  }
 
   const [test] = await db
     .select({ id: tests.id, title: tests.title })
     .from(tests)
     .where(and(eq(tests.id, parsed.data.testId), vlastni(ucet, tests)))
     .limit(1)
-  if (!test) return Response.json({ error: 'Písemka se nenašla' }, { status: 404 })
+  if (!test) return Response.json({ error: 'Písemka se nenašla. Vyber jinou ze svých písemek.' }, { status: 404 })
 
   const [last] = await db
     .select({ position: testItems.position })

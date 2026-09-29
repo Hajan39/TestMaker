@@ -112,4 +112,138 @@ test.describe('hlavolamy', () => {
 
     expect(volaniModelu, 'model se z obrazovky volat nesmí').toEqual([])
   })
+
+  test('rozbitý hlavolam se uloží jako rozpracovaný, ale tisk a zařazení jsou zamčené', async ({ page }) => {
+    const nazev = `E2E rozbitá ${Date.now()}`
+    await page.goto('/hlavolamy')
+    await napisSlova(page, [
+      ['fotosyntéza', 'Děj v zelených listech'],
+      ['list', 'Probíhá v něm fotosyntéza'],
+    ])
+    await napisNazev(page, nazev)
+    await page.getByLabel('Sloupce').fill('6')
+    await page.getByLabel('Řádky').fill('6')
+    await expect(page.locator('[data-slot="puzzle-problems"]')).toContainText('nevejde')
+
+    // Tisk i zařazení jsou zamčené a je u nich napsané proč.
+    await expect(page.getByRole('button', { name: 'Vytisknout', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Vytisknout s řešením' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Zařadit do písemky' })).toBeDisabled()
+    await expect(page.locator('[data-slot="puzzle-blocked"]')).toContainText('opravíš potíže')
+
+    // Uložit jako rozpracovaný jde, jen se řekne, že tisknout se zatím nedá.
+    await page.getByRole('button', { name: 'Uložit hlavolam' }).click()
+    await expect(page.getByText('zatím se nedá vytisknout ani zařadit do písemky')).toBeVisible()
+    await expect(page.locator('[data-slot="puzzle-list"]').getByText(nazev)).toBeVisible()
+  })
+
+  test('slovo bez nápovědy nezmizí potichu a rozsah polí se hlídá', async ({ page }) => {
+    await page.goto('/hlavolamy')
+    await page.getByLabel('Druh hlavolamu').click()
+    await page.getByRole('option', { name: 'Tajenka' }).click()
+    await napisSlova(page, [
+      ['kořen', 'Poutá rostlinu v půdě'],
+      ['stonek', ''],
+      ['list', 'Probíhá v něm fotosyntéza'],
+    ])
+    await napisNazev(page, 'E2E bez nápovědy')
+
+    // Řádek zůstal v seznamu a je u něj napsané, co doplnit.
+    await expect(page.getByRole('textbox', { name: 'Slovo 2', exact: true })).toHaveValue('stonek')
+    const potiz = page.locator('[data-slot="puzzle-entry-problem"]')
+    await expect(potiz).toHaveCount(1)
+    await expect(potiz).toContainText('Doplň nápovědu')
+    await expect(page.locator('[data-slot="puzzle-missing"]')).toContainText('Oprav řádek')
+
+    // Příliš dlouhé slovo se ohlásí se skutečnou mezí, ne obecnou hláškou.
+    await page.getByRole('textbox', { name: 'Slovo 3', exact: true }).fill('a'.repeat(30))
+    await expect(potiz.nth(1)).toContainText('nejvýš 24')
+  })
+
+  test('rozměr mřížky jde přepsat a mimo meze se srovná', async ({ page }) => {
+    await page.goto('/hlavolamy')
+    const sloupce = page.getByLabel('Sloupce')
+    await sloupce.fill('')
+    await expect(sloupce).toHaveValue('')
+    await sloupce.pressSequentially('15')
+    await expect(sloupce).toHaveValue('15')
+    await sloupce.fill('50')
+    await sloupce.blur()
+    await expect(sloupce).toHaveValue('20')
+  })
+
+  test('mazání i zahození změn se nejdřív zeptá', async ({ page }) => {
+    const nazev = `E2E mazání ${Date.now()}`
+    await page.goto('/hlavolamy')
+    await napisSlova(page, SLOVA)
+    await napisNazev(page, nazev)
+    await page.getByRole('button', { name: 'Uložit hlavolam' }).click()
+    const radek = page.locator('[data-slot="puzzle-list"] li').filter({ hasText: nazev })
+    await expect(radek).toBeVisible()
+
+    // Neuložená změna: nový hlavolam ji bez ptaní nezahodí.
+    await page.getByLabel('Název').fill(`${nazev} upravený`)
+    await page.getByRole('button', { name: 'Nový hlavolam' }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog).toContainText('Zahodit neuložené změny?')
+    await dialog.getByRole('button', { name: 'Nechat být' }).click()
+    await expect(page.getByLabel('Název')).toHaveValue(`${nazev} upravený`)
+
+    // Mazání se ptá; „Nechat být" hlavolam nechá v knihovně.
+    await radek.getByRole('button', { name: /Akce pro hlavolam/ }).click()
+    await page.getByRole('menuitem', { name: 'Smazat' }).click()
+    await expect(dialog).toContainText(`Smazat hlavolam „${nazev}"?`)
+    await dialog.getByRole('button', { name: 'Nechat být' }).click()
+    await expect(radek).toBeVisible()
+
+    await radek.getByRole('button', { name: /Akce pro hlavolam/ }).click()
+    await page.getByRole('menuitem', { name: 'Smazat' }).click()
+    await dialog.getByRole('button', { name: 'Smazat hlavolam' }).click()
+    // Delší čekání: vývojový server cestu DELETE při prvním volání teprve překládá.
+    await expect(radek).toHaveCount(0, { timeout: 20_000 })
+  })
+
+  /**
+   * Vytažení slov se zkouší jen tam, kde je model nastavený (tlačítko je
+   * vidět) — v běžném běhu testů není a test se přeskočí. Pustit ho jde
+   * s vymyšleným klíčem, např.
+   * `AI_MODELS=google:x GOOGLE_GENERATIVE_AI_API_KEY=e2e pnpm exec playwright test e2e/hlavolamy.spec.ts`;
+   * odpověď na `/api/puzzles/words` je stejně podvržená, model se nevolá.
+   */
+  test('když model nedodá slova, rozhraní to neoznámí jako úspěch', async ({ page }) => {
+    await page.route('**/api/puzzles/words**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({ json: { entries: [] } })
+        return
+      }
+      await route.fulfill({
+        json: { entries: [], rejected: [], models: ['google:x'], requested: 12, returned: 0, dropped: 0 },
+      })
+    })
+    await page.goto('/hlavolamy')
+    const vytahnout = page.getByRole('button', { name: 'Vytáhnout slova z materiálů' })
+    test.skip(!(await vytahnout.isVisible()), 'Model není v testovacím serveru nastavený.')
+
+    await page.getByLabel('Téma').click()
+    await page.getByRole('option').nth(1).click()
+    await vytahnout.click()
+    await expect(page.getByText('Model nedodal žádné nové slovo.')).toBeVisible()
+
+    // Málo slov proti požadavku je varování s radou, ne zelený úspěch.
+    await page.unroute('**/api/puzzles/words**')
+    await page.route('**/api/puzzles/words**', async (route) => {
+      await route.fulfill({
+        json: {
+          entries: [
+            { word: 'kořen', clue: 'Poutá rostlinu v půdě' },
+            { word: 'list', clue: 'Zelený orgán' },
+          ],
+          rejected: [],
+          models: ['google:x'],
+        },
+      })
+    })
+    await vytahnout.click()
+    await expect(page.getByText('Přibylo jen 2 slova z 12 požadovaných.')).toBeVisible()
+  })
 })

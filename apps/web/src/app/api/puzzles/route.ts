@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { puzzleContentSchema } from '@testmaker/core/schema'
-import { insertPuzzle, loadPuzzleList } from '@/lib/puzzles'
+import {
+  describePuzzleIssues,
+  insertPuzzle,
+  loadPuzzleList,
+  topicExists,
+  TOPIC_NOT_FOUND_MESSAGE,
+} from '@/lib/puzzles'
 import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -24,12 +30,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   return sRozsahem(
     async (ucet) => {
-      const parsed = createSchema.safeParse(await request.json())
+      const parsed = createSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
         return Response.json(
-          { error: 'Neplatná data hlavolamu', detail: parsed.error.issues },
+          { error: describePuzzleIssues(parsed.error.issues), detail: parsed.error.issues },
           { status: 400 },
         )
+      }
+      // Cizí téma se tváří stejně jako neexistující; bez kontroly by uložení
+      // spadlo na cizím klíči, nebo by se hlavolam navázal na téma jiné školy.
+      if (parsed.data.topicId && !(await topicExists(ucet, parsed.data.topicId))) {
+        return Response.json({ error: TOPIC_NOT_FOUND_MESSAGE }, { status: 404 })
       }
 
       const puzzle = await insertPuzzle(ucet, parsed.data.puzzle, {
