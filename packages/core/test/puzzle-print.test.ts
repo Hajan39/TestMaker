@@ -262,8 +262,12 @@ describe('tisk hlavolamu přes stránky', () => {
     // React-pdf varuje, když nerozdělitelný blok nemá kam uhnout — a pak ho slisuje.
     expect(warn.mock.calls.flat().join(' ')).not.toContain("can't wrap")
     for (const page of pages) {
+      // Zápatí („strana X / Y" a vedle něj název) leží v dolním okraji záměrně;
+      // pozná se podle řádku s číslem strany.
+      const footerY = page.find((g) => /strana \d+ \/ \d+/.test(g.str))?.y
+      const body = footerY === undefined ? page : page.filter((g) => Math.abs(g.y - footerY) > 2)
       // Žádný text pod dolním okrajem (slisovaný blok z papíru přetekl).
-      expect(Math.max(...page.map((g) => g.y))).toBeLessThan(bottom + 1)
+      expect(Math.max(...body.map((g) => g.y))).toBeLessThan(bottom + 1)
       // Žádná prázdná strana.
       expect(page.length).toBeGreaterThan(0)
     }
