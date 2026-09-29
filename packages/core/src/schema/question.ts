@@ -360,6 +360,38 @@ export const DEFAULT_POINTS: Record<QuestionType, number> = {
   label_image: 3,
 }
 
+/**
+ * Body podle rozsahu odpovědi, jak je dává učitelka: bod za každé doplnění,
+ * přiřazení nebo popisek, bod za jednoslovnou odpověď a výběr jedné možnosti,
+ * dva body za výběr více možností. Model body jen hádá (nabízel i 10 bodů za
+ * krátké přiřazení), proto se u těchto typů jeho číslo nepřebírá. Volná
+ * odpověď a kresba nemají co počítat — u nich rozhoduje rozsah odpovědi,
+ * který pozná jen model nebo učitelka, a funkce vrací `null`.
+ */
+export function pointsByScope(q: QuestionContent): number | null {
+  switch (q.type) {
+    case 'short_answer':
+    case 'single_choice':
+      return 1
+    case 'multi_choice':
+      return 2
+    case 'fill_blank':
+      return q.payload.blanks.length
+    case 'matching':
+      return q.payload.pairs.length
+    case 'table_fill':
+      return q.payload.answers.length
+    case 'label_image':
+      return q.payload.labels.length
+    case 'true_false':
+    case 'ordering':
+      return DEFAULT_POINTS[q.type]
+    case 'open':
+    case 'draw':
+      return null
+  }
+}
+
 /* ------------------------------------------------------------------ validace */
 
 /** Doplňková kontrola, kterou samotné zod schéma neumí (indexy, počty). */
@@ -377,10 +409,8 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       if (new Set(q.payload.correctIndices).size !== q.payload.correctIndices.length) {
         errors.push('correctIndices obsahuje duplicity')
       }
-      if (q.payload.correctIndices.length === n) errors.push('všechny možnosti nemohou být správné')
-      if (q.payload.correctIndices.length < 2) {
-        errors.push('multi_choice musí mít aspoň dvě správné možnosti (jinak jde o single_choice)')
-      }
+      // Správná může být jedna, víc i všechny — žák nesmí z tvaru otázky
+      // uhodnout, kolik jich má označit.
       const normalizedOptions = q.payload.options.map((o) => o.trim().toLowerCase())
       if (new Set(normalizedOptions).size !== normalizedOptions.length) {
         errors.push('možnosti se opakují')

@@ -38,8 +38,12 @@ export const AI_SETTINGS = {
   avoidLimit: 80,
   /** Delší zadání v seznamu k vyhnutí se ořízne — k odlišení stačí začátek. */
   avoidItemMaxLength: 100,
-  /** Víc bodů od modelu se nepřebírá (Gemini nabízelo i 25 za přiřazování). */
-  maxAiPoints: 10,
+  /**
+   * Nejvíc bodů, které se od modelu převezmou u volné odpovědi a kresby
+   * (ostatní typy body počítají samy, viz `pointsByScope`). Víc by znamenalo
+   * hodně rozsáhlou odpověď, jakou písemka na základní škole nemívá.
+   */
+  maxAiPoints: 5,
   /** Nejkratší kus citace, který má smysl v materiálu hledat; kratší by se našel kdekoli. */
   minEvidencePart: 8,
 } as const

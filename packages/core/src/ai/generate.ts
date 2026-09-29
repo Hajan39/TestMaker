@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
+  pointsByScope,
   normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
@@ -193,12 +194,16 @@ export function salvageQuestions(raw: unknown): QuestionContent[] {
 }
 
 /**
- * Body doplní podle typu, pokud model vrátil výchozí 1 nebo nesmyslně vysokou
- * hodnotu. Gemini u přiřazovacích otázek nabízelo i 25 bodů — na písemce pro
- * druhý stupeň to jednu otázku postaví nad zbytek testu. Učitelka si body může
- * kdykoli přepsat ručně, schéma proto širší rozsah dál připouští.
+ * Body otázky od modelu. Kde jdou spočítat z rozsahu odpovědi (doplnění,
+ * přiřazení, výběr), určí je `pointsByScope` a číslo modelu se zahodí.
+ * U volné odpovědi a kresby se převezme, jen když je v rozumných mezích —
+ * Gemini nabízelo i 25 bodů a jedna otázka pak převáží celou písemku.
+ * Učitelka si body může kdykoli přepsat ručně, schéma proto širší rozsah
+ * dál připouští.
  */
 export function withDefaultPoints(question: QuestionContent): QuestionContent {
+  const byScope = pointsByScope(question)
+  if (byScope !== null) return { ...question, points: byScope }
   if (question.points > 1 && question.points <= AI_SETTINGS.maxAiPoints) return question
   return { ...question, points: DEFAULT_POINTS[question.type] }
 }

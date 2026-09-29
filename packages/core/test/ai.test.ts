@@ -9,11 +9,13 @@ import {
   questionKey,
   salvageQuestions,
   splitIntoBatches,
+  withDefaultPoints,
 } from '../src/ai/generate'
 import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompts/questions'
 import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
+  DEFAULT_POINTS,
   normalizeEvidence,
   normalizeMatchingPayload,
   normalizeOrderingPayload,
@@ -648,15 +650,13 @@ describe('rozdělení typů mezi dávky', () => {
   })
 })
 
-describe('výběr více možností vyžaduje víc než jednu správnou odpověď', () => {
-  it('jedna správná možnost je odmítnuta', () => {
+describe('výběr více možností připouští jednu až všechny správné', () => {
+  it('jedna správná možnost projde', () => {
     const parsed = questionContentSchema.parse({
       type: 'multi_choice',
       payload: { prompt: 'Vyber správné možnosti.', options: ['a', 'b', 'c', 'd'], correctIndices: [1] },
     })
-    expect(validateQuestionContent(parsed)).toContain(
-      'multi_choice musí mít aspoň dvě správné možnosti (jinak jde o single_choice)',
-    )
+    expect(validateQuestionContent(parsed)).toEqual([])
   })
 
   it('dvě a víc správných možností v pořádku projde', () => {
@@ -667,12 +667,12 @@ describe('výběr více možností vyžaduje víc než jednu správnou odpověď
     expect(validateQuestionContent(parsed)).toEqual([])
   })
 
-  it('všechny možnosti správně je odmítnuto', () => {
+  it('všechny možnosti správně projdou', () => {
     const parsed = questionContentSchema.parse({
       type: 'multi_choice',
       payload: { prompt: 'Vyber správné možnosti.', options: ['a', 'b', 'c'], correctIndices: [0, 1, 2] },
     })
-    expect(validateQuestionContent(parsed)).toContain('všechny možnosti nemohou být správné')
+    expect(validateQuestionContent(parsed)).toEqual([])
   })
 
   it('opakovaná možnost je odmítnuta', () => {
@@ -1024,5 +1024,44 @@ describe('kontrola citace', () => {
   it('otázka bez citace projde', () => {
     expect(evidenceMatches(s(), usek)).toBe(true)
     expect(evidenceMatches(s('   '), usek)).toBe(true)
+  })
+})
+
+describe('body podle rozsahu odpovědi', () => {
+  const q = (content: unknown) => withDefaultPoints(questionContentSchema.parse(content))
+
+  it('bod za každé doplnění a přiřazení, bez ohledu na číslo od modelu', () => {
+    expect(
+      q({
+        type: 'fill_blank',
+        points: 10,
+        payload: { text: 'Srdce má ___ síně a ___ komory.', blanks: ['dvě', 'dvě'] },
+      }).points,
+    ).toBe(2)
+    expect(
+      q({
+        type: 'matching',
+        points: 10,
+        payload: { left: ['a', 'b', 'c'], right: ['x', 'y', 'z'], pairs: [[0, 1], [1, 2], [2, 0]] },
+      }).points,
+    ).toBe(3)
+  })
+
+  it('jednoslovná odpověď za bod, výběr více možností za dva', () => {
+    expect(q({ type: 'short_answer', points: 5, payload: { prompt: 'Jak se jmenuje…?', answer: 'x' } }).points).toBe(1)
+    expect(
+      q({
+        type: 'multi_choice',
+        points: 1,
+        payload: { prompt: 'Vyber správné.', options: ['a', 'b', 'c', 'd'], correctIndices: [0] },
+      }).points,
+    ).toBe(2)
+  })
+
+  it('u volné odpovědi převezme rozumné číslo modelu, přehnané ne', () => {
+    const open = (points: number) =>
+      q({ type: 'open', points, payload: { prompt: 'Popiš dýchání.', answer: 'x' } }).points
+    expect(open(4)).toBe(4)
+    expect(open(10)).toBe(DEFAULT_POINTS.open)
   })
 })

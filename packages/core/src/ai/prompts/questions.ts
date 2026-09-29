@@ -48,13 +48,13 @@ export const MAX_REPLACEMENT_NOTE_LENGTH = 300
 
 export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   open:
-    'Jen když má materiál stručnou věcnou odpověď, ne názor. 2–6 řádků; v `answer` napiš vzorovou odpověď k opravování, ne jen heslo.',
+    'Jen když má materiál stručnou věcnou odpověď, ne názor. 2–6 řádků; v `answer` napiš vzorovou odpověď k opravování, ne jen heslo. `points` 2–4 podle toho, kolik věcí má odpověď obsahovat.',
   draw:
-    'Jen když jde látku nakreslit a popsat (stavba, schéma, pokus, mapa). Zadání řekne, co nakreslit a které části popsat. 6–12 řádků místa; v `answer` vypiš, co musí kresba obsahovat a které popisky.',
+    'Jen když jde látku nakreslit a popsat (stavba, schéma, pokus, mapa). Zadání řekne, co nakreslit a které části popsat. 6–12 řádků místa; v `answer` vypiš, co musí kresba obsahovat a které popisky. `points` 2–4 podle počtu popisků.',
   short_answer: 'Odpověď je jedno slovo nebo krátké sousloví z materiálu. Do `acceptedAnswers` dej běžné varianty.',
   single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
   multi_choice:
-    '4–5 možností, aspoň 2 správné a aspoň 1 špatná — zadání musí říct, že správných je víc. Špatné možnosti věrohodné, ne nesmyslné. Žádná možnost se neopakuje.',
+    '4 možnosti; správná může být jedna, dvě, tři i všechny — počet mezi otázkami střídej, ať ho žák nemůže uhodnout. Zadání řekne, ať žák označí všechny správné možnosti, ale neprozradí kolik jich je. Špatné možnosti věrohodné, ne nesmyslné. Žádná možnost se neopakuje.',
   true_false: '4 krátká tvrzení, zhruba půl pravdivých. Nepravdivé tvrzení vznikne malou změnou pravdivého.',
   fill_blank:
     '1–4 vynechaná slova; počet ___ v textu přesně odpovídá poli `blanks`; vynechávej klíčové pojmy z materiálu, ne nahodilá slova.',
