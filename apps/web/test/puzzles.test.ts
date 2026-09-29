@@ -36,7 +36,9 @@ const modelVratiSlova: typeof generatePuzzleWords = async () => ({
     { word: 'chloroplast', clue: 'Zelené tělísko v buňce' },
   ],
   rejected: [],
+  adjusted: [],
   models: ['google:gemini-flash-latest'],
+  stats: { requested: 2, returned: 2, usable: 2, dropped: 0 },
 })
 
 /** Podvržený model, kterému došel denní limit. */
@@ -225,7 +227,7 @@ describe('slova od modelu', () => {
       count: 2,
       generate: async (request) => {
         poslanyText = request.text
-        return { entries: [], rejected: [], models: [] }
+        return { entries: [], rejected: [], adjusted: [], models: [], stats: { requested: 2, returned: 0, usable: 0, dropped: 0 } }
       },
     })
 

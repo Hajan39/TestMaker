@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, isNull } from 'drizzle-orm'
-import { generatePuzzleWords } from '@testmaker/core/ai'
+import { generatePuzzleWords, type PuzzleWordsResult } from '@testmaker/core/ai'
 import {
   puzzleContentSchema,
   puzzleInstructions,
@@ -297,11 +297,15 @@ export async function suggestPuzzleWords(
     kind: PuzzleKind
     count: number
     avoid?: string[]
+    /** Věta tajenky — model podle ní volí slova s potřebnými písmeny. */
+    phrase?: string
+    /** Mřížka osmisměrky — podle ní se hlídá nejdelší slovo. */
+    grid?: { cols: number; rows: number }
     signal?: AbortSignal
     /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
     generate?: typeof generatePuzzleWords
   },
-): Promise<{ entries: { word: string; clue: string }[]; rejected: { word: string; reason: string }[]; models: string[] }> {
+): Promise<PuzzleWordsResult> {
   const [meta] = await db
     .select({ topicName: topics.name, gradeName: grades.name, subjectName: subjects.name })
     .from(topics)
@@ -342,6 +346,8 @@ export async function suggestPuzzleWords(
       count: options.count,
       kind: options.kind,
       avoid: options.avoid,
+      phrase: options.phrase,
+      grid: options.grid,
     },
     { signal: options.signal },
   )

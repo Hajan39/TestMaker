@@ -46,4 +46,44 @@ export const AI_SETTINGS = {
   maxAiPoints: 5,
   /** Nejkratší kus citace, který má smysl v materiálu hledat; kratší by se našel kdekoli. */
   minEvidencePart: 8,
+  /**
+   * Slova do hlavolamu (`puzzleWords.ts`). Meze slova i nápovědy, které dává
+   * schéma hlavolamu (`puzzleEntrySchema`) a velikost mřížky, se berou odtamtud;
+   * tady jsou jen čísla samotného generování.
+   */
+  puzzleWords: {
+    /**
+     * Kolik znaků materiálů se modelu pošle nejvýš. Na slovní zásobu to stačí;
+     * když je materiálů víc, rozpočet se dělí mezi ně (`fitMaterials`), aby
+     * poslední soubory podle abecedy nevypadly celé.
+     */
+    materialChars: 60_000,
+    /** Úsek, po kterém se z dlouhého materiálu vybírá rovnoměrně napříč textem. */
+    materialChunkChars: 2_000,
+    /** Kratší slovo se v osmisměrce najde náhodou kdekoli. */
+    minLetters: 3,
+    /** Tajenka nemá mřížku; delší řádek se nevejde na šířku stránky. */
+    cryptogramMaxLetters: 14,
+    /** Délka nápovědy, o kterou se model žádá; tvrdou mez dává schéma. */
+    clueTargetLength: 120,
+    /** Nápověda, která by po zkrácení byla kratší, se radši zahodí. */
+    clueMinTrimmedLength: 25,
+    /** Kolik prvních písmen slova se hledá v nápovědě jako prozrazený kořen. */
+    clueRootLetters: 5,
+    /**
+     * Dvě slova, z nichž jedno je začátkem druhého a liší se nejvýš o tolik
+     * písmen, jsou tvary téhož pojmu (kořen/kořeny, Ústava/ustava).
+     */
+    nearDuplicateExtraLetters: 2,
+    /** Nejvíc slov na jedno volání — víc jich hlavolam ani nepojme. */
+    maxWordsPerCall: 40,
+    /**
+     * U tajenky se žádá o víc slov, než kolik chybí písmen: část slov
+     * se zahodí (nenajdou se v materiálu, prozradí se v nápovědě) a párování
+     * písmen se slovy potřebuje rezervu. Chybějících písmen × tenhle poměr,
+     * aspoň `cryptogramMinExtraWords` navíc.
+     */
+    cryptogramExtraWordsRatio: 0.5,
+    cryptogramMinExtraWords: 3,
+  },
 } as const
