@@ -24,13 +24,17 @@ export const UCTY = {
   ucitelkaA: 'ucitelka.a@localhost',
   ucitelkaB: 'ucitelka.b@localhost',
   nahled: 'nahled@localhost',
+  administrator: 'admin@localhost',
+  spravceB: 'spravce.b@localhost',
+  ucitelkaC: 'ucitelka.c@localhost',
 } as const
 
 export type Osoba = keyof typeof UCTY
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /prihlaseni\.(spec|setup)\.ts|role\.spec\.ts|sprava\.spec\.ts|vlastnictvi\.spec\.ts/,
+  testMatch:
+    /prihlaseni\.(spec|setup)\.ts|role\.spec\.ts|sprava\.spec\.ts|vlastnictvi\.spec\.ts|administrace\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],

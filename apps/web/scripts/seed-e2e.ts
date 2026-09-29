@@ -21,11 +21,13 @@ import { existsSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
+import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { nanoid } from 'nanoid'
 import { BUILT_IN_TEMPLATES } from '@testmaker/core/schema'
 import * as schema from '../src/db/schema'
+import { nasaditSablony } from '../src/db/sablony'
 import { zahesovat } from '../src/lib/heslo'
 import { VYCHOZI_UCET_ID } from '../src/lib/vychozi'
 import { MIN_USABLE_TOPIC_CHARS } from '../src/db/schema'
@@ -288,6 +290,24 @@ const UCTY = [
     role: 'nahled' as const,
     heslo: E2E_HESLO,
   },
+  {
+    id: 'e2e-administrator',
+    email: 'admin@localhost',
+    name: 'Administrátor',
+    role: 'administrator' as const,
+    heslo: E2E_HESLO,
+  },
+]
+
+/**
+ * Druhá škola pro testy administrátora: vlastní správce, učitelka a její
+ * soukromá písemka, kterou smí vidět jen ona a administrátor.
+ */
+const DRUHA_SKOLA_ID = 'skola-druha'
+export const SOUKROMA_PISEMKA_C = 'Soukromá písemka učitelky C'
+const UCTY_DRUHE_SKOLY = [
+  { id: 'e2e-spravce-b', email: 'spravce.b@localhost', name: 'Správce B', role: 'spravce' as const },
+  { id: 'e2e-ucitelka-c', email: 'ucitelka.c@localhost', name: 'Učitelka C', role: 'ucitelka' as const },
 ]
 
 async function main() {
@@ -333,6 +353,30 @@ async function main() {
       position: index,
     })
   }
+
+  await db.insert(schema.schools).values({ id: DRUHA_SKOLA_ID, name: 'Druhá škola', slug: 'druha' })
+  for (const ucet of UCTY_DRUHE_SKOLY) {
+    await db.insert(schema.users).values({
+      ...ucet,
+      schoolId: DRUHA_SKOLA_ID,
+      passwordHash: await zahesovat(E2E_HESLO),
+    })
+  }
+  await nasaditSablony(db, DRUHA_SKOLA_ID)
+  const [sablonaDruhe] = await db
+    .select({ id: schema.templates.id })
+    .from(schema.templates)
+    .where(eq(schema.templates.schoolId, DRUHA_SKOLA_ID))
+    .limit(1)
+  await db.insert(schema.tests).values({
+    id: newId(),
+    schoolId: DRUHA_SKOLA_ID,
+    ownerId: 'e2e-ucitelka-c',
+    visibility: 'soukrome',
+    title: SOUKROMA_PISEMKA_C,
+    templateId: sablonaDruhe!.id,
+    header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+  })
 
   let subjectPosition = 0
   let materials = 0
