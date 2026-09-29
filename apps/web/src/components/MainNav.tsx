@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AppShell, type NavItem } from '@testmaker/ui'
 import { GenerationStatus } from '@/components/GenerationStatus'
 import { UserMenu } from '@/components/UserMenu'
-import type { Role } from '@/lib/role'
+import { roleMuzeSpravovat, type Role } from '@/lib/role'
 
 // Import materiálů a přehled generování zůstávají jako stránky (odkazy z
 // úvodu, ukazatel v liště), ale v liště samotné už nejsou — obojí je jen
@@ -46,7 +46,7 @@ export function MainNav({
   ucet: { jmeno: string; email: string; role: Role } | null
 }) {
   const pathname = usePathname()
-  const nav = ucet?.role === 'spravce' ? [...NAV, ...NAV_SPRAVCE] : NAV
+  const nav = ucet && roleMuzeSpravovat(ucet.role) ? [...NAV, ...NAV_SPRAVCE] : NAV
   const activeHref = findActiveHref(pathname, nav)
 
   return (

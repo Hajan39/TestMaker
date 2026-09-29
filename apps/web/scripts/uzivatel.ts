@@ -5,7 +5,13 @@
  *
  *   pnpm --filter @testmaker/web uzivatel -- --email jana@skola.cz --jmeno "Jana" --role spravce
  *   pnpm --filter @testmaker/web uzivatel -- --email jana@skola.cz --heslo
+ *   pnpm --filter @testmaker/web uzivatel -- --email ja@skola.cz --role administrator
+ *   pnpm --filter @testmaker/web uzivatel -- --email eva@jina.cz --skola jina-skola
  *   pnpm --filter @testmaker/web uzivatel -- --vypis
+ *
+ * Nový účet vznikne ve škole podle `--skola` (slug nebo id), bez něj
+ * v nejstarší. Roli `administrator` jde přidělit jedině tady — v aplikaci se
+ * nenabízí.
  *
  * Heslo se nepíše do příkazu (zůstalo by v historii), ale zadává se po
  * spuštění. Když se nezadá, vygeneruje se a vypíše.
@@ -39,13 +45,13 @@ function prepinac(jmeno: string): string | null {
   return hodnota && !hodnota.startsWith('--') ? hodnota : ''
 }
 
-const ROLE = ['ucitelka', 'spravce', 'nahled'] as const
+const ROLE = ['ucitelka', 'spravce', 'nahled', 'administrator'] as const
 type Role = (typeof ROLE)[number]
 
 async function main(): Promise<void> {
   loadEnv()
 
-  const { asc, eq } = await import('drizzle-orm')
+  const { asc, eq, or } = await import('drizzle-orm')
   const { db, schools, users } = await import('../src/db/index')
   const { odvolatVsechnyRelaceBezRelace } = await import('../src/lib/uctyServis')
   const { vygenerovatHeslo, zahesovat, zkontrolovatSilu } = await import('../src/lib/heslo')
@@ -59,13 +65,14 @@ async function main(): Promise<void> {
         role: users.role,
         status: users.status,
         skola: schools.name,
+        slug: schools.slug,
       })
       .from(users)
       .innerJoin(schools, eq(schools.id, users.schoolId))
       .orderBy(asc(users.email))
     if (rows.length === 0) console.log('Žádné účty. Založ prvního správce přepínačem --email.')
     for (const row of rows) {
-      console.log(`${row.email}\t${row.role}\t${row.status}\t${row.name} (${row.skola})`)
+      console.log(`${row.email}\t${row.role}\t${row.status}\t${row.name} (${row.skola}, ${row.slug})`)
     }
     return
   }
@@ -94,9 +101,20 @@ async function main(): Promise<void> {
     ? []
     : await db.select().from(users).where(eq(users.id, 'ucet-zakladatelka')).limit(1)
 
-  const [skola] = await db.select().from(schools).orderBy(asc(schools.createdAt)).limit(1)
+  const skolaPrepinac = prepinac('skola')
+  const [skola] = skolaPrepinac
+    ? await db
+        .select()
+        .from(schools)
+        .where(or(eq(schools.slug, skolaPrepinac), eq(schools.id, skolaPrepinac)))
+        .limit(1)
+    : await db.select().from(schools).orderBy(asc(schools.createdAt)).limit(1)
   if (!skola) {
-    console.error('V databázi není žádná škola. Nejdřív spusť migrace (`pnpm db:migrate`).')
+    console.error(
+      skolaPrepinac
+        ? `Škola ${skolaPrepinac} se nenašla. Slug i id škol vypíše \`--vypis\`.`
+        : 'V databázi není žádná škola. Nejdřív spusť migrace (`pnpm db:migrate`).',
+    )
     process.exit(1)
   }
 
@@ -139,8 +157,12 @@ async function main(): Promise<void> {
           lockedUntil: null,
         })
         .where(eq(users.id, existujici.id))
-      // Změna hesla i odemčení musí odhlásit stará zařízení.
-      if (passwordHash) await odvolatVsechnyRelaceBezRelace(existujici.id)
+      // Změna hesla i odemčení musí odhlásit stará zařízení. Změna role taky:
+      // role se nese v podepsané cookii a brána by do odhlášení pouštěla podle
+      // staré.
+      if (passwordHash || (role && role !== existujici.role)) {
+        await odvolatVsechnyRelaceBezRelace(existujici.id)
+      }
       console.log(`Účet ${email} upraven.`)
     } else if (zakladajici) {
       await db

@@ -9,6 +9,7 @@ import {
   zapisOdkazyDuplicit,
   zapisRadky,
 } from '@/lib/backup'
+import { ROLE_SPRAVY } from '@/lib/role'
 import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -51,7 +52,7 @@ export async function GET() {
   })
     },
     // Záloha je celá škola: patří správci, ne jednotlivé učitelce.
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -144,6 +145,6 @@ export async function POST(request: Request) {
     )
   }
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }

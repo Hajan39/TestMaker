@@ -7,6 +7,7 @@ import {
   loadPromptRules,
   setPromptRuleActive,
 } from '@/lib/promptRules'
+import { ROLE_SPRAVY } from '@/lib/role'
 import { sRozsahem } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -31,7 +32,7 @@ export async function GET() {
       const pravidla = await loadPromptRules(ucet)
       return Response.json({ pravidla })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
         throw error
       }
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -77,6 +78,6 @@ export async function PATCH(request: Request) {
         throw error
       }
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }

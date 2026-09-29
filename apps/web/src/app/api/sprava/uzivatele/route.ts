@@ -3,12 +3,24 @@ import { z } from 'zod'
 import { db, schools, users } from '@/db'
 import { vygenerovatHeslo, zahesovat, zkontrolovatSilu } from '@/lib/heslo'
 import { newId } from '@/lib/ids'
-import { ROLES, type Role } from '@/lib/role'
+import { ROLE_SPRAVY, ROLES, ROLES_PRIDELITELNE, roleJeAdministrator, type Role } from '@/lib/role'
 import { odvolatVsechnyRelace, sRozsahem, zapsatAudit } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
 const roleSchema = z.enum(ROLES as unknown as [Role, ...Role[]])
+
+/**
+ * Administrátora přiděluje jen skript u databáze: uniklý účet správce se tak
+ * přes aplikaci na administrátora nepovýší. Schéma roli zná (jinak by se
+ * nedala vrátit srozumitelná hláška), odmítá se až tady.
+ */
+const NEPRIDELITELNA = 'Tuhle roli v aplikaci přidělit nejde.'
+const ADMIN_JEN_SKRIPTEM = 'Administrátorský účet se mění jen skriptem.'
+
+function pridelitelna(role: Role | undefined): boolean {
+  return role === undefined || ROLES_PRIDELITELNE.includes(role)
+}
 
 const createSchema = z.object({
   email: z.string().email().max(200),
@@ -64,7 +76,7 @@ export async function GET() {
         })),
       })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -74,6 +86,9 @@ export async function POST(request: Request) {
     async (ucet) => {
       const parsed = createSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!pridelitelna(parsed.data.role)) {
+        return Response.json({ error: NEPRIDELITELNA }, { status: 400 })
+      }
 
       const email = parsed.data.email.trim().toLowerCase()
       const [existujici] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
@@ -106,7 +121,7 @@ export async function POST(request: Request) {
 
       return Response.json({ id, heslo })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -116,10 +131,16 @@ export async function PATCH(request: Request) {
     async (ucet) => {
       const parsed = updateSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!pridelitelna(parsed.data.role)) {
+        return Response.json({ error: NEPRIDELITELNA }, { status: 400 })
+      }
 
       const [cil] = await db.select().from(users).where(eq(users.id, parsed.data.id)).limit(1)
       if (!cil || cil.schoolId !== ucet.schoolId) {
         return Response.json({ error: 'Účet se nenašel' }, { status: 404 })
+      }
+      if (roleJeAdministrator(cil.role)) {
+        return Response.json({ error: ADMIN_JEN_SKRIPTEM }, { status: 403 })
       }
 
       // Poslední správce nesmí zmizet — jinak by se do správy nedostal nikdo
@@ -182,7 +203,7 @@ export async function PATCH(request: Request) {
 
       return Response.json({ ok: true, ...(heslo ? { heslo } : {}) })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 
@@ -203,6 +224,9 @@ export async function DELETE(request: Request) {
       if (!cil || cil.schoolId !== ucet.schoolId) {
         return Response.json({ error: 'Účet se nenašel' }, { status: 404 })
       }
+      if (roleJeAdministrator(cil.role)) {
+        return Response.json({ error: ADMIN_JEN_SKRIPTEM }, { status: 403 })
+      }
 
       await db.update(users).set({ status: 'zablokovany' }).where(eq(users.id, id))
       await odvolatVsechnyRelace(id)
@@ -216,6 +240,6 @@ export async function DELETE(request: Request) {
       })
       return Response.json({ ok: true })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }

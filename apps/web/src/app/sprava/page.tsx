@@ -6,6 +6,7 @@ import { countJobs } from '@/lib/jobs'
 import { aiStatus } from '@/lib/ai'
 import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
+import { roleMuzeSpravovat } from '@/lib/role'
 import { ucetStranky } from '@/lib/uzivatel'
 import { SpravaScreen } from './SpravaScreen'
 
@@ -21,7 +22,7 @@ const UDALOSTI = 100
  */
 export default async function SpravaPage() {
   const ucet = await ucetStranky()
-  if (ucet.role !== 'spravce') {
+  if (!roleMuzeSpravovat(ucet.role)) {
     return (
       <PageShell>
         <p className="text-sm text-fg-soft">Do správy má přístup jen správce školy.</p>

@@ -23,7 +23,14 @@ import {
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
-import { ROLES, ROLE_LABELS, USER_STATUS_LABELS, type Role, type UserStatus } from '@/lib/role'
+import {
+  ROLES_PRIDELITELNE,
+  ROLE_LABELS,
+  USER_STATUS_LABELS,
+  roleJeAdministrator,
+  type Role,
+  type UserStatus,
+} from '@/lib/role'
 
 export interface UcetRadek {
   id: string
@@ -243,7 +250,7 @@ export function SpravaScreen({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROLES.map((hodnota) => (
+                    {ROLES_PRIDELITELNE.map((hodnota) => (
                       <SelectItem key={hodnota} value={hodnota}>
                         {ROLE_LABELS[hodnota]}
                       </SelectItem>
@@ -281,50 +288,58 @@ export function SpravaScreen({
                   </span>
                 </div>
 
-                <Select
-                  value={ucet.role}
-                  onValueChange={(next) =>
-                    void upravit(ucet.id, { role: next }, `Role změněna na ${ROLE_LABELS[next as Role]}.`)
-                  }
-                >
-                  <SelectTrigger className="w-36">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((hodnota) => (
-                      <SelectItem key={hodnota} value={hodnota}>
-                        {ROLE_LABELS[hodnota]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void upravit(ucet.id, { heslo: true }, 'Nové heslo vygenerováno.')}
-                >
-                  Nové heslo
-                </Button>
-                {ucet.status === 'aktivni' ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={ucet.id === ja}
-                    onClick={() =>
-                      void upravit(ucet.id, { status: 'zablokovany' }, 'Účet zablokován a odhlášen.')
-                    }
-                  >
-                    Zablokovat
-                  </Button>
+                {roleJeAdministrator(ucet.role) ? (
+                  // Administrátora spravuje jen skript u databáze; tady se
+                  // jen ukáže, že ve škole je.
+                  <Badge variant="secondary">{ROLE_LABELS[ucet.role]}</Badge>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void upravit(ucet.id, { status: 'aktivni' }, 'Účet zpřístupněn.')}
-                  >
-                    Zpřístupnit
-                  </Button>
+                  <>
+                    <Select
+                      value={ucet.role}
+                      onValueChange={(next) =>
+                        void upravit(ucet.id, { role: next }, `Role změněna na ${ROLE_LABELS[next as Role]}.`)
+                      }
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLES_PRIDELITELNE.map((hodnota) => (
+                          <SelectItem key={hodnota} value={hodnota}>
+                            {ROLE_LABELS[hodnota]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void upravit(ucet.id, { heslo: true }, 'Nové heslo vygenerováno.')}
+                    >
+                      Nové heslo
+                    </Button>
+                    {ucet.status === 'aktivni' ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={ucet.id === ja}
+                        onClick={() =>
+                          void upravit(ucet.id, { status: 'zablokovany' }, 'Účet zablokován a odhlášen.')
+                        }
+                      >
+                        Zablokovat
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void upravit(ucet.id, { status: 'aktivni' }, 'Účet zpřístupněn.')}
+                      >
+                        Zpřístupnit
+                      </Button>
+                    )}
+                  </>
                 )}
               </Card>
             ))}

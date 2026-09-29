@@ -1,6 +1,7 @@
 import { PageShell } from '@testmaker/ui'
 import { db } from '@/db'
 import { spocitej } from '@/lib/backup'
+import { roleMuzeSpravovat } from '@/lib/role'
 import { ucetStranky } from '@/lib/uzivatel'
 import { ZalohaScreen } from './ZalohaScreen'
 
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic'
 export default async function ZalohaPage() {
   // Záloha je celá škola včetně cizích písemek — proto ji vidí jen správce.
   const ucet = await ucetStranky()
-  if (ucet.role !== 'spravce') {
+  if (!roleMuzeSpravovat(ucet.role)) {
     return (
       <PageShell>
         <p className="text-sm text-fg-soft">

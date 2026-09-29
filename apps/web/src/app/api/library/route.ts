@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
 import { createLibraryItem, renameLibraryItem } from '@/lib/library'
+import { ROLE_SPRAVY } from '@/lib/role'
 import { sRozsahem, skola, zapsatAudit, type Scope } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -122,7 +123,7 @@ export async function DELETE(request: Request) {
       })
       return Response.json({ ok: true, deleted: impact })
     },
-    { role: ['spravce'] },
+    { role: ROLE_SPRAVY },
   )
 }
 

@@ -111,3 +111,42 @@ describe('úprava účtů', () => {
     expect(response.status).toBe(409)
   })
 })
+
+describe('role administrátora se v aplikaci nepřiděluje', () => {
+  it('nový účet s rolí administrátora se odmítne', async () => {
+    const response = await zalozit(
+      jsonReq('/api/sprava/uzivatele', 'POST', {
+        email: 'nova@skola.cz',
+        name: 'Nová',
+        role: 'administrator',
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: string }).error).toBe(
+      'Tuhle roli v aplikaci přidělit nejde.',
+    )
+  })
+
+  it('změna role na administrátora se odmítne', async () => {
+    const kolegyne = await seedUcet()
+    const response = await upravit(
+      jsonReq('/api/sprava/uzivatele', 'PATCH', { id: kolegyne.userId, role: 'administrator' }),
+    )
+    expect(response.status).toBe(400)
+    const [ucet] = await db.select().from(users).where(eq(users.id, kolegyne.userId))
+    expect(ucet?.role).toBe('ucitelka')
+  })
+
+  it('administrátorský účet správce nezmění ani nezablokuje', async () => {
+    const admin = await seedUcet({ role: 'administrator' })
+    const zmena = await upravit(
+      jsonReq('/api/sprava/uzivatele', 'PATCH', { id: admin.userId, heslo: true }),
+    )
+    expect(zmena.status).toBe(403)
+    expect(((await zmena.json()) as { error: string }).error).toBe(
+      'Administrátorský účet se mění jen skriptem.',
+    )
+    const blok = await zablokovat(req(`/api/sprava/uzivatele?id=${admin.userId}`, { method: 'DELETE' }))
+    expect(blok.status).toBe(403)
+  })
+})
