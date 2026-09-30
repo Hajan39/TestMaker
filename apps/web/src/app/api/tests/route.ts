@@ -1,9 +1,24 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { testHeaderConfigSchema } from '@testmaker/core/schema'
+import {
+  parseItemContent,
+  questionContentSchema,
+  serializeQuestionSnapshot,
+  TEST_ITEM_KINDS,
+  testHeaderConfigSchema,
+  testKindSchema,
+  type TestKind,
+} from '@testmaker/core/schema'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
-import { buildPuzzleSnapshots, buildQuestionSnapshots, copyTest, resolveGradeId, testConditions } from '@/lib/tests'
+import {
+  buildPuzzleSnapshots,
+  buildQuestionSnapshots,
+  copyTest,
+  resolveGradeId,
+  resolveTopic,
+  testConditions,
+} from '@/lib/tests'
 import { skola, sRozsahem, vlastni, type Prihlaseny } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
@@ -15,7 +30,7 @@ const itemSchema = z.object({
    * — tam už není z čeho snímek pořídit znovu.
    */
   id: z.string().nullable().default(null),
-  kind: z.enum(['question', 'heading', 'instruction', 'page_break', 'puzzle']),
+  kind: z.enum(TEST_ITEM_KINDS),
   questionId: z.string().nullable().default(null),
   /** Vyplněné u položky druhu `puzzle` — hlavolam zařazený do písemky. */
   puzzleId: z.string().nullable().default(null),
@@ -23,6 +38,15 @@ const itemSchema = z.object({
   pointsOverride: z.number().nullable().default(null),
   /** Počet linek na odpověď jen pro tenhle test; prázdné = podle otázky. */
   linesOverride: z.number().int().min(1).max(30).nullable().default(null),
+  /** Obsah položky `text` (varianta) nebo `table` (mřížka); ověřuje se schématem z core. */
+  content: z.unknown().optional(),
+  /** Značka „ověř“ u položky listu. */
+  needsCheck: z.boolean().default(false),
+  /**
+   * Obsah úlohy pracovního listu. Úloha listu v bance není, takže její snímek
+   * posílá klient; u písemky se pole ignoruje a snímek vzniká z banky.
+   */
+  question: questionContentSchema.nullable().default(null),
 })
 
 const testSchema = z.object({
@@ -38,7 +62,41 @@ const testSchema = z.object({
   variants: z.union([z.literal(1), z.literal(2)]).default(1),
   showKey: z.boolean().default(true),
   items: z.array(itemSchema).default([]),
+  /** Písemka, nebo pracovní list. Mění se jen při založení. */
+  kind: testKindSchema.default('pisemka'),
+  /** Téma listu; ověřuje se proti škole. Mění se jen při založení. */
+  topicId: z.string().min(1).nullable().default(null),
+  /** Zadání listu (JSON podle `worksheetBriefSchema`). Mění se jen při založení. */
+  brief: z.string().max(40_000).nullable().default(null),
 })
+
+type Item = z.infer<typeof itemSchema>
+
+/**
+ * Obsah položek zkontrolovaný dřív, než se cokoli zapíše — odmítnutý list
+ * nesmí zůstat v databázi napůl uložený.
+ */
+function checkItems(kind: TestKind, items: Item[]): Response | null {
+  for (const item of items) {
+    if (item.kind === 'text' && !parseItemContent('text', item.content)) {
+      return Response.json({ error: 'Text v listu nemá platnou variantu (text, nebo fun fact).' }, { status: 400 })
+    }
+    if (item.kind === 'table' && !parseItemContent('table', item.content)) {
+      return Response.json(
+        {
+          error:
+            'Tabulku nejde uložit: každý řádek musí mít tolik buněk, kolik je sloupců (nejvýš 6 sloupců a 12 řádků), ' +
+            'a aspoň jedna buňka musí zůstat prázdná k doplnění.',
+        },
+        { status: 400 },
+      )
+    }
+    if (kind === 'pracovni_list' && item.kind === 'question' && !item.questionId && !item.question) {
+      return Response.json({ error: 'Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber.' }, { status: 400 })
+    }
+  }
+  return null
+}
 
 /**
  * Seznam testů. Volitelně zúžený hledáním v názvu a popisu (`q`), šablonou
@@ -96,11 +154,28 @@ export async function POST(request: Request) {
         return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
       }
       const id = newId()
-      const { items, ...test } = parsed.data
-      const gradeId = await resolveGradeId(ucet, test.gradeId)
+      const { items, kind, topicId: topicVstup, brief, ...test } = parsed.data
+      const invalid = checkItems(kind, items)
+      if (invalid) return invalid
 
-      await db.insert(tests).values({ id, schoolId: ucet.schoolId, ownerId: ucet.userId, ...test, gradeId })
-      const problem = await writeItems(ucet, id, items)
+      const worksheet = kind === 'pracovni_list'
+      // Téma a zadání patří jen listu; ročník listu k tématu se bere z tématu.
+      const topic = worksheet ? await resolveTopic(ucet, topicVstup) : null
+      const gradeId = (await resolveGradeId(ucet, test.gradeId)) ?? topic?.gradeId ?? null
+
+      await db.insert(tests).values({
+        id,
+        schoolId: ucet.schoolId,
+        ownerId: ucet.userId,
+        ...test,
+        kind,
+        topicId: topic?.id ?? null,
+        brief: worksheet ? brief : null,
+        // Na listu se nic neznámkuje — bez ohledu na to, co pošle klient.
+        graded: worksheet ? false : test.graded,
+        gradeId,
+      })
+      const problem = await writeItems(ucet, id, kind, items)
       if (problem) return problem
 
       return Response.json({ id })
@@ -126,15 +201,27 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
-  const { id, items, gradeId: gradeIdVstup, ...test } = parsed.data
+  // Druh, téma a zadání se při úpravě nemění — editor je neposílá a výchozí
+  // hodnoty schématu by je jinak potichu smazaly.
+  const { id, items, gradeId: gradeIdVstup, kind: _kind, topicId: _topicId, brief: _brief, ...test } = parsed.data
   const gradeId = gradeIdVstup === undefined ? undefined : await resolveGradeId(ucet, gradeIdVstup)
 
   // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
   // ne přepsat.
+  const [puvodni] = await db
+    .select({ kind: tests.kind })
+    .from(tests)
+    .where(and(eq(tests.id, id), vlastni(ucet, tests)))
+    .limit(1)
+  if (!puvodni) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
+  const invalid = checkItems(puvodni.kind, items)
+  if (invalid) return invalid
+
   const zmeneno = await db
     .update(tests)
     .set({
       ...test,
+      graded: puvodni.kind === 'pracovni_list' ? false : test.graded,
       // `gradeId` se do `.set()` dává, jen když ho tělo vůbec neslo — jinak
       // by explicitní `undefined` v objektu `.set()` třídu nechtěně smazal.
       ...(gradeId !== undefined ? { gradeId } : {}),
@@ -160,7 +247,7 @@ export async function PUT(request: Request) {
   )
 
   await db.delete(testItems).where(and(skola(ucet, testItems), eq(testItems.testId, id)))
-  const problem = await writeItems(ucet, id, items, keptSnapshots, keptPuzzleSnapshots)
+  const problem = await writeItems(ucet, id, puvodni.kind, items, keptSnapshots, keptPuzzleSnapshots)
   if (problem) return problem
 
   return Response.json({ id })
@@ -188,7 +275,8 @@ export async function DELETE(request: Request) {
 async function writeItems(
   ucet: Prihlaseny,
   testId: string,
-  items: z.infer<typeof itemSchema>[],
+  kind: TestKind,
+  items: Item[],
   keptSnapshots: Map<string, string> = new Map(),
   keptPuzzleSnapshots: Map<string, string> = new Map(),
 ): Promise<Response | null> {
@@ -232,14 +320,29 @@ async function writeItems(
         position: index,
         kind: item.kind,
         questionId,
-        text: item.kind === 'question' || item.kind === 'puzzle' ? null : item.text,
+        text: item.kind === 'question' || item.kind === 'puzzle' || item.kind === 'table' ? null : item.text,
+        // Obsah prošel kontrolou v `checkItems`; ukládá se v podobě ze schématu.
+        content:
+          item.kind === 'text'
+            ? parseItemContent('text', item.content)
+            : item.kind === 'table'
+              ? parseItemContent('table', item.content)
+              : null,
+        needsCheck: item.needsCheck,
         pointsOverride: item.pointsOverride,
         linesOverride: item.kind === 'question' ? item.linesOverride : null,
         // Snímek se pořizuje jednou, při zařazení otázky do testu. U položky,
         // která v testu už byla, se drží ten původní — jinak by přeuložení
         // testu (třeba kvůli opravě názvu) přepsalo obsah už vytištěné
         // písemky aktuálním zněním otázky, čemuž má zmrazení bránit.
+        //
+        // Úloha pracovního listu v bance není: její obsah upravuje učitelka
+        // přímo v listu a snímek posílá klient, takže má přednost i před
+        // dříve uloženým snímkem.
         questionSnapshot:
+          (kind === 'pracovni_list' && item.kind === 'question' && item.question
+            ? serializeQuestionSnapshot(item.question)
+            : null) ??
           (item.id ? keptSnapshots.get(item.id) : null) ??
           (questionId ? (snapshots.get(questionId) ?? null) : null),
         puzzleId,

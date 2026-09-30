@@ -1,6 +1,7 @@
 import 'server-only'
 import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
+  parseItemContent,
   resolveTestItemPuzzle,
   resolveTestItemQuestion,
   serializeQuestionSnapshot,
@@ -10,8 +11,21 @@ import {
   type ResolvedTestItem,
   type Template,
   type Test,
+  type TestKind,
 } from '@testmaker/core/schema'
-import { db, assets, grades, puzzles, questions, subjects, templates, testItems, tests, type TestItemRow } from '@/db'
+import {
+  db,
+  assets,
+  grades,
+  puzzles,
+  questions,
+  subjects,
+  templates,
+  testItems,
+  tests,
+  topics,
+  type TestItemRow,
+} from '@/db'
 import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
 import { newId } from './ids'
 import { toQuestion } from './questions'
@@ -29,6 +43,8 @@ export interface TestQuery {
   templateId?: string
   /** Třída, ze které test vznikl — filtr v přehledu testů. */
   gradeId?: string
+  /** Písemky, nebo pracovní listy; bez udání písemky (přehled Testy). */
+  kind?: TestKind
 }
 
 /**
@@ -47,6 +63,7 @@ export interface TestQuery {
 export function testConditions(scope: Scope, query: TestQuery): SQL[] {
   const viditelne = viditelnyTest(scope, tests)
   const conditions: SQL[] = viditelne ? [viditelne] : []
+  conditions.push(eq(tests.kind, query.kind ?? 'pisemka'))
   const needle = query.search?.trim()
   if (needle) {
     const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
@@ -72,13 +89,13 @@ export interface TestGradeOption {
  * aspoň jeden test viditelný přihlášené osobě. Ročník bez testu by ve filtru
  * ukazoval na prázdný seznam, proto se do nabídky nedostane.
  */
-export async function loadTestGradeOptions(scope: Scope): Promise<TestGradeOption[]> {
+export async function loadTestGradeOptions(scope: Scope, kind: TestKind = 'pisemka'): Promise<TestGradeOption[]> {
   const rows = await db
     .selectDistinct({ id: grades.id, subjectName: subjects.name, gradeName: grades.name })
     .from(tests)
     .innerJoin(grades, eq(grades.id, tests.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(viditelnyTest(scope, tests))
+    .where(and(viditelnyTest(scope, tests), eq(tests.kind, kind)))
     .orderBy(asc(subjects.position), asc(subjects.name), asc(grades.position), asc(grades.name))
   return rows.map((row) => ({ id: row.id, label: `${row.subjectName} · ${row.gradeName}` }))
 }
@@ -180,6 +197,10 @@ export async function copyTest(
     schoolId: scope.schoolId,
     ownerId: scope.userId,
     visibility: 'soukrome',
+    // Kopie listu zůstává listem i se zadáním — jinak by se objevila mezi písemkami.
+    kind: source.kind,
+    topicId: source.topicId,
+    brief: source.brief,
     title: options.title ? options.title(source.title) : `${source.title} (kopie)`,
     description: source.description,
     graded: source.graded,
@@ -209,6 +230,8 @@ export async function copyTest(
     questionSnapshot: item.questionSnapshot,
     puzzleId: item.puzzleId,
     puzzleSnapshot: item.puzzleSnapshot,
+    content: item.content,
+    needsCheck: item.needsCheck,
   }))
   if (newItems.length > 0) await db.insert(testItems).values(newItems)
 
@@ -232,6 +255,23 @@ export async function resolveGradeId(scope: Scope, gradeId: string | null): Prom
     .where(and(eq(grades.id, gradeId), skola(scope, grades)))
     .limit(1)
   return row ? row.id : null
+}
+
+/**
+ * Téma listu ověřené proti škole, i s ročníkem, který list od tématu
+ * přebírá. Cizí nebo smazané téma vrací `null`.
+ */
+export async function resolveTopic(
+  scope: Scope,
+  topicId: string | null,
+): Promise<{ id: string; gradeId: string } | null> {
+  if (!topicId) return null
+  const [row] = await db
+    .select({ id: topics.id, gradeId: topics.gradeId })
+    .from(topics)
+    .where(and(eq(topics.id, topicId), skola(scope, topics)))
+    .limit(1)
+  return row ?? null
 }
 
 /**
@@ -361,6 +401,11 @@ export async function loadTestItems(
       questionSnapshot: row.questionSnapshot,
       puzzleId: row.puzzleId,
       puzzleSnapshot: row.puzzleSnapshot,
+      content: row.content,
+      needsCheck: row.needsCheck,
+      // Poškozený obsah dá `null` — položka se ukáže jako chybná, list žije dál.
+      ...(row.kind === 'table' ? { table: parseItemContent('table', row.content) } : {}),
+      ...(row.kind === 'text' ? { textContent: parseItemContent('text', row.content) } : {}),
       ...resolveTestItemQuestion(row.questionSnapshot, live, row.id),
       ...(row.kind === 'puzzle' ? resolveTestItemPuzzle(row.puzzleSnapshot, livePuzzle) : {}),
     }

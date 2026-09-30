@@ -144,6 +144,50 @@ describe('záloha a obnova', () => {
     expect(polozka!.questionId).toBe(otazkaId)
   })
 
+  it('pracovní list přežije export i obnovu i s obsahem a značkou ověř', async () => {
+    const { topicId } = await nasypKnihovnu()
+    await db.update(tests).set({ kind: 'pracovni_list', topicId, brief: '{"title":"Plíce"}', graded: false })
+    const table = { header: ['A', 'B'], rows: [[{ value: 'x', blank: false }, { value: 'y', blank: true }]] }
+    await db.insert(testItems).values({
+      id: 'polozka-tabulka',
+      schoolId: UCET.schoolId,
+      testId: 'test-zaloha',
+      position: 1,
+      kind: 'table',
+      content: table,
+      needsCheck: true,
+    })
+    const text = await stahni()
+    await vyprazdni()
+    await obnovPresApi(text)
+
+    const [list] = await db.select().from(tests)
+    expect(list).toMatchObject({ kind: 'pracovni_list', topicId, brief: '{"title":"Plíce"}', graded: false })
+    const [tabulka] = await db.select().from(testItems).where(eq(testItems.id, 'polozka-tabulka'))
+    expect(tabulka).toMatchObject({ kind: 'table', content: table, needsCheck: true })
+  })
+
+  it('starší záloha bez sloupců pro listy se obnoví s výchozími hodnotami', async () => {
+    await nasypKnihovnu()
+    const zaloha = JSON.parse(await stahni()) as { tabulky: Record<string, Record<string, unknown>[]> }
+    for (const row of zaloha.tabulky.tests ?? []) {
+      delete row.kind
+      delete row.topicId
+      delete row.brief
+    }
+    for (const row of zaloha.tabulky.test_items ?? []) {
+      delete row.content
+      delete row.needsCheck
+    }
+    await vyprazdni()
+    await obnovPresApi(JSON.stringify(zaloha))
+
+    const [test] = await db.select().from(tests)
+    expect(test).toMatchObject({ kind: 'pisemka', topicId: null, brief: null })
+    const [polozka] = await db.select().from(testItems)
+    expect(polozka).toMatchObject({ content: null, needsCheck: false })
+  })
+
   it('pravidlo promptu přežije export i obnovu (na rozdíl od zpětné vazby z přegenerování)', async () => {
     await nasypKnihovnu()
     await createPromptRule(UCET, { text: 'Piš spisovnou a jednoduchou češtinou bez chyb.', reason: 'cestina' })
