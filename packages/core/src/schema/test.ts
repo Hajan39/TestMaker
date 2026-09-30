@@ -6,9 +6,10 @@ import type { Template } from './template'
 /**
  * Položka testu — struktura testu není omezená na pouhý seznam otázek.
  * Pátý druh, `puzzle`, je hotový hlavolam (osmisměrka, tajenka): není to
- * otázka a v bance nemá co dělat, ale do písemky se zařadit má.
+ * otázka a v bance nemá co dělat, ale do písemky se zařadit má. `text`
+ * (krátký text, fun fact) a `table` (tabulka k doplnění) patří pracovním listům.
  */
-export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break', 'puzzle'] as const
+export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break', 'puzzle', 'text', 'table'] as const
 export type TestItemKind = (typeof TEST_ITEM_KINDS)[number]
 
 export const testHeaderConfigSchema = z.object({

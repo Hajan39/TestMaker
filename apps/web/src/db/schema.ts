@@ -566,8 +566,23 @@ export const tests = sqliteTable(
      * musí jít jeho písemku vytisknout, aniž by se skládala znovu.
      */
     visibility: text('visibility').notNull().default('soukrome').$type<'soukrome' | 'skola'>(),
+    /**
+     * Písemka, nebo pracovní list. List sdílí s písemkou editor, šablony
+     * i tisk, ale má vlastní záložku a tiskne se vždy bez bodů a známky.
+     */
+    kind: text('kind').notNull().default('pisemka').$type<'pisemka' | 'pracovni_list'>(),
     title: text('title').notNull(),
     description: text('description'),
+    /**
+     * Téma z knihovny, ke kterému list vznikl. U písemek a listů z volného
+     * zadání prázdné; smazání tématu list nesmí vzít s sebou.
+     */
+    topicId: text('topic_id').references(() => topics.id, { onDelete: 'set null' }),
+    /**
+     * Zadání listu, jak ho učitelka napsala, i s vloženým vlastním textem.
+     * Přegenerování jednotlivých kusů z něj vychází, aby zůstaly v duchu listu.
+     */
+    brief: text('brief'),
     /** Test na známky — bez toho se netisknou body ani políčko na známku. */
     graded: integer('graded', { mode: 'boolean' }).notNull().default(true),
     templateId: text('template_id')
@@ -602,7 +617,9 @@ export const testItems = sqliteTable(
       .notNull()
       .references(() => tests.id, { onDelete: 'cascade' }),
     position: integer('position').notNull(),
-    kind: text('kind').notNull().$type<'question' | 'heading' | 'instruction' | 'page_break' | 'puzzle'>(),
+    kind: text('kind')
+      .notNull()
+      .$type<'question' | 'heading' | 'instruction' | 'page_break' | 'puzzle' | 'text' | 'table'>(),
     /**
      * Odkaz do banky otázek. Cizí klíč se `set null`: smazáním otázky se
      * položka z hotového testu nesmí ztratit — co je na papíře, drží
@@ -634,6 +651,13 @@ export const testItems = sqliteTable(
     puzzleId: text('puzzle_id').references(() => puzzles.id, { onDelete: 'set null' }),
     /** Zmrazený obsah hlavolamu (JSON podle `puzzleContentSchema`). */
     puzzleSnapshot: text('puzzle_snapshot'),
+    /**
+     * Obsah položky, který se nevejde do `text`: u `text` varianta (text,
+     * nebo fun fact), u `table` mřížka. Tvar určuje zod v core.
+     */
+    content: text('content', { mode: 'json' }).$type<Record<string, unknown>>(),
+    /** Značka „ověř“: obsah nevychází z materiálů tématu, ale z obecných znalostí modelu. */
+    needsCheck: integer('needs_check', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [
     index('test_items_test_idx').on(table.testId, table.position),
@@ -646,6 +670,32 @@ export const testItems = sqliteTable(
     /** Týž důvod jako u otázek: `set null` musí najít položky bez čtení celé tabulky. */
     index('test_items_puzzle_idx').on(table.puzzleId),
     index('test_items_school_idx').on(table.schoolId),
+  ],
+)
+
+/**
+ * Každý pokus o volání modelu — i ten, kterému došel limit a žebříček šel
+ * dál. Provozní záznam pro přehled v administraci; do zálohy školy nepatří.
+ */
+export const aiCalls = sqliteTable(
+  'ai_calls',
+  {
+    id: text('id').primaryKey(),
+    schoolId: schoolId(),
+    /** Prázdné u fronty a plánovače, kde nikdo přihlášený není. */
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    task: text('task').notNull().$type<'otazky' | 'hlavolam' | 'list'>(),
+    /** `poskytovatel:model` */
+    model: text('model').notNull(),
+    outcome: text('outcome').notNull().$type<'ok' | 'limit' | 'bad_shape' | 'error'>(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    durationMs: integer('duration_ms').notNull(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (table) => [
+    index('ai_calls_created_idx').on(table.createdAt),
+    index('ai_calls_school_idx').on(table.schoolId, table.createdAt),
   ],
 )
 
@@ -664,3 +714,4 @@ export type UserRow = typeof users.$inferSelect
 export type SessionRow = typeof sessions.$inferSelect
 export type AuditRow = typeof auditLog.$inferSelect
 export type PromptRuleRow = typeof promptRules.$inferSelect
+export type AiCallRow = typeof aiCalls.$inferSelect

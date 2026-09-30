@@ -54,7 +54,10 @@ export async function migrovat(
 
   const cista = createClient({ url: ':memory:' })
   try {
-    await migrate(drizzle(cista), { migrationsFolder: zaklad })
+    // Srovnává se jen se základem: migrace, které přibyly po něm, se pustí
+    // až po převodu. Kdyby šly do srovnání i ony, stará databáze by jejich
+    // sloupce postrádala a převod by skončil jako „neopravitelný“.
+    await cista.migrate(prvni.sql)
     const rozdily = rozdilySchemat(await popisSchematu(cista), await popisSchematu(client))
 
     // Chybějící nebo přebývající tabulku či sloupec převod neopraví — to by

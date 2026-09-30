@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import { createClient, type Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
+import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { afterEach, describe, expect, it } from 'vitest'
-import { POMOCNE_TABULKY, SLOZKA_HISTORIE, migrovat, porovnatSeZakladem } from '@/db/migrace'
+import { POMOCNE_TABULKY, SLOZKA_HISTORIE, SLOZKA_ZAKLADU, migrovat, porovnatSeZakladem } from '@/db/migrace'
 
 /**
  * Čistý základ a převod databáze ze staré řady migrací. Každý test má vlastní
@@ -13,6 +14,9 @@ import { POMOCNE_TABULKY, SLOZKA_HISTORIE, migrovat, porovnatSeZakladem } from '
  * základu a starou řadu by neukázala.
  */
 const uklid: (() => void)[] = []
+
+/** Základ a migrace, které přibyly po něm. */
+const POCET_MIGRACI = readMigrationFiles({ migrationsFolder: SLOZKA_ZAKLADU }).length
 
 afterEach(() => {
   for (const krok of uklid.splice(0)) krok()
@@ -40,7 +44,7 @@ describe('čistá databáze', () => {
 
     const jmena = await tabulky(client)
     for (const pomocna of POMOCNE_TABULKY) expect(jmena).not.toContain(pomocna)
-    expect((await client.execute('SELECT COUNT(*) AS n FROM __drizzle_migrations')).rows[0]?.n).toBe(1)
+    expect((await client.execute('SELECT COUNT(*) AS n FROM __drizzle_migrations')).rows[0]?.n).toBe(POCET_MIGRACI)
     expect((await client.execute('SELECT COUNT(*) AS n FROM schools')).rows[0]?.n).toBe(0)
     expect((await client.execute('SELECT COUNT(*) AS n FROM users')).rows[0]?.n).toBe(0)
   })
@@ -71,7 +75,7 @@ describe('převod ze staré řady', () => {
     const jmena = await tabulky(client)
     for (const pomocna of POMOCNE_TABULKY) expect(jmena).not.toContain(pomocna)
     expect(jmena.some((j) => j.startsWith('__prestavba_'))).toBe(false)
-    expect((await client.execute('SELECT COUNT(*) AS n FROM __drizzle_migrations')).rows[0]?.n).toBe(1)
+    expect((await client.execute('SELECT COUNT(*) AS n FROM __drizzle_migrations')).rows[0]?.n).toBe(POCET_MIGRACI)
 
     const rocnik = await client.execute("SELECT name, subject_id FROM grades WHERE id = 'rocnik-1'")
     expect(rocnik.rows[0]).toMatchObject({ name: '6. ročník', subject_id: 'predmet-1' })
