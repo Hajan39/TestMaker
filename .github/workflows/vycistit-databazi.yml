@@ -1,0 +1,70 @@
+name: Vyčistit produkční databázi
+
+# Smaže celou databázi v Tursu a postaví ji znovu čistou: migrace, první škola
+# se šablonami a administrátor s výchozím heslem (tajemství ADMIN_HESLO), které
+# se musí při prvním přihlášení změnit. Spouští se jen ručně (Actions → tenhle
+# workflow → Run workflow). Záloha celé databáze před smazáním zůstane u běhu
+# jako artefakt.
+
+on:
+  workflow_dispatch:
+    inputs:
+      potvrzeni:
+        description: 'Jméno databáze v Tursu (první část adresy libsql://<jméno>.turso.io) — bez shody se nic nesmaže'
+        required: true
+      skola:
+        description: 'Název první školy'
+        required: true
+      email:
+        description: 'E-mail administrátora'
+        required: true
+
+# Nesmí běžet souběžně s migrací po pushi do main.
+concurrency:
+  group: turso
+  cancel-in-progress: false
+
+jobs:
+  vycistit:
+    name: Vyčistit Turso
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout repozitář
+        uses: actions/checkout@v5
+
+      - name: Zjistit verzi pnpm z package.json
+        id: pnpm-version
+        run: echo "version=$(node -p "require('./package.json').packageManager.split('@')[1]")" >> "$GITHUB_OUTPUT"
+
+      - name: Nainstalovat pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.pnpm-version.outputs.version }}
+
+      - name: Nainstalovat Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Nainstalovat závislosti
+        run: pnpm install --frozen-lockfile
+
+      - name: Smazat a založit znovu
+        env:
+          DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          ADMIN_HESLO: ${{ secrets.ADMIN_HESLO }}
+          POTVRZENI: ${{ inputs.potvrzeni }}
+          SKOLA: ${{ inputs.skola }}
+          EMAIL: ${{ inputs.email }}
+        run: pnpm --filter @testmaker/web db:vycistit -- --potvrdit "$POTVRZENI" --skola "$SKOLA" --email "$EMAIL"
+
+      - name: Uložit zálohu
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-pred-vycistenim
+          path: apps/web/zaloha-*.sql
+          if-no-files-found: ignore
+          retention-days: 14

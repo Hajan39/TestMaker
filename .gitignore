@@ -41,3 +41,6 @@ apps/web/CLAUDE.md
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/e2e/screenshots/
+
+# Zálohy před vyčištěním databáze (scripts/vycistit-databazi.ts) — obsahují data
+zaloha-*.sql

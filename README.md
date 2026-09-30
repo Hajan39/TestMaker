@@ -268,6 +268,7 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 | `pnpm typecheck` | Kontrola typů |
 | `pnpm db:migrate` | Migrace databáze |
 | `pnpm db:seed` | Vestavěné šablony a vývojový účet |
+| `pnpm --filter @testmaker/web db:vycistit` | Smaže celou databázi a založí čistou s první školou a administrátorem (viz níž) |
 | `pnpm --filter @testmaker/web uzivatel` | Založení a odemčení účtu z příkazové řádky |
 | `pnpm db:studio` | Prohlížeč databáze |
 | `pnpm --filter @testmaker/web push:remote` | Přenos knihovny do produkce (viz níž) |
@@ -304,7 +305,15 @@ data (chybějící nebo přebývající sloupec), nic nezmění a vypíše rozd�
 U souboru se před každou čekající migrací udělá záloha vedle něj
 (`local.db.pred-migraci-…`).
 
-Úplně nové nasazení s prázdným Tursem: `turso db destroy <jméno>` a
+Úplně nové nasazení s prázdným Tursem bez mazání databáze v Tursu: workflow
+[`.github/workflows/vycistit-databazi.yml`](.github/workflows/vycistit-databazi.yml)
+(spouští se jen ručně). Zálohu celé databáze uloží k běhu jako artefakt, databázi
+smaže, pustí migrace a založí první školu a administrátora s výchozím heslem
+z tajemství `ADMIN_HESLO` (aspoň 10 znaků), které se musí při prvním přihlášení
+změnit. Jako potvrzení chce jméno databáze (`libsql://<jméno>.turso.io`).
+Lokálně totéž `db:vycistit`, viz hlavička `apps/web/scripts/vycistit-databazi.ts`.
+
+Nebo ručně: `turso db destroy <jméno>` a
 `turso db create <jméno>` (nebo nová databáze a nový token do Vercelu
 i do GitHubu), pak pořadí výše.
 Proměnnou `APP_PASSWORD` ze starého přihlašování jedním heslem lze po nasazení

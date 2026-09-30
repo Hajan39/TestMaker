@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "db:vycistit": "tsx --conditions=react-server scripts/vycistit-databazi.ts",
     "uzivatel": "tsx --conditions=react-server scripts/uzivatel.ts",
     "db:studio": "drizzle-kit studio",
     "import:local": "tsx scripts/import-local.ts",

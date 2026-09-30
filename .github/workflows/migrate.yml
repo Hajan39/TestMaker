@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Nesmí běžet souběžně s vyčištěním databáze (vycistit-databazi.yml).
+concurrency:
+  group: turso
+  cancel-in-progress: false
+
 jobs:
   migrate:
     name: Migrovat Turso
