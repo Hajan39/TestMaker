@@ -14,13 +14,18 @@ import {
   AlertDialogTitle,
   Badge,
   DropdownMenuItem,
+  pocet,
   toast,
+  type PluralForms,
 } from '@testmaker/ui'
 import { PrintMenuItems } from '@/components/PrintMenu'
 import { RowActions } from '@/components/RowActions'
+import type { TestKind } from '@testmaker/core/schema'
+import { testPath } from './paths'
 
 export interface TestRowData {
   id: string
+  kind: TestKind
   title: string
   graded: boolean
   variants: number
@@ -29,6 +34,10 @@ export interface TestRowData {
   templateName: string
   /** „Předmět · ročník"; `null` u testu bez třídy. */
   gradeLabel: string | null
+  /** Téma pracovního listu; `null` u volného zadání (i když téma mezitím zmizelo). */
+  topicName: string | null
+  /** Všechny položky kromě zalomení strany — u listu se počítají místo otázek. */
+  itemCount: number
   updatedAt: string
 }
 
@@ -76,7 +85,7 @@ function TestActions({ row }: { row: TestRowData }) {
       router.refresh()
       toast.success(`Kopie „${row.title} (kopie)“ je hotová.`, {
         duration: 10_000,
-        action: { label: 'Otevřít', onClick: () => router.push(`/tests/${data.id}`) },
+        action: { label: 'Otevřít', onClick: () => router.push(testPath(row.kind, data.id!)) },
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Kopii se nepodařilo vytvořit')
@@ -98,9 +107,9 @@ function TestActions({ row }: { row: TestRowData }) {
 
   return (
     <>
-      <RowActions label={`Akce u testu ${row.title}`} busy={pdfWork ?? (copying ? 'Kopíruji…' : null)}>
+      <RowActions label={`${row.kind === 'pracovni_list' ? 'Akce u listu' : 'Akce u testu'} ${row.title}`} busy={pdfWork ?? (copying ? 'Kopíruji…' : null)}>
         <DropdownMenuItem asChild>
-          <Link href={`/tests/${row.id}`}>Upravit</Link>
+          <Link href={testPath(row.kind, row.id)}>Upravit</Link>
         </DropdownMenuItem>
         {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
             místo tlačítka s třemi tečkami, stejně jako u tisku. */}
@@ -128,9 +137,13 @@ function TestActions({ row }: { row: TestRowData }) {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Smazat test „{row.title}“?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {row.kind === 'pracovni_list' ? 'Smazat pracovní list' : 'Smazat test'} „{row.title}“?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.
+              {row.kind === 'pracovni_list'
+                ? 'List se smaže i se všemi položkami.'
+                : 'Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.'}
               Akci nejde vrátit zpět.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -161,8 +174,20 @@ function otazkyWord(count: number): string {
   return 'otázek'
 }
 
-/** Odznáčky testu: na známky / bez známek, případně varianty A/B. */
+const POLOZKY: PluralForms = ['položka', 'položky', 'položek']
+
+/**
+ * Odznáčky testu: na známky / bez známek, případně varianty A/B. List se
+ * neznámkuje nikdy — u něj odznáček říká, z čeho vznikl.
+ */
 function TestBadges({ row }: { row: TestRowData }) {
+  if (row.kind === 'pracovni_list') {
+    return (
+      <div className="mt-1 flex flex-wrap gap-1">
+        <Badge variant="secondary">{row.topicName ? `téma: ${row.topicName}` : 'volné zadání'}</Badge>
+      </div>
+    )
+  }
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {row.graded ? <Badge variant="status">na známky</Badge> : <Badge variant="secondary">bez známek</Badge>}
@@ -176,13 +201,19 @@ export function TestRow({ row }: { row: TestRowData }) {
   return (
     <tr>
       <td className="py-2 pr-4">
-        <Link href={`/tests/${row.id}`} className="font-medium text-fg hover:text-brand">
+        <Link href={testPath(row.kind, row.id)} className="font-medium text-fg hover:text-brand">
           {row.title}
         </Link>
         <TestBadges row={row} />
       </td>
-      <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.questionCount}</td>
-      <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
+      {row.kind === 'pracovni_list' ? (
+        <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.itemCount}</td>
+      ) : (
+        <>
+          <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.questionCount}</td>
+          <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
+        </>
+      )}
       <td className="py-2 pr-4 text-fg-soft">{row.templateName}</td>
       <td className="py-2 pr-4 text-fg-soft">{row.gradeLabel ?? ''}</td>
       <td className="py-2 pr-4 text-fg-muted">
@@ -206,7 +237,7 @@ export function TestCard({ row }: { row: TestRowData }) {
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <Link
-            href={`/tests/${row.id}`}
+            href={testPath(row.kind, row.id)}
             className="font-medium break-words text-fg hover:text-brand"
           >
             {row.title}
@@ -216,11 +247,17 @@ export function TestCard({ row }: { row: TestRowData }) {
         <TestActions row={row} />
       </div>
       <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-fg-soft">
-        <span className="ui-numeric">
-          {row.questionCount} {otazkyWord(row.questionCount)}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span className="ui-numeric">{row.points} b.</span>
+        {row.kind === 'pracovni_list' ? (
+          <span className="ui-numeric">{pocet(row.itemCount, POLOZKY)}</span>
+        ) : (
+          <>
+            <span className="ui-numeric">
+              {row.questionCount} {otazkyWord(row.questionCount)}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="ui-numeric">{row.points} b.</span>
+          </>
+        )}
         <span aria-hidden="true">·</span>
         <span>{row.templateName}</span>
         {row.gradeLabel ? (

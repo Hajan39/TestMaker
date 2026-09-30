@@ -14,6 +14,7 @@ import { roleJeAdministrator, roleMuzeSpravovat, type Role } from '@/lib/role'
 const NAV: NavItem[] = [
   { href: '/', label: 'Třídy' },
   { href: '/tests', label: 'Testy' },
+  { href: '/listy', label: 'Pracovní listy' },
   { href: '/hlavolamy', label: 'Hlavolamy' },
   { href: '/templates', label: 'Šablony' },
 ]

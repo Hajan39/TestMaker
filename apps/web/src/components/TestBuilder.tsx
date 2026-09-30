@@ -59,6 +59,8 @@ export function TestBuilder({
    * skončila chybou.
    */
   ai: { configured: boolean; problems: string[] }
+  /** Kolik položek model po vygenerování listu vynechal (`?vynechano=`). */
+  dropped?: number
 }) {
   const router = useRouter()
   const narrow = useMatchesMedia('(max-width: 1023.98px)')

@@ -1,5 +1,6 @@
 'use client'
 
+import type { TestKind } from '@testmaker/core/schema'
 import { useMatchesMedia } from '@testmaker/ui'
 import { TestCard, TestRow, type TestRowData } from './TestRow'
 
@@ -10,7 +11,7 @@ import { TestCard, TestRow, type TestRowData } from './TestRow'
  * znamenají zdvojené odkazy i zdvojená tlačítka pro všechno, co stránku
  * prochází, od čtečky obrazovky po testy.
  */
-export function TestsTable({ rows }: { rows: TestRowData[] }) {
+export function TestsTable({ kind, rows }: { kind: TestKind; rows: TestRowData[] }) {
   const phone = useMatchesMedia('(max-width: 639.98px)')
 
   if (phone) {
@@ -29,8 +30,14 @@ export function TestsTable({ rows }: { rows: TestRowData[] }) {
         <thead>
           <tr className="border-b border-line-soft text-fg-muted">
             <th className="py-2 pr-4 font-medium">Název</th>
-            <th className="py-2 pr-4 font-medium">Otázky</th>
-            <th className="py-2 pr-4 font-medium">Body</th>
+            {kind === 'pracovni_list' ? (
+              <th className="py-2 pr-4 font-medium">Položky</th>
+            ) : (
+              <>
+                <th className="py-2 pr-4 font-medium">Otázky</th>
+                <th className="py-2 pr-4 font-medium">Body</th>
+              </>
+            )}
             <th className="py-2 pr-4 font-medium">Šablona</th>
             <th className="py-2 pr-4 font-medium">Třída</th>
             <th className="py-2 pr-4 font-medium">Změněno</th>
