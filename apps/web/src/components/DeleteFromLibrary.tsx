@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet, toast } from '@testmaker/ui'
-import { useMuzeSpravovat } from '@/components/Prava'
+import { useMuzeMenit, useMuzeSpravovat } from '@/components/Prava'
 
 type Kind = 'subject' | 'grade' | 'topic'
 
@@ -68,12 +68,14 @@ export function DeleteFromLibrary({
   /** Kam odejít po smazání; bez toho se jen obnoví stránka. */
   redirectTo?: string
 }) {
-  // Mazání v knihovně smí jen správce (`DELETE /api/library`) — tlačítko se
-  // ucitelce ani náhledu vůbec nenabízí. Hlídka je až za hooky, aby se jich
+  // Stejné pravidlo jako `DELETE /api/library`: téma smaže každý, kdo smí
+  // měnit obsah, předmět a ročník jen správce. Komu by server odmítl, tomu
+  // se tlačítko vůbec nenabízí. Hlídka je až za hooky, aby se jich
   // v každém vykreslení volal stejný počet.
+  const muzeMenit = useMuzeMenit()
   const muzeSpravovat = useMuzeSpravovat()
   const router = useRouter()
-  if (!muzeSpravovat) return null
+  if (kind === 'topic' ? !muzeMenit : !muzeSpravovat) return null
 
   return (
     <DeleteButton

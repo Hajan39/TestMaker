@@ -2,8 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
 import { createLibraryItem, renameLibraryItem } from '@/lib/library'
-import { ROLE_SPRAVY } from '@/lib/role'
-import { sRozsahem, skola, zapsatAudit, type Scope } from '@/lib/uzivatel'
+import { muzeSpravovat, sRozsahem, skola, zapsatAudit, type Scope } from '@/lib/uzivatel'
 
 export const runtime = 'nodejs'
 
@@ -88,8 +87,10 @@ export async function PATCH(request: Request) {
 /**
  * Smaže předmět, ročník nebo téma i se vším, co pod ním leží.
  *
- * Knihovna je společná, takže tohle mazání sahá na práci kolegyň — proto ho
- * smí jedině správce a proto se zapisuje do záznamu událostí.
+ * Knihovna je společná, takže tohle mazání sahá na práci kolegyň — proto se
+ * zapisuje do záznamu událostí. Téma smaže každý, kdo smí měnit obsah (téma
+ * je jednotka, se kterou učitelka pracuje celá); předmět nebo ročník, pod
+ * kterým leží práce celé školy, jedině správce.
  */
 export async function DELETE(request: Request) {
   return sRozsahem(
@@ -98,6 +99,9 @@ export async function DELETE(request: Request) {
       const kind = kindSchema.safeParse(params.get('kind'))
       const id = params.get('id')
       if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
+      if (kind.data !== 'topic' && !muzeSpravovat(ucet)) {
+        return Response.json({ error: 'Předmět nebo ročník smí smazat jen správce.' }, { status: 403 })
+      }
 
       const impact = await measure(ucet, kind.data, id)
       if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
@@ -123,7 +127,7 @@ export async function DELETE(request: Request) {
       })
       return Response.json({ ok: true, deleted: impact })
     },
-    { role: ROLE_SPRAVY },
+    { zapis: true },
   )
 }
 

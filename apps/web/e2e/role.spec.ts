@@ -223,13 +223,52 @@ test('náhled vidí pruh materiálů, ale bez nahrávání, přepínače a mazá
 })
 
 /**
- * Mazání v knihovně (`DELETE /api/library`) smí jen správce — ucitelka smí
- * měnit obsah (přejmenovat, přesunout, generovat), ale tlačítka „Smazat
- * ročník"/„Smazat téma"/„Smazat předmět" se jí vůbec nenabízejí, jinak by
- * narazila na tichou 403 (viz `DeleteFromLibrary`).
+ * Mazání v knihovně (`DELETE /api/library`): téma smaže i ucitelka — s tématem
+ * pracuje celá, od založení po smazání. Předmět a ročník, pod kterými leží
+ * práce celé školy, jen správce; tlačítka „Smazat ročník"/„Smazat předmět" se
+ * jí proto vůbec nenabízejí, jinak by narazila na 403 (viz `DeleteFromLibrary`).
  */
-test.describe('ucitelka nemaže v knihovně — to smí jen správce', () => {
+test.describe('ucitelka maže témata, předměty a ročníky ne', () => {
   test.use({ storageState: 'e2e/.auth/ucitelkaA.json' })
+
+  test('ucitelka založí téma, přejmenuje ho a smaže', async ({ page, request }) => {
+    const subject = await request.post('/api/library', {
+      data: { kind: 'subject', name: `E2E UCITELKA TEMA ${Date.now()}` },
+    })
+    expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
+    const { id: subjectId } = (await subject.json()) as { id: string }
+    const grade = await request.post('/api/library', {
+      data: { kind: 'grade', name: `Ročník pro téma ${Date.now()}`, parentId: subjectId },
+    })
+    expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
+    const { id: gradeId } = (await grade.json()) as { id: string }
+
+    const topic = await request.post('/api/library', {
+      data: { kind: 'topic', name: 'Učitelčino téma', parentId: gradeId },
+    })
+    expect(topic.ok(), 'ucitelka nezaložila téma').toBe(true)
+    const { id: topicId } = (await topic.json()) as { id: string }
+
+    const renamed = await request.patch('/api/library', {
+      data: { kind: 'topic', id: topicId, name: 'Učitelčino téma přejmenované' },
+    })
+    expect(renamed.ok(), 'ucitelka nepřejmenovala téma').toBe(true)
+
+    await page.goto(`/topics/${topicId}`)
+    await expect(page.getByRole('heading', { name: 'Učitelčino téma přejmenované' })).toBeVisible()
+    await page.getByRole('button', { name: 'Smazat téma' }).first().click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
+    await expect(page).not.toHaveURL(new RegExp(topicId))
+
+    const gone = await request.get(`/api/library?kind=topic&id=${encodeURIComponent(topicId)}`)
+    expect(gone.status()).toBe(404)
+
+    // Ročník ani předmět smazat nesmí — ani přímo přes API.
+    const gradeDelete = await request.delete(`/api/library?kind=grade&id=${encodeURIComponent(gradeId)}`)
+    expect(gradeDelete.status()).toBe(403)
+    const subjectDelete = await request.delete(`/api/library?kind=subject&id=${encodeURIComponent(subjectId)}`)
+    expect(subjectDelete.status()).toBe(403)
+  })
 
   test('stránka třídy ucitelce nenabídne „Smazat ročník"', async ({ page, request }) => {
     const subject = await request.post('/api/library', {
