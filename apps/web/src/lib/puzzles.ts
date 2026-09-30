@@ -322,6 +322,9 @@ export async function loadRenderablePuzzle(
       id: `puzzle-${puzzle.id}`,
       ownerId: scope.userId,
       visibility: 'soukrome',
+      kind: 'pisemka',
+      topicId: null,
+      brief: null,
       // Nadpis a pokyn nese hlavička; `TestDocument` je pak u hlavolamu
       // neopakuje (viz `puzzleHeadShown`), takže se tisknou jen jednou.
       title: puzzle.title,

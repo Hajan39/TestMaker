@@ -109,6 +109,9 @@ const SAMPLE_TEST: Test = {
   // Ukázka pro náhled šablony nepatří nikomu; hodnoty jsou jen výplň typu.
   ownerId: 'sample',
   visibility: 'soukrome',
+  kind: 'pisemka',
+  topicId: null,
+  brief: null,
   title: 'Dýchací soustava',
   description: null,
   graded: true,
