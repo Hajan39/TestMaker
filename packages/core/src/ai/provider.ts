@@ -71,6 +71,29 @@ const LEGACY_AI_VARIABLES = [
 /** Poskytovatelé v pořadí pro hlášky: napřed ti se zdarma. */
 const PROVIDER_LIST = (['google', 'openrouter', 'anthropic'] as const satisfies readonly AiProviderName[]).join(', ')
 
+/** Položky žebříčku, jak jsou napsané: `AI_MODELS`, bez něj výchozí modely. */
+function ladderItems(env: Env): string[] {
+  const raw = env.AI_MODELS?.trim()
+  return (raw ? raw.split(',') : [...AI_SETTINGS.defaultModels]).map((item) => item.trim()).filter(Boolean)
+}
+
+/**
+ * Žebříček pro přehled v administraci: v pořadí z `AI_MODELS` i s modely,
+ * ke kterým chybí klíč (ty se při generování přeskakují). Položky bez známého
+ * poskytovatele a opakování vynechává.
+ */
+export function listAiModels(env: Env = process.env): { model: string; hasKey: boolean }[] {
+  const seen = new Set<string>()
+  return ladderItems(env).flatMap((item) => {
+    const config = parseModel(item)
+    if (!config) return []
+    const model = describeAiConfig(config)
+    if (seen.has(model)) return []
+    seen.add(model)
+    return [{ model, hasKey: Boolean(apiKeyOf(config.provider, env)) }]
+  })
+}
+
 /**
  * Žebříček modelů i to, proč v něm něco chybí. `problems` jsou české věty
  * pro majitele (co v `.env.local` opravit): staré proměnné, položka bez
@@ -85,10 +108,8 @@ export function describeAiSetup(env: Env = process.env): { ladder: AiConfig[]; p
     }
   }
 
-  const raw = env.AI_MODELS?.trim()
-  const items = (raw ? raw.split(',') : [...AI_SETTINGS.defaultModels]).map((item) => item.trim()).filter(Boolean)
   const ladder: AiConfig[] = []
-  for (const item of items) {
+  for (const item of ladderItems(env)) {
     const config = parseModel(item)
     if (!config) {
       problems.push(`Položka „${item}" v AI_MODELS nemá známého poskytovatele (${PROVIDER_LIST}).`)

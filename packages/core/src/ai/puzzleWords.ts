@@ -7,7 +7,7 @@ import {
 } from '../schema/puzzle'
 import { phraseWords, splitWord } from '../puzzle/letters'
 import { chunkText, pickChunks } from './generate'
-import { objectCall, startLadder } from './ladder'
+import { objectCall, startLadder, type AiCallListener, type CallMeter } from './ladder'
 import { readAiLadder, type AiConfig } from './provider'
 import {
   buildPuzzleWordsPrompt,
@@ -77,6 +77,7 @@ export type PuzzleWordsCall = (input: {
   system: string
   prompt: string
   signal?: AbortSignal
+  meter?: CallMeter
 }) => Promise<{ words: { word: string; clue: string }[] }>
 
 const responseSchema = z.object({
@@ -136,9 +137,11 @@ export async function generatePuzzleWords(
     signal?: AbortSignal
     /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
     callModel?: PuzzleWordsCall
+    /** Každý pokus o volání modelu (viz `startLadder`); web z něj zapisuje přehled použití. */
+    onCall?: AiCallListener
   } = {},
 ): Promise<PuzzleWordsResult> {
-  const ladder = startLadder(options.models ?? readAiLadder(), options.signal)
+  const ladder = startLadder(options.models ?? readAiLadder(), options.signal, options.onCall)
   const callModel: PuzzleWordsCall =
     options.callModel ??
     (() => {
@@ -157,7 +160,7 @@ export async function generatePuzzleWords(
   const prompt = buildPuzzleWordsPrompt(request, { count, text, missingLetters: countLetters(missingBefore) })
   // Slova nejde zachránit po kouscích jako otázky — špatný tvar znamená zkusit další model.
   const { value, model } = await ladder.call(
-    (config) => callModel({ config, system, prompt, signal: options.signal }),
+    (config, meter) => callModel({ config, system, prompt, signal: options.signal, meter }),
     { nextOnBadShape: true },
   )
 

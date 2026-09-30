@@ -10,7 +10,7 @@ import {
   type QuestionContent,
   type QuestionType,
 } from '../schema/question'
-import { objectCall, rawTextOf, startLadder } from './ladder'
+import { objectCall, rawTextOf, startLadder, type AiCallListener, type CallMeter } from './ladder'
 import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './prompts/questions'
 import { readAiLadder, type AiConfig } from './provider'
 import { referencesSource } from './sourceReference'
@@ -42,6 +42,7 @@ export type ModelCall = (input: {
   system: string
   prompt: string
   signal?: AbortSignal
+  meter?: CallMeter
 }) => Promise<{ questions: QuestionContent[] }>
 
 const FILE_HEADER = /^=== .+ ===$/
@@ -311,10 +312,12 @@ export async function generateQuestions(
     onBatch?: (questions: QuestionContent[], info: { model: string }) => Promise<void> | void
     /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
     callModel?: ModelCall
+    /** Každý pokus o volání modelu (viz `startLadder`); web z něj zapisuje přehled použití. */
+    onCall?: AiCallListener
   } = {},
 ): Promise<GenerationResult> {
   request = { ...request, types: onlyAiTypes(request.types) }
-  const ladder = startLadder(options.models ?? readAiLadder(), options.signal)
+  const ladder = startLadder(options.models ?? readAiLadder(), options.signal, options.onCall)
   const callModel: ModelCall =
     options.callModel ??
     (() => {
@@ -361,7 +364,9 @@ export async function generateQuestions(
       let produced: QuestionContent[] = []
       let batchModel = ''
       try {
-        const result = await ladder.call((config) => callModel({ config, system, prompt, signal: options.signal }))
+        const result = await ladder.call((config, meter) =>
+          callModel({ config, system, prompt, signal: options.signal, meter }),
+        )
         produced = result.value.questions
         batchModel = result.model
       } catch (error) {
