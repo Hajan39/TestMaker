@@ -1,7 +1,7 @@
 'use client'
 
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { skipReason } from '@testmaker/core/extract'
+import { potrebujeDom, processFile, skipReason } from '@testmaker/core/extract'
 import type { ExtractResponse } from '@/workers/extract.worker'
 
 export interface FileEntry {
@@ -88,7 +88,12 @@ async function walkDropEntry(
   }
 }
 
-/** Zpracuje soubory ve workeru; `onResult` dostane každý výsledek hned. */
+/**
+ * Zpracuje soubory; `onResult` dostane každý výsledek hned. PDF, které bývá
+ * velké a čte se dlouho, jde do workeru, aby nezamrzlo rozhraní. Dokumenty
+ * a prezentace potřebují `DOMParser`, který ve workeru není — čtou se tady,
+ * z rozbaleného ZIPu je to jen jeden XML soubor.
+ */
 export async function extractAll(
   entries: FileEntry[],
   onResult: (result: ExtractResponse) => void,
@@ -99,12 +104,20 @@ export async function extractAll(
 
   try {
     for (const [index, entry] of entries.entries()) {
+      if (potrebujeDom(entry.file.name)) {
+        onResult({ id: index, ...(await processFile(entry.file, entry.relativePath)) })
+        continue
+      }
       const result = await new Promise<ExtractResponse>((resolve, reject) => {
+        // Modul workeru pdf.js se po načtení sám napojí na zprávy tohoto
+        // workeru a pošle sem vlastní „ready" — výsledek se proto pozná
+        // podle `id`, ne podle toho, že přišla první zpráva.
         const onMessage = (event: MessageEvent<ExtractResponse>) => {
+          if (event.data?.id !== index) return
           worker.removeEventListener('message', onMessage)
           resolve(event.data)
         }
-        worker.addEventListener('message', onMessage, { once: true })
+        worker.addEventListener('message', onMessage)
         worker.addEventListener('error', (event) => reject(new Error(event.message)), { once: true })
         worker.postMessage({ id: index, file: entry.file, relativePath: entry.relativePath })
       })

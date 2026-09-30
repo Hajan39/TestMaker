@@ -24,6 +24,17 @@ const MIME_BY_EXT: Record<string, string> = {
   md: 'text/markdown',
 }
 
+/** Formáty čtené přes `DOMParser`. */
+const DOM_EXTENSIONS = new Set(['odp', 'odt', 'ods', 'docx', 'html', 'htm'])
+
+/**
+ * Potřebuje soubor ke čtení `DOMParser`? Ve web workeru žádný není, takže
+ * takové soubory se musí číst v hlavním vlákně stránky.
+ */
+export function potrebujeDom(fileName: string): boolean {
+  return DOM_EXTENSIONS.has(fileExtension(fileName))
+}
+
 /** Extrahuje text podle přípony souboru. */
 export async function extractFile(file: File): Promise<ExtractionResult> {
   const ext = fileExtension(file.name)
