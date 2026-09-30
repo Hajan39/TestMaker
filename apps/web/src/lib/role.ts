@@ -7,6 +7,7 @@
 
 /**
  * - `ucitelka` — plná práce s obsahem: import, generování, kontrola, testy.
+ *   V rozhraní „Učitel/ka", protože ve sborovně jsou obě pohlaví; klíč zůstává.
  * - `spravce` — navíc účty, zálohy, nastavení a záznam událostí.
  * - `nahled` — jen čte a tiskne; nic nemění.
  * - `administrator` — nad školami: zakládá je, přepíná se mezi nimi a v každé
@@ -24,7 +25,7 @@ export const ROLES_PRIDELITELNE: readonly Role[] = ['ucitelka', 'spravce', 'nahl
 export const ROLE_SPRAVY: Role[] = ['spravce', 'administrator']
 
 export const ROLE_LABELS: Record<Role, string> = {
-  ucitelka: 'Učitelka',
+  ucitelka: 'Učitel/ka',
   spravce: 'Správce',
   nahled: 'Náhled',
   administrator: 'Administrátor',
