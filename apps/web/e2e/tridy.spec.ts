@@ -260,3 +260,45 @@ test.describe('staré adresy', () => {
     }
   })
 })
+
+test.describe('pořadí témat v ročníku', () => {
+  test('témata jsou česky podle abecedy, jdou přeskládat a vrátit k abecedě', async ({ page }) => {
+    const { subjectId, gradeId } = await zalozTridu(page.request, `E2E PORADI ${RAZITKO}`, 'Pořadí')
+    try {
+      // Schválně v pořadí, které SQL řadí špatně: `10.` před `2.`.
+      for (const name of ['10. Savci', '2. Ptáci', '1. Úvod']) {
+        const topic = await page.request.post('/api/library', {
+          data: { kind: 'topic', name, parentId: gradeId },
+        })
+        expect(topic.ok(), `téma „${name}" se nepodařilo založit`).toBe(true)
+      }
+
+      await page.goto(`/tridy/${gradeId}`)
+      const seznam = page.getByTestId('temata-rocniku')
+      const poradi = () => seznam.getByRole('button', { name: /^Přesunout téma / }).evaluateAll(
+        (uchyty) => uchyty.map((uchyt) => uchyt.getAttribute('aria-label')?.replace('Přesunout téma ', '')),
+      )
+      await expect.poll(poradi).toEqual(['1. Úvod', '2. Ptáci', '10. Savci'])
+
+      // Přeskládání z klávesnice: mezerník zvedne, šipka posune, mezerník položí.
+      const uchyt = seznam.getByRole('button', { name: 'Přesunout téma 10. Savci' })
+      // dnd-kit mezi kroky počítá polohu dlaždic, proto krátké pauzy.
+      await uchyt.focus()
+      for (const klavesa of ['Space', 'ArrowLeft', 'ArrowLeft', 'Space']) {
+        await page.keyboard.press(klavesa)
+        await page.waitForTimeout(150)
+      }
+      await expect.poll(poradi).toEqual(['10. Savci', '1. Úvod', '2. Ptáci'])
+
+      // Pořadí se uložilo: po obnovení stránky platí dál.
+      await page.reload()
+      await expect.poll(poradi).toEqual(['10. Savci', '1. Úvod', '2. Ptáci'])
+
+      await page.getByRole('button', { name: 'Seřadit podle abecedy' }).click()
+      await expect.poll(poradi).toEqual(['1. Úvod', '2. Ptáci', '10. Savci'])
+      await expect(page.getByRole('button', { name: 'Seřadit podle abecedy' })).toHaveCount(0)
+    } finally {
+      await smazPredmet(page.request, subjectId)
+    }
+  })
+})
