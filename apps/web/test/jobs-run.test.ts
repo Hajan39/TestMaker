@@ -119,6 +119,24 @@ describe('zpracování úlohy z fronty', () => {
     expect(job?.finishedAt).toBeTruthy()
   })
 
+  it('volání modelu z fronty se zapíše bez uživatele', async () => {
+    const { aiCalls } = await import('@/db')
+    await db.delete(aiCalls)
+    const puvodni = model.impl!
+    model.impl = async (request, options) => {
+      options?.onCall?.({ model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 })
+      return puvodni(request, options)
+    }
+    await queueJob()
+    await POST()
+
+    await vi.waitFor(async () => {
+      expect(await db.select().from(aiCalls)).toMatchObject([
+        { schoolId: UCET.schoolId, userId: null, task: 'otazky', model: 'google:a' },
+      ])
+    })
+  })
+
   it('zbývající úlohy se počítají, ať rozhraní ví, že má volat znovu', async () => {
     await queueJob()
     await queueJob()

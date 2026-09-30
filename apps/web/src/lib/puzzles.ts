@@ -17,6 +17,7 @@ import {
 } from '@testmaker/core/schema'
 import { db, grades, materials, puzzleWordDrafts, puzzles, subjects, templates, topics } from '@/db'
 import type { PuzzleRow } from '@/db'
+import { zapisovatVolani } from '@/lib/aiUsage'
 import { skola, vlastni, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 
@@ -416,6 +417,6 @@ export async function suggestPuzzleWords(
       phrase: options.phrase,
       grid: options.grid,
     },
-    { signal: options.signal },
+    { signal: options.signal, onCall: zapisovatVolani(scope, 'hlavolam') },
   )
 }

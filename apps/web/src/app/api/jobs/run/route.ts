@@ -1,6 +1,7 @@
 import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
 import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
+import { zapisovatVolani } from '@/lib/aiUsage'
 import { generateForTopic } from '@/lib/generation'
 import { scopeFromJob, zapsatAudit } from '@/lib/uzivatel'
 
@@ -80,7 +81,10 @@ async function runOne() {
   if (claimed.length === 0) return Response.json({ processed: false, remaining: await remaining() })
 
   try {
-    const outcome = await generateForTopic(scopeFromJob(job), job.topicId, job.params)
+    const outcome = await generateForTopic(scopeFromJob(job), job.topicId, job.params, {
+      // Fronta běží bez přihlášené osoby — v přehledu použití AI bez uživatele.
+      onCall: zapisovatVolani({ schoolId: job.schoolId, userId: null }, 'otazky'),
+    })
     await db
       .update(generationJobs)
       .set({

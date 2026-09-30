@@ -8,9 +8,11 @@ import {
   type UlohaAi,
 } from '@/lib/aiUsage'
 import { PORADI } from '@/lib/backup'
+import { generateForTopic } from '@/lib/generation'
 import { newId } from '@/lib/ids'
+import { suggestPuzzleWords } from '@/lib/puzzles'
 import type { Scope } from '@/lib/uzivatel'
-import { UCET } from './helpers'
+import { seedMaterial, seedTopic, UCET } from './helpers'
 import { TEST_SKOLA_ID } from './setup'
 
 /**
@@ -197,5 +199,41 @@ describe('zápis volání', () => {
 
   it('záloha školy tabulku nepřenáší', () => {
     expect(PORADI).not.toContain('ai_calls')
+  })
+})
+
+const UDALOST = { model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 } as const
+
+describe('zapojení do generování', () => {
+  it('otázky tématu zapíšou volání pod přihlášenou učitelku', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: 'Fotosyntéza probíhá v listech rostlin. '.repeat(20) })
+    await generateForTopic(UCET, topicId, { count: 1, types: ['single_choice'], difficulty: 2 }, {
+      generate: async (_request, options) => {
+        options?.onCall?.(UDALOST)
+        return { questions: [], rejected: [], chunks: 1, failedCalls: [], models: [] }
+      },
+    })
+    await vi.waitFor(async () => {
+      expect(await db.select().from(aiCalls)).toMatchObject([
+        { schoolId: TEST_SKOLA_ID, userId: UCET.userId, task: 'otazky', model: 'google:a' },
+      ])
+    })
+  })
+
+  it('slova do hlavolamu se zapíšou jako hlavolam', async () => {
+    const { topicId } = await seedTopic()
+    await seedMaterial(topicId, { text: 'Houba roste v lese a má klobouk. '.repeat(20) })
+    await suggestPuzzleWords(UCET, topicId, {
+      kind: 'wordsearch',
+      count: 1,
+      generate: async (_request, options) => {
+        options?.onCall?.(UDALOST)
+        return { entries: [], rejected: [], adjusted: [], models: ['google:a'], stats: { requested: 1, returned: 0, usable: 0, dropped: 0 } }
+      },
+    })
+    await vi.waitFor(async () => {
+      expect(await db.select().from(aiCalls)).toMatchObject([{ userId: UCET.userId, task: 'hlavolam' }])
+    })
   })
 })

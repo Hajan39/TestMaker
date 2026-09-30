@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
-import { generateQuestions } from '@testmaker/core/ai'
+import { generateQuestions, type AiCallListener } from '@testmaker/core/ai'
 import {
   AI_QUESTION_TYPES,
   REGENERATE_REASONS,
@@ -20,6 +20,7 @@ import {
   users,
   type QuestionRow,
 } from '@/db'
+import { zapisovatVolani } from '@/lib/aiUsage'
 import { skola, type Scope } from '@/lib/uzivatel'
 import { newId } from '@/lib/ids'
 import { MIN_GENERATE_CHARS } from '@/lib/materials'
@@ -196,6 +197,11 @@ export async function generateForTopic(
     onSaved?: (info: { created: number; questions: Question[] }) => void | Promise<void>
     /** Podvržené generování pro testy; v aplikaci se nepředává. */
     generate?: typeof generateQuestions
+    /**
+     * Kam zapsat volání modelu do přehledu použití AI. Výchozí je přihlášená
+     * osoba z `scope`; fronta předává záznam bez uživatele.
+     */
+    onCall?: AiCallListener
   } = {},
 ): Promise<GenerateOutcome> {
   const wanted = await resolveCount(scope, topicId, params)
@@ -229,6 +235,7 @@ export async function generateForTopic(
     },
     {
       signal: options.signal,
+      onCall: options.onCall ?? zapisovatVolani(scope, 'otazky'),
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
         const ids = await insertQuestions(scope, batch, { topicId, source: 'ai' })
@@ -405,7 +412,7 @@ export async function regenerateQuestion(
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
       ...(reasonInfo ? { replacementReason: { hint: reasonInfo.hint, note: options.note } } : {}),
     },
-    { signal: options.signal },
+    { signal: options.signal, onCall: zapisovatVolani(scope, 'otazky') },
   )
 
   const replacement = result.questions[0]
@@ -499,7 +506,7 @@ export async function createVariant(
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
       variantOf: { direction, originalPrompt: questionPrompt(original) },
     },
-    { signal: options.signal },
+    { signal: options.signal, onCall: zapisovatVolani(scope, 'otazky') },
   )
 
   const generated = result.questions[0]
