@@ -338,7 +338,7 @@ export function SpravaScreen({
                     <Select
                       value={ucet.role}
                       onValueChange={(next) =>
-                        void upravit(ucet.id, { role: next }, `Role změněna na ${ROLE_LABELS[next as Role]}.`)
+                        void upravit(ucet.id, { role: next }, `Role změněna na ${ROLE_LABELS[next as Role]}. Účet se musí znovu přihlásit.`)
                       }
                     >
                       <SelectTrigger className="w-36">

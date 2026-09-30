@@ -103,6 +103,10 @@ export const aktualniUzivatel = cache(async (): Promise<Prihlaseny | null> => {
     .limit(1)
 
   if (!row || row.status !== 'aktivni' || row.sessionVersion !== relace.sv) return null
+  // Role v cookie rozhoduje v bráně (`proxy.ts`), která do databáze nevidí.
+  // Když se od té v databázi liší, je cookie zastaralá — jinak by po změně
+  // role učitelka dál narážela na práva Náhledu, dokud se sama neodhlásí.
+  if (row.role !== relace.role) return null
 
   // Relace se používá, takže jde vidět, že je zařízení živé; podle toho se
   // ve správě pozná, co je opuštěná přihláška.

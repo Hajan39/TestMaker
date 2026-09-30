@@ -86,6 +86,26 @@ describe('úprava účtů', () => {
     expect(relace?.revokedAt).not.toBeNull()
   })
 
+  it('změna role odhlásí otevřená okna, jinak by brána držela starou roli', async () => {
+    const ucet = await seedUcet({ role: 'nahled' })
+    await db.insert(sessions).values({
+      id: 'relace-se-starou-roli',
+      userId: ucet.userId,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+
+    const response = await upravit(
+      jsonReq('/api/sprava/uzivatele', 'PATCH', { id: ucet.userId, role: 'ucitelka' }),
+    )
+    expect(response.status).toBe(200)
+
+    const [radek] = await db.select().from(users).where(eq(users.id, ucet.userId))
+    expect(radek?.role).toBe('ucitelka')
+    expect(radek?.sessionVersion).toBe(2)
+    const [relace] = await db.select().from(sessions).where(eq(sessions.id, 'relace-se-starou-roli'))
+    expect(relace?.revokedAt).not.toBeNull()
+  })
+
   it('zablokování účet nemaže, jen mu vezme přístup', async () => {
     const ucet = await seedUcet()
     const response = await zablokovat(req(`/api/sprava/uzivatele?id=${ucet.userId}`, { method: 'DELETE' }))

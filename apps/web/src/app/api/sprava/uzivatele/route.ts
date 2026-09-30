@@ -188,7 +188,10 @@ export async function PATCH(request: Request) {
         await db.update(users).set(zmeny).where(eq(users.id, cil.id))
       }
       // Reset hesla, zablokování i výslovné odhlášení musí shodit otevřená okna.
-      if (heslo || parsed.data.odhlasit || parsed.data.status === 'zablokovany') {
+      // Změna role taky: role je zapsaná v cookie a brána by se až do nového
+      // přihlášení řídila tou starou.
+      const zmenaRole = parsed.data.role !== undefined && parsed.data.role !== cil.role
+      if (heslo || parsed.data.odhlasit || parsed.data.status === 'zablokovany' || zmenaRole) {
         await odvolatVsechnyRelace(cil.id)
       }
 
