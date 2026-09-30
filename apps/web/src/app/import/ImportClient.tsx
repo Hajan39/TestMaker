@@ -169,6 +169,19 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     )
   }
 
+  /**
+   * Hromadné zařazení: vyplněná pole se přepíšou u všech zahrnutých témat,
+   * prázdná zůstanou, jak byla. Stejné téma u všech skupin znamená, že se
+   * soubory při importu sejdou v jediném tématu.
+   */
+  function updateAll(change: Partial<Pick<PreviewGroup, 'subject' | 'grade' | 'topic'>>) {
+    const filled = Object.fromEntries(
+      Object.entries(change).filter(([, value]) => value && value.trim()),
+    ) as Partial<PreviewGroup>
+    if (Object.keys(filled).length === 0) return
+    setGroups((current) => current.map((group) => (group.include ? { ...group, ...filled } : group)))
+  }
+
   function toggleFile(groupId: string, fileKey: string) {
     setGroups((current) =>
       current.map((group) =>
@@ -215,7 +228,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
             ),
           ),
       )
-      setDestinations(found.filter((item): item is ImportDestination => item !== null))
+      // Skupiny se při hromadném zařazení sejdou v jednom tématu — odkaz stačí jednou.
+      const unique = new Map(
+        found.filter((item): item is ImportDestination => item !== null).map((item) => [item.topicId, item]),
+      )
+      setDestinations([...unique.values()])
       setPhase('done')
       router.refresh()
     } catch (uploadError) {
@@ -348,6 +365,15 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
             </Button>
           </Card>
 
+          {groups.length > 1 ? (
+            <BulkAssign
+              subjects={allSubjects}
+              gradeHints={gradeHints}
+              disabled={busy}
+              onApply={updateAll}
+            />
+          ) : null}
+
           {groups.map((group) => {
             const near = nearDuplicateSubject(group.subject)
             const chosen = group.files.filter((file) => file.include).length
@@ -468,6 +494,76 @@ function toPreview(materials: ExtractedMaterial[]): PreviewGroup[] {
     include: true,
     files: group.files.map((file) => ({ key: file.key, material: file, include: true })),
   }))
+}
+
+/**
+ * Zařazení pro všechna témata náhledu najednou — u hromady volných souborů
+ * se jinak předmět a ročník vypisují u každého tématu zvlášť.
+ */
+function BulkAssign({
+  subjects,
+  gradeHints,
+  disabled,
+  onApply,
+}: {
+  subjects: string[]
+  gradeHints: (subject: string) => string[]
+  disabled?: boolean
+  onApply: (change: { subject: string; grade: string; topic: string }) => void
+}) {
+  const [subject, setSubject] = useState('')
+  const [grade, setGrade] = useState('')
+  const [topic, setTopic] = useState('')
+  const empty = !subject.trim() && !grade.trim() && !topic.trim()
+
+  return (
+    <Card className="gap-3 p-5" data-testid="import-bulk">
+      <div>
+        <h2 className="text-sm font-semibold text-fg">Zařadit všechna témata najednou</h2>
+        <p className="mt-1 text-sm text-fg-muted">
+          Vyplněné pole se přepíše u všech zahrnutých témat, prázdné zůstane beze změny. Stejné téma
+          u všech spojí soubory do jednoho tématu.
+        </p>
+      </div>
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onApply({ subject, grade, topic })
+        }}
+      >
+        <Field
+          label="Předmět"
+          value={subject}
+          listId="predmety-hromadne"
+          options={subjects}
+          placeholder="beze změny"
+          disabled={disabled}
+          onChange={setSubject}
+        />
+        <Field
+          label="Ročník"
+          value={grade}
+          listId="rocniky-hromadne"
+          options={gradeHints(subject)}
+          placeholder="beze změny"
+          disabled={disabled}
+          onChange={setGrade}
+        />
+        <Field
+          label="Téma"
+          value={topic}
+          className="min-w-56 flex-1"
+          placeholder="beze změny"
+          disabled={disabled}
+          onChange={setTopic}
+        />
+        <Button type="submit" variant="outline" disabled={disabled || empty}>
+          Nastavit všem
+        </Button>
+      </form>
+    </Card>
+  )
 }
 
 /** Editovatelné políčko zařazení s našeptáváním z knihovny. */

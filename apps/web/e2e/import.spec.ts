@@ -91,4 +91,54 @@ test.describe('náhled importu', () => {
     )
     expect(deleted.ok(), 'zkušební téma se nepodařilo uklidit').toBe(true)
   })
+
+  test('hromadné zařazení nastaví předmět, ročník i téma všem skupinám', async ({ page }) => {
+    const topic = 'Obratlovci hromadně'
+    const zbytky = await page.request.get(`/api/library/search?q=${encodeURIComponent(topic)}`)
+    for (const found of ((await zbytky.json()) as { results: { topicId: string }[] }).results) {
+      await page.request.delete(`/api/library?kind=topic&id=${encodeURIComponent(found.topicId)}`)
+    }
+
+    await page.goto('/import')
+    await page.locator('[data-testid="import-files"]').setInputFiles([
+      {
+        name: 'Obojživelníci.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from(text('Obojživelníci žijí ve vodě i na souši a dýchají kůží.'), 'utf8'),
+      },
+      {
+        name: 'Plazi.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from(text('Plazi mají suchou kůži se šupinami a kladou vejce.'), 'utf8'),
+      },
+    ])
+
+    const groups = page.locator('[data-testid="import-group"]')
+    await expect(groups).toHaveCount(2)
+
+    const bulk = page.locator('[data-testid="import-bulk"]')
+    await bulk.getByLabel('Předmět').pressSequentially(SUBJECT)
+    await bulk.getByLabel('Ročník').pressSequentially(GRADE)
+    await bulk.getByLabel('Téma').pressSequentially(topic)
+    await bulk.getByRole('button', { name: 'Nastavit všem' }).click()
+
+    for (const group of await groups.all()) {
+      await expect(group.getByLabel('Předmět')).toHaveValue(SUBJECT)
+      await expect(group.getByLabel('Ročník')).toHaveValue(GRADE)
+      await expect(group.getByLabel('Téma')).toHaveValue(topic)
+    }
+
+    await page.getByRole('button', { name: 'Importovat (2)' }).click()
+    await expect(page.getByText(/Naimportováno 2 materiály/)).toBeVisible()
+    // Obě skupiny skončily v jediném tématu.
+    await expect(page.getByRole('button', { name: /^Téma / })).toHaveCount(1)
+
+    const found = await page.request.get(`/api/library/search?q=${encodeURIComponent(topic)}`)
+    const { results } = (await found.json()) as { results: { topicId: string }[] }
+    expect(new Set(results.map((result) => result.topicId)).size).toBe(1)
+    for (const topicId of new Set(results.map((result) => result.topicId))) {
+      const deleted = await page.request.delete(`/api/library?kind=topic&id=${encodeURIComponent(topicId)}`)
+      expect(deleted.ok(), 'zkušební téma se nepodařilo uklidit').toBe(true)
+    }
+  })
 })
