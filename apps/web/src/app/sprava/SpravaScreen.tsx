@@ -307,7 +307,7 @@ export function SpravaScreen({
 
           <div className="space-y-2">
             {uzivatele.map((ucet) => (
-              <Card key={ucet.id} className="flex flex-wrap items-center gap-3 p-3">
+              <Card key={ucet.id} className="flex-row flex-wrap items-center gap-3 p-3">
                 <div className="min-w-56 flex-1">
                   <p className="font-medium text-fg">
                     {ucet.name}
