@@ -23,12 +23,15 @@ const SEARCH_DELAY = 350
  * nenačítá celý.
  */
 export function TestsFilters({
+  basePath,
   search,
   templateId,
   templates,
   gradeId,
   grades,
 }: {
+  /** `/tests`, nebo `/listy` — filtr zůstává na přehledu, ze kterého přišel. */
+  basePath: string
   search: string
   templateId: string
   templates: { id: string; name: string }[]
@@ -55,9 +58,9 @@ export function TestsFilters({
       if (next.templateId) params.set('templateId', next.templateId)
       if (next.gradeId) params.set('trida', next.gradeId)
       const query = params.toString()
-      startNavigate(() => router.push(query ? `/tests?${query}` : '/tests', { scroll: false }))
+      startNavigate(() => router.push(query ? `${basePath}?${query}` : basePath, { scroll: false }))
     },
-    [router],
+    [router, basePath],
   )
 
   // Psaní se do adresy propisuje se zpožděním, aby se seznam nenačítal po

@@ -35,7 +35,8 @@ import {
   PaperQuestion,
   PaperSheet,
 } from '@testmaker/ui'
-import { formatPoints, type DraftItem } from './types'
+import { formatPoints, type DraftItem, type WorksheetControls } from './types'
+import { TableItemEditor, TextItemEditor } from './WorksheetItems'
 
 /**
  * Stránka písemky — náhled a obsah testu v jedné ploše.
@@ -62,6 +63,7 @@ export function TestPage({
   onRemove,
   onPatch,
   onAdd,
+  worksheet,
 }: {
   items: DraftItem[]
   title: string
@@ -75,6 +77,8 @@ export function TestPage({
   onPatch: (key: string, patch: Partial<DraftItem>) => void
   /** `index` je místo, kam položka přijde (0 = úplně nahoru); bez něj na konec. */
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
+  /** Ovládání pracovního listu; u písemky chybí. */
+  worksheet?: WorksheetControls
 }) {
   // Které otázky mají zrovna odkryté řešení. Stav patří sem, ne do položky:
   // s testem se neukládá a po zavření okna nikomu nechybí.
@@ -102,6 +106,8 @@ export function TestPage({
         // měl méně stran než PDF.
         puzzleId: item.puzzleId,
         puzzle: item.puzzle,
+        table: item.table,
+        textContent: item.textContent,
       })),
     [items],
   )
@@ -191,6 +197,22 @@ export function TestPage({
           <Button size="sm" variant="outline" onClick={() => onAdd('page_break')}>
             + Nová strana
           </Button>
+          {worksheet ? (
+            <>
+              <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('text')}>
+                + Text
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('fun_fact')}>
+                + Fun fact
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('table')}>
+                + Tabulka
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('question')}>
+                + Úloha
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -224,13 +246,15 @@ export function TestPage({
                     ) : null}
                     {pageIndex === 0 && items.length === 0 ? (
                       <p className="mt-6 text-center text-sm text-paper-fg opacity-60">
-                        Zatím prázdná písemka. Zaškrtni otázku v bance a objeví se tady na stránce.
+                        {worksheet
+                          ? 'Zatím prázdný list. Přidej text, fun fact, tabulku nebo úlohu tlačítky nahoře.'
+                          : 'Zatím prázdná písemka. Zaškrtni otázku v bance a objeví se tady na stránce.'}
                       </p>
                     ) : null}
                     <ol>
                       {page.map(({ item, index, number }) => (
                         <Fragment key={item.key}>
-                          <InsertSlot index={index} total={items.length} onAdd={onAdd} />
+                          <InsertSlot index={index} total={items.length} onAdd={onAdd} worksheet={worksheet} />
                           <PageRow
                             item={item}
                             number={number}
@@ -241,11 +265,12 @@ export function TestPage({
                             onToggleAnswer={toggleAnswer}
                             onRemove={onRemove}
                             onPatch={onPatch}
+                            worksheet={worksheet}
                           />
                         </Fragment>
                       ))}
                       {pageIndex === pages.length - 1 ? (
-                        <InsertSlot index={items.length} total={items.length} onAdd={onAdd} />
+                        <InsertSlot index={items.length} total={items.length} onAdd={onAdd} worksheet={worksheet} />
                       ) : null}
                     </ol>
                   </PaperSheet>
@@ -263,8 +288,10 @@ export function TestPage({
       {items.length > 0 ? (
         <dl className="mt-3 flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-line-soft pt-2 text-sm text-fg-muted">
           <div>
-            <dt className="inline text-fg-soft">Otázek: </dt>
-            <dd className="ui-numeric inline">{questionCount}</dd>
+            <dt className="inline text-fg-soft">{worksheet ? 'Položek: ' : 'Otázek: '}</dt>
+            <dd className="ui-numeric inline">
+              {worksheet ? items.filter((item) => item.kind !== 'page_break').length : questionCount}
+            </dd>
           </div>
           {graded ? (
             <div>
@@ -293,10 +320,12 @@ function InsertSlot({
   index,
   total,
   onAdd,
+  worksheet,
 }: {
   index: number
   total: number
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
+  worksheet?: WorksheetControls
 }) {
   const label = index === total ? 'Vložit na konec' : `Vložit před ${index + 1}. položku`
   return (
@@ -318,6 +347,14 @@ function InsertSlot({
           <DropdownMenuItem onSelect={() => onAdd('heading', index)}>Nadpis části</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onAdd('instruction', index)}>Pokyn</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onAdd('page_break', index)}>Zalomení strany</DropdownMenuItem>
+          {worksheet ? (
+            <>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('text', index)}>Krátký text</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('fun_fact', index)}>Fun fact</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('table', index)}>Tabulka k doplnění</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('question', index)}>Úloha</DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       <span aria-hidden="true" className="h-px flex-1 bg-paper-line opacity-0 transition-opacity group-hover/slot:opacity-100" />
@@ -342,7 +379,9 @@ function PageRow({
   onToggleAnswer,
   onRemove,
   onPatch,
+  worksheet,
 }: {
+  worksheet?: WorksheetControls
   item: DraftItem
   /** Pořadí otázky v testu (od nuly); u ostatních položek `null`. */
   number: number | null
@@ -423,10 +462,44 @@ function PageRow({
             Řešení
           </Button>
         ) : null}
+        {worksheet && item.kind === 'question' ? (
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => worksheet.onEditQuestion(item.key)}>
+            Upravit
+          </Button>
+        ) : null}
+        {worksheet?.onRegenerate && item.kind !== 'page_break' ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            disabled={worksheet.regenerating !== null}
+            aria-busy={worksheet.regenerating === item.key || undefined}
+            onClick={() => worksheet.onRegenerate?.(item.key)}
+          >
+            {worksheet.regenerating === item.key ? 'Přegenerovávám…' : 'Přegenerovat'}
+          </Button>
+        ) : null}
         <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => onRemove(item.key)}>
           Odebrat
         </Button>
       </div>
+
+      {item.needsCheck ? (
+        // Značka „ověř“ se netiskne. Odškrtává se jen kliknutím — úprava textu
+        // ji neodškrtne sama, protože oprava jednoho slova ještě neznamená
+        // ověřený obsah.
+        <div className="pt-2">
+          <button
+            type="button"
+            className="rounded-[var(--radius-tag)] bg-draft-bg px-1.5 py-0.5 text-xs font-medium text-draft-fg hover:underline"
+            title="Obsah nevychází z materiálů. Po kontrole značku odškrtni kliknutím."
+            aria-label="ověř — odškrtnout značku po kontrole"
+            onClick={() => onPatch(item.key, { needsCheck: false })}
+          >
+            ověř ✓
+          </button>
+        </div>
+      ) : null}
 
       {repeatLabel || item.questionMissing || item.questionEdited ? (
         <div className="flex flex-wrap items-center gap-1 pt-2">
@@ -467,6 +540,23 @@ function PageRow({
         // Hlavolam se v osnově jen ukazuje tak, jak se vytiskne; slova
         // a mřížka se mění na obrazovce Hlavolamy, ne tady.
         <PaperPuzzle puzzle={item.puzzle} className="text-paper-fg" />
+      ) : item.kind === 'text' ? (
+        item.textContent ? (
+          <TextItemEditor
+            text={item.text ?? ''}
+            variant={item.textContent.variant}
+            config={config}
+            onChange={(text) => onPatch(item.key, { text })}
+          />
+        ) : (
+          <BrokenItem />
+        )
+      ) : item.kind === 'table' ? (
+        item.table ? (
+          <TableItemEditor table={item.table} onChange={(table) => onPatch(item.key, { table })} />
+        ) : (
+          <BrokenItem />
+        )
       ) : item.kind === 'page_break' ? (
         <p className="my-2 flex items-center gap-2 text-xs text-fg-muted">
           <span aria-hidden="true" className="h-px flex-1 border-b border-dashed border-line" />
@@ -506,5 +596,14 @@ function PageRow({
         />
       )}
     </li>
+  )
+}
+
+/** Položka listu, jejíž uložený obsah neprošel schématem — zbytek listu žije dál. */
+function BrokenItem() {
+  return (
+    <p className="my-2 rounded-[var(--radius-inner)] bg-danger-bg px-2 py-1 text-sm text-danger">
+      Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu.
+    </p>
   )
 }

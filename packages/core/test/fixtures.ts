@@ -1,5 +1,5 @@
 import type { Question } from '../src/schema/question'
-import type { ResolvedTestItem, Test } from '../src/schema/test'
+import type { ResolvedTestItem, TableItemContent, Test } from '../src/schema/test'
 import { BUILT_IN_TEMPLATES } from '../src/schema/builtInTemplates'
 import type { Template } from '../src/schema/template'
 
@@ -138,6 +138,9 @@ export function makeTest(overrides: Partial<Test> = {}): Test {
     id: 'test-1',
     ownerId: 'ucitelka-1',
     visibility: 'soukrome',
+    kind: 'pisemka',
+    topicId: null,
+    brief: null,
     title: 'Dýchací soustava',
     description: null,
     graded: true,
@@ -195,4 +198,47 @@ export function makeItems(questions: Question[] = sampleQuestions): ResolvedTest
     })
   })
   return items
+}
+
+/**
+ * Tabulka k doplnění o `rows` řádcích; prostřední sloupec je prázdný
+ * s odpovědí do klíče.
+ */
+export function makeTable(rows: number, longCells = false): TableItemContent {
+  const filler = longCells ? ' — delší popis, který se v buňce zalomí na víc řádků a zvětší výšku řádku' : ''
+  return {
+    caption: 'Doplň tabulku orgánů',
+    header: ['Orgán', 'Funkce', 'Kde leží'],
+    rows: Array.from({ length: rows }, (_, r) => [
+      { value: `Orgán ${r + 1}${filler}`, blank: false },
+      { value: `funkce ${r + 1}`, blank: true },
+      { value: `v těle ${r + 1}${filler}`, blank: false },
+    ]),
+  }
+}
+
+/** Položky pracovního listu: nadpis, text, fun fact a tabulka. */
+export function makeWorksheetItems(tableRows = 3, longCells = false): ResolvedTestItem[] {
+  const base = { testId: 'list-1', questionId: null, pointsOverride: null }
+  return [
+    { ...base, id: 'w-h', order: 0, kind: 'heading', text: 'Dýchání' },
+    {
+      ...base,
+      id: 'w-t',
+      order: 1,
+      kind: 'text',
+      text: 'Plíce jsou párový orgán uložený v hrudníku. Vzduch do nich proudí průdušnicí.',
+      textContent: { variant: 'text' },
+    },
+    {
+      ...base,
+      id: 'w-f',
+      order: 2,
+      kind: 'text',
+      text: 'Dospělý člověk se za den nadechne asi dvacettisíckrát.',
+      textContent: { variant: 'fun_fact' },
+      needsCheck: true,
+    },
+    { ...base, id: 'w-tab', order: 3, kind: 'table', text: null, table: makeTable(tableRows, longCells) },
+  ]
 }

@@ -12,6 +12,91 @@ import type { Template } from './template'
 export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break', 'puzzle', 'text', 'table'] as const
 export type TestItemKind = (typeof TEST_ITEM_KINDS)[number]
 
+/**
+ * Písemka, nebo pracovní list. List sdílí s písemkou editor, šablony i tisk,
+ * ale nic se na něm nehodnotí a jeho úlohy do banky nejdou.
+ */
+export const testKindSchema = z.enum(['pisemka', 'pracovni_list'])
+export type TestKind = z.infer<typeof testKindSchema>
+
+/* ------------------------------------------------- položky pracovního listu */
+
+/** Krátký text, nebo fun fact v rámečku. Samotný text je ve sloupci `text`. */
+export const TEXT_ITEM_VARIANTS = ['text', 'fun_fact'] as const
+export type TextItemVariant = (typeof TEXT_ITEM_VARIANTS)[number]
+
+export const textItemContentSchema = z.object({ variant: z.enum(TEXT_ITEM_VARIANTS) })
+export type TextItemContent = z.infer<typeof textItemContentSchema>
+
+/** Víc sloupců se na šířku A4 nevejde, víc řádků už není tabulka k doplnění, ale opisování. */
+export const TABLE_MAX_COLUMNS = 6
+export const TABLE_MAX_ROWS = 12
+
+export const worksheetTableCellSchema = z.object({
+  value: z.string(),
+  /** Prázdná buňka na vyplnění; `value` je pak správná odpověď do klíče. */
+  blank: z.boolean(),
+})
+export type WorksheetTableCell = z.infer<typeof worksheetTableCellSchema>
+
+/**
+ * Tvar tabulky bez vzájemných kontrol — tak ho dostává model. Kontroly napříč
+ * poli (počet buněk v řádku, aspoň jedna prázdná) se do JSON schématu pro model
+ * nepřenesou, proto se ověřují až v kódu přes `tableItemContentSchema`.
+ */
+export const tableItemShapeSchema = z.object({
+  /** Nepovinný popisek nad tabulkou. */
+  caption: z.string().optional(),
+  header: z.array(z.string()).min(1).max(TABLE_MAX_COLUMNS),
+  rows: z.array(z.array(worksheetTableCellSchema)).min(1).max(TABLE_MAX_ROWS),
+})
+
+export const tableItemContentSchema = tableItemShapeSchema.superRefine((table, ctx) => {
+  if (table.rows.some((row) => row.length !== table.header.length)) {
+    ctx.addIssue({ code: 'custom', message: 'Každý řádek tabulky musí mít tolik buněk, kolik je sloupců.' })
+  }
+  if (!table.rows.some((row) => row.some((cell) => cell.blank))) {
+    ctx.addIssue({ code: 'custom', message: 'Tabulka potřebuje aspoň jednu prázdnou buňku k doplnění.' })
+  }
+})
+export type TableItemContent = z.infer<typeof tableItemContentSchema>
+
+/**
+ * Obsah položky z databáze. Poškozený obsah vrací `null` — položka se pak
+ * v náhledu ukáže jako chybná, místo aby spadl celý list (vzor:
+ * `parseQuestionSnapshot`).
+ */
+export function parseItemContent(kind: 'text', raw: unknown): TextItemContent | null
+export function parseItemContent(kind: 'table', raw: unknown): TableItemContent | null
+export function parseItemContent(kind: 'text' | 'table', raw: unknown): TextItemContent | TableItemContent | null {
+  const parsed = (kind === 'text' ? textItemContentSchema : tableItemContentSchema).safeParse(raw)
+  return parsed.success ? parsed.data : null
+}
+
+/**
+ * Zadání listu, jak ho učitelka napsala. Ukládá se k listu (`tests.brief`)
+ * jako JSON, aby přegenerování jednotlivých kusů vycházelo z téhož zadání.
+ */
+export const worksheetBriefSchema = z.object({
+  /** Název tématu nebo volného zadání v okamžiku založení. */
+  title: z.string(),
+  instructions: z.string().default(''),
+  ownText: z.string().default(''),
+})
+export type WorksheetBrief = z.infer<typeof worksheetBriefSchema>
+
+/** Zadání z databáze; text, který není naším JSON, se bere jako pokyn. */
+export function parseWorksheetBrief(raw: string | null | undefined): WorksheetBrief | null {
+  if (!raw) return null
+  try {
+    const parsed = worksheetBriefSchema.safeParse(JSON.parse(raw))
+    if (parsed.success) return parsed.data
+  } catch {
+    // Není to JSON — níž se vezme jako prostý pokyn.
+  }
+  return { title: '', instructions: raw, ownText: '' }
+}
+
 export const testHeaderConfigSchema = z.object({
   school: z.string().default(''),
   subject: z.string().default(''),
@@ -52,6 +137,13 @@ export interface TestItem {
    * pozdější úprava hlavolamu nesmí změnit už vytištěnou písemku ani klíč.
    */
   puzzleSnapshot?: string | null
+  /**
+   * Obsah položky `text` (varianta) nebo `table` (mřížka), jak leží
+   * v databázi. Číst přes `parseItemContent`, ne přímo.
+   */
+  content?: unknown
+  /** Značka „ověř“: obsah nevychází z materiálů. Netiskne se. */
+  needsCheck?: boolean
 }
 
 /**
@@ -139,6 +231,11 @@ export interface Test {
   ownerId: string
   /** `soukrome` vidí jen autorka, `skola` i kolegyně ze sborovny. */
   visibility: 'soukrome' | 'skola'
+  kind: TestKind
+  /** Téma, ze kterého list vznikl; u písemek a volného zadání `null`. */
+  topicId: string | null
+  /** Zadání listu (JSON podle `worksheetBriefSchema`); u písemek `null`. */
+  brief: string | null
   title: string
   description: string | null
   /** Test na známky — bez toho se nevykreslují body ani políčko na známku. */
@@ -169,6 +266,10 @@ export interface ResolvedTestItem extends TestItem {
   puzzle?: PuzzleContent | null
   /** Hlavolam už v knihovně není; test žije dál ze snímku. */
   puzzleMissing?: boolean
+  /** Vyplněno u `kind === 'table'`; `null`, když je uložený obsah poškozený. */
+  table?: TableItemContent | null
+  /** Vyplněno u `kind === 'text'`; `null`, když je uložený obsah poškozený. */
+  textContent?: TextItemContent | null
 }
 
 /**

@@ -86,4 +86,27 @@ export const AI_SETTINGS = {
     cryptogramExtraWordsRatio: 0.5,
     cryptogramMinExtraWords: 3,
   },
+  /** Pracovní listy (`worksheet.ts`). Tvar tabulky a jejích mezí dává schéma v core. */
+  worksheet: {
+    /**
+     * Kolik znaků materiálů tématu se modelu pošle nejvýš. List je jedno
+     * volání; víc textu by model stejně nepokryl a volání by zbytečně zdražilo.
+     */
+    materialChars: 40_000,
+    /** Úsek, po kterém se z dlouhého materiálu vybírá rovnoměrně napříč textem. */
+    materialChunkChars: 2_000,
+    /** Nejdelší vlastní text, který učitelka do zadání vloží. */
+    ownTextMax: 20_000,
+    /** Nejdelší pokyn k listu. */
+    instructionsMax: 1_000,
+    /**
+     * Nejdelší krátký text nebo fun fact od modelu (znaky). Delší se vyřadí,
+     * ne ořízne — useknutá věta nedává smysl. Ruční úpravu to neomezuje.
+     */
+    textMax: 600,
+    /** Méně obsahových položek (bez nadpisů a pokynů) už na list nestačí. */
+    minItems: 3,
+    /** Víc položek se na list pro jednu hodinu nevejde; přebytek se zahodí. */
+    maxItems: 20,
+  },
 } as const

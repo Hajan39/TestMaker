@@ -1,6 +1,9 @@
 import 'server-only'
 import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
+  parseItemContent,
+  parseWorksheetBrief,
+  type WorksheetBrief,
   resolveTestItemPuzzle,
   resolveTestItemQuestion,
   serializeQuestionSnapshot,
@@ -10,10 +13,32 @@ import {
   type ResolvedTestItem,
   type Template,
   type Test,
+  type TestKind,
 } from '@testmaker/core/schema'
-import { db, assets, grades, puzzles, questions, subjects, templates, testItems, tests, type TestItemRow } from '@/db'
+import {
+  db,
+  assets,
+  grades,
+  puzzles,
+  questions,
+  subjects,
+  templates,
+  testItems,
+  tests,
+  topics,
+  type TestItemRow,
+} from '@/db'
+import {
+  generateWorksheet,
+  regenerateWorksheetItem,
+  type WorksheetItemDraft,
+  type WorksheetRequest,
+  type WorksheetTarget,
+} from '@testmaker/core/ai'
 import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
+import { loadTopicSource } from './generation'
 import { newId } from './ids'
+import { zapisovatVolani } from './aiUsage'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
 
@@ -29,6 +54,8 @@ export interface TestQuery {
   templateId?: string
   /** Třída, ze které test vznikl — filtr v přehledu testů. */
   gradeId?: string
+  /** Písemky, nebo pracovní listy; bez udání písemky (přehled Testy). */
+  kind?: TestKind
 }
 
 /**
@@ -47,6 +74,7 @@ export interface TestQuery {
 export function testConditions(scope: Scope, query: TestQuery): SQL[] {
   const viditelne = viditelnyTest(scope, tests)
   const conditions: SQL[] = viditelne ? [viditelne] : []
+  conditions.push(eq(tests.kind, query.kind ?? 'pisemka'))
   const needle = query.search?.trim()
   if (needle) {
     const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
@@ -72,13 +100,13 @@ export interface TestGradeOption {
  * aspoň jeden test viditelný přihlášené osobě. Ročník bez testu by ve filtru
  * ukazoval na prázdný seznam, proto se do nabídky nedostane.
  */
-export async function loadTestGradeOptions(scope: Scope): Promise<TestGradeOption[]> {
+export async function loadTestGradeOptions(scope: Scope, kind: TestKind = 'pisemka'): Promise<TestGradeOption[]> {
   const rows = await db
     .selectDistinct({ id: grades.id, subjectName: subjects.name, gradeName: grades.name })
     .from(tests)
     .innerJoin(grades, eq(grades.id, tests.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(viditelnyTest(scope, tests))
+    .where(and(viditelnyTest(scope, tests), eq(tests.kind, kind)))
     .orderBy(asc(subjects.position), asc(subjects.name), asc(grades.position), asc(grades.name))
   return rows.map((row) => ({ id: row.id, label: `${row.subjectName} · ${row.gradeName}` }))
 }
@@ -109,6 +137,9 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
     id: row.id,
     ownerId: row.ownerId,
     visibility: row.visibility,
+    kind: row.kind,
+    topicId: row.topicId,
+    brief: row.brief,
     title: row.title,
     description: row.description,
     graded: row.graded,
@@ -177,6 +208,10 @@ export async function copyTest(
     schoolId: scope.schoolId,
     ownerId: scope.userId,
     visibility: 'soukrome',
+    // Kopie listu zůstává listem i se zadáním — jinak by se objevila mezi písemkami.
+    kind: source.kind,
+    topicId: source.topicId,
+    brief: source.brief,
     title: options.title ? options.title(source.title) : `${source.title} (kopie)`,
     description: source.description,
     graded: source.graded,
@@ -206,6 +241,8 @@ export async function copyTest(
     questionSnapshot: item.questionSnapshot,
     puzzleId: item.puzzleId,
     puzzleSnapshot: item.puzzleSnapshot,
+    content: item.content,
+    needsCheck: item.needsCheck,
   }))
   if (newItems.length > 0) await db.insert(testItems).values(newItems)
 
@@ -229,6 +266,23 @@ export async function resolveGradeId(scope: Scope, gradeId: string | null): Prom
     .where(and(eq(grades.id, gradeId), skola(scope, grades)))
     .limit(1)
   return row ? row.id : null
+}
+
+/**
+ * Téma listu ověřené proti škole, i s ročníkem, který list od tématu
+ * přebírá. Cizí nebo smazané téma vrací `null`.
+ */
+export async function resolveTopic(
+  scope: Scope,
+  topicId: string | null,
+): Promise<{ id: string; gradeId: string } | null> {
+  if (!topicId) return null
+  const [row] = await db
+    .select({ id: topics.id, gradeId: topics.gradeId })
+    .from(topics)
+    .where(and(eq(topics.id, topicId), skola(scope, topics)))
+    .limit(1)
+  return row ?? null
 }
 
 /**
@@ -358,6 +412,11 @@ export async function loadTestItems(
       questionSnapshot: row.questionSnapshot,
       puzzleId: row.puzzleId,
       puzzleSnapshot: row.puzzleSnapshot,
+      content: row.content,
+      needsCheck: row.needsCheck,
+      // Poškozený obsah dá `null` — položka se ukáže jako chybná, list žije dál.
+      ...(row.kind === 'table' ? { table: parseItemContent('table', row.content) } : {}),
+      ...(row.kind === 'text' ? { textContent: parseItemContent('text', row.content) } : {}),
       ...resolveTestItemQuestion(row.questionSnapshot, live, row.id),
       ...(row.kind === 'puzzle' ? resolveTestItemPuzzle(row.puzzleSnapshot, livePuzzle) : {}),
     }
@@ -451,4 +510,159 @@ export async function loadRenderableTest(
     withKey: options.withKey,
     assets: await loadAssets(scope, items),
   }
+}
+
+/* ------------------------------------------------------- pracovní listy */
+
+/** Hláška pro téma, které mezi otevřením formuláře a odesláním zmizelo. */
+export const WORKSHEET_TOPIC_GONE_MESSAGE = 'Téma už v knihovně není, vyber jiné.'
+
+/** Z čeho list vzniká: téma z knihovny, nebo volné zadání. */
+export type WorksheetSource = { topicId: string } | { title: string; gradeId: string | null }
+
+/**
+ * Zadání pro model složené z tématu (materiály bez duplicit a vynechaných)
+ * nebo z volného zadání. Cizí či smazané téma vrací `null`; cizí ročník
+ * volného zadání se tiše zahodí.
+ */
+export async function loadWorksheetRequest(
+  scope: Scope,
+  source: WorksheetSource,
+  brief: { instructions: string; ownText: string },
+): Promise<{ request: WorksheetRequest; topicId: string | null; gradeId: string | null } | null> {
+  if ('topicId' in source) {
+    const topic = await resolveTopic(scope, source.topicId)
+    const loaded = topic ? await loadTopicSource(scope, topic.id) : null
+    if (!topic || !loaded) return null
+    return {
+      request: {
+        title: loaded.topicName,
+        subjectName: loaded.subjectName,
+        gradeName: loaded.gradeName || null,
+        materials: loaded.text,
+        ...brief,
+      },
+      topicId: topic.id,
+      gradeId: topic.gradeId,
+    }
+  }
+
+  const gradeId = await resolveGradeId(scope, source.gradeId)
+  const [grade] = gradeId
+    ? await db
+        .select({ gradeName: grades.name, subjectName: subjects.name })
+        .from(grades)
+        .innerJoin(subjects, eq(subjects.id, grades.subjectId))
+        .where(and(eq(grades.id, gradeId), skola(scope, grades)))
+        .limit(1)
+    : []
+  return {
+    request: {
+      title: source.title,
+      subjectName: grade?.subjectName ?? null,
+      gradeName: grade?.gradeName ?? null,
+      materials: '',
+      ...brief,
+    },
+    topicId: null,
+    gradeId,
+  }
+}
+
+/** Položka od modelu v podobě řádku `test_items`. */
+function worksheetItemRow(item: WorksheetItemDraft) {
+  const base = { text: null, content: null, questionSnapshot: null, needsCheck: item.needsCheck }
+  switch (item.kind) {
+    case 'heading':
+    case 'instruction':
+      return { ...base, text: item.text }
+    case 'text':
+      return { ...base, text: item.text, content: item.content }
+    case 'table':
+      return { ...base, content: item.content }
+    case 'question':
+      return { ...base, questionSnapshot: serializeQuestionSnapshot(item.question) }
+  }
+}
+
+/**
+ * Vygeneruje list a uloží ho i s položkami jedním zápisem (`db.batch`),
+ * takže při chybě nezůstane napůl uložený. Úlohy jdou jen do snímků položek,
+ * do banky nikdy. Vrací `null`, když téma v knihovně není.
+ */
+export async function createGeneratedWorksheet(
+  scope: Scope,
+  input: { source: WorksheetSource; instructions: string; ownText: string },
+  options: { signal?: AbortSignal } = {},
+): Promise<{ id: string; dropped: number; models: string[] } | null> {
+  const loaded = await loadWorksheetRequest(scope, input.source, input)
+  if (!loaded) return null
+  const [template] = await loadTemplates(scope)
+  if (!template) throw new Error('Škola nemá žádnou šablonu pro tisk. Založ ji v Šablonách a zkus to znovu.')
+
+  const result = await generateWorksheet(loaded.request, { signal: options.signal, onCall: zapisovatVolani(scope, 'list') })
+
+  const id = newId()
+  const brief: WorksheetBrief = {
+    title: loaded.request.title,
+    instructions: input.instructions,
+    ownText: input.ownText,
+  }
+  await db.batch([
+    db.insert(tests).values({
+      id,
+      schoolId: scope.schoolId,
+      ownerId: scope.userId,
+      kind: 'pracovni_list',
+      title: result.title,
+      topicId: loaded.topicId,
+      gradeId: loaded.gradeId,
+      brief: JSON.stringify(brief),
+      graded: false,
+      templateId: template.id,
+      header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+    }),
+    db.insert(testItems).values(
+      result.items.map((item, position) => ({
+        id: newId(),
+        schoolId: scope.schoolId,
+        testId: id,
+        position,
+        kind: item.kind,
+        ...worksheetItemRow(item),
+      })),
+    ),
+  ])
+  return { id, dropped: result.dropped, models: result.models }
+}
+
+/**
+ * Nová podoba jednoho kusu vlastního listu — z téhož zadání a materiálů
+ * tématu. Cizí list i písemka vrací `null`. Nic neukládá: položku nahradí
+ * editor a uloží se s listem.
+ */
+export async function regenerateWorksheetPart(
+  scope: Scope,
+  testId: string,
+  target: WorksheetTarget,
+  existing: string[],
+  options: { signal?: AbortSignal } = {},
+): Promise<WorksheetItemDraft | null> {
+  const [row] = await db
+    .select({ title: tests.title, topicId: tests.topicId, gradeId: tests.gradeId, brief: tests.brief })
+    .from(tests)
+    .where(and(eq(tests.id, testId), vlastni(scope, tests), eq(tests.kind, 'pracovni_list')))
+    .limit(1)
+  if (!row) return null
+  const brief = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '' }
+  const title = brief.title || row.title
+  // Smazané téma list nebere s sebou (`topic_id` se vyprázdní) — pak se
+  // přegeneruje jako volné zadání z názvu a ročníku.
+  const loaded =
+    (row.topicId ? await loadWorksheetRequest(scope, { topicId: row.topicId }, brief) : null) ??
+    (await loadWorksheetRequest(scope, { title, gradeId: row.gradeId }, brief))
+  return regenerateWorksheetItem(loaded!.request, target, existing, {
+    signal: options.signal,
+    onCall: zapisovatVolani(scope, 'list'),
+  })
 }

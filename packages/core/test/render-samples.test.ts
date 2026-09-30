@@ -17,7 +17,7 @@ import { registerServerFonts } from '../src/pdf/node'
 import { extractPdf } from '../src/extract/pdf'
 import type { ResolvedTestItem } from '../src/schema/test'
 import { puzzleContentSchema } from '../src/schema/puzzle'
-import { makeItems, makeQuestion, makeTemplate, makeTest, TALL_IMAGE_DATA_URL } from './fixtures'
+import { makeItems, makeQuestion, makeTemplate, makeTest, makeWorksheetItems, TALL_IMAGE_DATA_URL } from './fixtures'
 
 registerServerFonts()
 const OUT = resolve(import.meta.dirname, 'tmp')
@@ -226,4 +226,37 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s hlavolamy', async () 
   // úplně vymazalo a prázdná mřížka v klíči by se poznala až u tiskárny.
   const { text } = await extractPdf(new Uint8Array(readFileSync(path)))
   expect(text).toContain('P O D L I S T')
+})
+
+/**
+ * Pracovní list: text, fun fact v rámečku, úloha a dvě tabulky, z nichž druhá
+ * se nevejde na stranu — musí se zlomit po řádcích a na další straně
+ * zopakovat záhlaví. To jde poznat jen okem na vygenerovaném PDF.
+ */
+it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku pracovního listu', async () => {
+  mkdirSync(OUT, { recursive: true })
+  const [first, ...rest] = makeWorksheetItems(4)
+  const question = makeItems().find((item) => item.kind === 'question')!
+  const items: ResolvedTestItem[] = [
+    first!,
+    ...rest,
+    { ...question, id: 'w-q', questionId: null },
+    ...makeWorksheetItems(12, true).slice(3).map((item) => ({ ...item, id: 'w-tab-2' })),
+    // Za tabulkou další strana: záhlaví tabulky se na ni opakovat nesmí.
+    { ...first!, id: 'w-pb', kind: 'page_break', text: null },
+    { ...first!, id: 'w-h2', text: 'Za tabulkou' },
+  ]
+  const path = resolve(OUT, 'worksheet.pdf')
+  await renderToFile(
+    createElement(TestDocument, {
+      test: makeTest({ graded: false, kind: 'pracovni_list', variants: 1, title: 'Pracovní list – dýchání' }),
+      template: makeTemplate('pracovni-list'),
+      items,
+      variant: 'A',
+      withKey: true,
+      assets: {},
+    }) as never,
+    path,
+  )
+  await checkSample(path, ['Věděli jste?', 'Doplň tabulku orgánů', 'funkce 12'])
 })

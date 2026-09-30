@@ -88,6 +88,15 @@ describe('co která role smí', () => {
     expect(maPravo(nahled, '/api/library', 'DELETE')).toBe(false)
   })
 
+  it('pracovní listy: náhled je čte, generovat a měnit je smí jen učitelka', () => {
+    expect(maPravo(nahled, '/listy', 'GET')).toBe(true)
+    expect(maPravo(nahled, '/listy/abc', 'GET')).toBe(true)
+    expect(maPravo(nahled, '/api/worksheets/generate', 'POST')).toBe(false)
+    expect(maPravo(nahled, '/api/worksheets/abc/items/x/regenerate', 'POST')).toBe(false)
+    expect(maPravo(ucitelka, '/api/worksheets/generate', 'POST')).toBe(true)
+    expect(maPravo(ucitelka, '/listy/new', 'GET')).toBe(true)
+  })
+
   it('učitelka smí pracovat s obsahem', () => {
     expect(maPravo(ucitelka, '/api/questions', 'POST')).toBe(true)
     expect(maPravo(ucitelka, '/api/generate', 'POST')).toBe(true)

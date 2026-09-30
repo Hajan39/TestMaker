@@ -29,21 +29,24 @@ export function TestSettings({
   value,
   templates,
   onChange,
+  worksheet = false,
 }: {
   value: TestSettingsValue
   templates: Template[]
   onChange: (next: TestSettingsValue) => void
+  /** Pracovní list: bez známek a bez variant — na listu se nic nehodnotí ani neopisuje. */
+  worksheet?: boolean
 }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button size="sm" variant="outline">
-          Nastavení testu
+          {worksheet ? 'Nastavení listu' : 'Nastavení testu'}
         </Button>
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>Nastavení testu</SheetTitle>
+          <SheetTitle>{worksheet ? 'Nastavení listu' : 'Nastavení testu'}</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-4">
@@ -56,7 +59,7 @@ export function TestSettings({
             />
           </div>
 
-          <div>
+          <div className={worksheet ? 'hidden' : undefined}>
             <Label htmlFor="test-variants">Varianty</Label>
             <Select
               value={String(value.variants)}
@@ -137,7 +140,7 @@ export function TestSettings({
           {/* Klíč správných odpovědí se tu nenastavuje: volí se až při tisku,
               kde se vybírá mezi „Zadání pro žáky" a „Klíč pro mě". */}
           <div className="flex flex-wrap gap-5">
-            <label className="flex items-center gap-2 text-sm text-fg-soft">
+            <label className={worksheet ? 'hidden' : 'flex items-center gap-2 text-sm text-fg-soft'}>
               <Checkbox
                 checked={value.graded}
                 onCheckedChange={() => onChange({ ...value, graded: !value.graded })}

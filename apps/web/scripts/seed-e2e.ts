@@ -15,7 +15,8 @@
  *   - ročník „6. ročník“ s dost tématy na rolování a s dlouhým názvem bez mezer,
  *   - témata se schválenými otázkami všech typů a obtížností (banka, osnova testu),
  *   - téma s pevným id `csxxOerbvKhz` (test zmrazení otázky ho má natvrdo),
- *   - vestavěné šablony `builtin-*` (náhledy šablon, tisk testu).
+ *   - vestavěné šablony `builtin-*` (náhledy šablon, tisk testu),
+ *   - hotový pracovní list s pevným id `e2e-pracovni-list` (přehled listů, značka „ověř“).
  */
 import { existsSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -307,6 +308,9 @@ const DRUHA_SKOLA_ID = 'skola-druha'
 /** Model v záznamech volání; test administrace ho hledá v přehledu „Použití AI“. */
 export const AI_POUZITI_MODEL = 'google:e2e-pouziti'
 export const SOUKROMA_PISEMKA_C = 'Soukromá písemka učitelky C'
+
+/** Hotový pracovní list výchozího účtu (`e2e/pracovni-listy.spec.ts` ho má natvrdo). */
+const E2E_PRACOVNI_LIST_ID = 'e2e-pracovni-list'
 const UCTY_DRUHE_SKOLY = [
   { id: 'e2e-spravce-b', email: 'spravce.b@localhost', name: 'Správce B', role: 'spravce' as const },
   { id: 'e2e-ucitelka-c', email: 'ucitelka.c@localhost', name: 'Učitelka C', role: 'ucitelka' as const },
@@ -532,6 +536,53 @@ async function main() {
   for (const radek of volani) {
     await db.insert(schema.aiCalls).values({ id: newId(), userId: null, durationMs: 4200, ...radek })
   }
+
+  /**
+   * Jeden hotový pracovní list, aby měl přehled listů co ukázat a e2e test
+   * značky „ověř“ i podvrženého generování měl kam sáhnout (pevné id).
+   */
+  await db.insert(schema.tests).values({
+    id: E2E_PRACOVNI_LIST_ID,
+    schoolId: SKOLA_ID,
+    ownerId: VYCHOZI_UCET_ID,
+    kind: 'pracovni_list',
+    title: 'E2E pracovní list o fotosyntéze',
+    topicId: aiKvalitaTopicId,
+    brief: JSON.stringify({ title: 'Fotosyntéza a dýchání rostlin', instructions: '', ownText: '' }),
+    graded: false,
+    templateId: 'builtin-pracovni-list',
+    header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
+  })
+  const polozkyListu = [
+    { kind: 'heading' as const, text: 'Fotosyntéza' },
+    { kind: 'text' as const, text: 'Rostliny ze světla, vody a oxidu uhličitého vyrábějí cukry.', content: { variant: 'text' } },
+    { kind: 'text' as const, text: 'Jeden strom vyrobí za rok kyslík pro několik lidí.', content: { variant: 'fun_fact' }, needsCheck: true },
+    {
+      kind: 'table' as const,
+      content: {
+        header: ['Vstupuje', 'Vystupuje'],
+        rows: [[{ value: 'oxid uhličitý', blank: false }, { value: 'kyslík', blank: true }]],
+      },
+    },
+    {
+      kind: 'question' as const,
+      questionSnapshot: JSON.stringify({
+        type: 'single_choice',
+        points: 1,
+        blocks: [],
+        payload: { prompt: 'Co rostlina při fotosyntéze uvolňuje?', options: ['Kyslík', 'Dusík'], correctIndex: 0 },
+      }),
+    },
+  ]
+  await db.insert(schema.testItems).values(
+    polozkyListu.map((polozka, position) => ({
+      id: newId(),
+      schoolId: SKOLA_ID,
+      testId: E2E_PRACOVNI_LIST_ID,
+      position,
+      ...polozka,
+    })),
+  )
 
   client.close()
   console.log(

@@ -21,6 +21,24 @@ export function formatPoints(points: number): string {
 }
 
 /**
+ * Rozměry položek pracovního listu v bodech. Čte je vykreslení PDF
+ * (`WorksheetBlocks.tsx`) i odhad výšky (`estimate.ts`), aby se náhled
+ * lámal tam, kde PDF.
+ */
+export const WORKSHEET_LAYOUT = {
+  /** Mezera nad krátkým textem. */
+  textSpacing: 8,
+  /** Mezera nad rámečkem fun factu a nad tabulkou. */
+  blockSpacing: 10,
+  /** Vnitřní okraj rámečku fun factu. */
+  funFactPadding: 6,
+  /** Vnitřní okraj buňky tabulky. */
+  cellPadding: 4,
+  /** Nejmenší výška řádku tabulky — do prázdné buňky se píše rukou. */
+  rowMinHeight: 22,
+} as const
+
+/**
  * Zadání doplňovačky, ve kterém jsou místa k doplnění (`___`) nahrazená
  * očíslovanou linkou. Týmiž čísly se na mezery odkazuje klíč, takže se
  * odpovědi nemusí dopočítávat podle pořadí v textu.
