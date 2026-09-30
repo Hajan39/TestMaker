@@ -318,7 +318,12 @@ const UCTY_DRUHE_SKOLY = [
 
 async function main() {
   if (onlyIfMissing && existsSync(dbFile)) {
-    console.log(`Testovací databáze ${dbFile} už je, nechávám ji být.`)
+    // Data zůstávají, ale schéma se dotáhne — jinak by testy po každé nové
+    // migraci běžely nad starou databází a padaly na chybějícím sloupci.
+    const existujici = createClient({ url: `file:${dbFile}` })
+    await migrate(drizzle(existujici, { schema }), { migrationsFolder: resolve(webRoot, 'drizzle') })
+    existujici.close()
+    console.log(`Testovací databáze ${dbFile} už je, jen jsem dotáhl migrace.`)
     return
   }
 
