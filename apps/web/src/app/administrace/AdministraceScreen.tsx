@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Badge, Button, Card, toast } from '@testmaker/ui'
 import { SkolaFormular, type NastaveniSkoly } from '@/components/SkolaFormular'
 import type { SkolaRadek } from '@/lib/skoly'
+import { PRAZDNE_UDAJE, udajeZRadku } from '@/lib/skolaUdaje'
 
-const PRAZDNA: NastaveniSkoly = { name: '', googleDomain: '', googleAutoJoin: false }
+const PRAZDNA: NastaveniSkoly = { name: '', googleDomain: '', googleAutoJoin: false, ...PRAZDNE_UDAJE }
 
 export function AdministraceScreen({
   skoly,
@@ -96,6 +97,7 @@ export function AdministraceScreen({
                 name: skola.name,
                 googleDomain: skola.googleDomain ?? '',
                 googleAutoJoin: skola.googleAutoJoin,
+                ...udajeZRadku(skola),
               }}
               tlacitko="Uložit"
               onUlozit={(nastaveni) => poslat('PATCH', { id: skola.id, ...nastaveni }, 'Škola uložena.')}

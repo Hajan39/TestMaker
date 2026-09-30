@@ -44,6 +44,17 @@ export const schools = sqliteTable(
      * `ceka`, který se nepřihlásí, dokud mu správce nepřidělí roli.
      */
     googleAutoJoin: integer('google_auto_join', { mode: 'boolean' }).notNull().default(false),
+    // Adresa a kontakty (`lib/skolaUdaje.ts`); všechno nepovinné.
+    street: text('street'),
+    city: text('city'),
+    postalCode: text('postal_code'),
+    website: text('website'),
+    email: text('email'),
+    phone: text('phone'),
+    /** IČO školy. */
+    ico: text('ico'),
+    /** Jméno ředitele či ředitelky. */
+    principal: text('principal'),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [

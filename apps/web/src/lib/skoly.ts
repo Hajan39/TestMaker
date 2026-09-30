@@ -6,6 +6,7 @@ import { nasaditSablony } from '@/db/sablony'
 import { newId } from '@/lib/ids'
 import { roleJeAdministrator, roleMuzeSpravovat } from '@/lib/role'
 import { normalizovatDomenu, slugZNazvu } from '@/lib/skolaText'
+import { normalizovatUdaj, UDAJE_SKOLY, type KlicUdaje } from '@/lib/skolaUdaje'
 import type { Scope } from '@/lib/uzivatel'
 
 /**
@@ -14,27 +15,44 @@ import type { Scope } from '@/lib/uzivatel'
  * nemá právo, dostane stejnou odpověď, jako by neexistovala.
  */
 
-export interface SkolaRadek {
+export type SkolaRadek = {
   id: string
   name: string
   slug: string
   googleDomain: string | null
   googleAutoJoin: boolean
   pocetUctu: number
-}
+} & { [K in KlicUdaje]: string | null }
 
-export interface ZmenySkoly {
+export type ZmenySkoly = {
   name?: string
   googleDomain?: string | null
   googleAutoJoin?: boolean
-}
+} & { [K in KlicUdaje]?: string | null }
+
+const udajeSchema = z.object(
+  Object.fromEntries(UDAJE_SKOLY.map((pole) => [pole.klic, z.string().max(200).nullable().optional()])) as {
+    [K in KlicUdaje]: z.ZodOptional<z.ZodNullable<z.ZodString>>
+  },
+)
 
 /** Tělo požadavku na úpravu školy; sdílí ho správa i administrace. */
-export const zmenySkolySchema = z.object({
-  name: z.string().max(200).optional(),
-  googleDomain: z.string().max(200).nullable().optional(),
-  googleAutoJoin: z.boolean().optional(),
-})
+export const zmenySkolySchema = z
+  .object({
+    name: z.string().max(200).optional(),
+    googleDomain: z.string().max(200).nullable().optional(),
+    googleAutoJoin: z.boolean().optional(),
+  })
+  .extend(udajeSchema.shape)
+
+/** Adresa a kontakty k uložení — jen ta pole, která v požadavku přišla. */
+function udajeKUlozeni(zmeny: ZmenySkoly): Partial<Record<KlicUdaje, string | null>> {
+  const sada: Partial<Record<KlicUdaje, string | null>> = {}
+  for (const { klic } of UDAJE_SKOLY) {
+    if (zmeny[klic] !== undefined) sada[klic] = normalizovatUdaj(klic, zmeny[klic])
+  }
+  return sada
+}
 
 export type VysledekSkoly = { ok: true; id: string } | { ok: false; chyba: string; status: number }
 
@@ -53,6 +71,14 @@ export async function seznamSkol(scope: Scope): Promise<SkolaRadek[] | null> {
       slug: schools.slug,
       googleDomain: schools.googleDomain,
       googleAutoJoin: schools.googleAutoJoin,
+      street: schools.street,
+      city: schools.city,
+      postalCode: schools.postalCode,
+      website: schools.website,
+      email: schools.email,
+      phone: schools.phone,
+      ico: schools.ico,
+      principal: schools.principal,
       pocetUctu: count(users.id),
     })
     .from(schools)
@@ -78,6 +104,7 @@ export async function zalozitSkolu(scope: Scope, vstup: ZmenySkoly): Promise<Vys
     slug: await volnySlug(slugZNazvu(name)),
     googleDomain,
     googleAutoJoin: vstup.googleAutoJoin ?? false,
+    ...udajeKUlozeni(vstup),
   })
   await nasaditSablony(db, id)
   return { ok: true, id }
@@ -97,7 +124,7 @@ export async function upravitSkolu(
   const [skola] = await db.select({ id: schools.id }).from(schools).where(eq(schools.id, schoolId)).limit(1)
   if (!skola) return NENALEZENA
 
-  const sada: Partial<typeof schools.$inferInsert> = {}
+  const sada: Partial<typeof schools.$inferInsert> = udajeKUlozeni(zmeny)
   if (zmeny.name !== undefined) {
     const name = zmeny.name.trim()
     if (!name) return BEZ_NAZVU

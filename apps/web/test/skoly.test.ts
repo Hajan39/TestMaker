@@ -81,6 +81,33 @@ describe('správce upraví svou školu', () => {
     expect(udalost).toBeTruthy()
   })
 
+  it('adresu a kontakty: web dostane https, prázdné pole se vymaže, neposlané zůstane', async () => {
+    const prvni = await upravitVlastni(
+      jsonReq('/api/sprava/skola', 'PATCH', {
+        street: ' Školní 12 ',
+        city: 'Brno',
+        postalCode: '602 00',
+        website: 'www.zs-test.cz',
+        email: 'info@zs-test.cz',
+        phone: '+420 541 000 000',
+        ico: '12345678',
+        principal: 'Mgr. Jana Nováková',
+      }),
+    )
+    expect(prvni.status).toBe(200)
+    let [skola] = await db.select().from(schools).where(eq(schools.id, TEST_SKOLA_ID))
+    expect(skola).toMatchObject({
+      street: 'Školní 12',
+      city: 'Brno',
+      website: 'https://www.zs-test.cz',
+      principal: 'Mgr. Jana Nováková',
+    })
+
+    await upravitVlastni(jsonReq('/api/sprava/skola', 'PATCH', { phone: '', website: 'http://zs-test.cz' }))
+    ;[skola] = await db.select().from(schools).where(eq(schools.id, TEST_SKOLA_ID))
+    expect(skola).toMatchObject({ phone: null, website: 'http://zs-test.cz', city: 'Brno' })
+  })
+
   it('prázdný název se odmítne', async () => {
     const response = await upravitVlastni(jsonReq('/api/sprava/skola', 'PATCH', { name: '  ' }))
     expect(response.status).toBe(400)
@@ -131,7 +158,9 @@ describe('administrace škol', () => {
     const prvni = await zalozitSkolu(
       jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize', googleDomain: 'kolize.cz' }),
     )
-    const druha = await zalozitSkolu(jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize' }))
+    const druha = await zalozitSkolu(
+      jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize', city: 'Olomouc' }),
+    )
     expect(prvni.status).toBe(200)
     expect(druha.status).toBe(200)
     const { id: idPrvni } = (await prvni.json()) as { id: string }
@@ -142,6 +171,7 @@ describe('administrace škol', () => {
     expect(a?.slug).toBe('zs-kolize')
     expect(b?.slug).toBe('zs-kolize-2')
     expect(a?.googleDomain).toBe('kolize.cz')
+    expect(b?.city).toBe('Olomouc')
 
     const sablony = await db.select().from(templates).where(eq(templates.schoolId, idPrvni))
     expect(sablony.map((t) => t.slug).sort()).toEqual(BUILT_IN_TEMPLATES.map((t) => t.slug).sort())

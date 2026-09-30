@@ -7,6 +7,7 @@ import { aiStatus } from '@/lib/ai'
 import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
 import { roleMuzeSpravovat } from '@/lib/role'
+import { PRAZDNE_UDAJE, udajeZRadku } from '@/lib/skolaUdaje'
 import { ucetStranky } from '@/lib/uzivatel'
 import { SpravaScreen } from './SpravaScreen'
 
@@ -67,6 +68,14 @@ export default async function SpravaPage() {
         name: schools.name,
         googleDomain: schools.googleDomain,
         googleAutoJoin: schools.googleAutoJoin,
+        street: schools.street,
+        city: schools.city,
+        postalCode: schools.postalCode,
+        website: schools.website,
+        email: schools.email,
+        phone: schools.phone,
+        ico: schools.ico,
+        principal: schools.principal,
       })
       .from(schools)
       .where(eq(schools.id, ucet.schoolId))
@@ -84,6 +93,7 @@ export default async function SpravaPage() {
         skola={skola?.name ?? ''}
         googleDomain={skola?.googleDomain ?? null}
         googleAutoJoin={skola?.googleAutoJoin ?? false}
+        udajeSkoly={skola ? udajeZRadku(skola) : PRAZDNE_UDAJE}
         uzivatele={uzivatele.map((row) => ({
           id: row.id,
           email: row.email,

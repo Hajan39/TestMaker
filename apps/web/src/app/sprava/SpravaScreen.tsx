@@ -21,7 +21,8 @@ import {
   toast,
 } from '@testmaker/ui'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
-import { SkolaFormular } from '@/components/SkolaFormular'
+import { SkolaFormular, type NastaveniSkoly } from '@/components/SkolaFormular'
+import type { UdajeSkoly } from '@/lib/skolaUdaje'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
 import {
@@ -73,6 +74,7 @@ export function SpravaScreen({
   skola,
   googleDomain,
   googleAutoJoin,
+  udajeSkoly,
   uzivatele,
   udalosti,
   fronta,
@@ -87,6 +89,7 @@ export function SpravaScreen({
   skola: string
   googleDomain: string | null
   googleAutoJoin: boolean
+  udajeSkoly: UdajeSkoly
   uzivatele: UcetRadek[]
   udalosti: UdalostRadek[]
   fronta: { queued: number; running: number; done: number; error: number }
@@ -178,11 +181,7 @@ export function SpravaScreen({
     router.refresh()
   }
 
-  async function ulozitSkolu(nastaveni: {
-    name: string
-    googleDomain: string
-    googleAutoJoin: boolean
-  }): Promise<boolean> {
+  async function ulozitSkolu(nastaveni: NastaveniSkoly): Promise<boolean> {
     const response = await fetch('/api/sprava/skola', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -258,7 +257,7 @@ export function SpravaScreen({
               z domény, který tu ještě není, se zaeviduje a čeká, až mu přidělíš roli.
             </p>
             <SkolaFormular
-              vychozi={{ name: skola, googleDomain: googleDomain ?? '', googleAutoJoin }}
+              vychozi={{ name: skola, googleDomain: googleDomain ?? '', googleAutoJoin, ...udajeSkoly }}
               tlacitko="Uložit školu"
               onUlozit={ulozitSkolu}
             />
