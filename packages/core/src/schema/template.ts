@@ -69,6 +69,17 @@ export const templateConfigSchema = z.object({
     rule: z.boolean().default(true),
     spacingBefore: z.number().min(0).max(60).default(16),
   }).prefault({}),
+  /**
+   * Rámeček fun factu v pracovním listu. Výchozí hodnoty drží stávající
+   * šablony v chodu beze změny — nastavení přibylo až s listy.
+   */
+  funFact: z
+    .object({
+      label: z.string().default('Věděli jste?'),
+      border: z.boolean().default(true),
+      shaded: z.boolean().default(true),
+    })
+    .prefault({}),
   /** Výchozí styl otázky + přepisy pro konkrétní typy. */
   questionDefaults: questionStyleSchema.prefault({}),
   questionStyles: z.partialRecord(z.enum(QUESTION_TYPES), questionStyleSchema.partial()).default({}),
