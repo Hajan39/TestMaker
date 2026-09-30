@@ -8,6 +8,7 @@ import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
 import { formatPoints, puzzleForVariant } from './layout'
 import { QuestionBody } from './QuestionBody'
 import { PuzzleBody } from './PuzzleBody'
+import { TableBlock, TextBlock } from './WorksheetBlocks'
 import { buildVariant } from './shuffle'
 import { pagePadding, questionLabel } from './styles'
 import { sanitizeText } from './text'
@@ -31,7 +32,9 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
   // Samostatný hlavolam (viz `loadRenderablePuzzle`) žádnou variantu nemá —
   // „varianta A“ v klíči i v patičce by jen mátla.
   const standalonePuzzle = ordered.length === 1 && ordered[0]?.kind === 'puzzle' && test.variants === 1
-  const variantLabel = standalonePuzzle && variant === 'A' ? null : variant
+  // Pracovní list se v aplikaci na varianty nedělí — „varianta A“ by jen mátla.
+  const variantLabel =
+    (standalonePuzzle || (test.kind === 'pracovni_list' && test.variants === 1)) && variant === 'A' ? null : variant
   const firstContent = ordered.findIndex((item) => item.kind !== 'page_break')
   const heading = { title: test.title, description: test.description }
 
@@ -109,7 +112,19 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
               </Text>
             )
           }
-          return <View key={item.id} break />
+          if (item.kind === 'text') {
+            // Poškozený obsah (neznámá varianta) nesmí vzít s sebou celý list —
+            // text se aspoň vytiskne jako obyčejný odstavec.
+            return (
+              <TextBlock key={item.id} text={item.text ?? ''} variant={item.textContent?.variant ?? 'text'} config={config} />
+            )
+          }
+          if (item.kind === 'table') {
+            // Poškozená tabulka se vynechá; editor ji ukazuje jako chybnou.
+            return item.table ? <TableBlock key={item.id} table={item.table} /> : null
+          }
+          if (item.kind === 'page_break') return <View key={item.id} break />
+          return null
         })}
 
         {config.footer ? <Footer variant={variantLabel} testTitle={test.title} /> : null}
@@ -390,6 +405,9 @@ function KeyPage({
               head={<Text style={{ fontWeight: 'bold' }}>{sanitizeText(`Řešení – ${item.puzzle.title}`)}</Text>}
             />
           )
+        }
+        if (item.kind === 'table' && item.table) {
+          return <TableBlock key={item.id} table={item.table} solved />
         }
         if (item.kind !== 'question' || !item.question) return null
         index += 1

@@ -9,6 +9,7 @@ import {
   cellSize,
   cryptogramLayout,
   placedEntries,
+  WORKSHEET_LAYOUT,
 } from './layout'
 import { mm } from './styles'
 
@@ -131,6 +132,8 @@ export function estimateHeight(item: ResolvedTestItem, config: TemplateConfig, h
   if (item.kind === 'page_break') return 0
   const parts = puzzleParts(item, config, heading)
   if (parts) return sum(parts) * PUZZLE_SAFETY_MARGIN
+  const table = tableParts(item, config)
+  if (item.kind === 'table') return table ? sum(table) * SAFETY_MARGIN : 0
   return rawEstimateHeight(item, config) * SAFETY_MARGIN
 }
 
@@ -266,8 +269,54 @@ export function puzzleParts(item: ResolvedTestItem, config: TemplateConfig, head
   return [head + phrase, ...gridRows, ...clues]
 }
 
+/** Výška řádku tabulky listu: nejvyšší buňka, nejméně místo na psaní rukou. */
+function tableRowHeight(cells: string[], config: TemplateConfig): number {
+  const cellWidth = contentWidth(config) / cells.length - 2 * WORKSHEET_LAYOUT.cellPadding
+  const lines = Math.max(...cells.map((cell) => wrappedLines(cell, cellWidth, config.page.fontSize)))
+  return Math.max(WORKSHEET_LAYOUT.rowMinHeight, lines * lineHeight(config) + 2 * WORKSHEET_LAYOUT.cellPadding)
+}
+
+/** Výška záhlaví tabulky — na každé další straně se tiskne znovu. */
+export function tableHeaderHeight(item: ResolvedTestItem, config: TemplateConfig): number {
+  if (item.kind !== 'table' || !item.table) return 0
+  const cellWidth = contentWidth(config) / item.table.header.length - 2 * WORKSHEET_LAYOUT.cellPadding
+  const lines = Math.max(...item.table.header.map((title) => wrappedLines(title, cellWidth, config.page.fontSize)))
+  return lines * lineHeight(config) + 2 * WORKSHEET_LAYOUT.cellPadding
+}
+
+/**
+ * Výška tabulky listu po nerozdělitelných kusech, jak je tiskne `TableBlock`:
+ * první kus je mezera, popisek, záhlaví a první řádek (záhlaví se od řádků
+ * neodtrhne), další jsou jednotlivé řádky. Pro jinou položku (i poškozenou
+ * tabulku) vrací `null`.
+ */
+export function tableParts(item: ResolvedTestItem, config: TemplateConfig): number[] | null {
+  if (item.kind !== 'table' || !item.table) return null
+  const table = item.table
+  const caption = table.caption
+    ? wrappedLines(table.caption, contentWidth(config), config.page.fontSize) * lineHeight(config)
+    : 0
+  const rows = table.rows.map((row) => tableRowHeight(row.map((cell) => cell.value), config))
+  const [first = 0, ...rest] = rows
+  return [WORKSHEET_LAYOUT.blockSpacing + caption + tableHeaderHeight(item, config) + first, ...rest]
+}
+
 function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): number {
   const line = lineHeight(config)
+
+  if (item.kind === 'text') {
+    const text = item.text ?? ''
+    if (item.textContent?.variant !== 'fun_fact') {
+      return WORKSHEET_LAYOUT.textSpacing + wrappedLines(text, contentWidth(config), config.page.fontSize) * line
+    }
+    const inner = contentWidth(config) - 2 * WORKSHEET_LAYOUT.funFactPadding - 2
+    return (
+      WORKSHEET_LAYOUT.blockSpacing +
+      2 * WORKSHEET_LAYOUT.funFactPadding +
+      (config.funFact.label ? line : 0) +
+      wrappedLines(text, inner, config.page.fontSize) * line
+    )
+  }
 
   if (item.kind === 'heading') {
     return config.sectionStyle.spacingBefore + config.sectionStyle.fontSize * 1.6
@@ -376,6 +425,26 @@ export function paginate(
         if (used + row > usableHeight) {
           newPage()
           continued = true
+        }
+        used += row
+      }
+      return
+    }
+
+    // Tabulka listu se láme po řádcích; na další straně se před řádky
+    // zopakuje záhlaví, takže zabere místo i tam.
+    const table = tableParts(item, config)
+    if (table) {
+      const header = tableHeaderHeight(item, config) * SAFETY_MARGIN
+      const [head = 0, ...rows] = table.map((part) => part * SAFETY_MARGIN)
+      if ((current.length > 0 || continued) && used + head > usableHeight) newPage()
+      current.push(item)
+      used += head
+      for (const row of rows) {
+        if (used + row > usableHeight) {
+          newPage()
+          continued = true
+          used = header
         }
         used += row
       }
