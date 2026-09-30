@@ -39,11 +39,18 @@ export function QuestionEditorForm({
   question,
   onCancel,
   onSaved,
+  onSubmit,
 }: {
   topicId: string
   question: Question | null
   onCancel: () => void
   onSaved: (saved?: Question) => void
+  /**
+   * Místo uložení do banky předá obsah volajícímu — úloha pracovního listu
+   * žije jen ve snímku položky listu, do banky nepatří. Body se pak nenabízejí,
+   * list se neznámkuje.
+   */
+  onSubmit?: (content: QuestionContent) => void
 }) {
   const [type, setType] = useState<QuestionType>(question?.type ?? 'single_choice')
   const [payload, setPayload] = useState<Record<string, unknown>>(
@@ -83,6 +90,11 @@ export function QuestionEditorForm({
     const problems = validateQuestionContent(parsed.data as QuestionContent)
     if (problems.length > 0) {
       setError(problems.join('; '))
+      return
+    }
+
+    if (onSubmit) {
+      onSubmit(parsed.data as QuestionContent)
       return
     }
 
@@ -129,7 +141,7 @@ export function QuestionEditorForm({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-24">
+        <div className={onSubmit ? 'hidden' : 'w-24'}>
           <Label htmlFor={`question-editor-points-${uid}`}>Body</Label>
           <Input
             id={`question-editor-points-${uid}`}
@@ -193,6 +205,8 @@ export function QuestionEditor({
   returnFocusRef,
   onClose,
   onSaved,
+  onSubmit,
+  title,
 }: {
   topicId: string
   question: Question | null
@@ -205,6 +219,10 @@ export function QuestionEditor({
   returnFocusRef?: React.RefObject<HTMLElement | null>
   onClose: () => void
   onSaved: () => void
+  /** Viz `QuestionEditorForm` — obsah bez uložení do banky. */
+  onSubmit?: (content: QuestionContent) => void
+  /** Nadpis dialogu místo výchozího „Upravit otázku“ / „Nová otázka“. */
+  title?: string
 }) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -217,9 +235,15 @@ export function QuestionEditor({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{question ? 'Upravit otázku' : 'Nová otázka'}</DialogTitle>
+          <DialogTitle>{title ?? (question ? 'Upravit otázku' : 'Nová otázka')}</DialogTitle>
         </DialogHeader>
-        <QuestionEditorForm topicId={topicId} question={question} onCancel={onClose} onSaved={() => onSaved()} />
+        <QuestionEditorForm
+          topicId={topicId}
+          question={question}
+          onCancel={onClose}
+          onSaved={() => onSaved()}
+          onSubmit={onSubmit}
+        />
       </DialogContent>
     </Dialog>
   )

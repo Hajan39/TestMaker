@@ -3,17 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import type { Question, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
-import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
+import type { Question, QuestionContent, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
+import type { WorksheetItemDraft, WorksheetTarget } from '@testmaker/core/ai'
+import { Button, Input, Label, pocet, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
 import type { Role } from '@/lib/role'
 import type { PickerTopic } from '@/lib/questionPicker'
 import { PrintMenu } from '@/components/PrintMenu'
+import { QuestionEditor } from '@/components/QuestionEditor'
+import { testPath } from '@/app/tests/paths'
+import { emptyTable } from '@/components/test-builder/WorksheetItems'
 import { TestVariantMenu } from '@/components/TestVariantMenu'
 import { BankPanel } from '@/components/test-builder/BankPanel'
 import { TestPage } from '@/components/test-builder/TestPage'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
-import { nextDraftKey, type BankFilters, type DraftItem, type TestSettingsValue } from '@/components/test-builder/types'
+import {
+  nextDraftKey,
+  type BankFilters,
+  type DraftItem,
+  type TestSettingsValue,
+  type WorksheetAddKind,
+} from '@/components/test-builder/types'
 import { defaultTemplateId, emptyHeader } from '@/components/test-builder/defaults'
 
 const STRUCTURAL_TEXT: Record<'heading' | 'instruction' | 'page_break', string | null> = {
@@ -40,6 +50,7 @@ export function TestBuilder({
   backTopic,
   role,
   ai,
+  dropped = 0,
 }: {
   topics: PickerTopic[]
   templates: Template[]
@@ -64,6 +75,10 @@ export function TestBuilder({
 }) {
   const router = useRouter()
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
+  // Pracovní list vzniká vždy z formuláře „Nový pracovní list“, takže do
+  // editoru přichází už uložený a druh se pozná podle testu.
+  const worksheet = test?.kind === 'pracovni_list'
+  const kind = test?.kind ?? 'pisemka'
   const [settings, setSettings] = useState<TestSettingsValue>(() => ({
     title: test?.title ?? '',
     description: test?.description ?? '',
@@ -92,6 +107,9 @@ export function TestBuilder({
       questionMissing: item.questionMissing,
       puzzleId: item.puzzleId ?? null,
       puzzle: item.puzzle ?? null,
+      table: item.table ?? null,
+      textContent: item.textContent ?? null,
+      needsCheck: item.needsCheck ?? false,
     })),
   )
   // Na stav otázky se tu nefiltruje: do banky jdou ze serveru jen schválené
@@ -146,6 +164,9 @@ export function TestBuilder({
       question,
       puzzleId: null,
       puzzle: null,
+      table: null,
+      textContent: null,
+      needsCheck: false,
     }
   }
 
@@ -210,6 +231,9 @@ export function TestBuilder({
         question: null,
         puzzleId: null,
         puzzle: null,
+        table: null,
+        textContent: null,
+        needsCheck: false,
       }
       const at = Math.min(Math.max(index ?? current.length, 0), current.length)
       const next = [...current]
@@ -235,6 +259,129 @@ export function TestBuilder({
     setDraft((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
+  /* --------------------------------------------------- pracovní list */
+
+  // Editor úlohy listu: `key` upravované položky, nebo místo pro novou.
+  const [questionDialog, setQuestionDialog] = useState<{ key: string | null; index?: number } | null>(null)
+  const [regenerating, setRegenerating] = useState<string | null>(null)
+
+  function insertAt(item: DraftItem, index?: number) {
+    setDraft((current) => {
+      const at = Math.min(Math.max(index ?? current.length, 0), current.length)
+      const next = [...current]
+      next.splice(at, 0, item)
+      return next
+    })
+  }
+
+  /** Úloha listu jako otázka pro náhled; metadata banky u ní nic neznamenají. */
+  function worksheetQuestion(content: QuestionContent): Question {
+    return {
+      ...content,
+      id: nextDraftKey(),
+      topicId: null,
+      materialId: null,
+      source: 'manual',
+      status: 'approved',
+      createdAt: '',
+      variantOf: null,
+    } as Question
+  }
+
+  const blankItem = (kind: DraftItem['kind']): DraftItem => ({
+    key: nextDraftKey(),
+    id: null,
+    kind,
+    questionId: null,
+    text: null,
+    pointsOverride: null,
+    linesOverride: null,
+    question: null,
+    puzzleId: null,
+    puzzle: null,
+    table: null,
+    textContent: null,
+    needsCheck: false,
+  })
+
+  function addWorksheetItem(kind: WorksheetAddKind, index?: number) {
+    if (kind === 'question') return setQuestionDialog({ key: null, index })
+    if (kind === 'table') return insertAt({ ...blankItem('table'), table: emptyTable() }, index)
+    insertAt({ ...blankItem('text'), text: '', textContent: { variant: kind } }, index)
+  }
+
+  function submitQuestion(content: QuestionContent) {
+    if (!questionDialog) return
+    if (questionDialog.key) patchItem(questionDialog.key, { question: worksheetQuestion(content) })
+    else insertAt({ ...blankItem('question'), question: worksheetQuestion(content) }, questionDialog.index)
+    setQuestionDialog(null)
+  }
+
+  /** Položka od modelu v podobě položky editoru; klíč a id zůstávají původní. */
+  function fromModel(item: WorksheetItemDraft, previous: DraftItem): DraftItem {
+    const base = { ...blankItem(item.kind), key: previous.key, id: previous.id, needsCheck: item.needsCheck }
+    switch (item.kind) {
+      case 'heading':
+      case 'instruction':
+        return { ...base, text: item.text }
+      case 'text':
+        return { ...base, text: item.text, textContent: item.content }
+      case 'table':
+        return { ...base, table: item.content }
+      case 'question':
+        return { ...base, question: worksheetQuestion(item.question) }
+    }
+  }
+
+  function targetOf(item: DraftItem): WorksheetTarget | null {
+    if (item.kind === 'heading' || item.kind === 'instruction' || item.kind === 'table') return { kind: item.kind }
+    if (item.kind === 'text') return { kind: item.textContent?.variant ?? 'text' }
+    if (item.kind === 'question' && item.question) return { kind: 'question', questionType: item.question.type }
+    return null
+  }
+
+  /** Text položky pro seznam „tohle už na listu je“. */
+  function summaryOf(item: DraftItem): string {
+    if (item.kind === 'question') return (item.question?.payload as { prompt?: string } | undefined)?.prompt ?? ''
+    if (item.kind === 'table') return item.table ? `Tabulka: ${item.table.header.join(', ')}` : ''
+    return item.text ?? ''
+  }
+
+  /**
+   * Nová podoba jednoho kusu od modelu, na tomtéž místě. Neukládá se sama —
+   * list se uloží tlačítkem Uložit jako po každé jiné úpravě.
+   */
+  async function regenerate(key: string) {
+    const item = draft.find((candidate) => candidate.key === key)
+    const target = item ? targetOf(item) : null
+    if (!item || !target || !savedId) return
+    setError(null)
+    setRegenerating(key)
+    try {
+      const response = await fetch(
+        `/api/worksheets/${encodeURIComponent(savedId)}/items/${encodeURIComponent(item.id ?? key)}/regenerate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            target,
+            existing: draft.filter((other) => other.key !== key).map(summaryOf).filter(Boolean),
+          }),
+        },
+      )
+      const data = (await response.json().catch(() => ({}))) as { item?: WorksheetItemDraft; error?: string }
+      if (!response.ok || !data.item) throw new Error(data.error ?? `Přegenerování selhalo (${response.status})`)
+      const replacement = fromModel(data.item, item)
+      setDraft((current) => current.map((candidate) => (candidate.key === key ? replacement : candidate)))
+    } catch (regenerateError) {
+      setError(regenerateError instanceof Error ? regenerateError.message : String(regenerateError))
+    } finally {
+      setRegenerating(null)
+    }
+  }
+
+  const toCheck = draft.filter((item) => item.needsCheck).length
+
   /** Otisk toho, co je opravdu uložené — porovnáním se pozná neuložená změna. */
   const fingerprint = useMemo(
     () =>
@@ -247,9 +394,14 @@ export function TestBuilder({
           text: item.text,
           pointsOverride: item.pointsOverride,
           linesOverride: item.linesOverride,
+          table: item.table,
+          textContent: item.textContent,
+          needsCheck: item.needsCheck,
+          // Úloha listu žije jen v položce — její úprava je změna listu.
+          question: worksheet && !item.questionId ? item.question : null,
         })),
       }),
-    [settings, draft],
+    [settings, draft, worksheet],
   )
   // Otisk naposledy uloženého stavu. Ve stavu, ne v ref — ref se během
   // vykreslování nemá číst a React na to upozorňuje.
@@ -270,9 +422,11 @@ export function TestBuilder({
     if (!settings.title.trim()) {
       setTitleInvalid(true)
       titleRef.current?.focus()
-      return setError('Vyplň název písemky.')
+      return setError(worksheet ? 'Vyplň název listu.' : 'Vyplň název písemky.')
     }
-    if (questionCount === 0) return setError('Přidej aspoň jednu otázku.')
+    if (worksheet) {
+      if (draft.length === 0) return setError('Přidej do listu aspoň jednu položku.')
+    } else if (questionCount === 0) return setError('Přidej aspoň jednu otázku.')
 
     setSaving(true)
     const body = {
@@ -298,6 +452,10 @@ export function TestBuilder({
         text: item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
+        content: item.kind === 'table' ? item.table : item.kind === 'text' ? item.textContent : undefined,
+        needsCheck: item.needsCheck,
+        // Úloha listu v bance není — její obsah jde se snímkem položky.
+        question: worksheet && item.kind === 'question' && !item.questionId ? item.question : null,
       })),
     }
 
@@ -314,7 +472,7 @@ export function TestBuilder({
       const result = (await response.json()) as { id: string }
       setSavedFingerprint(fingerprint)
       setSavedId(result.id)
-      if (!test) router.replace(`/tests/${result.id}`)
+      if (!test) router.replace(testPath(kind, result.id))
       else router.refresh()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError))
@@ -346,15 +504,32 @@ export function TestBuilder({
       onRemove={removeItem}
       onPatch={patchItem}
       onAdd={addStructural}
+      worksheet={
+        worksheet
+          ? {
+              onAdd: addWorksheetItem,
+              onEditQuestion: (key) => setQuestionDialog({ key }),
+              // Přegenerovat jde jen s nastaveným modelem a u uloženého listu
+              // (zadání listu je na serveru); náhled nemění nic.
+              onRegenerate: ai.configured && savedId && role !== 'nahled' ? (key) => void regenerate(key) : undefined,
+              regenerating,
+            }
+          : undefined
+      }
     />
   )
+  const editedQuestion = questionDialog?.key
+    ? (draft.find((item) => item.key === questionDialog.key)?.question ?? null)
+    : null
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         {/* Název není nastavení mezi ostatními: bez něj se test neuloží, takže
             patří do hlavičky na oči, ne do panelu, který se ani neotevře. */}
         <div className="min-w-0 flex-1 basis-64">
-          <h1 className="ui-page-title">{test ? 'Úprava testu' : 'Nový test'}</h1>
+          <h1 className="ui-page-title">
+            {worksheet ? 'Úprava pracovního listu' : test ? 'Úprava testu' : 'Nový test'}
+          </h1>
           {gradeLabel || backTopic ? (
             <p className="mt-1 text-sm text-fg-muted">
               {gradeLabel}
@@ -367,12 +542,12 @@ export function TestBuilder({
             </p>
           ) : null}
           <div className="mt-2 max-w-md">
-            <Label htmlFor="test-title">Název písemky</Label>
+            <Label htmlFor="test-title">{worksheet ? 'Název listu' : 'Název písemky'}</Label>
             <Input
               id="test-title"
               ref={titleRef}
               value={settings.title}
-              placeholder="Např. Čtvrtletní písemka – přírodopis"
+              placeholder={worksheet ? 'Např. Sopky – procvičování' : 'Např. Čtvrtletní písemka – přírodopis'}
               aria-invalid={titleInvalid || undefined}
               aria-describedby={titleInvalid ? 'test-title-error' : undefined}
               onChange={(event) => {
@@ -389,7 +564,7 @@ export function TestBuilder({
           {savedId ? <PrintMenu testId={savedId} variants={settings.variants} /> : null}
           {/* Verze písemky vzniká z uložené podoby — bez uloženého testu (nový
               test, role náhled) nemá tlačítko co dělat. */}
-          {savedId && role !== 'nahled' ? (
+          {savedId && role !== 'nahled' && !worksheet ? (
             <TestVariantMenu
               testId={savedId}
               ai={ai}
@@ -397,8 +572,9 @@ export function TestBuilder({
               onDirty={() => setError('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
             />
           ) : null}
-          <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />
-          <TestSettings value={settings} templates={templates} onChange={setSettings} />
+          {/* Losování i banka patří písemce — úlohy listu z banky nejsou. */}
+          {worksheet ? null : <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />}
+          <TestSettings value={settings} templates={templates} onChange={setSettings} worksheet={worksheet} />
           <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
         </div>
       </div>
@@ -409,9 +585,37 @@ export function TestBuilder({
         </p>
       ) : null}
 
+      {worksheet && dropped > 0 ? (
+        <p className="text-sm text-fg-muted">
+          {pocet(dropped, ['položku', 'položky', 'položek'])} model nevrátil v pořádku a{' '}
+          {dropped === 1 ? 'vynechala se' : 'vynechaly se'}. Chybějící kus můžeš přidat ručně.
+        </p>
+      ) : null}
+      {worksheet && toCheck > 0 ? (
+        // Nenápadné upozornění; tisk nijak neblokuje.
+        <p className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg" data-slot="ke-kontrole">
+          Ke kontrole: {pocet(toCheck, ['položka', 'položky', 'položek'])}. Jejich obsah nevychází z materiálů —
+          ověř ho a značku „ověř“ pak odškrtni kliknutím.
+        </p>
+      ) : null}
+
+      {questionDialog ? (
+        <QuestionEditor
+          topicId=""
+          question={editedQuestion}
+          title={editedQuestion ? 'Upravit úlohu' : 'Nová úloha'}
+          onClose={() => setQuestionDialog(null)}
+          onSaved={() => setQuestionDialog(null)}
+          onSubmit={submitQuestion}
+        />
+      ) : null}
+
       {/* Vykresluje se jen jedna podoba. Obě naráz (jedna schovaná) znamenaly
           zdvojená `id` filtrů a zdvojené zaškrtávátko „Vybrat vše". */}
-      {narrow ? (
+      {worksheet ? (
+        // List banku nemá — stránka dostane celou šířku.
+        <div className="h-[75vh]">{sheet}</div>
+      ) : narrow ? (
         // Pod 1024 px: jeden sloupec se záložkami.
         <Tabs defaultValue="banka">
           <TabsList>

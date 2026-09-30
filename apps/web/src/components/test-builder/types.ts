@@ -1,4 +1,11 @@
-import type { PuzzleContent, Question, ResolvedTestItem, TestHeaderConfig } from '@testmaker/core/schema'
+import type {
+  PuzzleContent,
+  Question,
+  ResolvedTestItem,
+  TableItemContent,
+  TestHeaderConfig,
+  TextItemContent,
+} from '@testmaker/core/schema'
 
 /** Zápis bodů má jedinou definici — tutéž, jakou tiskne PDF. */
 export { formatPoints } from '@testmaker/core/pdf/layout'
@@ -19,10 +26,30 @@ export interface DraftItem {
   puzzleId: string | null
   /** Obsah hlavolamu ze zmrazeného snímku; jen ke čtení, upravuje se v Hlavolamech. */
   puzzle: PuzzleContent | null
+  /** Mřížka tabulky listu; `null` u jiných položek i u poškozené tabulky. */
+  table: TableItemContent | null
+  /** Varianta textu listu (text, nebo fun fact); `null` u jiných položek i u poškozeného obsahu. */
+  textContent: TextItemContent | null
+  /** Značka „ověř“: obsah nevychází z materiálů. Odškrtává ji učitelka, úprava ne. */
+  needsCheck: boolean
   /** Živá otázka se od zmrazené v testu liší. */
   questionEdited?: boolean
   /** Otázka už v bance není; test drží jen její snímek. */
   questionMissing?: boolean
+}
+
+/** Co jde do pracovního listu přidat navíc proti písemce. */
+export type WorksheetAddKind = 'text' | 'fun_fact' | 'table' | 'question'
+
+/** Ovládání položek, které má jen pracovní list. */
+export interface WorksheetControls {
+  onAdd: (kind: WorksheetAddKind, index?: number) => void
+  /** Otevře editor úlohy listu (výsledek jde do snímku položky, ne do banky). */
+  onEditQuestion: (key: string) => void
+  /** Přegenerování kusu; bez nastaveného modelu nebo neuloženého listu chybí. */
+  onRegenerate?: (key: string) => void
+  /** Klíč položky, která se právě přegenerovává. */
+  regenerating: string | null
 }
 
 /**

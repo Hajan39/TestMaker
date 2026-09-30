@@ -193,7 +193,9 @@ export async function PUT(request: Request) {
   // výslovné `null` znamená „zruš vazbu na třídu". Kdyby default doplnil
   // `null` i za chybějící pole, první uložení z editoru, který gradeId
   // neposílá, by třídu testu potichu smazalo.
-  const schema = testSchema.extend({
+  // Druh, téma a zadání se při úpravě nemění — editor je neposílá a výchozí
+  // hodnoty schématu by je jinak potichu smazaly.
+  const schema = testSchema.omit({ kind: true, topicId: true, brief: true }).extend({
     id: z.string().min(1),
     gradeId: z.string().min(1).nullable().optional(),
   })
@@ -201,9 +203,7 @@ export async function PUT(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
   }
-  // Druh, téma a zadání se při úpravě nemění — editor je neposílá a výchozí
-  // hodnoty schématu by je jinak potichu smazaly.
-  const { id, items, gradeId: gradeIdVstup, kind: _kind, topicId: _topicId, brief: _brief, ...test } = parsed.data
+  const { id, items, gradeId: gradeIdVstup, ...test } = parsed.data
   const gradeId = gradeIdVstup === undefined ? undefined : await resolveGradeId(ucet, gradeIdVstup)
 
   // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
