@@ -261,7 +261,8 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM nad SQLite
 
 | Příkaz | Co dělá |
 | --- | --- |
-| `pnpm dev` | Vývojový server |
+| `pnpm dev` | Vývojový server nad ostrou `local.db` |
+| `pnpm dev:sandbox` | Vývojový server na :3200 nad zahoditelnou `dev.db` s přihlašováním; účty viz `apps/web/scripts/dev-sandbox.ts` (`--reset` postaví databázi znovu) |
 | `pnpm build` | Produkční build |
 | `pnpm test` | Testy |
 | `pnpm typecheck` | Kontrola typů |
