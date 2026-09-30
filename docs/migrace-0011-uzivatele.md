@@ -1,6 +1,6 @@
 # Migrace 0011 — uživatelé, školy a vlastnictví obsahu
 
-Soubor: `apps/web/drizzle/0011_vlastnictvi.sql`
+Soubor: `apps/web/drizzle-historie/0011_vlastnictvi.sql`
 
 ## Co dělá
 

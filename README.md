@@ -290,7 +290,22 @@ prostředí:
 
 Pořadí při prvním nasazení je závazné, jinak se dovnitř nedostane nikdo:
 migrace (`pnpm db:migrate` proti Tursu) → založení prvního správce skriptem
-`uzivatel` proti téže databázi → nasazení kódu → správce doplní učitelky.
+`uzivatel` proti téže databázi (v prázdné databázi se zeptá i na název první
+školy) → nasazení kódu → správce doplní učitelky.
+
+Čistá databáze vzniká jedinou migrací `apps/web/drizzle/0000_zaklad.sql`, bez
+pomocných tabulek a bez dat. Starší řada jednadvaceti migrací je ve složce
+`apps/web/drizzle-historie`; databázi, která jí prošla (`local.db`, první
+Turso), `pnpm db:migrate` převede sám: dotáhne zbylé staré migrace, tabulky
+s odlišným schématem přestaví do tvaru základu, zahodí pomocné tabulky
+`migration_00xx_*` a data nechá, jak jsou. Když by převod musel domýšlet
+data (chybějící nebo přebývající sloupec), nic nezmění a vypíše rozdíly.
+U souboru se před každou čekající migrací udělá záloha vedle něj
+(`local.db.pred-migraci-…`).
+
+Úplně nové nasazení s prázdným Tursem: `turso db destroy <jméno>` a
+`turso db create <jméno>` (nebo nová databáze a nový token do Vercelu
+i do GitHubu), pak pořadí výše.
 Proměnnou `APP_PASSWORD` ze starého přihlašování jedním heslem lze po nasazení
 smazat, nic už nedělá.
 

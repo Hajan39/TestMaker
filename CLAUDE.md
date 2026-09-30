@@ -129,6 +129,12 @@ zastaralému základu a příští migrace by šla proti němu, ne proti tomu, c
 je doopravdy v `local.db`. Po přidání migrace proto spusť `pnpm db:generate`
 a ověř, že nehlásí žádnou změnu.
 
+Čistá databáze vzniká jediným základem `apps/web/drizzle/0000_zaklad.sql`;
+stará řada migrací je jen ve `drizzle-historie` pro převod starších databází
+(`src/db/migrace.ts`) a pro testy tehdejších datových migrací. Do historie se
+nic nepřidává. Migrace se pouští jen přes `pnpm db:migrate`, nikdy přes
+`drizzle-kit migrate` — ten by převod obešel.
+
 Změny ve vykreslení PDF ověřuj na vygenerovaném souboru, ne jen podle typů:
 
 ```bash

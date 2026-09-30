@@ -5,6 +5,7 @@ import { db, schools, users } from '@/db'
 import { nasaditSablony } from '@/db/sablony'
 import { newId } from '@/lib/ids'
 import { roleJeAdministrator, roleMuzeSpravovat } from '@/lib/role'
+import { normalizovatDomenu, slugZNazvu } from '@/lib/skolaText'
 import type { Scope } from '@/lib/uzivatel'
 
 /**
@@ -40,26 +41,7 @@ export type VysledekSkoly = { ok: true; id: string } | { ok: false; chyba: strin
 const NENALEZENA: VysledekSkoly = { ok: false, chyba: 'Škola se nenašla.', status: 404 }
 const BEZ_NAZVU: VysledekSkoly = { ok: false, chyba: 'Škola musí mít název.', status: 400 }
 
-/**
- * Doména tak, jak ji vrací Google v `hd`: malými písmeny, bez zavináče
- * a mezer. Prázdná znamená „bez přihlášení Googlem" a ukládá se jako `NULL`,
- * aby víc škol bez domény nenaráželo na unikátní index.
- */
-export function normalizovatDomenu(vstup: string | null | undefined): string | null {
-  const domena = (vstup ?? '').trim().replace(/^@+/, '').replace(/\s+/g, '').toLowerCase()
-  return domena || null
-}
-
-/** Slug z názvu: bez diakritiky, malými písmeny, slova spojená pomlčkou. */
-export function slugZNazvu(nazev: string): string {
-  const slug = nazev
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return slug || 'skola'
-}
+export { normalizovatDomenu, slugZNazvu } from '@/lib/skolaText'
 
 /** Všechny školy — jen pro administrátora, jinak `null`. */
 export async function seznamSkol(scope: Scope): Promise<SkolaRadek[] | null> {

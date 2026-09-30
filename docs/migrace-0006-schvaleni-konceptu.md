@@ -1,6 +1,6 @@
 # Migrace 0006 — hromadné schválení konceptů
 
-Soubor: `apps/web/drizzle/0006_approve-existing-drafts.sql`
+Soubor: `apps/web/drizzle-historie/0006_approve-existing-drafts.sql`
 
 ## Co dělá
 

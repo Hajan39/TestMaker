@@ -1,6 +1,6 @@
 # Migrace 0014 — zbylé koncepty na schválené
 
-Soubor: `apps/web/drizzle/0014_approve-remaining-drafts.sql`
+Soubor: `apps/web/drizzle-historie/0014_approve-remaining-drafts.sql`
 
 ## Co dělá
 
@@ -82,7 +82,7 @@ SELECT hash, created_at FROM __drizzle_migrations;
 Hash spočítáš třeba takhle:
 
 ```bash
-shasum -a 256 apps/web/drizzle/0014_approve-remaining-drafts.sql
+shasum -a 256 apps/web/drizzle-historie/0014_approve-remaining-drafts.sql
 ```
 
 a najdeš řádek s odpovídajícím `hash`.

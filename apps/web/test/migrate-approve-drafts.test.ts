@@ -15,7 +15,8 @@ import { afterEach, describe, expect, it } from 'vitest'
  * se zkráceným rejstříkem), do něj se vloží otázky ve všech třech stavech,
  * a teprve pak se pustí plná sada migrací, tedy i 0006.
  */
-const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle')
+// Datové migrace ze staré řady; čistá databáze dnes vzniká jediným základem.
+const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle-historie')
 const cleanups: (() => void)[] = []
 
 afterEach(() => {

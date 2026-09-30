@@ -13,7 +13,8 @@ import { afterEach, describe, expect, it } from 'vitest'
  * postavená migracemi po `0013_puzzle-word-drafts`, do ní vložené otázky ve
  * všech třech stavech, a teprve pak plná sada migrací.
  */
-const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle')
+// Datové migrace ze staré řady; čistá databáze dnes vzniká jediným základem.
+const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle-historie')
 const cleanups: (() => void)[] = []
 
 afterEach(() => {

@@ -9,8 +9,9 @@
  *   pnpm --filter @testmaker/web uzivatel -- --email eva@jina.cz --skola jina-skola
  *   pnpm --filter @testmaker/web uzivatel -- --vypis
  *
- * Nový účet vznikne ve škole podle `--skola` (slug nebo id), bez něj
- * v nejstarší. Roli `administrator` jde přidělit jedině tady — v aplikaci se
+ * Nový účet vznikne ve škole podle `--skola` (slug nebo id), v nové škole
+ * podle `--nova-skola "Název"`, jinak v nejstarší. V prázdné databázi se
+ * skript na název první školy zeptá. Roli `administrator` jde přidělit jedině tady — v aplikaci se
  * nenabízí.
  *
  * Heslo se nepíše do příkazu (zůstalo by v historii), ale zadává se po
@@ -56,6 +57,8 @@ async function main(): Promise<void> {
   const { odvolatVsechnyRelaceBezRelace } = await import('../src/lib/uctyServis')
   const { vygenerovatHeslo, zahesovat, zkontrolovatSilu } = await import('../src/lib/heslo')
   const { newId } = await import('../src/lib/ids')
+  const { nasaditSablony } = await import('../src/db/sablony')
+  const { slugZNazvu } = await import('../src/lib/skolaText')
 
   if (process.argv.includes('--vypis')) {
     const rows = await db
@@ -101,24 +104,50 @@ async function main(): Promise<void> {
     ? []
     : await db.select().from(users).where(eq(users.id, 'ucet-zakladatelka')).limit(1)
 
-  const skolaPrepinac = prepinac('skola')
-  const [skola] = skolaPrepinac
-    ? await db
-        .select()
-        .from(schools)
-        .where(or(eq(schools.slug, skolaPrepinac), eq(schools.id, skolaPrepinac)))
-        .limit(1)
-    : await db.select().from(schools).orderBy(asc(schools.createdAt)).limit(1)
-  if (!skola) {
-    console.error(
-      skolaPrepinac
-        ? `Škola ${skolaPrepinac} se nenašla. Slug i id škol vypíše \`--vypis\`.`
-        : 'V databázi není žádná škola. Nejdřív spusť migrace (`pnpm db:migrate`).',
-    )
-    process.exit(1)
+  const rozhrani = createInterface({ input: process.stdin, output: process.stdout })
+
+  /*
+   * Škola nového účtu: `--nova-skola "Název"` ji založí, `--skola` vybere
+   * existující, jinak se vezme nejstarší. V úplně prázdné databázi (čisté
+   * nasazení) se na název první školy zeptá a založí ji i se šablonami.
+   */
+  async function zalozitSkolu(nazev: string) {
+    let slug = slugZNazvu(nazev)
+    for (let pokus = 2; (await db.select().from(schools).where(eq(schools.slug, slug)).limit(1)).length; pokus += 1) {
+      slug = `${slugZNazvu(nazev)}-${pokus}`
+    }
+    const [nova] = await db.insert(schools).values({ id: newId(), name: nazev, slug }).returning()
+    await nasaditSablony(db, nova!.id)
+    console.log(`Založena škola ${nazev} (${slug}).`)
+    return nova!
   }
 
-  const rozhrani = createInterface({ input: process.stdin, output: process.stdout })
+  const skolaPrepinac = prepinac('skola')
+  const novaSkola = prepinac('nova-skola')?.trim()
+  let [skola] = novaSkola
+    ? [await zalozitSkolu(novaSkola)]
+    : skolaPrepinac
+      ? await db
+          .select()
+          .from(schools)
+          .where(or(eq(schools.slug, skolaPrepinac), eq(schools.id, skolaPrepinac)))
+          .limit(1)
+      : await db.select().from(schools).orderBy(asc(schools.createdAt)).limit(1)
+  if (!skola && skolaPrepinac) {
+    console.error(`Škola ${skolaPrepinac} se nenašla. Slug i id škol vypíše \`--vypis\`.`)
+    rozhrani.close()
+    process.exit(1)
+  }
+  if (!skola) {
+    const nazev = (await rozhrani.question('V databázi zatím není žádná škola. Název první školy: ')).trim()
+    if (!nazev) {
+      console.error('Bez názvu školy účet založit nejde.')
+      rozhrani.close()
+      process.exit(1)
+    }
+    skola = await zalozitSkolu(nazev)
+  }
+
   try {
     const jmeno =
       prepinac('jmeno') ||
