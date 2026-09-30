@@ -201,10 +201,12 @@ async function bezPrihlaseni(row: {
   skola: string
   activeSchoolId: string | null
 }): Promise<Prihlaseny> {
-  const { activeSchoolId: _vybrana, ...zbytek } = row
   const vybrana = await vybranaSkola(row)
   return {
-    ...zbytek,
+    userId: row.userId,
+    role: row.role,
+    jmeno: row.jmeno,
+    email: row.email,
     schoolId: vybrana?.id ?? row.schoolId,
     skola: vybrana?.name ?? row.skola,
     domovskaSkolaId: row.schoolId,

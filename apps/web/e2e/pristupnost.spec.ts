@@ -57,6 +57,9 @@ async function activeOutline(page: import('@playwright/test').Page) {
 
 test.describe('obrys při procházení tabulátorem', () => {
   test('odkaz v horní liště nemá obrys v klidu, ale má ho po zaostření', async ({ page, browserName }) => {
+    // WebKit z Playwrightu na Windows tabulátorem odkazy
+    // přeskočí s Option i bez něj; dostane se jen na tlačítka a pole.
+    test.skip(browserName === 'webkit' && process.platform === 'win32', 'WebKit na Windows netabuluje na odkazy.')
     await page.goto('/')
 
     const restOutline = await page.evaluate(() => {
@@ -91,6 +94,9 @@ test.describe('obrys při procházení tabulátorem', () => {
   })
 
   test('obrys je vidět i v tmavém režimu', async ({ page, browserName }) => {
+    // WebKit z Playwrightu na Windows tabulátorem odkazy
+    // přeskočí s Option i bez něj; dostane se jen na tlačítka a pole.
+    test.skip(browserName === 'webkit' && process.platform === 'win32', 'WebKit na Windows netabuluje na odkazy.')
     await page.goto('/')
     await page.getByRole('button', { name: 'Tmavý motiv' }).click()
     await expect(page.locator('html')).toHaveClass(/dark/)

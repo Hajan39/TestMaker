@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createClient, type Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
@@ -10,8 +7,9 @@ import { POMOCNE_TABULKY, SLOZKA_HISTORIE, SLOZKA_ZAKLADU, migrovat, porovnatSeZ
 
 /**
  * Čistý základ a převod databáze ze staré řady migrací. Každý test má vlastní
- * soubor v dočasné složce — sdílená databáze z `test/setup.ts` už je na
- * základu a starou řadu by neukázala.
+ * databázi v paměti — sdílená databáze z `test/setup.ts` už je na základu
+ * a starou řadu by neukázala. Soubor ne: libsql ho na Windows drží i po
+ * `close()` a dočasná složka by nešla smazat.
  */
 const uklid: (() => void)[] = []
 
@@ -23,12 +21,8 @@ afterEach(() => {
 })
 
 function novaDatabaze(): Client {
-  const dir = mkdtempSync(join(tmpdir(), 'testmaker-migrace-'))
-  const client = createClient({ url: `file:${join(dir, 'db.sqlite')}` })
-  uklid.push(() => {
-    client.close()
-    rmSync(dir, { recursive: true, force: true })
-  })
+  const client = createClient({ url: ':memory:' })
+  uklid.push(() => client.close())
   return client
 }
 

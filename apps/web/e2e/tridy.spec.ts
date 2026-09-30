@@ -106,6 +106,9 @@ test.describe('rozcestník tříd', () => {
     try {
       await page.goto(`/tridy/${gradeId}`)
       await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
+      // Nadpis je vidět už z vykreslení na serveru; třídu si zapamatuje až
+      // efekt po hydrataci. Bez čekání by test odešel dřív (ve WebKitu ano).
+      await expect.poll(() => page.evaluate(() => Object.values(localStorage))).toContain(gradeId)
 
       // Nová návštěva úvodu bez `?vse=1` přesměruje rovnou do zapamatované třídy.
       await page.goto('/')

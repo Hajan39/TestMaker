@@ -112,9 +112,15 @@ test.describe('stejný soubor ve dvou tématech', () => {
     // materiál, ne jako odložená duplicita.
     for (const grade of ['7. ročník', '8. ročník']) {
       await page.goto('/?vse=1')
-      await page.getByPlaceholder('Hledat v celé knihovně…').pressSequentially('Sdílené téma')
+      const search = page.getByPlaceholder('Hledat v celé knihovně…')
       const result = page.getByRole('button', { name: new RegExp(`Sdílené téma.*${grade}`, 's') })
-      await expect(result).toBeVisible()
+      // Znaky napsané před hydratací stránky React zahodí; psaní se proto
+      // opakuje, dokud se výsledek neukáže.
+      await expect(async () => {
+        await search.clear()
+        await search.pressSequentially('Sdílené téma')
+        await expect(result).toBeVisible({ timeout: 3_000 })
+      }).toPass({ timeout: 20_000 })
       await result.click()
 
       await expect(page.getByRole('heading', { name: 'Sdílené téma' })).toBeVisible()

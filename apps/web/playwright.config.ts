@@ -45,6 +45,12 @@ export default defineConfig({
     env: {
       DATABASE_URL: 'file:./e2e.db',
       DATABASE_AUTH_TOKEN: '',
+      // Podvržený model, aby rozhraní generování bylo vidět vždycky — jinak by
+      // výsledek testů záležel na tom, jestli má vývojář klíč v `.env.local`.
+      // Skutečné volání modelu testy podvrhují přes `page.route`; s tímhle
+      // klíčem by stejně neprošlo.
+      AI_MODELS: 'google:e2e',
+      GOOGLE_GENERATIVE_AI_API_KEY: 'e2e',
       // Vlastní složka sestavení: jinak se server nerozběhne vedle `pnpm dev`.
       NEXT_DIST_DIR: '.next-e2e',
     },

@@ -137,6 +137,9 @@ test.describe('dlaždice témat', () => {
     // Dlouhý bezmezerový název je v seedu jen v „6. ročník" u PŘÍRODOPISU.
     await page.goto('/')
     await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
+    // Navigace je na klientu: síť je v klidu dřív, než se stránka vymění
+    // (ve WebKitu spolehlivě), proto se čeká na adresu třídy.
+    await page.waitForURL(/\/tridy\//)
     await page.waitForLoadState('networkidle')
 
     // V knihovně jsou názvy jako `prirodopis-6_pl-bezobratli-vztahy._test_2018`.
