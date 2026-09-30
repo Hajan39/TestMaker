@@ -41,6 +41,18 @@ test.describe('administrátor', () => {
     await expect(page.getByText('Cizí škola')).toHaveCount(0)
   })
 
+  test('vidí použití AI ze všech škol a přepne období', async ({ page }) => {
+    await page.goto('/administrace')
+    const pouziti = page.locator('[data-slot="card"]').filter({ hasText: 'Použití AI' })
+    await expect(pouziti.getByRole('heading', { name: 'Použití AI' })).toBeVisible()
+    await expect(pouziti.getByRole('cell', { name: 'google:e2e-pouziti' })).toBeVisible()
+    await expect(pouziti.getByRole('cell', { name: 'Druhá škola' })).toBeVisible()
+
+    await pouziti.getByRole('link', { name: '7 dní' }).click()
+    await expect(page).toHaveURL(/dni=7/)
+    await expect(pouziti.getByRole('link', { name: '7 dní' })).toHaveAttribute('aria-current', 'page')
+  })
+
   test('založí školu a ta se objeví v přepínači', async ({ page }) => {
     const nazev = `ZŠ Zkušební ${Date.now()}`
     await page.goto('/administrace')
@@ -101,5 +113,10 @@ test.describe('učitelka první školy', () => {
     await page.goto('/tests')
     await expect(page.getByRole('heading').first()).toBeVisible()
     await expect(page.getByText(SOUKROMA_PISEMKA_C)).toHaveCount(0)
+  })
+
+  test('přehled použití AI je pro ni neexistující', async ({ page }) => {
+    const odpoved = await page.request.get('/api/administrace/ai')
+    expect(odpoved.status()).toBe(404)
   })
 })

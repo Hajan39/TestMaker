@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge, Button, Card, toast } from '@testmaker/ui'
 import { SkolaFormular, type NastaveniSkoly } from '@/components/SkolaFormular'
@@ -11,11 +12,14 @@ export function AdministraceScreen({
   skoly,
   aktualni,
   domovska,
+  pouzitiAi,
 }: {
   skoly: SkolaRadek[]
   /** Škola, ve které administrátor právě pracuje. */
   aktualni: string
   domovska: string
+  /** Přehled použití AI; vykresluje ho server, sem přichází hotový. */
+  pouzitiAi?: ReactNode
 }) {
   const router = useRouter()
 
@@ -59,6 +63,8 @@ export function AdministraceScreen({
           nahoře nebo tlačítkem u školy. Nová škola dostane vestavěné šablony rovnou.
         </p>
       </div>
+
+      {pouzitiAi}
 
       <Card className="p-4">
         <h2 className="mb-3 font-medium text-fg">Nová škola</h2>

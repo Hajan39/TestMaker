@@ -304,6 +304,8 @@ const UCTY = [
  * soukromá písemka, kterou smí vidět jen ona a administrátor.
  */
 const DRUHA_SKOLA_ID = 'skola-druha'
+/** Model v záznamech volání; test administrace ho hledá v přehledu „Použití AI“. */
+export const AI_POUZITI_MODEL = 'google:e2e-pouziti'
 export const SOUKROMA_PISEMKA_C = 'Soukromá písemka učitelky C'
 const UCTY_DRUHE_SKOLY = [
   { id: 'e2e-spravce-b', email: 'spravce.b@localhost', name: 'Správce B', role: 'spravce' as const },
@@ -514,6 +516,21 @@ async function main() {
         createdBy: VYCHOZI_UCET_ID,
       })
     }
+  }
+
+  /*
+   * Pár volání modelu pro přehled „Použití AI“ v administraci: úspěch, limit
+   * a nepoužitelná odpověď, otázky i hlavolam, v obou školách.
+   */
+  const volani = [
+    { schoolId: SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'ok', inputTokens: 5200, outputTokens: 900 },
+    { schoolId: SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'limit', inputTokens: null, outputTokens: null },
+    { schoolId: SKOLA_ID, task: 'otazky', model: 'openrouter:e2e-zaloha:free', outcome: 'ok', inputTokens: 4800, outputTokens: 850 },
+    { schoolId: SKOLA_ID, task: 'hlavolam', model: 'openrouter:e2e-zaloha:free', outcome: 'bad_shape', inputTokens: null, outputTokens: null },
+    { schoolId: DRUHA_SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'ok', inputTokens: 3100, outputTokens: 600 },
+  ] as const
+  for (const radek of volani) {
+    await db.insert(schema.aiCalls).values({ id: newId(), userId: null, durationMs: 4200, ...radek })
   }
 
   client.close()
