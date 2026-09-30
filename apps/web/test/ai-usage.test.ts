@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiCalls, db, schools } from '@/db'
+import { GET } from '@/app/api/administrace/ai/route'
+import { aiCalls, db, schools, users } from '@/db'
 import {
   obdobiZ,
   prehledPouzitiAi,
@@ -12,7 +13,7 @@ import { generateForTopic } from '@/lib/generation'
 import { newId } from '@/lib/ids'
 import { suggestPuzzleWords } from '@/lib/puzzles'
 import type { Scope } from '@/lib/uzivatel'
-import { seedMaterial, seedTopic, UCET } from './helpers'
+import { req, seedMaterial, seedTopic, UCET } from './helpers'
 import { TEST_SKOLA_ID } from './setup'
 
 /**
@@ -202,7 +203,31 @@ describe('zápis volání', () => {
   })
 })
 
-const UDALOST = { model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 } as const
+describe('GET /api/administrace/ai', () => {
+  async function jako(role: 'administrator' | 'ucitelka') {
+    const id = newId()
+    await db.insert(users).values({ id, schoolId: TEST_SKOLA_ID, email: `${id}@localhost`, name: `Účet ${id}`, role })
+    vi.stubEnv('E2E_UZIVATEL', id)
+  }
+
+  it('administrátor dostane přehled, neznámé období spadne na 30 dní', async () => {
+    await jako('administrator')
+    await volani({ pred: 0 })
+    const odpoved = await GET(req('/api/administrace/ai?dni=abc'))
+    expect(odpoved.status).toBe(200)
+    const telo = (await odpoved.json()) as { dni: number; dny: unknown[] }
+    expect(telo.dni).toBe(30)
+    expect(telo.dny).toHaveLength(30)
+  })
+
+  it('učitelka dostane 404', async () => {
+    await jako('ucitelka')
+    const odpoved = await GET(req('/api/administrace/ai'))
+    expect(odpoved.status).toBe(404)
+  })
+})
+
+const UDALOST ={ model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 } as const
 
 describe('zapojení do generování', () => {
   it('otázky tématu zapíšou volání pod přihlášenou učitelku', async () => {

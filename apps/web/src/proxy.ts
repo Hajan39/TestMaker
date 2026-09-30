@@ -57,6 +57,11 @@ export async function proxy(request: NextRequest) {
   // Hrubé rozhodnutí podle role. Jestli je konkrétní písemka moje, rozhoduje
   // až server nad databází — proxy je pohodlí, ne bezpečnostní hranice.
   if (!maPravo(relace, pathname, request.method)) {
+    // Administrace nad školami se jiné roli tváří jako neexistující, stejně
+    // jako v route handlerech — 403 by prozradilo, že tu něco je.
+    if (!relace.zh && pathname.startsWith('/api/administrace/')) {
+      return NextResponse.json({ error: 'Nenalezeno' }, { status: 404 })
+    }
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Na tuhle akci nemáte oprávnění.' }, { status: 403 })
     }

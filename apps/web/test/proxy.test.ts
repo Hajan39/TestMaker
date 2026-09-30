@@ -135,6 +135,16 @@ describe('co která role projde branou', () => {
     expect(api.status).toBe(403)
   })
 
+  it('API administrace se jiné roli tváří jako neexistující', async () => {
+    process.env.AUTH_SECRET = 'secret'
+    expect((await proxy(await prihlaseny('/api/administrace/ai', { role: 'administrator' }))).status).toBe(200)
+
+    const ucitelka = await proxy(await prihlaseny('/api/administrace/ai'))
+    expect(ucitelka.status).toBe(404)
+    const spravce = await proxy(await prihlaseny('/api/administrace/skoly', { role: 'spravce', method: 'POST' }))
+    expect(spravce.status).toBe(404)
+  })
+
   it('náhled si čte a tiskne, ale zapsat nesmí', async () => {
     process.env.AUTH_SECRET = 'secret'
     expect((await proxy(await prihlaseny('/api/tests/abc/pdf', { role: 'nahled' }))).status).toBe(200)
