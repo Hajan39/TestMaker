@@ -80,6 +80,8 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
         `,
         // Téma listu; smazané téma se vyprázdní a list se ukáže jako volné zadání.
         topicName: topics.name,
+        // Nasdílenou písemku kolegyně jde otevřít a zkopírovat, ne upravit či smazat.
+        mine: sql<boolean>`${tests.ownerId} = ${ucet.userId}`.mapWith(Boolean),
         questionCount: sql<number>`(
           select count(*) from ${testItems}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'
@@ -88,8 +90,16 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
           select count(*) from ${testItems}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} != 'page_break'
         )`,
+        // Body stejně jako v editoru a v PDF: přednost má zmrazený snímek
+        // otázky, živá otázka z banky jen tam, kde snímek chybí. Rozbitý JSON
+        // by `json_extract` shodil celý dotaz, proto napřed `json_valid`.
         points: sql<number>`(
-          select coalesce(sum(coalesce(${testItems.pointsOverride}, ${questions.points})), 0)
+          select coalesce(sum(coalesce(
+            ${testItems.pointsOverride},
+            case when json_valid(${testItems.questionSnapshot})
+              then json_extract(${testItems.questionSnapshot}, '$.points') end,
+            ${questions.points}
+          )), 0)
           from ${testItems}
           left join ${questions} on ${questions.id} = ${testItems.questionId}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'

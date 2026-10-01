@@ -32,9 +32,12 @@ export async function POST(request: Request) {
         return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
       }
 
-      const parsed = bodySchema.safeParse(await request.json())
+      const parsed = bodySchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
-        return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+        return Response.json(
+          { error: 'Verzi písemky se nepodařilo spustit. Obnov stránku a zkus to znovu.', detail: parsed.error.issues },
+          { status: 400 },
+        )
       }
 
       const source = await loadTest(ucet, parsed.data.testId)
@@ -55,8 +58,10 @@ export async function POST(request: Request) {
           }
 
           try {
+            // Záměrně bez `request.signal` (jako u generování listu): odchod ze
+            // stránky by verzi utnul uprostřed a zůstala by napůl hotová kopie.
+            // Server ji proto dokončí i bez učitelky; uvidí ji v přehledu testů.
             const outcome = await createTestVariant(ucet, parsed.data.testId, parsed.data.direction, {
-              signal: request.signal,
               onStart: (total, testId) => send({ type: 'start', total, testId }),
               onProgress: (done, total) => send({ type: 'progress', done, total }),
             })

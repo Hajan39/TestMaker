@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@testmaker/ui'
 import { useMemo } from 'react'
+import Link from 'next/link'
 import type { PickerTopic } from '@/lib/questionPicker'
 import type { BankFilters } from './types'
 
@@ -180,7 +181,19 @@ export function BankPanel({
 
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {visibleTopics.length === 0 ? (
-          <EmptyState title="Žádné otázky neodpovídají filtru" />
+          topics.every((topic) => topic.questions.length === 0) ? (
+            // Prázdná banka není prázdný filtr — učitelka musí vědět, kde otázky vzniknou.
+            <EmptyState
+              title="V bance zatím nejsou schválené otázky — přidej materiály a schval otázky v Knihovně."
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/">Otevřít Knihovnu</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState title="Žádné otázky neodpovídají filtru" />
+          )
         ) : (
           visibleTopics.map((topic) => (
             // Sbalené ve výchozím stavu — u desítek témat by rozbalená banka byla

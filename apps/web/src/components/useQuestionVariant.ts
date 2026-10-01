@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
+import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
 
 /**
  * Hlášky na hranici obtížnosti — musí souhlasit s `variantDifficultyLimitMessage`
@@ -50,21 +51,20 @@ export function useQuestionVariant(
     if (disabledReason(direction)) return
     setBusyDirection(direction)
     try {
-      const response = await fetch('/api/questions/variant', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: question.id, direction }),
-      })
-      const data = (await response.json()) as { question?: Question; error?: string }
-      if (!response.ok || !data.question) {
-        toast.error(data.error ?? 'Verzi se nepodařilo vytvořit')
+      const data = await requestJson<{ question: Question }>(
+        '/api/questions/variant',
+        jsonBody('POST', { id: question.id, direction }),
+        'Verzi se nepodařilo vytvořit.',
+      )
+      if (!data.question) {
+        toast.error(`Verzi se nepodařilo vytvořit. ${SERVER_TROUBLE}`)
         return
       }
       toast.success(direction === 'easier' ? 'Vznikla lehčí verze otázky.' : 'Vznikla těžší verze otázky.')
       onCreated?.(data.question)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Verzi se nepodařilo vytvořit')
+      toast.error(errorMessage(error, 'Verzi se nepodařilo vytvořit.'))
     } finally {
       setBusyDirection(null)
     }

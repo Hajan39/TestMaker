@@ -73,6 +73,14 @@ const testSchema = z.object({
 type Item = z.infer<typeof itemSchema>
 
 /**
+ * Odmítnuté tělo požadavku. Editor hlídá název i položky sám, takže sem se
+ * dostane spíš zastaralá stránka nebo chybějící šablona než překlep.
+ */
+const NEPLATNY_TEST =
+  'Písemku se nepodařilo uložit — chybí název (nejvýš 200 znaků) nebo šablona, případně je některá položka neúplná. ' +
+  'Zkontroluj to, obnov stránku a zkus to znovu.'
+
+/**
  * Obsah položek zkontrolovaný dřív, než se cokoli zapíše — odmítnutý list
  * nesmí zůstat v databázi napůl uložený.
  */
@@ -149,9 +157,9 @@ export async function POST(request: Request) {
       // tady, po odbočce.
       if (copyOf) return copyTestResponse(ucet, copyOf)
 
-      const parsed = testSchema.safeParse(await request.json())
+      const parsed = testSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
-        return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+        return Response.json({ error: NEPLATNY_TEST, detail: parsed.error.issues }, { status: 400 })
       }
       const id = newId()
       const { items, kind, topicId: topicVstup, brief, ...test } = parsed.data
@@ -163,20 +171,26 @@ export async function POST(request: Request) {
       const topic = worksheet ? await resolveTopic(ucet, topicVstup) : null
       const gradeId = (await resolveGradeId(ucet, test.gradeId)) ?? topic?.gradeId ?? null
 
-      await db.insert(tests).values({
-        id,
-        schoolId: ucet.schoolId,
-        ownerId: ucet.userId,
-        ...test,
-        kind,
-        topicId: topic?.id ?? null,
-        brief: worksheet ? brief : null,
-        // Na listu se nic neznámkuje — bez ohledu na to, co pošle klient.
-        graded: worksheet ? false : test.graded,
-        gradeId,
-      })
-      const problem = await writeItems(ucet, id, kind, items)
-      if (problem) return problem
+      const rows = await itemRows(ucet, id, kind, items)
+      if (rows instanceof Response) return rows
+
+      // Test a položky jedním dávkovým zápisem — jinak by po chybě vložení
+      // zůstal v přehledu prázdný test.
+      await db.batch([
+        db.insert(tests).values({
+          id,
+          schoolId: ucet.schoolId,
+          ownerId: ucet.userId,
+          ...test,
+          kind,
+          topicId: topic?.id ?? null,
+          brief: worksheet ? brief : null,
+          // Na listu se nic neznámkuje — bez ohledu na to, co pošle klient.
+          graded: worksheet ? false : test.graded,
+          gradeId,
+        }),
+        ...(rows.length > 0 ? [db.insert(testItems).values(rows)] : []),
+      ])
 
       return Response.json({ id })
     },
@@ -199,9 +213,9 @@ export async function PUT(request: Request) {
     id: z.string().min(1),
     gradeId: z.string().min(1).nullable().optional(),
   })
-  const parsed = schema.safeParse(await request.json())
+  const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: NEPLATNY_TEST, detail: parsed.error.issues }, { status: 400 })
   }
   const { id, items, gradeId: gradeIdVstup, ...test } = parsed.data
   const gradeId = gradeIdVstup === undefined ? undefined : await resolveGradeId(ucet, gradeIdVstup)
@@ -217,19 +231,6 @@ export async function PUT(request: Request) {
   const invalid = checkItems(puvodni.kind, items)
   if (invalid) return invalid
 
-  const zmeneno = await db
-    .update(tests)
-    .set({
-      ...test,
-      graded: puvodni.kind === 'pracovni_list' ? false : test.graded,
-      // `gradeId` se do `.set()` dává, jen když ho tělo vůbec neslo — jinak
-      // by explicitní `undefined` v objektu `.set()` třídu nechtěně smazal.
-      ...(gradeId !== undefined ? { gradeId } : {}),
-      updatedAt: new Date().toISOString(),
-    })
-    .where(and(eq(tests.id, id), vlastni(ucet, tests)))
-    .returning({ id: tests.id })
-  if (zmeneno.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
   // Snímky zmizelých otázek se musí načíst dřív, než se staré položky smažou.
   const existing = await db
     .select({
@@ -246,11 +247,34 @@ export async function PUT(request: Request) {
     existing.filter((row) => row.puzzleSnapshot).map((row) => [row.id, row.puzzleSnapshot as string]),
   )
 
-  await db.delete(testItems).where(and(skola(ucet, testItems), eq(testItems.testId, id)))
-  const problem = await writeItems(ucet, id, puvodni.kind, items, keptSnapshots, keptPuzzleSnapshots)
-  if (problem) return problem
+  const rows = await itemRows(ucet, id, puvodni.kind, items, {
+    ids: new Set(existing.map((row) => row.id)),
+    snapshots: keptSnapshots,
+    puzzleSnapshots: keptPuzzleSnapshots,
+  })
+  if (rows instanceof Response) return rows
 
-  return Response.json({ id })
+  // Úprava, smazání starých a vložení nových položek naráz: kdyby vložení
+  // selhalo, nesmí test zůstat bez položek.
+  await db.batch([
+    db
+      .update(tests)
+      .set({
+        ...test,
+        graded: puvodni.kind === 'pracovni_list' ? false : test.graded,
+        // `gradeId` se do `.set()` dává, jen když ho tělo vůbec neslo — jinak
+        // by explicitní `undefined` v objektu `.set()` třídu nechtěně smazal.
+        ...(gradeId !== undefined ? { gradeId } : {}),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(and(eq(tests.id, id), vlastni(ucet, tests))),
+    db.delete(testItems).where(and(skola(ucet, testItems), eq(testItems.testId, id))),
+    ...(rows.length > 0 ? [db.insert(testItems).values(rows)] : []),
+  ])
+
+  // Id položek se vracejí, aby editor při dalším uložení navázal na tytéž
+  // položky a jejich zmrazené snímky.
+  return Response.json({ id, itemIds: rows.map((row) => row.id) })
     },
     { zapis: true },
   )
@@ -261,26 +285,38 @@ export async function DELETE(request: Request) {
     async (ucet) => {
       const id = new URL(request.url).searchParams.get('id')
       if (!id) return Response.json({ error: 'Chybí id' }, { status: 400 })
-      await db.delete(tests).where(and(eq(tests.id, id), vlastni(ucet, tests)))
+      const smazano = await db
+        .delete(tests)
+        .where(and(eq(tests.id, id), vlastni(ucet, tests)))
+        .returning({ id: tests.id })
+      if (smazano.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
       return Response.json({ ok: true })
     },
     { zapis: true },
   )
 }
 
+/** Co test už měl: id položek a jejich zmrazené snímky. */
+interface KeptItems {
+  ids: Set<string>
+  snapshots: Map<string, string>
+  puzzleSnapshots: Map<string, string>
+}
+
 /**
- * Uloží položky testu. Vrací odpověď, jen když se něco odmítlo — jinak
- * `null` a volající pokračuje.
+ * Připraví řádky položek testu k vložení. Vrací odpověď, když se něco
+ * odmítlo — zapisuje až volající, aby šlo všechno jedním dávkovým zápisem.
  */
-async function writeItems(
+async function itemRows(
   ucet: Prihlaseny,
   testId: string,
   kind: TestKind,
   items: Item[],
-  keptSnapshots: Map<string, string> = new Map(),
-  keptPuzzleSnapshots: Map<string, string> = new Map(),
-): Promise<Response | null> {
-  if (items.length === 0) return null
+  kept: KeptItems = { ids: new Set(), snapshots: new Map(), puzzleSnapshots: new Map() },
+): Promise<Response | (typeof testItems.$inferInsert & { id: string })[]> {
+  if (items.length === 0) return []
+  const keptSnapshots = kept.snapshots
+  const keptPuzzleSnapshots = kept.puzzleSnapshots
 
   // Snímek se pořizuje tady na serveru z aktuálního obsahu banky. Klient ho
   // neposílá — jinak by šlo do hotové písemky podstrčit cokoli.
@@ -309,12 +345,20 @@ async function writeItems(
     )
   }
 
-  await db.insert(testItems).values(
-    items.map((item, index) => {
+  // Položka, která v testu už byla, si nechává své id — jen tak na ni editor
+  // při dalším uložení naváže i se zmrazeným snímkem.
+  const used = new Set<string>()
+  const keepId = (id: string | null | undefined): string => {
+    const value = id && kept.ids.has(id) && !used.has(id) ? id : newId()
+    used.add(value)
+    return value
+  }
+
+  return items.map((item, index) => {
       const questionId = item.kind === 'question' ? item.questionId : null
       const puzzleId = item.kind === 'puzzle' ? item.puzzleId : null
       return {
-        id: newId(),
+        id: keepId(item.id),
         schoolId: ucet.schoolId,
         testId,
         position: index,
@@ -350,7 +394,5 @@ async function writeItems(
           (item.id ? keptPuzzleSnapshots.get(item.id) : null) ??
           (puzzleId ? (puzzleSnapshots.get(puzzleId) ?? null) : null),
       }
-    }),
-  )
-  return null
+    })
 }

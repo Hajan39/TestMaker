@@ -44,10 +44,12 @@ export function TopicTile({
 }) {
   return (
     <Card className="gap-1.5 p-3 hover:border-brand">
-      {/* Přejmenování patří k názvu, proto je uvnitř karty, ne vedle ní. */}
+      {/* Přejmenování patří k názvu, proto je uvnitř karty, ne vedle ní.
+          Název je odkaz jako zbytek dlaždice — kliknutí na něj dřív nedělalo
+          nic; tužka i pole přejmenování proklik samy zastaví. */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex min-w-0 items-center gap-1">
+          <Link href={`/topics/${id}`} className="flex min-w-0 items-center gap-1">
             <InlineName
               kind="topic"
               id={id}
@@ -55,7 +57,7 @@ export function TopicTile({
               className="text-sm text-fg-soft"
               label="Přejmenovat téma"
             />
-          </div>
+          </Link>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-md">
           {name}

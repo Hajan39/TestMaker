@@ -1,9 +1,10 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Badge, Button, Card, toast } from '@testmaker/ui'
+import { Badge, BusyButton, Card, toast } from '@testmaker/ui'
 import { SkolaFormular, type NastaveniSkoly } from '@/components/SkolaFormular'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import type { SkolaRadek } from '@/lib/skoly'
 
 const PRAZDNA: NastaveniSkoly = { name: '', googleDomain: '', googleAutoJoin: false }
@@ -22,16 +23,14 @@ export function AdministraceScreen({
   pouzitiAi?: ReactNode
 }) {
   const router = useRouter()
+  /** Škola, do které se právě přepíná — dvojí kliknutí by poslalo dva požadavky. */
+  const [prepinam, setPrepinam] = useState<string | null>(null)
 
   async function poslat(method: 'POST' | 'PATCH', telo: object, hlaska: string) {
-    const response = await fetch('/api/administrace/skoly', {
-      method,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(telo),
-    })
-    const data = (await response.json().catch(() => ({}))) as { error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Změna se nepovedla.')
+    try {
+      await requestJson('/api/administrace/skoly', jsonBody(method, telo), 'Změna se nepovedla.')
+    } catch (error) {
+      toast.error(errorMessage(error, 'Změna se nepovedla.'))
       return false
     }
     toast.success(hlaska)
@@ -40,16 +39,15 @@ export function AdministraceScreen({
   }
 
   async function prepnout(schoolId: string) {
-    const response = await fetch('/api/administrace/skola', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ schoolId }),
-    })
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? 'Školu se nepodařilo přepnout.')
+    setPrepinam(schoolId)
+    try {
+      await requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), 'Školu se nepodařilo přepnout.')
+    } catch (error) {
+      toast.error(errorMessage(error, 'Školu se nepodařilo přepnout.'))
+      setPrepinam(null)
       return
     }
+    // Tlačítko zůstane zablokované až do odchodu na úvod.
     router.push('/')
     router.refresh()
   }
@@ -86,9 +84,17 @@ export function AdministraceScreen({
                 {skola.slug} · účtů {skola.pocetUctu}
               </span>
               {skola.id !== aktualni ? (
-                <Button className="ml-auto" size="sm" variant="outline" onClick={() => void prepnout(skola.id)}>
+                <BusyButton
+                  className="ml-auto"
+                  size="sm"
+                  variant="outline"
+                  busy={prepinam === skola.id}
+                  busyLabel="Přepínám…"
+                  disabled={prepinam !== null}
+                  onClick={() => void prepnout(skola.id)}
+                >
                   Přepnout sem
-                </Button>
+                </BusyButton>
               ) : null}
             </div>
             <SkolaFormular

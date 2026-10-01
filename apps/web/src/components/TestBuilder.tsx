@@ -5,9 +5,21 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionContent, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
 import type { WorksheetItemDraft, WorksheetTarget } from '@testmaker/core/ai'
-import { Button, Input, Label, pocet, Tabs, TabsContent, TabsList, TabsTrigger, useMatchesMedia } from '@testmaker/ui'
+import {
+  Button,
+  Input,
+  Label,
+  pocet,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  toast,
+  useMatchesMedia,
+} from '@testmaker/ui'
 import type { Role } from '@/lib/role'
 import type { PickerTopic } from '@/lib/questionPicker'
+import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
 import { PrintMenu } from '@/components/PrintMenu'
 import { QuestionEditor } from '@/components/QuestionEditor'
 import { testPath } from '@/app/tests/paths'
@@ -51,6 +63,7 @@ export function TestBuilder({
   role,
   ai,
   dropped = 0,
+  mine = true,
 }: {
   topics: PickerTopic[]
   templates: Template[]
@@ -72,8 +85,14 @@ export function TestBuilder({
   ai: { configured: boolean; problems: string[] }
   /** Kolik položek model po vygenerování listu vynechal (`?vynechano=`). */
   dropped?: number
+  /**
+   * Je písemka přihlášené osoby? Nasdílenou od kolegyně server přepsat
+   * nedovolí, takže se jen čte a tiskne a k úpravám se nabízí kopie.
+   */
+  mine?: boolean
 }) {
   const router = useRouter()
+  const readOnly = !mine
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
   // Pracovní list vzniká vždy z formuláře „Nový pracovní list“, takže do
   // editoru přichází už uložený a druh se pozná podle testu.
@@ -129,6 +148,8 @@ export function TestBuilder({
     type: '',
   })
   const [saving, setSaving] = useState(false)
+  const [copying, setCopying] = useState(false)
+  // Jen chyba názvu — patří k poli; ostatní chyby akcí jdou do oznámení (toast).
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
   // Chybějící název se dřív ohlásil u lišty, ale pole bylo schované v panelu
@@ -355,26 +376,30 @@ export function TestBuilder({
     const item = draft.find((candidate) => candidate.key === key)
     const target = item ? targetOf(item) : null
     if (!item || !target || !savedId) return
-    setError(null)
     setRegenerating(key)
+    const failure = 'Položku se nepodařilo přegenerovat.'
     try {
-      const response = await fetch(
+      const data = await requestJson<{ item: WorksheetItemDraft }>(
         `/api/worksheets/${encodeURIComponent(savedId)}/items/${encodeURIComponent(item.id ?? key)}/regenerate`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            target,
-            existing: draft.filter((other) => other.key !== key).map(summaryOf).filter(Boolean),
-          }),
-        },
+        jsonBody('POST', {
+          target,
+          existing: draft.filter((other) => other.key !== key).map(summaryOf).filter(Boolean),
+        }),
+        failure,
       )
-      const data = (await response.json().catch(() => ({}))) as { item?: WorksheetItemDraft; error?: string }
-      if (!response.ok || !data.item) throw new Error(data.error ?? `Přegenerování selhalo (${response.status})`)
+      if (!data.item) throw new Error(`${failure} ${SERVER_TROUBLE}`)
       const replacement = fromModel(data.item, item)
       setDraft((current) => current.map((candidate) => (candidate.key === key ? replacement : candidate)))
+      // Nová podoba přepíše i ruční úpravy položky — původní jde ještě vrátit.
+      toast.success('Položka je přegenerovaná.', {
+        duration: 10_000,
+        action: {
+          label: 'Vrátit',
+          onClick: () => setDraft((current) => current.map((candidate) => (candidate.key === key ? item : candidate))),
+        },
+      })
     } catch (regenerateError) {
-      setError(regenerateError instanceof Error ? regenerateError.message : String(regenerateError))
+      toast.error(errorMessage(regenerateError, failure))
     } finally {
       setRegenerating(null)
     }
@@ -406,15 +431,50 @@ export function TestBuilder({
   // Otisk naposledy uloženého stavu. Ve stavu, ne v ref — ref se během
   // vykreslování nemá číst a React na to upozorňuje.
   const [savedFingerprint, setSavedFingerprint] = useState<string | null>(test ? fingerprint : null)
-  const dirty = savedFingerprint !== fingerprint
+  // Nasdílenou písemku uložit nejde, takže v ní ani není co ztratit.
+  const dirty = !readOnly && savedFingerprint !== fingerprint
 
   // Zavření okna s rozpracovanou osnovou znamenalo ztrátu celé práce bez varování.
+  // Odkazy uvnitř aplikace (zpět do tématu, hlavní nabídka) okno nezavírají,
+  // `beforeunload` je nezachytí — proto se klik na ně ověří zvlášť.
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    const leave = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return
+      const link = event.target instanceof Element ? event.target.closest('a[href^="/"]') : null
+      if (!link || link.getAttribute('target') === '_blank') return
+      if (window.confirm('Máš neuložené změny. Opravdu odejít?')) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
     window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
+    document.addEventListener('click', leave, true)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      document.removeEventListener('click', leave, true)
+    }
   }, [dirty])
+
+  /** Kopie nasdílené písemky — tu si pak autorka upravuje po svém. */
+  async function copy() {
+    if (!savedId) return
+    setCopying(true)
+    const failure = 'Kopii se nepodařilo vytvořit.'
+    try {
+      const data = await requestJson<{ id: string }>(
+        `/api/tests?copyOf=${encodeURIComponent(savedId)}`,
+        { method: 'POST' },
+        failure,
+      )
+      if (!data.id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
+      toast.success('Kopie je hotová — teď ji můžeš upravit.')
+      router.push(testPath(kind, data.id))
+    } catch (copyError) {
+      toast.error(errorMessage(copyError, failure))
+      setCopying(false)
+    }
+  }
 
   async function save() {
     setError(null)
@@ -425,8 +485,8 @@ export function TestBuilder({
       return setError(worksheet ? 'Vyplň název listu.' : 'Vyplň název písemky.')
     }
     if (worksheet) {
-      if (draft.length === 0) return setError('Přidej do listu aspoň jednu položku.')
-    } else if (questionCount === 0) return setError('Přidej aspoň jednu otázku.')
+      if (draft.length === 0) return void toast.error('Přidej do listu aspoň jednu položku.')
+    } else if (questionCount === 0) return void toast.error('Přidej aspoň jednu otázku.')
 
     setSaving(true)
     const body = {
@@ -459,23 +519,28 @@ export function TestBuilder({
       })),
     }
 
+    const failure = worksheet ? 'List se nepodařilo uložit.' : 'Písemku se nepodařilo uložit.'
     try {
-      const response = await fetch('/api/tests', {
-        method: savedId ? 'PUT' : 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(detail.error ?? `Uložení selhalo (${response.status})`)
-      }
-      const result = (await response.json()) as { id: string }
+      const result = await requestJson<{ id: string; itemIds: string[] }>(
+        '/api/tests',
+        jsonBody(savedId ? 'PUT' : 'POST', body),
+        failure,
+      )
+      const id = result.id
+      if (!id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
+      // Bez id z uložení by další uložení položky nepoznalo a jejich zmrazené
+      // snímky by se pořídily znovu z aktuální banky.
+      const itemIds = result.itemIds
+      if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
       setSavedFingerprint(fingerprint)
-      setSavedId(result.id)
-      if (!test) router.replace(testPath(kind, result.id))
+      setSavedId(id)
+      toast.success('Uloženo.')
+      // `?vynechano=` patří jen k čerstvě vygenerovanému listu — po uložení
+      // by upozornění na vynechané položky viselo dál, proto adresa bez něj.
+      if (!test || dropped > 0) router.replace(testPath(kind, id))
       else router.refresh()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError))
+      toast.error(errorMessage(saveError, failure))
     } finally {
       setSaving(false)
     }
@@ -547,6 +612,8 @@ export function TestBuilder({
               id="test-title"
               ref={titleRef}
               value={settings.title}
+              maxLength={200}
+              readOnly={readOnly}
               placeholder={worksheet ? 'Např. Sopky – procvičování' : 'Např. Čtvrtletní písemka – přírodopis'}
               aria-invalid={titleInvalid || undefined}
               aria-describedby={titleInvalid ? 'test-title-error' : undefined}
@@ -561,26 +628,46 @@ export function TestBuilder({
             pod stránkou písemky, kde vznikají. V liště nahoře stálo totéž ještě
             jednou a obě čísla se musela hlídat, aby si neodporovala. */}
         <div className="flex flex-wrap items-center gap-2">
-          {savedId ? <PrintMenu testId={savedId} variants={settings.variants} /> : null}
+          {savedId ? <PrintMenu testId={savedId} variants={settings.variants} dirty={dirty} /> : null}
+          {readOnly ? (
+            <Button disabled={copying} aria-busy={copying || undefined} onClick={() => void copy()}>
+              {copying ? 'Kopíruji…' : 'Vytvořit kopii'}
+            </Button>
+          ) : null}
           {/* Verze písemky vzniká z uložené podoby — bez uloženého testu (nový
               test, role náhled) nemá tlačítko co dělat. */}
-          {savedId && role !== 'nahled' && !worksheet ? (
+          {savedId && role !== 'nahled' && !worksheet && !readOnly ? (
             <TestVariantMenu
               testId={savedId}
               ai={ai}
               dirty={dirty}
-              onDirty={() => setError('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
+              onDirty={() => toast.error('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
             />
           ) : null}
           {/* Losování i banka patří písemce — úlohy listu z banky nejsou. */}
-          {worksheet ? null : <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />}
-          <TestSettings value={settings} templates={templates} onChange={setSettings} worksheet={worksheet} />
-          <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
+          {readOnly ? null : (
+            <>
+              {worksheet ? null : <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />}
+              <TestSettings value={settings} templates={templates} onChange={setSettings} worksheet={worksheet} />
+              {dirty ? (
+                <span className="text-sm text-fg-muted" role="status">
+                  Neuložené změny
+                </span>
+              ) : null}
+              <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
+            </>
+          )}
         </div>
       </div>
 
+      {readOnly ? (
+        <p className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft">
+          Sdílená písemka — pro úpravy si vytvoř kopii.
+        </p>
+      ) : null}
+
       {error ? (
-        <p id="test-title-error" className="text-sm text-danger">
+        <p id="test-title-error" role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
@@ -612,7 +699,13 @@ export function TestBuilder({
 
       {/* Vykresluje se jen jedna podoba. Obě naráz (jedna schovaná) znamenaly
           zdvojená `id` filtrů a zdvojené zaškrtávátko „Vybrat vše". */}
-      {worksheet ? (
+      {readOnly ? (
+        // Nasdílená písemka se jen prohlíží: banka by nebyla k ničemu a
+        // `fieldset disabled` vypne všechno ovládání stránky naráz.
+        <fieldset disabled className="contents">
+          <div className="h-[75vh]">{sheet}</div>
+        </fieldset>
+      ) : worksheet ? (
         // List banku nemá — stránka dostane celou šířku.
         <div className="h-[75vh]">{sheet}</div>
       ) : narrow ? (

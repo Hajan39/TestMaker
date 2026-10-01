@@ -19,6 +19,7 @@ import {
   toast,
 } from '@testmaker/ui'
 import { drainQueue } from '@/lib/generateClient'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import type { QueueCounts, QueueJob } from '@/lib/jobs'
 import { shrnutiBehu } from '@/lib/queueSummary'
 
@@ -57,11 +58,26 @@ export function QueueScreen({
   const busy = counts.running > 0 || counts.queued > 0
 
   const refresh = useCallback(async () => {
-    const response = await fetch('/api/jobs?vypis=1')
-    if (!response.ok) return
-    const next = (await response.json()) as QueueCounts & { jobs: QueueJob[] }
-    setData({ counts: next, jobs: next.jobs })
+    // Výpadek jednoho dotazu nevadí — přehled zůstane, jak byl, a další
+    // dotaz za tři vteřiny ho dorovná. Hláška by tu jen blikala.
+    try {
+      const response = await fetch('/api/jobs?vypis=1')
+      if (!response.ok) return
+      const next = (await response.json()) as QueueCounts & { jobs: QueueJob[] }
+      setData({ counts: next, jobs: next.jobs })
+    } catch {
+      // Viz výš.
+    }
   }, [])
+
+  // Fronta se zpracovává jen s otevřenou stránkou — zavření nebo obnovení
+  // ji zastaví, proto se prohlížeč napřed zeptá.
+  useEffect(() => {
+    if (!working) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [working])
 
   // Dotazovat se pořád dokola by bylo zbytečné — když nic nečeká ani neběží,
   // přehled se sám od sebe nezmění.
@@ -105,7 +121,7 @@ export function QueueScreen({
         action: created > 0 ? { label: 'Zkontrolovat', onClick: () => router.push('/?vse=1') } : undefined,
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error, 'Generování fronty se zastavilo.'))
     } finally {
       setWorking(false)
       await refresh()
@@ -116,12 +132,11 @@ export function QueueScreen({
   async function retry(ids?: string[]) {
     setRetrying(true)
     try {
-      const response = await fetch('/api/jobs/retry', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(ids ? { ids } : {}),
-      })
-      const result = (await response.json()) as { requeued?: number }
+      const result = await requestJson<{ requeued: number }>(
+        '/api/jobs/retry',
+        jsonBody('POST', ids ? { ids } : {}),
+        'Témata se nepodařilo vrátit do fronty.',
+      )
       const requeued = result.requeued ?? 0
       toast.success(
         requeued > 0
@@ -129,14 +144,24 @@ export function QueueScreen({
           : 'Nebylo co vracet do fronty.',
       )
       await refresh()
+    } catch (error) {
+      toast.error(errorMessage(error, 'Témata se nepodařilo vrátit do fronty.'))
     } finally {
       setRetrying(false)
     }
   }
 
   async function clear(scope: 'cekajici' | 'vse') {
-    await fetch(`/api/jobs?rozsah=${scope}`, { method: 'DELETE' })
+    // Chyba se nechává probublat — `DeleteButton` pak dialog nezavře
+    // a nepředstírá úspěch, který nenastal.
+    try {
+      await requestJson(`/api/jobs?rozsah=${scope}`, { method: 'DELETE' }, 'Frontu se nepodařilo vyprázdnit.')
+    } catch (error) {
+      toast.error(errorMessage(error, 'Frontu se nepodařilo vyprázdnit.'))
+      throw error
+    }
     stopRef.current = true
+    toast.success(scope === 'vse' ? 'Přehled generování je smazaný.' : 'Fronta je vyprázdněná.')
     await refresh()
     router.refresh()
   }
@@ -220,7 +245,7 @@ export function QueueScreen({
       {jobs.length === 0 ? (
         <EmptyState
           title="Nic se negeneruje"
-          hint="Otázky se sem dostanou z tématu tlačítkem „Vygenerovat z tématu“ nebo hromadným generováním ve třídě."
+          hint="Otázky se sem dostanou z tématu tlačítkem „Vygenerovat otázky“ nebo hromadným generováním ve třídě."
           action={
             <Link href="/">
               <Button size="sm" variant="outline">

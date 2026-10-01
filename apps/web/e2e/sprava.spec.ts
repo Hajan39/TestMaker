@@ -22,12 +22,16 @@ test('správce založí účet, dostane jednorázové heslo a pak ho zablokuje',
   await page.getByRole('button', { name: 'Založit účet' }).click()
 
   // Heslo se ukáže jednou a jen tady — správce ho předá osobně.
-  await expect(page.getByText(`Heslo pro ${email}`)).toBeVisible()
+  const dialogHesla = page.getByRole('dialog')
+  await expect(dialogHesla.getByText(`Heslo pro ${email}`)).toBeVisible()
+  await dialogHesla.getByRole('button', { name: 'Hotovo' }).click()
   await expect(page.getByText(email).first()).toBeVisible()
 
   // Karta účtu, ne libovolný `div`: jinak locator trefí i celou stránku.
   const radek = page.locator('[data-slot="card"]').filter({ hasText: email })
   await radek.getByRole('button', { name: 'Zablokovat' }).click()
+  // Zablokování učitelku odhlásí, takže se nejdřív potvrzuje.
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Zablokovat' }).click()
   await expect(radek.getByText('Zablokovaný')).toBeVisible()
 })
 
@@ -35,7 +39,7 @@ test('události ukazují, co se v aplikaci dělo', async ({ page }) => {
   await page.goto('/sprava')
   await page.getByRole('tab', { name: 'Události a chyby' }).click()
   // Přihlášení zkušebních účtů se zapsalo — jinak by záznam nebyl k ničemu.
-  await expect(page.getByText('prihlaseni').first()).toBeVisible()
+  await expect(page.getByText('Přihlášení', { exact: true }).first()).toBeVisible()
 })
 
 test('správce vidí záložku AI kvalita s čísly ze zkušebních dat', async ({ page }) => {

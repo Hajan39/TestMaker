@@ -598,7 +598,7 @@ export async function createGeneratedWorksheet(
   const loaded = await loadWorksheetRequest(scope, input.source, input)
   if (!loaded) return null
   const [template] = await loadTemplates(scope)
-  if (!template) throw new Error('Škola nemá žádnou šablonu pro tisk. Založ ji v Šablonách a zkus to znovu.')
+  if (!template) throw new Error('Škola nemá žádnou šablonu pro tisk. Dej vědět správci, ať ji přidá, a pak to zkus znovu.')
 
   const result = await generateWorksheet(loaded.request, { signal: options.signal, onCall: zapisovatVolani(scope, 'list') })
 

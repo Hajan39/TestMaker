@@ -187,6 +187,14 @@ describe('přesun materiálu do jiné skupiny', () => {
     const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId: 'nic', topicId }))
     expect(response.status).toBe(404)
   })
+
+  it('do tématu mimo mou školu (nebo neexistujícího) materiál nepřesune', async () => {
+    const { topicId } = await seedTopic()
+    const materialId = await seedMaterial(topicId)
+    const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: 'cizi-tema' }))
+    expect(response.status).toBe(404)
+    expect((await materialRow(materialId))?.topicId).toBe(topicId)
+  })
 })
 
 describe('sloučení skupin', () => {
@@ -204,6 +212,15 @@ describe('sloučení skupin', () => {
     const [otazka] = await db.select().from(questions).where(eq(questions.id, otazkaId)).limit(1)
     expect(otazka?.topicId).toBe(cilId)
     expect(await topicRow(zdrojId)).toBeUndefined()
+  })
+
+  it('do tématu mimo mou školu nesloučí a zdroj nechá být', async () => {
+    const { topicId: zdrojId } = await seedTopic({ topic: 'Zdroj bez cíle' })
+    const materialId = await seedMaterial(zdrojId)
+    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: zdrojId, targetId: 'cizi-tema' }))
+    expect(response.status).toBe(404)
+    expect((await materialRow(materialId))?.topicId).toBe(zdrojId)
+    expect(await topicRow(zdrojId)).toBeDefined()
   })
 
   it('obsah, který cílová skupina už má, se zahodí — v tématu smí být jen jednou', async () => {

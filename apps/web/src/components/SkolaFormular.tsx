@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Checkbox, Input, Label } from '@testmaker/ui'
+import { BusyButton, Checkbox, Input, Label } from '@testmaker/ui'
 
 export interface NastaveniSkoly {
   name: string
@@ -64,9 +64,9 @@ export function SkolaFormular({
         />
         Nové účty z domény zaevidovat ke schválení
       </label>
-      <Button type="submit" disabled={busy || !nastaveni.name.trim()}>
+      <BusyButton type="submit" busy={busy} busyLabel="Ukládám…" disabled={!nastaveni.name.trim()}>
         {tlacitko}
-      </Button>
+      </BusyButton>
     </form>
   )
 }

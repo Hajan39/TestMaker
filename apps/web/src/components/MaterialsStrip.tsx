@@ -17,7 +17,17 @@ import {
   type FileEntry,
 } from '@/lib/importClient'
 import { isUsableMaterial } from '@/lib/materials'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
   BusyButton,
   Button,
   cn,
@@ -78,12 +88,20 @@ export const MaterialsStrip = forwardRef<
   const filesRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(topicName)
+  // Přejmenování nadpisem tématu (`InlineName`) mění `topicName` zvenčí —
+  // bez převzetí by tlačítko Uložit vrátilo starý název zpátky.
+  const [lastTopicName, setLastTopicName] = useState(topicName)
+  if (topicName !== lastTopicName) {
+    setLastTopicName(topicName)
+    setName(topicName)
+  }
   const [siblings, setSiblings] = useState<{ id: string; name: string }[]>([])
   const [gradeOptions, setGradeOptions] = useState<{ id: string; name: string }[]>([])
   const [currentGrade, setCurrentGrade] = useState('')
   const [newGrade, setNewGrade] = useState('')
   const [addingGrade, setAddingGrade] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
+  const [mergeOpen, setMergeOpen] = useState(false)
   // Nabídky sourozeneckých témat a ročníků se dotahují až při otevření
   // úprav. Než dojdou, jsou rozbalovací seznamy prázdné — kdyby zůstaly
   // ovladatelné, otevřely by se do prázdna a vypadalo by to jako chyba.
@@ -135,41 +153,56 @@ export const MaterialsStrip = forwardRef<
     if (!manage) return
     // Shození příznaku patří k přepnutí do úprav, ne sem: stav se nemá měnit
     // synchronně v efektu (React to hlásí jako řetězení překreslení).
+    const failure = 'Nabídku témat a ročníků se nepodařilo načíst.'
     void Promise.all([
-      fetch(`/api/topics?siblingsOf=${encodeURIComponent(topicId)}`)
-        .then((response) => response.json())
-        .then((data: { topics: { id: string; name: string }[] }) => setSiblings(data.topics)),
-      fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
-        .then((response) => response.json())
-        .then((data: { grades: { id: string; name: string }[]; currentGrade: string }) => {
-          setGradeOptions(data.grades)
-          setCurrentGrade(data.currentGrade)
-        }),
-    ]).finally(() => setOptionsReady(true))
+      requestJson<{ topics: { id: string; name: string }[] }>(
+        `/api/topics?siblingsOf=${encodeURIComponent(topicId)}`,
+        undefined,
+        failure,
+      ).then((data) => setSiblings(data.topics ?? [])),
+      requestJson<{ grades: { id: string; name: string }[]; currentGrade: string }>(
+        `/api/topics?gradesOf=${encodeURIComponent(topicId)}`,
+        undefined,
+        failure,
+      ).then((data) => {
+        setGradeOptions(data.grades ?? [])
+        setCurrentGrade(data.currentGrade ?? '')
+      }),
+    ])
+      .catch((loadError: unknown) =>
+        setError(`${errorMessage(loadError, failure)} Klikni na Hotovo a otevři úpravy znovu.`),
+      )
+      .finally(() => setOptionsReady(true))
   }, [manage, topicId])
 
-  async function call(method: string, body: unknown) {
+  /** Uloží změnu tématu a ohlásí ji; vrací, jestli se to povedlo. Chybu ukáže v pruhu. */
+  async function call(method: string, body: unknown, success: string): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch('/api/topics', {
-        method,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      })
       // Server odmítne třeba přesun souboru tam, kde tentýž obsah už je.
       // Bez téhle hlášky to vypadalo, že se prostě nic nestalo.
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        setError(detail.error ?? `Nepovedlo se to (${response.status}).`)
-        return
-      }
-      router.refresh()
-    } catch (networkError) {
-      setError(networkError instanceof Error ? networkError.message : String(networkError))
+      await requestJson('/api/topics', jsonBody(method, body), 'Změnu se nepodařilo uložit.')
+      toast.success(success)
+      return true
+    } catch (callError) {
+      setError(errorMessage(callError, 'Změnu se nepodařilo uložit.'))
+      return false
     } finally {
       setBusy(false)
     }
+  }
+
+  async function update(method: string, body: unknown, success: string) {
+    if (await call(method, body, success)) router.refresh()
+  }
+
+  async function merge() {
+    const targetName = siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? 'vybraného tématu'
+    const merged = await call('POST', { sourceId: topicId, targetId: mergeTarget }, `Téma sloučeno do „${targetName}“.`)
+    setMergeOpen(false)
+    // Sloučené téma zaniklo — obnovení téže stránky by skončilo na „nenalezeno“.
+    if (merged) router.push(`/topics/${mergeTarget}`)
   }
 
   /** Extrahuje soubory v prohlížeči a nahraje je rovnou do tohoto tématu. */
@@ -210,7 +243,7 @@ export const MaterialsStrip = forwardRef<
         }
       })
     } catch (workerError) {
-      setError(workerError instanceof Error ? workerError.message : String(workerError))
+      setError(errorMessage(workerError, 'Soubory se nepodařilo přečíst.'))
     }
     setFailed(failures)
     if (emptySkips.length > 0) setSkipped((current) => [...current, ...emptySkips])
@@ -238,7 +271,7 @@ export const MaterialsStrip = forwardRef<
       }
       router.refresh()
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
+      setError(errorMessage(uploadError, 'Soubory se nepodařilo uložit.'))
     } finally {
       setUploadPhase('idle')
     }
@@ -355,7 +388,13 @@ export const MaterialsStrip = forwardRef<
                   siblings={siblings}
                   optionsReady={optionsReady}
                   busy={busy}
-                  onMove={(target) => void call('PUT', { materialId: material.id, topicId: target })}
+                  onMove={(target) =>
+                    void update(
+                      'PUT',
+                      { materialId: material.id, topicId: target },
+                      `Materiál přesunut do „${siblings.find((sibling) => sibling.id === target)?.name ?? 'vybraného tématu'}“.`,
+                    )
+                  }
                 />
               ))}
             </ul>
@@ -375,7 +414,7 @@ export const MaterialsStrip = forwardRef<
                 busy={busy}
                 busyLabel="Ukládám…"
                 disabled={!name.trim() || name === topicName}
-                onClick={() => void call('PATCH', { id: topicId, name })}
+                onClick={() => void update('PATCH', { id: topicId, name }, 'Téma přejmenováno.')}
               >
                 Uložit
               </BusyButton>
@@ -392,10 +431,14 @@ export const MaterialsStrip = forwardRef<
                   return
                 }
                 setAddingGrade(false)
-                void call('PATCH', { id: topicId, gradeName: value === 'bez-rocniku' ? '' : value })
+                void update(
+                  'PATCH',
+                  { id: topicId, gradeName: value === 'bez-rocniku' ? '' : value },
+                  value === 'bez-rocniku' ? 'Téma přeřazeno mezi témata bez ročníku.' : `Téma přeřazeno do ročníku ${value}.`,
+                )
               }}
             >
-              <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady}>
+              <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady || busy}>
                 {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám ročníky…</span>}
               </SelectTrigger>
               <SelectContent>
@@ -427,7 +470,7 @@ export const MaterialsStrip = forwardRef<
                   disabled={!newGrade.trim()}
                   onClick={() => {
                     setAddingGrade(false)
-                    void call('PATCH', { id: topicId, gradeName: newGrade })
+                    void update('PATCH', { id: topicId, gradeName: newGrade }, `Téma přeřazeno do ročníku ${newGrade.trim()}.`)
                   }}
                 >
                   Přeřadit
@@ -456,16 +499,44 @@ export const MaterialsStrip = forwardRef<
                   ))}
                 </SelectContent>
               </Select>
-              <BusyButton
-                size="sm"
-                variant="outline"
-                busy={busy}
-                busyLabel="Slučuji…"
-                disabled={!mergeTarget}
-                onClick={() => void call('POST', { sourceId: topicId, targetId: mergeTarget })}
-              >
-                Sloučit
-              </BusyButton>
+              {/* Sloučení je nevratné: téma zmizí a materiály, které cíl už má,
+                  se zahodí — proto se ptá stejně jako mazání. */}
+              <AlertDialog open={mergeOpen} onOpenChange={(next) => !busy && setMergeOpen(next)}>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={!mergeTarget || busy}>
+                    Sloučit
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Sloučit „{topicName}“ do „{siblings.find((sibling) => sibling.id === mergeTarget)?.name}“?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                      <div className="space-y-2">
+                        <p>
+                          Materiály i otázky se přesunou do vybraného tématu a téma „{topicName}“ zmizí.
+                          Materiály se stejným obsahem, jaký cílové téma už má, se smažou.
+                        </p>
+                        <p className="text-fg-muted">Akci nejde vrátit zpět.</p>
+                      </div>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={busy}>Zrušit</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={busy}
+                      aria-busy={busy || undefined}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        void merge()
+                      }}
+                    >
+                      {busy ? 'Slučuji…' : 'Sloučit'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
             <p className="mt-1 text-xs text-fg-muted">
               Materiály i otázky se přesunou do vybraného tématu, toto zanikne.

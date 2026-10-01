@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Button,
@@ -19,6 +19,10 @@ import {
   Textarea,
 } from '@testmaker/ui'
 import { emptyHeader } from '@/components/test-builder/defaults'
+import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+
+/** Položka „Bez ročníku“ — Select neumí prázdnou hodnotu jako položku. */
+const NO_GRADE = 'bez-rocniku'
 
 export interface WorksheetSubject {
   id: string
@@ -58,6 +62,27 @@ export function NewWorksheetForm({
   const [ownText, setOwnText] = useState('')
   const [busy, setBusy] = useState<'generate' | 'blank' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Odešla učitelka jinam v aplikaci, než list doběhl? Pak ji zpátky nepřesouvat.
+  // Nastavuje se i při připojení: React ve vývoji efekt spustí, uklidí a spustí znovu.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  // Server list dogeneruje i po zavření stránky, ale učitelka by o výsledku
+  // nevěděla — proto se odchod během generování nejdřív ověří.
+  useEffect(() => {
+    if (busy !== 'generate') return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [busy])
 
   const subject = subjects.find((item) => item.id === subjectId)
   const grade = subject?.grades.find((item) => item.id === gradeId)
@@ -72,13 +97,9 @@ export function NewWorksheetForm({
   }
 
   async function post(url: string, body: unknown): Promise<{ id: string; dropped?: number }> {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = (await response.json().catch(() => ({}))) as { id?: string; dropped?: number; error?: string }
-    if (!response.ok || !data.id) throw new Error(data.error ?? `Požadavek selhal (${response.status})`)
+    const failure = 'List se nepodařilo založit.'
+    const data = await requestJson<{ id: string; dropped: number }>(url, jsonBody('POST', body), failure)
+    if (!data.id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
     return { id: data.id, dropped: data.dropped }
   }
 
@@ -96,7 +117,7 @@ export function NewWorksheetForm({
             ? { source, topicId, ...brief }
             : { source, title: title.trim(), gradeId: freeGradeId || null, ...brief },
         )
-        router.push(dropped ? `/listy/${id}?vynechano=${dropped}` : `/listy/${id}`)
+        if (mounted.current) router.push(dropped ? `/listy/${id}?vynechano=${dropped}` : `/listy/${id}`)
       } else {
         const name = source === 'topic' ? topic!.name : title.trim()
         const { id } = await post('/api/tests', {
@@ -116,7 +137,7 @@ export function NewWorksheetForm({
         router.push(`/listy/${id}`)
       }
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : String(runError))
+      setError(errorMessage(runError, 'List se nepodařilo založit.'))
       setBusy(null)
     }
   }
@@ -207,17 +228,23 @@ export function NewWorksheetForm({
                 <Input
                   id="list-title"
                   value={title}
+                  maxLength={200}
                   placeholder="Např. Vánoce v Evropě"
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>
               <div>
                 <Label htmlFor="list-free-grade">Ročník</Label>
-                <Select value={freeGradeId} onValueChange={setFreeGradeId}>
+                <Select
+                  value={freeGradeId}
+                  onValueChange={(value) => setFreeGradeId(value === NO_GRADE ? '' : value)}
+                >
                   <SelectTrigger id="list-free-grade" className="w-full">
                     <SelectValue placeholder="Bez ročníku" />
                   </SelectTrigger>
                   <SelectContent>
+                    {/* Jednou vybraný ročník jde vrátit zpátky na žádný. */}
+                    <SelectItem value={NO_GRADE}>Bez ročníku</SelectItem>
                     {allGrades.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.label}
@@ -268,6 +295,11 @@ export function NewWorksheetForm({
         ) : null}
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {busy === 'generate' ? (
+          <p className="text-sm text-fg-muted" role="status">
+            List se připravuje. Když stránku opustíš, dokončí se i tak a najdeš ho v přehledu pracovních listů.
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={busy !== null} onClick={() => void run('blank')}>

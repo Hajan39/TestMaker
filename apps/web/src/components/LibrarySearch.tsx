@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Delayed, Input, LoadingList } from '@testmaker/ui'
 import type { LibrarySearchResult } from '@/lib/library'
+import { errorMessage, requestJson } from '@/lib/requestJson'
 
 /**
  * Hledání přes celou knihovnu, ne jen ve zvoleném ročníku. Hledá v názvech
@@ -17,6 +18,7 @@ export function LibrarySearch() {
   const [results, setResults] = useState<LibrarySearchResult[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Krátký dotaz se nehledá; výsledky se neukládají prázdné, jen se nezobrazí.
@@ -29,14 +31,31 @@ export function LibrarySearch() {
     // `setLoading` až uvnitř časovače: stav se nemá měnit synchronně v efektu
     // (React to hlásí jako řetězení překreslení) a u rychlého psaní se tak
     // hláška „Hledám…" ani neukáže zbytečně.
+    // Každý dotaz má vlastní `AbortController`: pomalá odpověď na starší
+    // dotaz jinak přepsala výsledky novějšího.
+    const controller = new AbortController()
     const timeout = setTimeout(() => {
       setLoading(true)
-      fetch(`/api/library/search?q=${encodeURIComponent(needle)}`)
-        .then((response) => response.json())
-        .then((data: { results: LibrarySearchResult[] }) => setResults(data.results))
-        .finally(() => setLoading(false))
+      setError(null)
+      requestJson<{ results: LibrarySearchResult[] }>(
+        `/api/library/search?q=${encodeURIComponent(needle)}`,
+        { signal: controller.signal },
+        'Hledání se nepodařilo.',
+      )
+        .then((data) => setResults(data.results ?? []))
+        .catch((searchError: unknown) => {
+          if (controller.signal.aborted) return
+          setResults([])
+          setError(errorMessage(searchError, 'Hledání se nepodařilo.'))
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false)
+        })
     }, 200)
-    return () => clearTimeout(timeout)
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
   }, [needle])
 
   useEffect(() => {
@@ -80,6 +99,8 @@ export function LibrarySearch() {
             <Delayed label="Hledám…" className="p-1">
               <LoadingList items={3} />
             </Delayed>
+          ) : error ? (
+            <p className="px-2 py-2 text-sm text-danger">{error}</p>
           ) : results.length === 0 ? (
             <p className="px-2 py-2 text-sm text-fg-muted">Nic neodpovídá hledání „{needle}&ldquo;.</p>
           ) : (

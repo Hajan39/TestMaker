@@ -7,10 +7,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   downloadPdf,
   printPdf,
+  toast,
 } from '@testmaker/ui'
 
 /**
@@ -90,10 +92,12 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
 export function PrintMenuItems({
   testId,
   variants,
+  disabled = false,
   onRun,
 }: {
   testId: string
   variants: number
+  disabled?: boolean
   onRun: (action: PrintAction) => void
 }) {
   const groups = printGroups(testId, variants)
@@ -103,7 +107,7 @@ export function PrintMenuItems({
         <Fragment key={group.variant}>
           {index > 0 ? <DropdownMenuSeparator /> : null}
           {group.actions.map((action) => (
-            <DropdownMenuItem key={action.key} onSelect={() => onRun(action)}>
+            <DropdownMenuItem key={action.key} disabled={disabled} onSelect={() => onRun(action)}>
               {action.label}
             </DropdownMenuItem>
           ))}
@@ -113,18 +117,21 @@ export function PrintMenuItems({
   )
 }
 
-/** Samostatná nabídka do lišty skladače — včetně čekání a chybové hlášky. */
-export function PrintMenu({ testId, variants }: { testId: string; variants: number }) {
+/**
+ * Samostatná nabídka do lišty skladače — včetně čekání a chybové hlášky.
+ *
+ * PDF vzniká na serveru z uložené podoby. S neuloženými změnami by se
+ * vytiskla starší verze, než jakou učitelka vidí — tisk proto počká na uložení.
+ */
+export function PrintMenu({ testId, variants, dirty = false }: { testId: string; variants: number; dirty?: boolean }) {
   // Vykreslení PDF trvá vteřiny; bez tohohle se po kliknutí zdánlivě nic nestalo.
   const [work, setWork] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   function run(action: PrintAction) {
-    setError(null)
     setWork(action.busyLabel)
     void action
       .run()
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .catch((cause: unknown) => toast.error(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setWork(null))
   }
 
@@ -143,11 +150,15 @@ export function PrintMenu({ testId, variants }: { testId: string; variants: numb
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <PrintMenuItems testId={testId} variants={variants} onRun={run} />
+        <DropdownMenuContent align="end" className={dirty ? 'max-w-xs' : undefined}>
+          {dirty ? (
+            <DropdownMenuLabel className="text-xs font-normal text-fg-soft">
+              Nejdřív ulož změny — tiskne se uložená podoba.
+            </DropdownMenuLabel>
+          ) : null}
+          <PrintMenuItems testId={testId} variants={variants} disabled={dirty} onRun={run} />
         </DropdownMenuContent>
       </DropdownMenu>
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
     </>
   )
 }

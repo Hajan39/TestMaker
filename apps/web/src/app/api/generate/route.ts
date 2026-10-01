@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   const parsed = bodySchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
 
   // Rezervace tématu: dvě generování naráz nad týmž tématem by o sobě nevěděla

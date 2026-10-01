@@ -1,6 +1,7 @@
 'use client'
 
 import type { Question, QuestionType } from '@testmaker/core/schema'
+import { fetchOrOffline, readJson, responseError } from '@/lib/requestJson'
 
 export interface GenerateOptions {
   topicId: string
@@ -32,26 +33,21 @@ export async function generateQuestionsStream(
   onEvent: (event: GenerateEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch('/api/generate', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(options),
-    signal,
-  })
+  const response = await fetchOrOffline(
+    '/api/generate',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(options),
+      signal,
+    },
+    'Generování se nepodařilo spustit.',
+  )
 
   if (!response.ok || !response.body) {
     // Server posílá vysvětlení česky (chybějící klíč, už běžící generování);
-    // holé číslo stavu učitelce nic neřekne.
-    const detail = await response.text()
-    const message = (() => {
-      try {
-        const parsed = JSON.parse(detail) as { error?: string }
-        return parsed.error ?? detail
-      } catch {
-        return detail
-      }
-    })()
-    throw new Error(message.slice(0, 300) || `Generování selhalo (${response.status})`)
+    // holé číslo stavu ani HTML chybové stránky učitelce nic neřeknou.
+    throw responseError(response, await readJson(response), 'Generování se nepodařilo spustit.')
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -89,26 +85,21 @@ export async function createTestVariantStream(
   onEvent: (event: TestVariantEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch('/api/tests/variant', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ testId, direction }),
-    signal,
-  })
+  const response = await fetchOrOffline(
+    '/api/tests/variant',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ testId, direction }),
+      signal,
+    },
+    'Verzi písemky se nepodařilo vytvořit.',
+  )
 
   if (!response.ok || !response.body) {
     // Server posílá vysvětlení česky (bez modelu, cizí test); holé číslo
-    // stavu učitelce nic neřekne.
-    const detail = await response.text()
-    const message = (() => {
-      try {
-        const parsed = JSON.parse(detail) as { error?: string }
-        return parsed.error ?? detail
-      } catch {
-        return detail
-      }
-    })()
-    throw new Error(message.slice(0, 300) || `Vytvoření verze selhalo (${response.status})`)
+    // stavu ani HTML chybové stránky učitelce nic neřeknou.
+    throw responseError(response, await readJson(response), 'Verzi písemky se nepodařilo vytvořit.')
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -138,13 +129,14 @@ export async function drainQueue(
 ): Promise<void> {
   for (;;) {
     if (shouldStop()) return
-    const response = await fetch('/api/jobs/run', { method: 'POST' })
-    if (!response.ok) throw new Error(`Fronta selhala (${response.status})`)
-    const result = (await response.json()) as {
-      processed: boolean
-      created?: number
-      error?: string
-      remaining: number
+    const failure = 'Fronta se zastavila.'
+    const response = await fetchOrOffline('/api/jobs/run', { method: 'POST' }, failure)
+    const result = await readJson<{ processed: boolean; created?: number; remaining: number }>(response)
+    // Server vysvětluje česky (chybějící klíč, vypršelé přihlášení);
+    // samotné „Fronta selhala (503)“ učitelce nic neřeklo.
+    if (!response.ok) throw responseError(response, result, failure)
+    if (typeof result.processed !== 'boolean' || typeof result.remaining !== 'number') {
+      throw responseError(response, {}, failure)
     }
     onStep({
       processed: result.processed,

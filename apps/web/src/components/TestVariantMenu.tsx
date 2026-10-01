@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import {
@@ -44,6 +44,18 @@ export function TestVariantMenu({
   const router = useRouter()
   const [busy, setBusy] = useState<TestVariantDirection | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+
+  // Server verzi dokončí i po zavření stránky, ale učitelka by o výsledku
+  // nevěděla — proto se odchod během vytváření nejdřív ověří.
+  useEffect(() => {
+    if (!busy) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [busy])
 
   async function run(direction: TestVariantDirection) {
     if (dirty) {
@@ -134,7 +146,7 @@ export function TestVariantMenu({
         {!ai.configured ? (
           <DropdownMenuLabel className="text-xs font-normal text-fg-soft">
             Verze písemky potřebuje generování, které není nastavené.
-            {ai.problems.length > 0 ? ` ${ai.problems.join(' ')}` : ' Správce ho zapne v nastavení AI (AI_MODELS).'}
+            {ai.problems.length > 0 ? ` ${ai.problems.join(' ')}` : ' Dej vědět správci, ať ho zapne.'}
           </DropdownMenuLabel>
         ) : null}
         {(['easier', 'harder'] as const).map((direction) => (

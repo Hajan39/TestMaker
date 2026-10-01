@@ -102,12 +102,15 @@ test.describe('tisk testu', () => {
 
     try {
       await page.goto('/tests')
+      const pdf = page.waitForResponse((response) => response.url().includes(`/api/tests/${id}/pdf`))
       await page.getByRole('button', { name: 'Akce' }).first().click()
       await page.getByRole('menuitem', { name: 'Vytisknout zadání pro žáky' }).click()
 
-      // Do stránky se vloží rám s PDF; to je pozorovatelný důsledek.
+      // PDF se nejdřív stáhne (aby se chyba serveru nevytiskla jako text)
+      // a hotové jde do rámu jako blob; to je pozorovatelný důsledek.
+      expect((await pdf).ok()).toBe(true)
       await expect
-        .poll(async () => page.locator(`iframe[src*="/api/tests/${id}/pdf"]`).count(), { timeout: 10_000 })
+        .poll(async () => page.locator('iframe[src^="blob:"]').count(), { timeout: 10_000 })
         .toBeGreaterThan(0)
     } finally {
       await page.request.delete(`/api/tests?id=${encodeURIComponent(id)}`)

@@ -38,19 +38,28 @@ export async function POST(request: Request) {
           { status: 503 },
         )
       }
-      const parsed = bodySchema.safeParse(await request.json())
+      const parsed = bodySchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
-        return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+        return Response.json(
+          {
+            error:
+              'Zadání listu není úplné — vyber téma, nebo napiš, o čem má list být (nejvýš 200 znaků), a zkus to znovu.',
+            detail: parsed.error.issues,
+          },
+          { status: 400 },
+        )
       }
       const body = parsed.data
       const source = body.source === 'topic' ? { topicId: body.topicId } : { title: body.title, gradeId: body.gradeId }
 
       try {
-        const result = await createGeneratedWorksheet(
-          ucet,
-          { source, instructions: body.instructions.trim(), ownText: body.ownText.trim() },
-          { signal: request.signal },
-        )
+        // Záměrně bez `request.signal`: když učitelka zavře stránku, list se
+        // stejně dogeneruje a uloží a najde ho v přehledu listů.
+        const result = await createGeneratedWorksheet(ucet, {
+          source,
+          instructions: body.instructions.trim(),
+          ownText: body.ownText.trim(),
+        })
         if (!result) return Response.json({ error: WORKSHEET_TOPIC_GONE_MESSAGE }, { status: 404 })
         return Response.json(result)
       } catch (error) {

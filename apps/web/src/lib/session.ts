@@ -117,6 +117,24 @@ export async function overitRelaci(
   return relace
 }
 
+/**
+ * Čerstvý token, když relace přešla polovinu platnosti; jinak `null`.
+ * Strop `RELACE_MAX_MS` hlídá řádek v `sessions`, takže prodlužovat cookie
+ * stačí bez databáze — proto to zvládne i proxy.
+ */
+export async function obnovitRelaci(
+  relace: Relace,
+  secret: string,
+  now: number = Date.now(),
+): Promise<string | null> {
+  if (relace.exp - now > RELACE_TTL_MS / 2) return null
+  return podepsatRelaci({ ...relace, exp: now + RELACE_TTL_MS }, secret)
+}
+
+/** Text pro API, když chybí platná relace. Klient ho čte učitelce. */
+export const NEPRIHLASEN_MESSAGE =
+  'Přihlášení vypršelo. Přihlas se znovu v nové záložce — rozdělaná práce v tomhle okně zůstane — a zkus to znovu.'
+
 /** Hlavička `Set-Cookie`; `null` místo tokenu cookie smaže. */
 export function relaceCookie(
   token: string | null,

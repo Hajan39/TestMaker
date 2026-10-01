@@ -11,6 +11,8 @@
  * prohlížeče nepatří.
  */
 
+import { jsonBody, requestJson } from '@/lib/requestJson'
+
 /** Řádek zálohy; co v něm je, řeší až server proti schématu. */
 type Radek = Record<string, unknown>
 
@@ -144,17 +146,7 @@ function nakrajej(radky: Radek[]): Radek[][] {
 }
 
 async function posli(telo: unknown): Promise<Record<string, unknown>> {
-  const odpoved = await fetch('/api/export', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(telo),
-  })
-  const data = (await odpoved.json().catch(() => null)) as Record<string, unknown> | null
-  if (!odpoved.ok) {
-    const hlaska = typeof data?.error === 'string' ? data.error : 'Obnova se nepovedla.'
-    throw new Error(hlaska)
-  }
-  return data ?? {}
+  return requestJson<Record<string, unknown>>('/api/export', jsonBody('POST', telo), 'Obnova se nepovedla.')
 }
 
 /**

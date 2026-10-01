@@ -24,11 +24,11 @@ export async function POST(request: Request) {
   try {
     if (raw) body = JSON.parse(raw)
   } catch {
-    return Response.json({ error: 'Neplatná data' }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
   }
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
 
   const requeued = await retryFailedJobs(ucet, parsed.data.ids)

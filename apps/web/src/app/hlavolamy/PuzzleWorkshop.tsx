@@ -57,8 +57,10 @@ import {
   toast,
   type PluralForms,
 } from '@testmaker/ui'
+import { useMuzeMenit } from '@/components/Prava'
 import { RowActions } from '@/components/RowActions'
 import type { PuzzleListItem, PuzzleTopic } from '@/lib/puzzles'
+import { errorMessage, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
 
 /** Hlavolam tak, jak ho vrací API po uložení. */
 type PuzzleListRow = PuzzleContent & { id: string; topicId: string | null; updatedAt: string }
@@ -84,10 +86,6 @@ const MAX_CLUE_LENGTH = PUZZLE_CLUE_MAX
 const MAX_TITLE_LENGTH = 200
 const MAX_INSTRUCTIONS_LENGTH = 500
 const MAX_PHRASE_LENGTH = PUZZLE_PHRASE_MAX
-
-/** Hláška, když server odpoví chybou bez vysvětlení (spadl, vypršel čas…). */
-const SERVER_TROUBLE = 'Server teď neodpověděl, jak měl. Zkus to za chvíli znovu; když to nepomůže, obnov stránku.'
-const OFFLINE = 'Nepodařilo se spojit se serverem. Zkontroluj připojení k internetu a zkus to znovu.'
 
 /**
  * Chce schéma u osmisměrky nápovědu? Zjišťuje se ze schématu samého, ne
@@ -293,35 +291,6 @@ function checkDraft(draft: Draft): DraftCheck {
   return { preview, content, rowProblems, missing }
 }
 
-/** Tělo odpovědi jako JSON; prázdné nebo rozbité tělo (pád serveru) = `{}`. */
-async function readJson<T>(response: Response): Promise<Partial<T> & { error?: string }> {
-  try {
-    return ((await response.json()) ?? {}) as Partial<T> & { error?: string }
-  } catch {
-    return {}
-  }
-}
-
-/**
- * Požadavek na API s českou chybou pro učitelku. Když server vrátí vlastní
- * hlášku, použije se ta; jinak obecná rada, co dělat.
- */
-async function requestJson<T>(url: string, init: RequestInit | undefined, failure: string): Promise<Partial<T>> {
-  let response: Response
-  try {
-    response = await fetch(url, init)
-  } catch {
-    throw new Error(`${failure} ${OFFLINE}`)
-  }
-  const data = await readJson<T>(response)
-  if (!response.ok) throw new Error(data.error ?? `${failure} ${SERVER_TROUBLE}`)
-  return data
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback
-}
-
 /** Číslo z odpovědi — přímo, nebo v objektu `counts`; server je zatím posílat nemusí. */
 function countFrom(data: Record<string, unknown>, ...names: string[]): number | null {
   const counts = (typeof data.counts === 'object' && data.counts ? data.counts : {}) as Record<string, unknown>
@@ -375,6 +344,7 @@ export function PuzzleWorkshop({
   aiConfigured: boolean
 }) {
   const router = useRouter()
+  const muzeMenit = useMuzeMenit()
   const [start] = useState(emptyDraft)
   const [draft, setDraft] = useState<Draft>(start)
   /** Otisk naposledy uloženého (nebo otevřeného) stavu. */
@@ -623,6 +593,8 @@ export function PuzzleWorkshop({
       if (!id) return
       if (wasDirty) toast.success('Změny jsou uložené, posílám hlavolam do tisku.')
       await printPdf(`/api/puzzles/${id}/pdf${withKey ? '?key=1' : ''}`)
+    } catch (error) {
+      toast.error(errorMessage(error, 'Hlavolam se nepodařilo vytisknout.'))
     } finally {
       setPrinting(null)
     }
@@ -747,6 +719,12 @@ export function PuzzleWorkshop({
             Osmisměrka a tajenka z materiálů tématu. Slova dodá model, mřížku skládá aplikace —
             vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.
           </p>
+          {muzeMenit ? null : (
+            <p className="mt-1 max-w-3xl text-sm text-fg-muted" data-slot="puzzle-read-only">
+              Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani
+              zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitelka.
+            </p>
+          )}
         </div>
         {/* Seznam uložených je až pod dílnou; na telefonu by se k němu nikdo neprohrabal. */}
         <a href="#ulozene-hlavolamy" className="text-sm text-fg-soft underline-offset-2 hover:underline">
@@ -761,6 +739,8 @@ export function PuzzleWorkshop({
               Otevírám hlavolam…
             </p>
           ) : null}
+          {/* Náhled si hlavolamy čte a tiskne, ale nemění — pole jsou zamčená celá najednou. */}
+          <fieldset disabled={!muzeMenit} className="contents">
           <Card className="space-y-4 p-4">
             <div className="flex flex-wrap gap-3">
               <div className="w-48">
@@ -807,11 +787,18 @@ export function PuzzleWorkshop({
                       void fetch(`/api/puzzles/words?topicId=${encodeURIComponent(topicId)}&kind=${draft.kind}`)
                         .then((response) => (response.ok ? response.json() : { entries: [] }))
                         .then((data: { entries?: ApiEntry[] }) => {
-                          if (data.entries?.length) {
-                            update({
-                              entries: data.entries.map((entry) => ({ word: entry.word, clue: entry.clue ?? '' })),
-                            })
-                          }
+                          const loaded = data.entries
+                          if (!loaded?.length) return
+                          // Odpověď chodí se zpožděním: mezitím mohla učitelka vybrat
+                          // jiné téma nebo začít psát slova — ta se nepřepisují.
+                          setDraft((current) =>
+                            current.topicId === topicId && current.entries.length === 0
+                              ? {
+                                  ...current,
+                                  entries: loaded.map((entry) => ({ word: entry.word, clue: entry.clue ?? '' })),
+                                }
+                              : current,
+                          )
                         })
                         .catch(() => undefined)
                     }
@@ -940,8 +927,10 @@ export function PuzzleWorkshop({
               </div>
             )}
           </Card>
+          </fieldset>
 
           <Card className="p-4">
+            <fieldset disabled={!muzeMenit} className="contents">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-medium text-fg">Slova ({pocet(draft.entries.length, SLOVA)})</h2>
               <Button
@@ -1010,6 +999,7 @@ export function PuzzleWorkshop({
                 })}
               </ul>
             )}
+            </fieldset>
 
             {problems.length > 0 ? (
               <ul className="mt-3 space-y-1 text-sm text-danger" data-slot="puzzle-problems">
@@ -1031,14 +1021,17 @@ export function PuzzleWorkshop({
             ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <BusyButton busy={saving && printing === null && zarazuji === null} busyLabel="Ukládám…" onClick={() => void save()}>
-                {draft.id ? 'Uložit změny' : 'Uložit hlavolam'}
-              </BusyButton>
+              {muzeMenit ? (
+                // Zablokované, i když ukládá tisk nebo zařazení — druhé kliknutí by poslalo druhý POST.
+                <BusyButton busy={saving} busyLabel="Ukládám…" onClick={() => void save()}>
+                  {draft.id ? 'Uložit změny' : 'Uložit hlavolam'}
+                </BusyButton>
+              ) : null}
               <BusyButton
                 variant="outline"
                 busy={printing === 'plain'}
                 busyLabel="Připravuji tisk…"
-                disabled={blockedReason !== null || printing !== null}
+                disabled={blockedReason !== null || printing !== null || saving || (!muzeMenit && (!draft.id || dirty))}
                 aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(false)}
               >
@@ -1048,20 +1041,22 @@ export function PuzzleWorkshop({
                 variant="outline"
                 busy={printing === 'key'}
                 busyLabel="Připravuji tisk…"
-                disabled={blockedReason !== null || printing !== null}
+                disabled={blockedReason !== null || printing !== null || saving || (!muzeMenit && (!draft.id || dirty))}
                 aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(true)}
               >
                 Vytisknout s řešením
               </BusyButton>
-              <Button
-                variant="outline"
-                disabled={blockedReason !== null}
-                aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
-                onClick={() => void chooseTest()}
-              >
-                Zařadit do písemky
-              </Button>
+              {muzeMenit ? (
+                <Button
+                  variant="outline"
+                  disabled={blockedReason !== null || saving}
+                  aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
+                  onClick={() => void chooseTest()}
+                >
+                  Zařadit do písemky
+                </Button>
+              ) : null}
               {draft.id || dirty ? (
                 <Button
                   variant="ghost"
@@ -1101,7 +1096,7 @@ export function PuzzleWorkshop({
               title="Zatím není co ukázat"
               hint={
                 !templateConfig
-                  ? 'Náhled potřebuje šablonu písemky. Založ ji v Šablonách, nebo požádej správce.'
+                  ? 'Náhled potřebuje šablonu písemky. Škola zatím žádnou nemá — požádej správce, ať ji přidá.'
                   : (missing.find((message) => !message.startsWith('Doplň název')) ??
                     'Náhled se objeví, jakmile budou v seznamu aspoň dvě slova.')
               }
@@ -1136,7 +1131,7 @@ export function PuzzleWorkshop({
                     <li key={pisemka.id}>
                       <button
                         type="button"
-                        disabled={zarazuji !== null}
+                        disabled={zarazuji !== null || saving}
                         className="flex w-full items-baseline justify-between gap-3 py-2 text-left text-sm text-fg hover:underline disabled:opacity-60"
                         onClick={() => void addToTest(pisemka.id)}
                       >
@@ -1217,9 +1212,11 @@ export function PuzzleWorkshop({
                   >
                     Otevřít
                   </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onSelect={() => askRemove(puzzle.id, puzzle.title)}>
-                    Smazat
-                  </DropdownMenuItem>
+                  {muzeMenit ? (
+                    <DropdownMenuItem variant="destructive" onSelect={() => askRemove(puzzle.id, puzzle.title)}>
+                      Smazat
+                    </DropdownMenuItem>
+                  ) : null}
                 </RowActions>
               </li>
             ))}

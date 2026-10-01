@@ -28,9 +28,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return Response.json({ error: `${AI_NOT_CONFIGURED_MESSAGE} Položku můžeš upravit ručně.` }, { status: 503 })
       }
       const { id } = await params
-      const parsed = bodySchema.safeParse(await request.json())
+      const parsed = bodySchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
-        return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+        return Response.json(
+          { error: 'Položku se nepodařilo přegenerovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues },
+          { status: 400 },
+        )
       }
       try {
         const item = await regenerateWorksheetPart(ucet, id, parsed.data.target, parsed.data.existing, {

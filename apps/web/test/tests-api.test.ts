@@ -123,7 +123,7 @@ describe('ukládání testu', () => {
       }),
     )
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Neplatná data' })
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('chybí název') })
   })
 
   it('odmítne nesmyslný počet linek u položky', async () => {
@@ -197,6 +197,27 @@ describe('přeuložení testu', () => {
     expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení' })
     // Rozhraní má o rozdílu vědět, aby ho mohlo učitelce ukázat.
     expect(item?.questionEdited).toBe(true)
+  })
+
+  it('vrátí id položek a s nimi drží zmrazený obsah i při dalším uložení', async () => {
+    const questionId = await seedQuestion(topicId, { prompt: 'Znění při zařazení' })
+    const id = await createTest([{ kind: 'question', questionId }])
+    const saved = await itemsForSave(id)
+
+    await db
+      .update(questions)
+      .set({ payload: { prompt: 'Změněné znění', options: ['a', 'b'], correctIndex: 0 } })
+      .where(eq(questions.id, questionId))
+
+    // Editor po uložení posílá id, která mu vrátilo předchozí uložení.
+    const body = { id, title: 'x', description: null, graded: true, templateId, header: emptyHeader, variants: 1, showKey: true }
+    const first = await PUT(jsonReq('/api/tests', 'PUT', { ...body, items: saved }))
+    const { itemIds } = (await first.json()) as { itemIds: string[] }
+    expect(itemIds).toEqual(saved.map((item) => (item as { id: string }).id))
+    await PUT(jsonReq('/api/tests', 'PUT', { ...body, items: saved.map((item, i) => ({ ...(item as object), id: itemIds[i] })) }))
+
+    const [item] = await loadTestItems(UCET, id)
+    expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení' })
   })
 
   it('otázka přidaná až při přeuložení se zmrazí v aktuálním znění', async () => {
@@ -358,6 +379,11 @@ describe('mazání testu', () => {
     expect(await loadTest(UCET, id)).toBeNull()
     const rows = await db.select().from(testItems).where(eq(testItems.testId, id))
     expect(rows).toHaveLength(0)
+  })
+
+  it('neexistující test hlásí 404, ne úspěch', async () => {
+    const response = await DELETE(req('/api/tests?id=neexistuje', { method: 'DELETE' }))
+    expect(response.status).toBe(404)
   })
 
   it('bez id odmítne mazat', async () => {

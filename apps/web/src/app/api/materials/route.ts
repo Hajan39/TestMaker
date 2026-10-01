@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = importBatchSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
 
   // Nahrání z konkrétního tématu: pole subject/grade/topic se ignorují a
@@ -154,7 +154,7 @@ export async function DELETE(request: Request) {
   return sRozsahem(
     async (ucet) => {
       const id = new URL(request.url).searchParams.get('id')
-      if (!id) return NextResponse.json({ error: 'Chybí id' }, { status: 400 })
+      if (!id) return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
       const [row] = await db
         .select({ topicId: materials.topicId })
         .from(materials)
@@ -178,7 +178,7 @@ export async function PATCH(request: Request) {
     async (ucet) => {
       const parsed = excludeSchema.safeParse(await request.json())
       if (!parsed.success) {
-        return NextResponse.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+        return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
       }
 
       const [row] = await db
@@ -186,7 +186,7 @@ export async function PATCH(request: Request) {
         .from(materials)
         .where(and(skola(ucet, materials), eq(materials.id, parsed.data.id)))
         .limit(1)
-      if (!row) return NextResponse.json({ error: 'Materiál se nenašel' }, { status: 404 })
+      if (!row) return NextResponse.json({ error: 'Materiál mezitím zmizel, obnov stránku.' }, { status: 404 })
 
       await db
         .update(materials)

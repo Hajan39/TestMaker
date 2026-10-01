@@ -28,6 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         role: uzivatel.role,
         skola: { id: uzivatel.schoolId, name: uzivatel.skola },
         domovskaSkolaId: uzivatel.domovskaSkolaId,
+        maHeslo: uzivatel.maHeslo !== false,
         skoly,
       }
     : null

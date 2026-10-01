@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const parsed = bodySchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
   // Poznámka bez důvodu nemá kam patřit — v promptu visí věta „Proč se otázka
   // nahrazuje" jen k vybranému důvodu, samotná poznámka bez ní nedává smysl.
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     .from(questions)
     .where(and(skola(ucet, questions), eq(questions.id, parsed.data.id)))
     .limit(1)
-  if (!original) return Response.json({ error: 'Otázka nenalezena' }, { status: 404 })
+  if (!original) return Response.json({ error: 'Otázka mezitím zmizela, obnov stránku.' }, { status: 404 })
   if (!original.topicId) {
     return Response.json(
       { error: 'Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada' },

@@ -16,10 +16,16 @@ export function TemplatePreview({
   templateId,
   graded = true,
   className,
+  decorative = false,
 }: {
   templateId: string
   graded?: boolean
   className?: string
+  /**
+   * Náhled uvnitř tlačítka (výběr šablony): iframe by klik spolkl a tlačítko
+   * by nereagovalo, proto se nedá zaměřit ani kliknout a čtečka ho přeskočí.
+   */
+  decorative?: boolean
 }) {
   const [ready, setReady] = useState(false)
   const timer = useRef<number | null>(null)
@@ -35,7 +41,7 @@ export function TemplatePreview({
   return (
     <div
       className={cn(
-        'relative aspect-[210/297] w-full overflow-hidden rounded border border-line bg-white',
+        'relative aspect-[210/297] w-full overflow-hidden rounded border border-line bg-paper',
         className,
       )}
     >
@@ -52,7 +58,9 @@ export function TemplatePreview({
       <iframe
         src={src}
         title="Náhled šablony"
-        className="size-full"
+        className={cn('size-full', decorative && 'pointer-events-none')}
+        tabIndex={decorative ? -1 : undefined}
+        aria-hidden={decorative || undefined}
         loading="lazy"
         onLoad={() => setReady(true)}
       />

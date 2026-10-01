@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AI_QUESTION_TYPES, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 
 /** Zapamatovaná odpověď na „je model nakonfigurovaný?“ — ptáme se jednou za načtení stránky. */
 let configuredCache: boolean | null = null
@@ -47,21 +48,16 @@ export function useRegenerateQuestion(
   async function run(reason?: RegenerateReason, note?: string) {
     setBusy(true)
     try {
-      const response = await fetch('/api/questions/regenerate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: questionId, reason, note }),
-      })
-      const data = (await response.json()) as { error?: string }
-      if (!response.ok) {
-        toast.error(data.error ?? 'Náhradu se nepodařilo vytvořit')
-        return
-      }
+      await requestJson(
+        '/api/questions/regenerate',
+        jsonBody('POST', { id: questionId, reason, note }),
+        'Náhradu se nepodařilo vytvořit.',
+      )
       toast.success('Otázka nahrazena novou.')
       onDone?.()
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Náhradu se nepodařilo vytvořit')
+      toast.error(errorMessage(error, 'Náhradu se nepodařilo vytvořit.'))
     } finally {
       setBusy(false)
     }

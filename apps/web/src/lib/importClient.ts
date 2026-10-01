@@ -3,6 +3,7 @@
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { skipReason } from '@testmaker/core/extract'
 import type { ExtractResponse } from '@/workers/extract.worker'
+import { jsonBody, requestJson } from '@/lib/requestJson'
 
 export interface FileEntry {
   file: File
@@ -133,28 +134,17 @@ export async function uploadMaterials(
 
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize)
-    const response = await fetch('/api/materials', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ materials: batch, ...(topicId ? { topicId } : {}) }),
-    })
-    if (!response.ok) {
-      // Server posílá vysvětlení česky (neplatná data, téma se nenašlo);
-      // syrový JSON by učitelce nic neřekl.
-      const detail = await response.text()
-      const message = (() => {
-        try {
-          const parsed = JSON.parse(detail) as { error?: string }
-          return parsed.error ?? detail
-        } catch {
-          return detail
-        }
-      })()
-      throw new Error(message.slice(0, 300) || `Import selhal (${response.status}).`)
-    }
-    const result = (await response.json()) as { imported: number; duplicates: number }
-    imported += result.imported
-    duplicates += result.duplicates
+    // Server posílá vysvětlení česky (neplatná data, téma se nenašlo); syrové
+    // tělo odpovědi (třeba HTML chybové stránky) by učitelce nic neřeklo.
+    const result = await requestJson<{ imported: number; duplicates: number }>(
+      '/api/materials',
+      jsonBody('POST', { materials: batch, ...(topicId ? { topicId } : {}) }),
+      imported + duplicates > 0
+        ? 'Část souborů se uložila, zbytek ne — nahraj je znovu, uložené se nezdvojí.'
+        : 'Soubory se nepodařilo uložit.',
+    )
+    imported += result.imported ?? 0
+    duplicates += result.duplicates ?? 0
     onProgress?.(Math.min(i + batchSize, items.length), items.length)
   }
 

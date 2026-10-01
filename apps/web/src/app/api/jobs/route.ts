@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     async (ucet) => {
   const parsed = enqueueSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
   const input = parsed.data
 

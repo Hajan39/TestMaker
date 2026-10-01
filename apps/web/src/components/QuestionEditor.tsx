@@ -27,7 +27,46 @@ import {
   Textarea,
 } from '@testmaker/ui'
 import { emptyPayload } from '@/lib/questionDefaults'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { PayloadFields } from './PayloadFields'
+
+/**
+ * Co opravit, podle pole, které zod odmítl. Anglická hláška zodu s cestou
+ * typu „payload.options.1: String must contain…“ učitelce nic neřekne.
+ */
+const FIELD_PROBLEMS: Record<string, string> = {
+  prompt: 'Zadání je moc krátké — napiš aspoň pár slov.',
+  options: 'Doplň možnosti odpovědí: žádná nesmí zůstat prázdná a musí jich být dost (u jedné správné aspoň 2, u více správných aspoň 3).',
+  correctIndex: 'Označ správnou odpověď.',
+  correctIndices: 'Označ aspoň jednu správnou odpověď.',
+  answer: 'Vyplň správnou odpověď do klíče.',
+  acceptedAnswers: 'Další přípustné odpovědi nesmějí být prázdné (nejvýš 10).',
+  statements: 'Každé tvrzení musí mít aspoň pár písmen; tvrzení může být nejvýš 12.',
+  text: 'Napiš text s místy k doplnění a označ je třemi podtržítky ___.',
+  blanks: 'Ke každému místu ___ doplň správný výraz.',
+  wordBank: 'Slova v nabídce nesmějí být prázdná (nejvýš 30).',
+  left: 'Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.',
+  right: 'Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.',
+  pairs: 'Přiřaď k sobě aspoň dvě dvojice.',
+  items: 'Vyplň aspoň tři položky k seřazení, žádná nesmí zůstat prázdná.',
+  headers: 'Doplň záhlaví tabulky.',
+  rows: 'Tabulka musí mít aspoň jeden řádek.',
+  answers: 'Doplň správné odpovědi do prázdných buněk tabulky.',
+  lines: 'Počet řádků na odpověď je moc velký — zvol menší číslo.',
+  points: 'Body musí být číslo od 0 do 100.',
+  explanation: 'Poznámka do klíče je moc dlouhá — zkrať ji pod 1000 znaků.',
+}
+
+function describeIssues(paths: PropertyKey[][]): string {
+  const messages = new Set(
+    paths.map((path) => {
+      // `payload.options.1` → `options`, `points` → `points`.
+      const field = String(path[0] === 'payload' ? path[1] : path[0])
+      return FIELD_PROBLEMS[field] ?? 'Otázka není vyplněná celá. Zkontroluj zadání, odpovědi a správné řešení.'
+    }),
+  )
+  return [...messages].join(' ')
+}
 
 /**
  * Formulář otázky — pole, uložení i chyby, bez dialogu okolo. Vyjmutý
@@ -84,7 +123,7 @@ export function QuestionEditorForm({
 
     const parsed = questionContentSchema.safeParse(candidate)
     if (!parsed.success) {
-      setError(parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '))
+      setError(describeIssues(parsed.error.issues.map((issue) => issue.path)))
       return
     }
     const problems = validateQuestionContent(parsed.data as QuestionContent)
@@ -100,24 +139,16 @@ export function QuestionEditorForm({
 
     setSaving(true)
     try {
-      const response = question
-        ? await fetch('/api/questions', {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: question.id, question: parsed.data }),
-          })
-        : await fetch('/api/questions', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ topicId, question: parsed.data }),
-          })
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(detail.error ?? `Uložení selhalo (${response.status})`)
-      }
+      await requestJson(
+        '/api/questions',
+        question
+          ? jsonBody('PATCH', { id: question.id, question: parsed.data })
+          : jsonBody('POST', { topicId, question: parsed.data }),
+        'Otázku se nepodařilo uložit.',
+      )
       onSaved()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError))
+      setError(errorMessage(saveError, 'Otázku se nepodařilo uložit.'))
     } finally {
       setSaving(false)
     }

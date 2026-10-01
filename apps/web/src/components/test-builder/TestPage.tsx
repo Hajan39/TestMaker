@@ -430,7 +430,7 @@ function PageRow({
               step={0.5}
               aria-label="Body za otázku"
               value={item.pointsOverride ?? question?.points ?? 0}
-              onChange={(event) => onPatch(item.key, { pointsOverride: Number(event.target.value) || 0 })}
+              onChange={(event) => onPatch(item.key, { pointsOverride: Math.max(0, Number(event.target.value) || 0) })}
             />
           </label>
         ) : null}
@@ -540,6 +540,16 @@ function PageRow({
         // Hlavolam se v osnově jen ukazuje tak, jak se vytiskne; slova
         // a mřížka se mění na obrazovce Hlavolamy, ne tady.
         <PaperPuzzle puzzle={item.puzzle} className="text-paper-fg" />
+      ) : item.kind === 'question' || item.kind === 'puzzle' ? (
+        // Otázka nebo hlavolam bez obsahu (zmizel z banky i bez snímku) —
+        // dřív propadl až do větve pokynu a ukázal se jako prázdné pole.
+        <BrokenItem
+          message={
+            item.kind === 'puzzle'
+              ? 'Hlavolam už není k dispozici — odeber ho z písemky.'
+              : 'Otázka už není k dispozici — odeber ji z písemky.'
+          }
+        />
       ) : item.kind === 'text' ? (
         item.textContent ? (
           <TextItemEditor
@@ -600,10 +610,14 @@ function PageRow({
 }
 
 /** Položka listu, jejíž uložený obsah neprošel schématem — zbytek listu žije dál. */
-function BrokenItem() {
+function BrokenItem({
+  message = 'Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu.',
+}: {
+  message?: string
+}) {
   return (
     <p className="my-2 rounded-[var(--radius-inner)] bg-danger-bg px-2 py-1 text-sm text-danger">
-      Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu.
+      {message}
     </p>
   )
 }

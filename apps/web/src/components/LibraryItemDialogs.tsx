@@ -18,6 +18,7 @@ import {
 } from '@testmaker/ui'
 import type { LibraryKind } from '@/lib/library'
 import { useMuzeMenit } from '@/components/Prava'
+import { errorMessage, readJson, responseError } from '@/lib/requestJson'
 
 /**
  * Zakládání a přejmenování v knihovně.
@@ -89,6 +90,9 @@ function NameDialog({
         return
       }
       change(false)
+    } catch (submitError) {
+      // Síťová chyba dřív neukázala nic — tlačítko se jen vrátilo do klidu.
+      setError(errorMessage(submitError, 'Nepovedlo se to uložit.'))
     } finally {
       setBusy(false)
     }
@@ -136,8 +140,7 @@ function NameDialog({
 /** Odpověď API přeložená na hlášku, kterou má smysl ukázat učitelce. */
 async function problem(response: Response): Promise<string | null> {
   if (response.ok) return null
-  const detail = (await response.json().catch(() => ({}))) as { error?: string }
-  return detail.error ?? `Nepovedlo se to (${response.status}).`
+  return responseError(response, await readJson(response), 'Nepovedlo se to uložit.').message
 }
 
 /**

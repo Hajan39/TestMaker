@@ -3,9 +3,24 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
+  BusyButton,
   Button,
   Card,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
   Select,
@@ -24,6 +39,7 @@ import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schem
 import { SkolaFormular } from '@/components/SkolaFormular'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import {
   ROLES_PRIDELITELNE,
   ROLE_LABELS,
@@ -66,6 +82,72 @@ function kdy(hodnota: string | null): string {
 /** Událost zapsal administrátor zvenku — `zapsatAudit` jí dal příznak. */
 function odAdministratora(detail: unknown): boolean {
   return typeof detail === 'object' && detail !== null && (detail as { administrator?: unknown }).administrator === true
+}
+
+/** Kódy událostí ze `zapsatAudit` česky. Neznámý kód se ukáže, jak je. */
+const UDALOSTI: Record<string, string> = {
+  'administrator-prepnul-skolu': 'Administrátor se přepnul do školy',
+  'fronta-chyba': 'Chyba ve frontě generování',
+  'generovani-chyba': 'Generování otázek se nepovedlo',
+  'google-cekajici-ucet': 'Přihlášení přes Google čeká na schválení',
+  'google-neznamy-ucet': 'Pokus o přihlášení neznámým účtem Google',
+  'obnova-ze-zalohy': 'Obnova ze zálohy',
+  odhlaseni: 'Odhlášení',
+  prihlaseni: 'Přihlášení',
+  'prihlaseni-chybne-heslo': 'Přihlášení se špatným heslem',
+  'prihlaseni-google': 'Přihlášení přes Google',
+  'prihlaseni-neaktivni-ucet': 'Pokus o přihlášení k neaktivnímu účtu',
+  'prihlaseni-zamceno': 'Účet dočasně zamčen po opakovaných pokusech',
+  'skola-upravena': 'Nastavení školy změněno',
+  'skola-zalozena': 'Škola založena',
+  'smazani-v-knihovne': 'Smazání v knihovně',
+  'ucet-upraven': 'Účet upraven',
+  'ucet-zablokovan': 'Účet zablokován',
+  'ucet-zalozen': 'Účet založen',
+  'zmena-hesla': 'Změna vlastního hesla',
+}
+
+const POLE_DETAILU: Record<string, string> = {
+  email: 'e-mail',
+  name: 'jméno',
+  role: 'role',
+  status: 'stav',
+  pocet: 'počet pokusů',
+  message: 'chyba',
+  odkazy: 'odkazů',
+  heslo: 'nové heslo',
+  odhlasit: 'odhlášení ze všech zařízení',
+  googleDomain: 'doména Google',
+  googleAutoJoin: 'evidovat účty z domény',
+}
+
+/** Detail události jako „klíč: hodnota“; id a příznak administrátora se nevypisují. */
+function popisDetailu(detail: unknown): string {
+  if (typeof detail !== 'object' || detail === null) return String(detail)
+  return Object.entries(detail as Record<string, unknown>)
+    .filter(([klic, hodnota]) => hodnota !== undefined && hodnota !== null && klic !== 'id' && klic !== 'administrator')
+    .map(([klic, hodnota]) => {
+      const text =
+        hodnota === true
+          ? 'ano'
+          : hodnota === false
+            ? 'ne'
+            : klic === 'role' && typeof hodnota === 'string' && hodnota in ROLE_LABELS
+              ? ROLE_LABELS[hodnota as Role]
+              : klic === 'status' && typeof hodnota === 'string' && hodnota in USER_STATUS_LABELS
+                ? USER_STATUS_LABELS[hodnota as UserStatus]
+                : typeof hodnota === 'object'
+                  ? JSON.stringify(hodnota)
+                  : String(hodnota)
+      return `${POLE_DETAILU[klic] ?? klic}: ${text}`
+    })
+    .join(' · ')
+}
+
+const PRIHLASOVANI: Record<'zapnuto' | 'vypnuto' | 'chybne-nastaveno', string> = {
+  zapnuto: 'Přihlašování zapnuté',
+  vypnuto: 'Přihlašování vypnuté (aplikace běží bez hesel)',
+  'chybne-nastaveno': 'Přihlašování je špatně nastavené — chybí AUTH_SECRET',
 }
 
 export function SpravaScreen({
@@ -120,62 +202,58 @@ export function SpravaScreen({
     if (!novePravidlo) return
     setPravidloBusy(true)
     try {
-      const response = await fetch('/api/prompt-rules', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: novePravidlo.text, reason: novePravidlo.reason }),
-      })
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      if (!response.ok) {
-        toast.error(data.error ?? 'Pravidlo se nepodařilo uložit.')
-        return
-      }
+      await requestJson(
+        '/api/prompt-rules',
+        jsonBody('POST', { text: novePravidlo.text, reason: novePravidlo.reason }),
+        'Pravidlo se nepodařilo uložit.',
+      )
       toast.success('Pravidlo uloženo a hned se použije při dalším generování.')
       setNovePravidlo(null)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Pravidlo se nepodařilo uložit.')
+      toast.error(errorMessage(error, 'Pravidlo se nepodařilo uložit.'))
     } finally {
       setPravidloBusy(false)
     }
   }
 
+  /** Pravidlo, které se právě přepíná — dvojí kliknutí by ho vrátilo zpátky. */
+  const [prepinamPravidlo, setPrepinamPravidlo] = useState<string | null>(null)
+
   async function prepnoutPravidlo(id: string, active: boolean) {
+    setPrepinamPravidlo(id)
     try {
-      const response = await fetch('/api/prompt-rules', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id, active }),
-      })
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      if (!response.ok) {
-        toast.error(data.error ?? 'Změna se nepovedla.')
-        return
-      }
+      await requestJson('/api/prompt-rules', jsonBody('PATCH', { id, active }), 'Změna se nepovedla.')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Změna se nepovedla.')
+      toast.error(errorMessage(error, 'Změna se nepovedla.'))
+    } finally {
+      setPrepinamPravidlo(null)
     }
   }
 
   async function zalozit(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
-    const response = await fetch('/api/sprava/uzivatele', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, name: jmeno, role }),
-    })
-    setBusy(false)
-    const data = (await response.json()) as { heslo?: string; error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Účet se nepodařilo založit.')
+    if (!jmeno.trim()) {
+      toast.error('Vyplň jméno učitelky — samé mezery nestačí.')
       return
     }
-    setHeslo({ email, heslo: data.heslo ?? '' })
-    setEmail('')
-    setJmeno('')
-    router.refresh()
+    setBusy(true)
+    try {
+      const data = await requestJson<{ heslo: string }>(
+        '/api/sprava/uzivatele',
+        jsonBody('POST', { email: email.trim(), name: jmeno.trim(), role }),
+        'Účet se nepodařilo založit.',
+      )
+      setHeslo({ email: email.trim(), heslo: data.heslo ?? '' })
+      setEmail('')
+      setJmeno('')
+      router.refresh()
+    } catch (error) {
+      toast.error(errorMessage(error, 'Účet se nepodařilo založit.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function ulozitSkolu(nastaveni: {
@@ -183,14 +261,10 @@ export function SpravaScreen({
     googleDomain: string
     googleAutoJoin: boolean
   }): Promise<boolean> {
-    const response = await fetch('/api/sprava/skola', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(nastaveni),
-    })
-    const data = (await response.json().catch(() => ({}))) as { error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Školu se nepodařilo uložit.')
+    try {
+      await requestJson('/api/sprava/skola', jsonBody('PATCH', nastaveni), 'Školu se nepodařilo uložit.')
+    } catch (error) {
+      toast.error(errorMessage(error, 'Školu se nepodařilo uložit.'))
       return false
     }
     toast.success('Škola uložena.')
@@ -198,23 +272,44 @@ export function SpravaScreen({
     return true
   }
 
+  /** Účet, na kterém právě běží změna — jeho tlačítka jsou do té doby zablokovaná. */
+  const [pracuje, setPracuje] = useState<string | null>(null)
+  /** Změna, která učitelku odhlásí — čeká na potvrzení. */
+  const [potvrzeni, setPotvrzeni] = useState<{
+    title: string
+    description: string
+    confirmLabel: string
+    run: () => Promise<void>
+  } | null>(null)
+
   async function upravit(id: string, zmeny: Record<string, unknown>, hlaska: string) {
-    const response = await fetch('/api/sprava/uzivatele', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, ...zmeny }),
-    })
-    const data = (await response.json()) as { heslo?: string; error?: string }
-    if (!response.ok) {
-      toast.error(data.error ?? 'Změna se nepovedla.')
-      return
+    setPracuje(id)
+    try {
+      const data = await requestJson<{ heslo: string }>(
+        '/api/sprava/uzivatele',
+        jsonBody('PATCH', { id, ...zmeny }),
+        'Změna se nepovedla.',
+      )
+      if (data.heslo) {
+        const ucet = uzivatele.find((row) => row.id === id)
+        setHeslo({ email: ucet?.email ?? '', heslo: data.heslo })
+      }
+      toast.success(hlaska)
+      router.refresh()
+    } catch (error) {
+      toast.error(errorMessage(error, 'Změna se nepovedla.'))
+    } finally {
+      setPracuje(null)
     }
-    if (data.heslo) {
-      const ucet = uzivatele.find((row) => row.id === id)
-      setHeslo({ email: ucet?.email ?? '', heslo: data.heslo })
+  }
+
+  async function zkopirovatHeslo(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Heslo zkopírováno.')
+    } catch {
+      toast.error('Kopírování se nepovedlo — heslo si opiš ručně.')
     }
-    toast.success(hlaska)
-    router.refresh()
   }
 
   return (
@@ -236,20 +331,50 @@ export function SpravaScreen({
         </TabsList>
 
         <TabsContent value="ucty" className="space-y-4">
-          {heslo ? (
-            <Card className="border-brand bg-brand-bg/40 p-4 text-sm">
-              <p className="font-medium text-fg">
-                Heslo pro {heslo.email}: <code className="ui-numeric">{heslo.heslo}</code>
-              </p>
-              <p className="mt-1 text-fg-soft">
-                Předej ho osobně. Podruhé se nezobrazí a při prvním přihlášení si ho učitelka
-                změní.
-              </p>
-              <Button className="mt-2" size="sm" variant="ghost" onClick={() => setHeslo(null)}>
-                Skrýt
-              </Button>
-            </Card>
-          ) : null}
+          {/* V dialogu, ne v kartě nahoře: u účtu dole v seznamu by karta
+              vyskočila mimo obrazovku a správce by heslo vůbec neviděl. */}
+          <Dialog open={heslo !== null} onOpenChange={(open) => (open ? null : setHeslo(null))}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Heslo pro {heslo?.email}</DialogTitle>
+                <DialogDescription>
+                  Předej ho osobně. Podruhé se nezobrazí a při prvním přihlášení si ho učitelka
+                  změní.
+                </DialogDescription>
+              </DialogHeader>
+              <code className="ui-numeric block rounded-[var(--radius-inner)] border border-line p-3 text-center text-lg">
+                {heslo?.heslo}
+              </code>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => heslo && void zkopirovatHeslo(heslo.heslo)}>
+                  Zkopírovat
+                </Button>
+                <Button onClick={() => setHeslo(null)}>Hotovo</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <AlertDialog open={potvrzeni !== null} onOpenChange={(open) => (open ? null : setPotvrzeni(null))}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{potvrzeni?.title}</AlertDialogTitle>
+                <AlertDialogDescription>{potvrzeni?.description}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Nechat být</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => {
+                    // Dialog se zavře hned; průběh pak ukazuje tlačítko v řádku účtu.
+                    void potvrzeni?.run()
+                    setPotvrzeni(null)
+                  }}
+                >
+                  {potvrzeni?.confirmLabel}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <Card className="p-4">
             <h2 className="font-medium text-fg">Škola</h2>
@@ -299,9 +424,9 @@ export function SpravaScreen({
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="submit" disabled={busy || !email || !jmeno}>
+              <BusyButton type="submit" busy={busy} busyLabel="Zakládám…" disabled={!email || !jmeno}>
                 Založit účet
-              </Button>
+              </BusyButton>
             </form>
           </Card>
 
@@ -335,8 +460,11 @@ export function SpravaScreen({
                   <Badge variant="secondary">{ROLE_LABELS[ucet.role]}</Badge>
                 ) : (
                   <>
+                    {/* Vlastní účet tady měnit nejde: sesazením z role nebo novým
+                        heslem by se správce sám odhlásil nebo zamkl ze správy. */}
                     <Select
                       value={ucet.role}
+                      disabled={ucet.id === ja || pracuje === ucet.id}
                       onValueChange={(next) =>
                         void upravit(ucet.id, { role: next }, `Role změněna na ${ROLE_LABELS[next as Role]}.`)
                       }
@@ -353,32 +481,77 @@ export function SpravaScreen({
                       </SelectContent>
                     </Select>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void upravit(ucet.id, { heslo: true }, 'Nové heslo vygenerováno.')}
-                    >
-                      Nové heslo
-                    </Button>
-                    {ucet.status === 'aktivni' ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={ucet.id === ja}
-                        onClick={() =>
-                          void upravit(ucet.id, { status: 'zablokovany' }, 'Účet zablokován a odhlášen.')
-                        }
-                      >
-                        Zablokovat
-                      </Button>
+                    {ucet.id === ja ? (
+                      <span className="text-xs text-fg-muted">
+                        Svou roli tu neměníš; své heslo změníš v nabídce účtu.
+                      </span>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => void upravit(ucet.id, { status: 'aktivni' }, 'Účet zpřístupněn.')}
-                      >
-                        Zpřístupnit
-                      </Button>
+                      <>
+                        <BusyButton
+                          size="sm"
+                          variant="outline"
+                          busy={pracuje === ucet.id}
+                          busyLabel="Pracuji…"
+                          disabled={pracuje !== null}
+                          onClick={() =>
+                            setPotvrzeni({
+                              title: `Vygenerovat nové heslo pro ${ucet.name}?`,
+                              description:
+                                'Učitelka bude okamžitě odhlášena ze všech zařízení a dosavadní heslo přestane platit. Nové heslo jí předáš a při přihlášení si ho změní.',
+                              confirmLabel: 'Vygenerovat heslo',
+                              run: () => upravit(ucet.id, { heslo: true }, 'Nové heslo vygenerováno.'),
+                            })
+                          }
+                        >
+                          Nové heslo
+                        </BusyButton>
+                        {ucet.status === 'aktivni' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pracuje !== null}
+                            onClick={() =>
+                              setPotvrzeni({
+                                title: `Zablokovat účet ${ucet.name}?`,
+                                description:
+                                  'Učitelka bude okamžitě odhlášena ze všech zařízení a nepřihlásí se, dokud účet znovu nezpřístupníš. Její otázky a písemky zůstanou.',
+                                confirmLabel: 'Zablokovat',
+                                run: () => upravit(ucet.id, { status: 'zablokovany' }, 'Účet zablokován a odhlášen.'),
+                              })
+                            }
+                          >
+                            Zablokovat
+                          </Button>
+                        ) : ucet.status === 'ceka' ? (
+                          // Účet z Googlu se zakládá s rolí Náhled; schválená učitelka
+                          // má ale pracovat, ne jen číst. Jinou roli (Správce) šlo zvolit
+                          // předem; komu má zůstat jen Náhled, tomu se přepne po schválení.
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pracuje !== null}
+                            onClick={() => {
+                              const novaRole: Role = ucet.role === 'nahled' ? 'ucitelka' : ucet.role
+                              void upravit(
+                                ucet.id,
+                                { status: 'aktivni', role: novaRole },
+                                `Účet schválen s rolí ${ROLE_LABELS[novaRole]}.`,
+                              )
+                            }}
+                          >
+                            Schválit
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pracuje !== null}
+                            onClick={() => void upravit(ucet.id, { status: 'aktivni' }, 'Účet zpřístupněn.')}
+                          >
+                            Zpřístupnit
+                          </Button>
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -400,12 +573,12 @@ export function SpravaScreen({
                       udalost.severity === 'chyba' ? 'font-medium text-danger' : 'font-medium text-fg'
                     }
                   >
-                    {udalost.action}
+                    {UDALOSTI[udalost.action] ?? udalost.action}
                   </span>
                   <span className="text-fg-soft">{udalost.kdo ?? 'bez přihlášení'}</span>
                   {odAdministratora(udalost.detail) ? <Badge variant="secondary">Administrátor</Badge> : null}
-                  {udalost.detail ? (
-                    <span className="text-xs text-fg-muted">{JSON.stringify(udalost.detail)}</span>
+                  {udalost.detail && popisDetailu(udalost.detail) ? (
+                    <span className="text-xs text-fg-muted">{popisDetailu(udalost.detail)}</span>
                   ) : null}
                 </div>
               ))
@@ -428,7 +601,7 @@ export function SpravaScreen({
               </ul>
             ) : null}
             <p>
-              Přihlašování: {prihlasovani}
+              {PRIHLASOVANI[prihlasovani]}
               {googleDomain ? `, Google pro doménu ${googleDomain}` : ', bez přihlášení přes Google'}.
             </p>
           </Card>
@@ -526,9 +699,14 @@ export function SpravaScreen({
                     onChange={(event) => setNovePravidlo({ ...novePravidlo, text: event.target.value })}
                   />
                   <div className="flex gap-2">
-                    <Button disabled={pravidloBusy || !novePravidlo.text.trim()} onClick={() => void ulozitPravidlo()}>
+                    <BusyButton
+                      busy={pravidloBusy}
+                      busyLabel="Ukládám…"
+                      disabled={!novePravidlo.text.trim()}
+                      onClick={() => void ulozitPravidlo()}
+                    >
                       Uložit pravidlo
-                    </Button>
+                    </BusyButton>
                     <Button variant="ghost" onClick={() => setNovePravidlo(null)}>
                       Zrušit
                     </Button>
@@ -582,9 +760,16 @@ export function SpravaScreen({
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={p.active ? 'secondary' : 'outline'}>{p.active ? 'Aktivní' : 'Vypnuté'}</Badge>
-                    <Button size="sm" variant="ghost" onClick={() => void prepnoutPravidlo(p.id, !p.active)}>
+                    <BusyButton
+                      size="sm"
+                      variant="ghost"
+                      busy={prepinamPravidlo === p.id}
+                      busyLabel={p.active ? 'Vypínám…' : 'Zapínám…'}
+                      disabled={prepinamPravidlo !== null}
+                      onClick={() => void prepnoutPravidlo(p.id, !p.active)}
+                    >
                       {p.active ? 'Vypnout' : 'Zapnout'}
-                    </Button>
+                    </BusyButton>
                   </div>
                 </div>
               ))

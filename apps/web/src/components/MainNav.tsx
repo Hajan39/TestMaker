@@ -46,6 +46,8 @@ export interface UcetVListe {
   /** Škola, ve které se právě pracuje. */
   skola: { id: string; name: string }
   domovskaSkolaId: string
+  /** Kdo se hlásí jen přes Google, heslo nemá a měnit ho nemůže. */
+  maHeslo: boolean
   /** Všechny školy — jen u administrátora, jinak prázdné. */
   skoly: { id: string; name: string }[]
 }
@@ -75,7 +77,7 @@ export function MainNav({
           {ucet && roleJeAdministrator(ucet.role) ? (
             <SkolaPrepinac skola={ucet.skola} domovskaSkolaId={ucet.domovskaSkolaId} skoly={ucet.skoly} />
           ) : null}
-          {ucet ? <UserMenu jmeno={ucet.jmeno} email={ucet.email} role={ucet.role} /> : null}
+          {ucet ? <UserMenu jmeno={ucet.jmeno} email={ucet.email} role={ucet.role} maHeslo={ucet.maHeslo} /> : null}
         </>
       }
       renderLink={(item, active) => (

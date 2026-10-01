@@ -850,7 +850,7 @@ describe('vysvětlení chyb od modelu', () => {
       new Error('You exceeded your current quota, please check your plan and billing details.'),
     )
     expect(failure.message).toContain('limit')
-    expect(failure.message).toContain('AI_MODELS')
+    expect(failure.message).toContain('správci')
     expect(failure.retryable).toBe(true)
   })
 
@@ -869,13 +869,13 @@ describe('vysvětlení chyb od modelu', () => {
   it('chybějící klíč není na opakování', () => {
     const failure = describeAiError(new Error('Anthropic API key is missing.'))
     expect(failure.retryable).toBe(false)
-    expect(failure.message).toContain('.env.local')
+    expect(failure.message).toContain('správci')
   })
 
   it('neznámou anglickou chybu nahradí českou radou', () => {
     const failure = describeAiError(new Error('Something odd happened '.repeat(20)))
     expect(failure.message).not.toContain('Something')
-    expect(failure.message).toContain('AI_MODELS')
+    expect(failure.message).toContain('správci')
     expect(failure.retryable).toBe(true)
   })
 

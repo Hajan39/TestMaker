@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BusyButton, Button, Card, StatRow, buttonVariants, pocet } from '@testmaker/ui'
+import { BusyButton, Button, Card, StatRow, pocet, toast } from '@testmaker/ui'
 import {
   obnovZeZalohy,
   poctyVZaloze,
@@ -12,6 +12,7 @@ import {
   type Prubeh,
   type Zaloha,
 } from '@/lib/backupClient'
+import { errorMessage, fetchOrOffline, readJson, responseError } from '@/lib/requestJson'
 
 /** Co se ukazuje v řádku počtů nad stránkou; zbytek je v kartách. */
 const PREHLED = ['subjects', 'topics', 'materials', 'questions', 'tests'] as const
@@ -33,6 +34,49 @@ export function ZalohaScreen({ pocty }: { pocty: Record<string, number> }) {
   const [obnovuji, setObnovuji] = useState(false)
   const [vysledek, setVysledek] = useState<Record<string, number> | null>(null)
   const [chyba, setChyba] = useState<string | null>(null)
+  const [stahuji, setStahuji] = useState(false)
+
+  // Obnova jde po mnoha dávkách; zavřená záložka by ji utnula v půlce.
+  useEffect(() => {
+    if (!obnovuji) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [obnovuji])
+
+  /**
+   * Stažení přes fetch, ne prostým odkazem: odkaz by při vypršelém přihlášení
+   * nebo chybě serveru uložil jako „zálohu“ chybovou hlášku a nikdo by to
+   * nepoznal, dokud by ji nepotřeboval.
+   */
+  async function stahnout() {
+    const failure = 'Zálohu se nepodařilo stáhnout.'
+    setStahuji(true)
+    try {
+      const response = await fetchOrOffline('/api/export', undefined, failure)
+      if (!response.ok) throw responseError(response, await readJson(response), failure)
+      if (!response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error(`${failure} Server neposlal soubor zálohy. Obnov stránku a zkus to znovu.`)
+      }
+      // Utržené spojení uprostřed stahování hlásí `blob()` jako TypeError — i to chytí `errorMessage`.
+      const blob = await response.blob()
+      const nazev =
+        /filename="?([^";]+)"?/.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'testmaker-zaloha.json'
+      const url = URL.createObjectURL(blob)
+      const odkaz = document.createElement('a')
+      odkaz.href = url
+      odkaz.download = nazev
+      odkaz.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error(errorMessage(error, failure))
+    } finally {
+      setStahuji(false)
+    }
+  }
 
   async function vyberSoubor(soubor: File | null) {
     setChyba(null)
@@ -44,7 +88,7 @@ export function ZalohaScreen({ pocty }: { pocty: Record<string, number> }) {
       setZaloha(prectena)
       setNazevSouboru(soubor.name)
     } catch (error) {
-      setChyba(error instanceof Error ? error.message : 'Soubor se nepodařilo přečíst.')
+      setChyba(errorMessage(error, 'Soubor se nepodařilo přečíst.'))
     }
   }
 
@@ -52,15 +96,23 @@ export function ZalohaScreen({ pocty }: { pocty: Record<string, number> }) {
     if (!zaloha) return
     setObnovuji(true)
     setChyba(null)
+    let castecne = false
     try {
-      const navezeno = await obnovZeZalohy(zaloha, setPrubeh)
+      const navezeno = await obnovZeZalohy(zaloha, (dalsi) => {
+        if (dalsi.hotovo > 0) castecne = true
+        setPrubeh(dalsi)
+      })
       setVysledek(navezeno)
       setZaloha(null)
       setPrubeh(null)
       // Počty nad stránkou musí po obnově sedět; přenačte je server.
       router.refresh()
     } catch (error) {
-      setChyba(error instanceof Error ? error.message : 'Obnova se nepovedla.')
+      const hlaska = errorMessage(error, 'Obnova se nepovedla.')
+      // Slučuje se podle id (`on conflict do update`), takže opakovaný běh nic nezdvojí.
+      setChyba(castecne ? `${hlaska} Část se už navezla; stačí obnovu spustit znovu, nic se nezdvojí.` : hlaska)
+      // Co se stihlo navézt, má sedět i v počtech nad stránkou.
+      if (castecne) router.refresh()
     } finally {
       setObnovuji(false)
     }
@@ -95,9 +147,14 @@ export function ZalohaScreen({ pocty }: { pocty: Record<string, number> }) {
           </p>
         </div>
         <div>
-          <a className={buttonVariants()} href="/api/export" download data-testid="stahnout-zalohu">
+          <BusyButton
+            busy={stahuji}
+            busyLabel="Stahuji zálohu…"
+            onClick={() => void stahnout()}
+            data-testid="stahnout-zalohu"
+          >
             Stáhnout zálohu
-          </a>
+          </BusyButton>
         </div>
       </Card>
 
@@ -117,7 +174,11 @@ export function ZalohaScreen({ pocty }: { pocty: Record<string, number> }) {
           accept="application/json,.json"
           className="sr-only"
           data-testid="zaloha-soubor"
-          onChange={(event) => void vyberSoubor(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            void vyberSoubor(event.target.files?.[0] ?? null)
+            // Bez vynulování by opětovný výběr téhož souboru (třeba po chybě) nic neudělal.
+            event.target.value = ''
+          }}
         />
         <div>
           <Button variant="outline" onClick={() => souborRef.current?.click()} disabled={obnovuji}>

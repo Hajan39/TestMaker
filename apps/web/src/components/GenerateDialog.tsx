@@ -80,7 +80,7 @@ export function GenerateSettingsForm({
               max={60}
               value={value.count}
               disabled={disabled}
-              onChange={(event) => onChange({ ...value, count: Number(event.target.value) || 1 })}
+              onChange={(event) => onChange({ ...value, count: clampCount(event.target.value) })}
             />
           </div>
           <div className="w-56">

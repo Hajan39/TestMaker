@@ -65,7 +65,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = patchSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
   const { id, name, gradeName } = parsed.data
 
   const update: { name?: string; gradeId?: string } = {}
@@ -78,7 +78,7 @@ export async function PATCH(request: Request) {
       .innerJoin(grades, eq(grades.id, topics.gradeId))
       .where(and(skola(ucet, topics), eq(topics.id, id)))
       .limit(1)
-    if (!current) return Response.json({ error: 'Téma nenalezeno' }, { status: 404 })
+    if (!current) return Response.json({ error: 'Téma se nenašlo — mezitím ho nejspíš někdo smazal. Obnov stránku a vyber jiné.' }, { status: 404 })
     update.gradeId = await ensureGrade(ucet, current.subjectId, gradeName.trim())
   }
 
@@ -91,7 +91,7 @@ export async function PATCH(request: Request) {
 export async function PUT(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = moveSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
   const { materialId, topicId } = parsed.data
 
   const [current] = await db
@@ -99,7 +99,8 @@ export async function PUT(request: Request) {
     .from(materials)
     .where(and(skola(ucet, materials), eq(materials.id, materialId)))
     .limit(1)
-  if (!current) return Response.json({ error: 'Materiál nenalezen' }, { status: 404 })
+  if (!current) return Response.json({ error: 'Materiál mezitím zmizel, obnov stránku.' }, { status: 404 })
+  if (!(await temaSkoly(ucet, topicId))) return temaNenalezeno()
 
   // Tentýž obsah smí být v tématu jen jednou — jinak by přesun spadl na
   // unikátním indexu a učitelka by viděla jen chybu serveru.
@@ -162,9 +163,12 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = mergeSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
   const { sourceId, targetId } = parsed.data
-  if (sourceId === targetId) return Response.json({ error: 'Stejné téma' }, { status: 400 })
+  if (sourceId === targetId) {
+    return Response.json({ error: 'Téma nejde sloučit samo se sebou. Vyber jiné cílové téma.' }, { status: 400 })
+  }
+  if (!(await temaSkoly(ucet, sourceId)) || !(await temaSkoly(ucet, targetId))) return temaNenalezeno()
 
   // Obsah, který cílové téma už má, se do něj podruhé nevejde (tentýž obsah
   // smí být v tématu jen jednou) — z rušeného tématu ho proto zahodíme.
@@ -200,6 +204,22 @@ export async function POST(request: Request) {
 
   return Response.json({ ok: true })
   }, { zapis: true })
+}
+
+const temaNenalezeno = () =>
+  Response.json(
+  { error: 'Téma se nenašlo — mezitím ho nejspíš někdo smazal. Obnov stránku a vyber jiné.' },
+  { status: 404 },
+)
+
+/** Je téma v mé škole? Cizí cíl přesunu se tváří jako neexistující. */
+async function temaSkoly(scope: Scope, id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(skola(scope, topics), eq(topics.id, id)))
+    .limit(1)
+  return Boolean(row)
 }
 
 /** Najde ročník daného jména v předmětu, nebo ho založí. */

@@ -75,6 +75,7 @@ export async function TestEditorPage({
         role={ucet.role}
         ai={aiStatus()}
         dropped={worksheet && dropped > 0 ? dropped : 0}
+        mine={test.ownerId === ucet.userId}
       />
     </PageShell>
   )

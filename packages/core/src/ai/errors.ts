@@ -25,7 +25,7 @@ const CZECH_LETTERS = /[ěščřžýáíéůúťďňĚŠČŘŽÝÁÍÉŮÚŤĎŇ
 
 export const UNKNOWN_ERROR_MESSAGE =
   'Generování se nepovedlo kvůli neočekávané chybě modelu. Zkus to za chvíli znovu; když se to opakuje, ' +
-  'zkontroluj nastavení AI_MODELS a klíče v .env.local, případně tam dopiš další model.'
+  'dej vědět správci.'
 
 /** Přeloží chybu od modelu na srozumitelné vysvětlení. */
 export function describeAiError(error: unknown): AiFailure {
@@ -36,25 +36,25 @@ export function describeAiError(error: unknown): AiFailure {
     return {
       message:
         'Vyčerpaný limit modelu. U bezplatných tarifů se limit počítá na den — zkus to znovu zítra, ' +
-        'nebo dopiš do .env.local (AI_MODELS) další model, třeba placený přes OpenRouter.',
+        'případně dej vědět správci.',
       retryable: true,
     }
   }
   if (lower.includes('experiencing high demand') || lower.includes('overloaded') || lower.includes('503')) {
     return {
-      message: 'Model je právě přetížený. Za chvíli to zkus znovu, nebo dopiš do AI_MODELS další model.',
+      message: 'Model je právě přetížený. Zkus to za chvíli znovu, případně dej vědět správci.',
       retryable: true,
     }
   }
   if (lower.includes('api key') || lower.includes('unauthenticated') || lower.includes('permission denied')) {
     return {
-      message: 'Klíč k modelu neplatí nebo chybí. Zkontroluj ho v souboru .env.local a restartuj aplikaci.',
+      message: 'Generování teď nefunguje — přístup k modelu není v pořádku. Zkus to později, případně dej vědět správci.',
       retryable: false,
     }
   }
   if (lower.includes('no longer available')) {
     return {
-      message: 'Zvolený model už poskytovatel nenabízí. Oprav jeho název v AI_MODELS v .env.local.',
+      message: 'Generování teď nefunguje — nastavený model už není k dispozici. Zkus to později, případně dej vědět správci.',
       retryable: false,
     }
   }
@@ -66,7 +66,7 @@ export function describeAiError(error: unknown): AiFailure {
     return {
       message:
         'Model odpověděl v jiném tvaru, než aplikace čeká. Zkus to znovu; když se to opakuje, ' +
-        'dopiš do AI_MODELS v .env.local jiný model jako zálohu.',
+        'dej vědět správci.',
       retryable: true,
     }
   }

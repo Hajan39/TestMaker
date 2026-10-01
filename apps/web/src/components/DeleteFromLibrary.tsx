@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet, toast } from '@testmaker/ui'
 import { useMuzeSpravovat } from '@/components/Prava'
+import { errorMessage, requestJson } from '@/lib/requestJson'
 
 type Kind = 'subject' | 'grade' | 'topic'
 
@@ -82,25 +83,30 @@ export function DeleteFromLibrary({
       title={`${TITLES[kind]}?`}
       confirmLabel="Smazat"
       describe={async () => {
-        const response = await fetch(
-          `/api/library?kind=${kind}&id=${encodeURIComponent(id)}`,
+        // Bez zachycení by síťová chyba nechala místo dopadu prázdné kostry.
+        try {
+          const response = await fetch(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`)
+          if (response.ok) return describeImpact((await response.json()) as Impact)
+        } catch {
+          // Hláška níž.
+        }
+        return (
+          <p className="text-danger">
+            Nepodařilo se zjistit, co se smaže — zavři dialog a otevři ho znovu.
+          </p>
         )
-        if (!response.ok) return <p className="text-danger">Nepodařilo se zjistit, co se smaže.</p>
-        return describeImpact((await response.json()) as Impact)
       }}
       onConfirm={async () => {
         // Chyba se nechává probublat dál — `DeleteButton` na ni čeká, aby
         // dialog nezavřel a nepředstíral úspěch, který nenastal.
         try {
-          const response = await fetch(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`, {
-            method: 'DELETE',
-          })
-          if (!response.ok) {
-            const detail = (await response.json().catch(() => ({}))) as { error?: string }
-            throw new Error(detail.error ?? `Mazání se nepodařilo (${response.status})`)
-          }
+          await requestJson(
+            `/api/library?kind=${kind}&id=${encodeURIComponent(id)}`,
+            { method: 'DELETE' },
+            'Mazání se nepodařilo.',
+          )
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : 'Mazání se nepodařilo')
+          toast.error(errorMessage(error, 'Mazání se nepodařilo.'))
           throw error
         }
         if (redirectTo) router.push(redirectTo)

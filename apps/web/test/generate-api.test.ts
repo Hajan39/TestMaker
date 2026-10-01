@@ -73,7 +73,7 @@ describe('kontrola vstupů generování', () => {
     withKey()
     const response = await POST(jsonReq('/api/generate', 'POST', {}))
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Neplatná data' })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' })
   })
 
   it('odmítne počet otázek mimo rozsah', async () => {

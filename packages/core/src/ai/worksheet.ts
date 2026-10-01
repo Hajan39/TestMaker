@@ -192,10 +192,24 @@ export async function generateWorksheet(
   const raw = Array.isArray(answer.items) ? answer.items : []
   const { items, dropped } = checkWorksheetItems(raw, { hasSource: hasSource(request) })
   const kept = items.slice(0, S.maxItems)
-  const content = kept.filter((item) => item.kind !== 'heading' && item.kind !== 'instruction')
-  if (content.length < S.minItems) throw new Error(WORKSHEET_TOO_FEW_MESSAGE)
+  // Nadpis nebo pokyn na konci listu (typicky po ořezu) už nemá k čemu patřit.
+  while (kept.length > 0 && isStructural(kept[kept.length - 1]!)) kept.pop()
+  const content = kept.filter((item) => !isStructural(item))
+  if (content.length < S.minItems) throw new Error(WORKSHEET_TOO_FEW_MESSAGE + describeDropped(dropped))
   const title = typeof answer.title === 'string' && answer.title.trim() ? answer.title.trim() : request.title
   return { title, items: kept, dropped, models }
+}
+
+function isStructural(item: WorksheetItemDraft): boolean {
+  return item.kind === 'heading' || item.kind === 'instruction'
+}
+
+/** Dovětek k chybě, kolik položek model zkazil — bez něj učitelka neví, jestli pomůže jiný pokyn. */
+function describeDropped(dropped: number): string {
+  if (dropped === 0) return ''
+  if (dropped === 1) return ' (1 položka byla vadná a vynechala se.)'
+  if (dropped < 5) return ` (${dropped} položky byly vadné a vynechaly se.)`
+  return ` (${dropped} položek bylo vadných a vynechalo se.)`
 }
 
 /** Sedí položka na to, o co se žádalo? */

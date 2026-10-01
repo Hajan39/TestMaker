@@ -23,6 +23,7 @@ import {
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { drainQueue } from '@/lib/generateClient'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { shrnutiBehu } from '@/lib/queueSummary'
 import { useMuzeMenit } from '@/components/Prava'
 
@@ -66,16 +67,19 @@ export function BulkGenerate({
     setStatus('Připravuji frontu…')
     stopRef.current = false
     try {
-      const response = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...scope, ...settings, skipWithQuestions }),
-      })
-      const queued = (await response.json()) as { enqueued: number; skipped: number }
-      if (queued.enqueued === 0) {
+      // Odmítnutí serveru (třeba vypršelé přihlášení) skončí v `catch` níž —
+      // dřív se z chybové odpovědi četl počet a hlásilo se „Ve frontě undefined témat“.
+      const queued = await requestJson<{ enqueued: number; skipped: number }>(
+        '/api/jobs',
+        jsonBody('POST', { ...scope, ...settings, skipWithQuestions }),
+        'Frontu se nepodařilo sestavit.',
+      )
+      const enqueued = queued.enqueued ?? 0
+      const skipped = queued.skipped ?? 0
+      if (enqueued === 0) {
         setStatus(
-          queued.skipped > 0
-            ? `Není co generovat — v tomhle rozsahu už otázky mají všechna témata. Přeskočeno: ${pocet(queued.skipped, TEMATA)}.`
+          skipped > 0
+            ? `Není co generovat — v tomhle rozsahu už otázky mají všechna témata. Přeskočeno: ${pocet(skipped, TEMATA)}.`
             : 'Není co generovat — v tomhle rozsahu není žádné téma s materiály.',
         )
         setRunning(false)
@@ -85,7 +89,7 @@ export function BulkGenerate({
       let created = 0
       let done = 0
       let failed = 0
-      setStatus(`Ve frontě ${pocet(queued.enqueued, TEMATA)}.`)
+      setStatus(`Ve frontě ${pocet(enqueued, TEMATA)}.`)
       // Ať se o rozdělané práci ví i v liště, když se panel zavře.
       announceGeneration()
 
@@ -110,7 +114,8 @@ export function BulkGenerate({
       setStatus(shrnutiBehu({ zpracovano: done, chyby: failed, otazky: created }).text)
       router.refresh()
     } catch (error) {
-      setErrors((current) => [...current, error instanceof Error ? error.message : String(error)])
+      setStatus((current) => (current === 'Připravuji frontu…' ? null : current))
+      setErrors((current) => [...current, errorMessage(error, 'Hromadné generování se zastavilo.')])
     } finally {
       setRunning(false)
     }
@@ -122,8 +127,10 @@ export function BulkGenerate({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button size="sm" variant="outline" disabled={running}>
-          Hromadné generování
+        {/* Za běhu zůstává tlačítko aktivní — jinak by se zavřený panel nedal
+            znovu otevřít a generování zastavit. */}
+        <Button size="sm" variant="outline">
+          {running ? 'Hromadné generování (běží…)' : 'Hromadné generování'}
         </Button>
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">

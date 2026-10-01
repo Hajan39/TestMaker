@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
   toast,
 } from '@testmaker/ui'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 
 /**
  * Přepínač škol pro administrátora. Název školy je v liště vidět pořád, aby
@@ -37,19 +38,12 @@ export function SkolaPrepinac({
     if (schoolId === skola.id) return
     setBusy(true)
     try {
-      const response = await fetch('/api/administrace/skola', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ schoolId }),
-      })
-      const data = (await response.json().catch(() => ({}))) as { error?: string }
-      if (!response.ok) {
-        toast.error(data.error ?? 'Školu se nepodařilo přepnout.')
-        return
-      }
+      await requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), 'Školu se nepodařilo přepnout.')
       // Otevřené téma nebo písemka v druhé škole neexistuje — začíná se od úvodu.
       router.push('/')
       router.refresh()
+    } catch (error) {
+      toast.error(errorMessage(error, 'Školu se nepodařilo přepnout.'))
     } finally {
       setBusy(false)
     }

@@ -34,9 +34,10 @@ function smazatStav(): string {
   return `${OAUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
 }
 
-function zpetSChybou(origin: string, chyba: string): Response {
+/** Zpět na přihlášení s hláškou; `info` se ukáže neutrálně, ne červeně jako chyba. */
+function zpetSChybou(origin: string, chyba: string, druh: 'chyba' | 'info' = 'chyba'): Response {
   const login = new URL('/login', origin)
-  login.searchParams.set('chyba', chyba)
+  login.searchParams.set(druh, chyba)
   return presmeruj(login, [smazatStav()])
 }
 
@@ -121,6 +122,7 @@ export async function GET(request: Request) {
     return zpetSChybou(
       url.origin,
       'Účet jsme zaevidovali. Přihlásit se půjde, jakmile ho správce schválí.',
+      'info',
     )
   }
 

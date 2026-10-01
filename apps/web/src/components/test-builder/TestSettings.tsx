@@ -55,6 +55,7 @@ export function TestSettings({
             <Input
               id="test-description"
               value={value.description}
+              maxLength={1000}
               onChange={(event) => onChange({ ...value, description: event.target.value })}
             />
           </div>
@@ -129,7 +130,7 @@ export function TestSettings({
                       : 'border-line hover:border-fg-muted')
                   }
                 >
-                  <TemplatePreview templateId={template.id} graded={value.graded} />
+                  <TemplatePreview templateId={template.id} graded={value.graded} decorative />
                   <span className="mt-1.5 block px-1 text-sm font-medium text-fg-soft">{template.name}</span>
                   <span className="block px-1 pb-1 text-xs text-fg-muted">{template.description}</span>
                 </button>

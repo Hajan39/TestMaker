@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { Question } from '@testmaker/core/schema'
 import { REGENERATE_REASONS, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
@@ -42,6 +42,7 @@ export function RegenerateButton({
   difficulty,
   onDone,
   onVariantCreated,
+  onBusyChange,
 }: {
   questionId: string
   type: QuestionType
@@ -50,11 +51,17 @@ export function RegenerateButton({
   onDone?: () => void
   /** Zavolá se po vzniku lehčí nebo těžší verze — nová karta se má hned objevit a posunout do zorného pole. */
   onVariantCreated?: (question: Question) => void
+  /** Karta podle toho zakáže úpravu a smazání, dokud model na otázce pracuje. */
+  onBusyChange?: (busy: boolean) => void
 }) {
   const { available, busy, run } = useRegenerateQuestion(questionId, type, onDone)
   const variant = useQuestionVariant({ id: questionId, type, difficulty }, onVariantCreated)
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
+  const anyBusy = busy || variant.busyDirection !== null
+  useEffect(() => {
+    onBusyChange?.(anyBusy)
+  }, [anyBusy, onBusyChange])
   if (!available) return null
 
   function vybratDuvod(reason: RegenerateReason) {
@@ -72,6 +79,7 @@ export function RegenerateButton({
         className="rounded-r-none"
         busy={busy}
         busyLabel="Přegeneruji…"
+        disabled={variant.busyDirection !== null}
         onClick={() => void run()}
       >
         Přegenerovat

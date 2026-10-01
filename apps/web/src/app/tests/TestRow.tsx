@@ -20,6 +20,7 @@ import {
 } from '@testmaker/ui'
 import { PrintMenuItems } from '@/components/PrintMenu'
 import { RowActions } from '@/components/RowActions'
+import { errorMessage, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
 import type { TestKind } from '@testmaker/core/schema'
 import { testPath } from './paths'
 
@@ -38,6 +39,8 @@ export interface TestRowData {
   topicName: string | null
   /** Všechny položky kromě zalomení strany — u listu se počítají místo otázek. */
   itemCount: number
+  /** Vlastní písemka; nasdílenou od kolegyně jde jen otevřít, vytisknout a zkopírovat. */
+  mine: boolean
   updatedAt: string
 }
 
@@ -75,20 +78,22 @@ function TestActions({ row }: { row: TestRowData }) {
    */
   async function copy() {
     setCopying(true)
+    const failure = 'Kopii se nepodařilo vytvořit.'
     try {
-      const response = await fetch(`/api/tests?copyOf=${encodeURIComponent(row.id)}`, { method: 'POST' })
-      const data = (await response.json()) as { id?: string; error?: string }
-      if (!response.ok || !data.id) {
-        toast.error(data.error ?? 'Kopii se nepodařilo vytvořit')
-        return
-      }
+      const data = await requestJson<{ id: string }>(
+        `/api/tests?copyOf=${encodeURIComponent(row.id)}`,
+        { method: 'POST' },
+        failure,
+      )
+      const id = data.id
+      if (!id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
       router.refresh()
       toast.success(`Kopie „${row.title} (kopie)“ je hotová.`, {
         duration: 10_000,
-        action: { label: 'Otevřít', onClick: () => router.push(testPath(row.kind, data.id!)) },
+        action: { label: 'Otevřít', onClick: () => router.push(testPath(row.kind, id)) },
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Kopii se nepodařilo vytvořit')
+      toast.error(errorMessage(error, failure))
     } finally {
       setCopying(false)
     }
@@ -96,10 +101,15 @@ function TestActions({ row }: { row: TestRowData }) {
 
   async function remove() {
     setDeleting(true)
+    const failure = row.kind === 'pracovni_list' ? 'List se nepodařilo smazat.' : 'Test se nepodařilo smazat.'
     try {
-      await fetch(`/api/tests?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' })
+      await requestJson(`/api/tests?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' }, failure)
+      // Dialog se zavírá jen po úspěchu — po chybě zůstane otevřený a jde to zkusit znovu.
       setConfirmOpen(false)
+      toast.success(`„${row.title}“ je smazaný.`)
       router.refresh()
+    } catch (error) {
+      toast.error(errorMessage(error, failure))
     } finally {
       setDeleting(false)
     }
@@ -109,7 +119,7 @@ function TestActions({ row }: { row: TestRowData }) {
     <>
       <RowActions label={`${row.kind === 'pracovni_list' ? 'Akce u listu' : 'Akce u testu'} ${row.title}`} busy={pdfWork ?? (copying ? 'Kopíruji…' : null)}>
         <DropdownMenuItem asChild>
-          <Link href={testPath(row.kind, row.id)}>Upravit</Link>
+          <Link href={testPath(row.kind, row.id)}>{row.mine ? 'Upravit' : 'Otevřít'}</Link>
         </DropdownMenuItem>
         {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
             místo tlačítka s třemi tečkami, stejně jako u tisku. */}
@@ -122,15 +132,18 @@ function TestActions({ row }: { row: TestRowData }) {
           variants={row.variants}
           onRun={(action) => void withPdfWork(action.busyLabel, action.run)}
         />
-        <DropdownMenuItem
-          variant="destructive"
-          onSelect={(event) => {
-            event.preventDefault()
-            setConfirmOpen(true)
-          }}
-        >
-          Smazat
-        </DropdownMenuItem>
+        {/* Smazat smí jen autorka — u nasdílené písemky by server odpověděl „nenašel se“. */}
+        {row.mine ? (
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={(event) => {
+              event.preventDefault()
+              setConfirmOpen(true)
+            }}
+          >
+            Smazat
+          </DropdownMenuItem>
+        ) : null}
       </RowActions>
       {pdfError ? <p className="mt-1 text-sm text-danger">{pdfError}</p> : null}
 
@@ -143,7 +156,7 @@ function TestActions({ row }: { row: TestRowData }) {
             <AlertDialogDescription>
               {row.kind === 'pracovni_list'
                 ? 'List se smaže i se všemi položkami.'
-                : 'Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.'}
+                : 'Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.'}{' '}
               Akci nejde vrátit zpět.
             </AlertDialogDescription>
           </AlertDialogHeader>

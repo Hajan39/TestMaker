@@ -8,6 +8,7 @@ import { newId } from '@/lib/ids'
 import { roleJeAdministrator, roleMuzeMenit, roleMuzeSpravovat, type Role } from '@/lib/role'
 import { VYCHOZI_UCET_ID } from '@/lib/vychozi'
 import {
+  NEPRIHLASEN_MESSAGE,
   RELACE_MAX_MS,
   RELACE_TTL_MS,
   SESSION_COOKIE,
@@ -43,6 +44,8 @@ export interface Prihlaseny extends Scope {
   domovskaSkolaId: string
   sid: string
   mustChangePassword: boolean
+  /** Má účet heslo? Kdo se hlásí jen přes Google, nemá co měnit. Chybí = neví se (lokální běh). */
+  maHeslo?: boolean
 }
 
 export { VYCHOZI_UCET_ID } from './vychozi'
@@ -86,6 +89,7 @@ export const aktualniUzivatel = cache(async (): Promise<Prihlaseny | null> => {
       skola: schools.name,
       sessionVersion: users.sessionVersion,
       mustChangePassword: users.mustChangePassword,
+      passwordHash: users.passwordHash,
       status: users.status,
       activeSchoolId: users.activeSchoolId,
     })
@@ -122,6 +126,7 @@ export const aktualniUzivatel = cache(async (): Promise<Prihlaseny | null> => {
     domovskaSkolaId: row.schoolId,
     sid: relace.sid,
     mustChangePassword: row.mustChangePassword,
+    maHeslo: Boolean(row.passwordHash),
   }
 })
 
@@ -395,14 +400,24 @@ export async function sRozsahem(
   } catch (error) {
     const odpoved = odpovedNaChybuPristupu(error)
     if (odpoved) return odpoved
-    throw error
+    // Rozbité tělo požadavku (`request.json()`) je chyba klienta, ne serveru.
+    if (error instanceof SyntaxError) {
+      return Response.json({ error: 'Požadavek nešel přečíst. Obnov stránku a zkus to znovu.' }, { status: 400 })
+    }
+    // Bez tohohle by klient dostal 500 s prázdným tělem a ukázal by anglickou
+    // chybu prohlížeče. Surové znění zůstává v logu serveru.
+    console.error('Neočekávaná chyba v API:', error)
+    return Response.json(
+      { error: 'Na serveru se něco pokazilo. Zkus to za chvíli znovu; když to nepomůže, dej vědět správci.' },
+      { status: 500 },
+    )
   }
 }
 
 /** Odpověď na výjimky z `requireScope`/`requireRole` v route handlerech. */
 export function odpovedNaChybuPristupu(error: unknown): Response | null {
   if (error instanceof NeniPrihlasen) {
-    return Response.json({ error: 'Nepřihlášeno' }, { status: 401 })
+    return Response.json({ error: NEPRIHLASEN_MESSAGE }, { status: 401 })
   }
   if (error instanceof NemaOpravneni) {
     return Response.json({ error: error.message }, { status: 403 })

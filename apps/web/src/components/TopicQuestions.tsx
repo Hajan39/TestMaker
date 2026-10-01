@@ -24,6 +24,7 @@ import { useMuzeMenit } from '@/components/Prava'
 import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
 import { emptyHeader } from '@/components/test-builder/defaults'
 import { newId } from '@/lib/ids'
+import { errorMessage } from '@/lib/requestJson'
 
 interface Filters {
   type: QuestionType | ''
@@ -333,7 +334,7 @@ export const TopicQuestions = forwardRef<
       router.refresh()
       router.push(`/tests/${result.id}?tema=${topic.id}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Test se nepodařilo založit')
+      toast.error(errorMessage(error, 'Test se nepodařilo založit.'))
       setCreatingTest(false)
     }
   }
@@ -374,7 +375,7 @@ export const TopicQuestions = forwardRef<
                 router.refresh()
               })
               .catch((error) =>
-                toast.error(error instanceof Error ? error.message : 'Vrácení se nepodařilo'),
+                toast.error(errorMessage(error, 'Vrácení se nepodařilo.')),
               ),
         },
       })
@@ -385,7 +386,7 @@ export const TopicQuestions = forwardRef<
         next.delete(question.id)
         return next
       })
-      toast.error(error instanceof Error ? error.message : 'Otázku se nepodařilo smazat')
+      toast.error(errorMessage(error, 'Otázku se nepodařilo smazat.'))
     } finally {
       setBusyIds((current) => {
         const next = new Set(current)
@@ -412,7 +413,7 @@ export const TopicQuestions = forwardRef<
       setDeletedQuestions(data.items)
       setDeletedCursor(data.nextCursor)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Smazané otázky se nepodařilo načíst.')
+      toast.error(errorMessage(error, 'Smazané otázky se nepodařilo načíst.'))
       setShowDeleted(false)
     } finally {
       setLoadingDeleted(false)
@@ -432,7 +433,7 @@ export const TopicQuestions = forwardRef<
       setDeletedQuestions((current) => [...(current ?? []), ...data.items])
       setDeletedCursor(data.nextCursor)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Další smazané otázky se nepodařilo načíst.')
+      toast.error(errorMessage(error, 'Další smazané otázky se nepodařilo načíst.'))
     } finally {
       setLoadingMoreDeleted(false)
     }
@@ -473,7 +474,7 @@ export const TopicQuestions = forwardRef<
       toast.success('Otázka obnovena')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Otázku se nepodařilo obnovit')
+      toast.error(errorMessage(error, 'Otázku se nepodařilo obnovit.'))
     } finally {
       setRestoringIds((current) => {
         const next = new Set(current)

@@ -91,7 +91,7 @@ export async function GET(request: Request) {
     order: params.get('order') ?? undefined,
   })
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
 
   const query: QuestionQuery = {
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = createSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
   const problems = validateQuestionContent(parsed.data.question)
   if (problems.length > 0) return Response.json({ error: problems.join('; ') }, { status: 400 })
@@ -140,7 +140,7 @@ export async function PATCH(request: Request) {
   return sRozsahem(async (ucet) => {
   const parsed = updateSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
 
   const update: Record<string, unknown> = {}
@@ -184,7 +184,7 @@ export async function PUT(request: Request) {
   if (body && typeof body === 'object' && 'topicId' in body) {
     const parsed = bulkTopicSchema.safeParse(body)
     if (!parsed.success) {
-      return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+      return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
     }
     const ids = await setStatusForTopic(ucet, parsed.data.topicId, parsed.data.from, parsed.data.status)
     return Response.json({ updated: ids.length, ids })
@@ -192,7 +192,7 @@ export async function PUT(request: Request) {
 
   const parsed = bulkSchema.safeParse(body)
   if (!parsed.success) {
-    return Response.json({ error: 'Neplatná data', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
   }
   await db
     .update(questions)
@@ -209,7 +209,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   return sRozsahem(async (ucet) => {
     const ids = new URL(request.url).searchParams.getAll('id')
-    if (ids.length === 0) return Response.json({ error: 'Chybí id' }, { status: 400 })
+    if (ids.length === 0) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
     await deleteQuestionsWithAssets(ucet, ids)
     return Response.json({ deleted: ids.length })
   }, { zapis: true })

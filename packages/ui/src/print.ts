@@ -1,26 +1,68 @@
 'use client'
 
+const PDF_FAILED = 'PDF se nepodařilo připravit.'
+const PDF_RETRY = 'Zkus to za chvíli znovu; když to nepomůže, obnov stránku.'
+const PDF_OFFLINE = 'Nepodařilo se spojit se serverem. Zkontroluj připojení k internetu a zkus to znovu.'
+
+/** Iframe posledního tisku; s dalším tiskem se uklidí (hned po tisku by ho Chrome zrušil). */
+let lastFrame: HTMLIFrameElement | null = null
+
+/**
+ * Stáhne PDF a ověří, že opravdu přišlo PDF. Chyba serveru (404, vypršelé
+ * přihlášení, hlavolam, který nejde vykreslit) se tak nevytiskne jako text
+ * na papír, ale skončí českou chybou, kterou volající ukáže.
+ */
+async function fetchPdf(href: string): Promise<Response> {
+  let response: Response
+  try {
+    response = await fetch(href)
+  } catch {
+    throw new Error(`${PDF_FAILED} ${PDF_OFFLINE}`)
+  }
+  if (response.ok) return response
+  const text = await response.text().catch(() => '')
+  let own: string | null = null
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown }
+    if (typeof parsed.error === 'string') own = parsed.error
+  } catch {
+    // Prostý text posílají PDF routy jen česky a krátce; HTML stránku platformy ne.
+    if (text && text.length < 300 && !text.trimStart().startsWith('<')) own = text.trim()
+  }
+  throw new Error(own ? `${PDF_FAILED} ${own}` : `${PDF_FAILED} ${PDF_RETRY}`)
+}
+
 /**
  * Pošle PDF rovnou do tisku, aby učitelka nemusela soubor stahovat a otevírat zvlášť.
  *
- * Prohlížeče se u vestavěného prohlížeče PDF chovají různě, proto je tu záložní cesta:
- * když se tisk do pár vteřin nepodaří vyvolat, otevře se PDF v nové záložce, kde si ho
- * uživatelka vytiskne sama.
+ * PDF se nejdřív stáhne a teprve hotové jde do skrytého rámu. Prohlížeče se
+ * u vestavěného prohlížeče PDF chovají různě, proto je tu záložní cesta: když
+ * se tisk do pár vteřin nepodaří vyvolat, PDF se uloží jako soubor (nové okno
+ * by po čekání na server blokátor vyskakovacích oken stejně zastavil).
  *
- * Vrací příslib, který se naplní, jakmile je o tisku rozhodnuto — voláním, nebo záložní
- * cestou. Volající podle toho může schovat hlášku „Připravuji tisk“.
+ * Příslib se naplní, jakmile je o tisku rozhodnuto; když PDF nepřijde, odmítne
+ * se s českou chybou.
  */
-export function printPdf(href: string, timeoutMs = 4000): Promise<void> {
-  return new Promise((resolve) => {
-    const frame = document.createElement('iframe')
-    frame.style.position = 'fixed'
-    frame.style.right = '0'
-    frame.style.bottom = '0'
-    frame.style.width = '0'
-    frame.style.height = '0'
-    frame.style.border = '0'
-    frame.src = href
+export async function printPdf(href: string, timeoutMs = 4000): Promise<void> {
+  const response = await fetchPdf(href)
+  const url = URL.createObjectURL(await response.blob())
+  const name = fileNameFromHeader(response.headers.get('content-disposition')) ?? 'test.pdf'
 
+  if (lastFrame) {
+    URL.revokeObjectURL(lastFrame.src)
+    lastFrame.remove()
+  }
+  const frame = document.createElement('iframe')
+  lastFrame = frame
+  frame.style.position = 'fixed'
+  frame.style.right = '0'
+  frame.style.bottom = '0'
+  frame.style.width = '0'
+  frame.style.height = '0'
+  frame.style.border = '0'
+  frame.src = url
+
+  await new Promise<void>((resolve) => {
     let settled = false
     const finish = () => {
       if (settled) return
@@ -32,11 +74,12 @@ export function printPdf(href: string, timeoutMs = 4000): Promise<void> {
     const fallback = window.setTimeout(() => {
       if (settled) return
       // Tisk se nepodařilo vyvolat; ať uživatelka neskončí s prázdnýma rukama.
-      window.open(href, '_blank', 'noopener')
+      saveBlobUrl(url, name)
       finish()
     }, timeoutMs)
 
     frame.onload = () => {
+      if (settled) return
       try {
         frame.contentWindow?.focus()
         frame.contentWindow?.print()
@@ -50,6 +93,15 @@ export function printPdf(href: string, timeoutMs = 4000): Promise<void> {
   })
 }
 
+function saveBlobUrl(url: string, name: string): void {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 /**
  * Stáhne PDF a uloží ho jako soubor. Odkaz `target="_blank"` tu nestačí:
  * vykreslení testu trvá vteřiny a otevřená prázdná záložka nic neříká, zatímco
@@ -60,17 +112,9 @@ export function printPdf(href: string, timeoutMs = 4000): Promise<void> {
  * nebo se nedá přečíst, použije se záložní.
  */
 export async function downloadPdf(href: string, fallbackName = 'test.pdf'): Promise<void> {
-  const response = await fetch(href)
-  if (!response.ok) throw new Error(`PDF se nepodařilo připravit (${response.status}).`)
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileNameFromHeader(response.headers.get('content-disposition')) ?? fallbackName
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
+  const response = await fetchPdf(href)
+  const url = URL.createObjectURL(await response.blob())
+  saveBlobUrl(url, fileNameFromHeader(response.headers.get('content-disposition')) ?? fallbackName)
   // Uvolnit až po chvíli: některé prohlížeče si adresu ještě čtou.
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

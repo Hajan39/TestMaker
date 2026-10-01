@@ -1,5 +1,5 @@
 import { AI_SETTINGS } from '@testmaker/core/ai'
-import { PageShell } from '@testmaker/ui'
+import { EmptyState, PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
 import { loadTemplates } from '@/lib/tests'
@@ -23,6 +23,17 @@ export default async function NewWorksheetPage() {
     })),
   }))
   const { configured, problems } = aiStatus()
+  // Bez šablony by uložení skončilo odmítnutím — řekne se to rovnou.
+  if (templates.length === 0) {
+    return (
+      <PageShell>
+        <EmptyState
+          title="Nejdřív je potřeba šablona"
+          hint="Ve škole zatím není žádná šablona pro tisk, takže nejde nic založit. Dej vědět správci, ať ji přidá."
+        />
+      </PageShell>
+    )
+  }
   return (
     <PageShell>
       <NewWorksheetForm

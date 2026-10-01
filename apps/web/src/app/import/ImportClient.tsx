@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { groupForImport } from '@testmaker/core/extract'
@@ -29,6 +29,7 @@ import {
   type ImportDestination,
 } from '@/lib/importClient'
 import { IssueList, SKIP_LABELS } from '@/components/importIssues'
+import { errorMessage } from '@/lib/requestJson'
 
 type Phase = 'idle' | 'extracting' | 'preview' | 'uploading' | 'done'
 
@@ -154,7 +155,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         }
       })
     } catch (workerError) {
-      setError(workerError instanceof Error ? workerError.message : String(workerError))
+      setError(errorMessage(workerError, 'Soubory se nepodařilo přečíst.'))
     }
 
     setGroups(toPreview(extracted))
@@ -219,12 +220,21 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       setPhase('done')
       router.refresh()
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
+      setError(errorMessage(uploadError, 'Soubory se nepodařilo uložit.'))
       setPhase('preview')
     }
   }
 
   const busy = phase === 'extracting' || phase === 'uploading'
+
+  // Zavření nebo obnovení stránky uprostřed čtení či ukládání souborů
+  // znamenalo ztrátu rozpracovaného importu bez varování.
+  useEffect(() => {
+    if (!busy) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [busy])
 
   return (
     <div className="space-y-4">
@@ -253,7 +263,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
           data-testid="import-folder"
           // @ts-expect-error nestandardní atribut pro výběr celé složky
           webkitdirectory=""
-          onChange={(event) => void handleEntries(entriesFromInput(event.target.files))}
+          onChange={(event) => {
+            void handleEntries(entriesFromInput(event.target.files))
+            // Bez vynulování by opětovný výběr téže složky nevyvolal `change`.
+            event.target.value = ''
+          }}
         />
         <input
           ref={filesRef}
@@ -261,7 +275,10 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
           multiple
           className="hidden"
           data-testid="import-files"
-          onChange={(event) => void handleEntries(entriesFromInput(event.target.files))}
+          onChange={(event) => {
+            void handleEntries(entriesFromInput(event.target.files))
+            event.target.value = ''
+          }}
         />
 
         <FolderUp className="size-8 text-fg-muted" aria-hidden />

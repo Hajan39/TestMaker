@@ -137,10 +137,18 @@ export async function POST(request: Request) {
   } catch (error) {
     // Typicky chybějící nadřazená položka (téma bez předmětu) nebo soubor
     // z novější verze aplikace. Učitelce nepomůže hláška z SQLite, ale to,
-    // kde přesně se obnova zadrhla.
-    const detail = error instanceof Error ? error.message : String(error)
+    // kde přesně se obnova zadrhla. Vysvětlení z `lib/backup` (stejný název,
+    // chybějící nadřazená položka, řádek bez id) projde; cokoli jiného je
+    // technický detail a ten jde jen do logu serveru.
+    const zprava = error instanceof Error ? error.message : ''
+    const vysvetleno = /^(V tabulce|Položka|Řádek tabulky) /.test(zprava) && !/nepodařilo zapsat:/.test(zprava)
+    if (!vysvetleno) console.error(`Obnova ze zálohy: tabulka ${davka.tabulka}`, error)
     return Response.json(
-      { error: `Část „${davka.tabulka}“ se nepodařilo obnovit: ${detail}` },
+      {
+        error: vysvetleno
+          ? zprava
+          : `Část zálohy nejde nahrát (tabulka ${davka.tabulka}). Záloha je nejspíš z jiné verze aplikace nebo poškozená.`,
+      },
       { status: 400 },
     )
   }

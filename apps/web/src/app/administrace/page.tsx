@@ -18,8 +18,8 @@ export default async function AdministracePage({
   searchParams: Promise<{ dni?: string }>
 }) {
   const ucet = await ucetStranky()
-  const skoly = await seznamSkol(ucet)
-  const prehled = await prehledPouzitiAi(ucet, obdobiZ((await searchParams).dni))
+  const { dni } = await searchParams
+  const [skoly, prehled] = await Promise.all([seznamSkol(ucet), prehledPouzitiAi(ucet, obdobiZ(dni))])
   if (!skoly || !prehled) {
     return (
       <PageShell>

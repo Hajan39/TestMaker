@@ -203,7 +203,7 @@ describe('import materiálů', () => {
   it('nesmyslná data jsou 400, ne pád serveru', async () => {
     const response = await POST(jsonReq('/api/materials', 'POST', { materials: [] }))
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Neplatná data' })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' })
   })
 })
 

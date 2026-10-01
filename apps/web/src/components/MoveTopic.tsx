@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, toast } from '@testmaker/ui'
 import { useMuzeMenit } from '@/components/Prava'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 
 const BEZ_ROCNIKU = 'bez-rocniku'
 const PLACEHOLDER = 'presun'
@@ -29,32 +30,25 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
   async function ensureLoaded() {
     if (grades !== null) return
     try {
-      const response = await fetch(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
-      if (!response.ok) throw new Error('Ročníky se nepodařilo načíst.')
-      const data = (await response.json()) as { grades: { id: string; name: string }[] }
-      setGrades(data.grades)
+      const data = await requestJson<{ grades: { id: string; name: string }[] }>(
+        `/api/topics?gradesOf=${encodeURIComponent(topicId)}`,
+        undefined,
+        'Ročníky se nepodařilo načíst.',
+      )
+      setGrades(data.grades ?? [])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Ročníky se nepodařilo načíst.')
+      toast.error(errorMessage(error, 'Ročníky se nepodařilo načíst.'))
     }
   }
 
   async function move(gradeName: string) {
     setBusy(true)
     try {
-      const response = await fetch('/api/topics', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: topicId, gradeName }),
-      })
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        toast.error(detail.error ?? 'Přesun se nepovedl, zkus to prosím znovu.')
-        return
-      }
+      await requestJson('/api/topics', jsonBody('PATCH', { id: topicId, gradeName }), 'Přesun se nepovedl.')
       toast.success(`Téma přesunuto do ${gradeName || 'Bez ročníku'}`)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Přesun se nepovedl, zkus to prosím znovu.')
+      toast.error(errorMessage(error, 'Přesun se nepovedl, zkus to prosím znovu.'))
     } finally {
       setBusy(false)
     }

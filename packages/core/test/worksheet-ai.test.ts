@@ -109,6 +109,22 @@ describe('generování listu', () => {
     expect(result.models).toEqual(['google:a'])
   })
 
+  it('nadpis a pokyn na konci listu (i po ořezu) vynechá', async () => {
+    const pokyn = { kind: 'instruction', text: 'Doplň.', fromMaterials: false }
+    const result = await generateWorksheet(ZADANI, {
+      models: MODELY,
+      callModel: fake({ title: 't', items: [text(), funFact, tabulka(), nadpis, pokyn] }),
+    })
+    expect(result.items.map((item) => item.kind)).toEqual(['text', 'text', 'table'])
+  })
+
+  it('chyba o málo položkách řekne, kolik jich model zkazil', async () => {
+    const call = fake({ title: 'x', items: [text(), otazka(9), otazka(9)] })
+    await expect(generateWorksheet(ZADANI, { models: MODELY, callModel: call })).rejects.toThrow(
+      '2 položky byly vadné',
+    )
+  })
+
   it('pokus o volání i s tokeny předá posluchači onCall', async () => {
     const events: AiCallEvent[] = []
     const call: WorksheetCall = async ({ meter }) => {

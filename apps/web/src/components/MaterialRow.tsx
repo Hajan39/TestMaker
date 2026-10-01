@@ -15,6 +15,7 @@ import {
   toast,
 } from '@testmaker/ui'
 import { useMuzeMenit } from '@/components/Prava'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 
 export interface GroupMaterial {
   id: string
@@ -72,21 +73,15 @@ export function MaterialRow({
     setExcludedOverride(next)
     setExcludePending(true)
     try {
-      const response = await fetch('/api/materials', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: material.id, excluded: next }),
-      })
-      if (!response.ok) {
-        setExcludedOverride(!next)
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        toast.error(detail.error ?? 'Nepovedlo se to uložit, zkus to prosím znovu.')
-        return
-      }
+      await requestJson(
+        '/api/materials',
+        jsonBody('PATCH', { id: material.id, excluded: next }),
+        'Nepovedlo se to uložit.',
+      )
       router.refresh()
-    } catch (networkError) {
+    } catch (saveError) {
       setExcludedOverride(!next)
-      toast.error(networkError instanceof Error ? networkError.message : 'Nepovedlo se to uložit, zkus to prosím znovu.')
+      toast.error(errorMessage(saveError, 'Nepovedlo se to uložit, zkus to prosím znovu.'))
     } finally {
       setExcludePending(false)
     }
@@ -154,7 +149,19 @@ export function MaterialRow({
           title="Smazat materiál?"
           description={`Materiál „${material.fileName}" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.`}
           onConfirm={async () => {
-            await fetch(`/api/materials?id=${encodeURIComponent(material.id)}`, { method: 'DELETE' })
+            // Chyba se nechává probublat dál — `DeleteButton` pak dialog
+            // nezavře a nepředstírá úspěch, který nenastal.
+            try {
+              await requestJson(
+                `/api/materials?id=${encodeURIComponent(material.id)}`,
+                { method: 'DELETE' },
+                'Materiál se nepodařilo smazat.',
+              )
+            } catch (deleteError) {
+              toast.error(errorMessage(deleteError, 'Materiál se nepodařilo smazat.'))
+              throw deleteError
+            }
+            toast.success(`Materiál „${material.fileName}“ smazán.`)
             router.refresh()
           }}
         />

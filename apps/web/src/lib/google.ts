@@ -167,8 +167,4 @@ export function presmeruj(cil: string | URL, cookies: string[] = []): Response {
   return new Response(null, { status: 307, headers })
 }
 
-/** Návrat po přihlášení — jen cesta uvnitř aplikace, nikdy cizí adresa. */
-export function bezpecnyNavrat(dal: string | null | undefined): string {
-  if (!dal || !dal.startsWith('/') || dal.startsWith('//')) return '/'
-  return dal
-}
+export { bezpecnyNavrat } from './navrat'

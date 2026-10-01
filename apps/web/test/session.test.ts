@@ -4,7 +4,9 @@ import {
   LOGIN_WINDOW_MS,
   authMode,
   clearLoginAttempts,
+  RELACE_TTL_MS,
   maPravo,
+  obnovitRelaci,
   overitRelaci,
   podepsatRelaci,
   recordLoginAttempt,
@@ -49,6 +51,18 @@ describe('podepsaná cookie relace', () => {
     await expect(overitRelaci('nesmysl', SECRET)).resolves.toBeNull()
     await expect(overitRelaci(undefined, SECRET)).resolves.toBeNull()
     await expect(overitRelaci(token, '')).resolves.toBeNull()
+  })
+
+  it('po polovině platnosti vydá čerstvou relaci, dřív ne', async () => {
+    const now = Date.now()
+    const cerstva = { v: 1 as const, ...relace({ exp: now + RELACE_TTL_MS - 1000 }) }
+    await expect(obnovitRelaci(cerstva, SECRET, now)).resolves.toBeNull()
+
+    const starnouci = { v: 1 as const, ...relace({ exp: now + 60_000 }) }
+    const token = await obnovitRelaci(starnouci, SECRET, now)
+    const obnovena = await overitRelaci(token ?? undefined, SECRET, now)
+    expect(obnovena?.exp).toBe(now + RELACE_TTL_MS)
+    expect(obnovena?.sid).toBe('relace-1')
   })
 
   it('vypršelou relaci nepustí, i když je podpis v pořádku', async () => {

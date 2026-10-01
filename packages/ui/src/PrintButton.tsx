@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { BusyButton } from './BusyButton'
 import { printPdf } from './print'
 
@@ -23,6 +24,8 @@ export function PrintButton({
     setPreparing(true)
     try {
       await printPdf(href)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'PDF se nepodařilo připravit.')
     } finally {
       setPreparing(false)
     }

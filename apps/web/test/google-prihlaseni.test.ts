@@ -60,7 +60,7 @@ function odpovedSTokenem(claims: Record<string, unknown>): typeof fetch {
 /** Kam brána poslala prohlížeč a s jakou hláškou. */
 function chybaZOdpovedi(response: Response): string {
   const location = new URL(response.headers.get('location') ?? '', 'https://testmaker.example')
-  return location.searchParams.get('chyba') ?? ''
+  return location.searchParams.get('chyba') ?? location.searchParams.get('info') ?? ''
 }
 
 beforeEach(async () => {

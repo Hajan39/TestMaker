@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import type { Question } from '@testmaker/core/schema'
 import { Button, Checkbox, QuestionPreview } from '@testmaker/ui'
@@ -69,6 +70,9 @@ export function QuestionCard({
   restoring?: boolean
   onRestore?: () => void
 }) {
+  // Dokud model otázku nahrazuje nebo z ní dělá verzi, úprava ani smazání
+  // nedávají smysl — po náhradě by mířily na otázku, která už je zamítnutá.
+  const [aiBusy, setAiBusy] = useState(false)
   if (deleted) {
     return (
       <div className="flex gap-3 opacity-60">
@@ -112,7 +116,7 @@ export function QuestionCard({
       </div>
       {muzeMenit ? (
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Button size="sm" variant="ghost" onClick={onEditStart}>
+          <Button size="sm" variant="ghost" disabled={aiBusy} onClick={onEditStart}>
             Upravit
           </Button>
           <RegenerateButton
@@ -121,12 +125,13 @@ export function QuestionCard({
             difficulty={question.difficulty}
             onDone={onRegenerateDone}
             onVariantCreated={onVariantCreated}
+            onBusyChange={setAiBusy}
           />
           <Button
             size="sm"
             variant="ghost"
             className="text-danger hover:text-danger"
-            disabled={busy}
+            disabled={busy || aiBusy}
             onClick={onRemove}
           >
             Smazat

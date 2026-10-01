@@ -63,7 +63,9 @@ export function buildWorksheetSystemPrompt(gradeName: string | null): string {
     '2. Fakta piš jen ta, kterými si jsi jistý. Nevymýšlej čísla, jména ani data.',
     '3. Úlohy musí jít vyřešit z textu na listu nebo ze znalostí, které žák toho ročníku má.',
     '4. Žádná položka se neodkazuje na obrázky, strany ani „text výše v materiálu“.',
-    `5. List má ${S.minItems + 2} až ${S.maxItems} položek včetně nadpisů a pokynů; střídej druhy položek.`,
+    `5. List má obvykle ${S.minItems + 2} až ${S.maxItems} položek včetně nadpisů a pokynů; střídej druhy položek.`,
+    `   Přání učitelky k rozsahu má přednost, jen vždy aspoň ${S.minItems} položky mimo nadpisy a pokyny`,
+    `   a nejvýš ${S.maxItems} položek celkem.`,
     '6. `title` je krátký název listu.',
   ].join('\n')
 }

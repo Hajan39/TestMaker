@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import {
   AUTH_MISCONFIGURED_MESSAGE,
+  NEPRIHLASEN_MESSAGE,
   SESSION_COOKIE,
   authMode,
   jeVolnaCesta,
   maPravo,
+  obnovitRelaci,
   overitRelaci,
+  relaceCookie,
   smazatStarouCookie,
 } from '@/lib/session'
 
@@ -48,11 +51,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const relace = await overitRelaci(
-    request.cookies.get(SESSION_COOKIE)?.value,
-    process.env.AUTH_SECRET ?? '',
-  )
-  if (!relace) return odmitnout(request, 'Nepřihlášeno')
+  const secret = process.env.AUTH_SECRET ?? ''
+  const relace = await overitRelaci(request.cookies.get(SESSION_COOKIE)?.value, secret)
+  if (!relace) return odmitnout(request, NEPRIHLASEN_MESSAGE)
 
   // Hrubé rozhodnutí podle role. Jestli je konkrétní písemka moje, rozhoduje
   // až server nad databází — proxy je pohodlí, ne bezpečnostní hranice.
@@ -71,7 +72,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(cil)
   }
 
-  return NextResponse.next()
+  // Kdo pracuje, toho po dvanácti hodinách od přihlášení nevyhodí: po
+  // polovině platnosti dostane čerstvou cookie.
+  const odpoved = NextResponse.next()
+  const cerstva = await obnovitRelaci(relace, secret)
+  if (cerstva) odpoved.headers.append('set-cookie', relaceCookie(cerstva))
+  return odpoved
 }
 
 /**

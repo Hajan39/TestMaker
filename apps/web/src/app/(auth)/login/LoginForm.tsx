@@ -3,13 +3,16 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Card, Input, Label } from '@testmaker/ui'
+import { bezpecnyNavrat } from '@/lib/navrat'
+import { errorMessage, fetchOrOffline, jsonBody, readJson, SERVER_TROUBLE } from '@/lib/requestJson'
 
 export function LoginForm({ googleZapnuty }: { googleZapnuty: boolean }) {
   const router = useRouter()
   const parametry = useSearchParams()
-  // Kam uživatelka mířila, než ji brána poslala sem.
-  const dal = parametry.get('dal') || '/'
+  // Kam uživatelka mířila, než ji brána poslala sem — jen uvnitř aplikace.
+  const dal = bezpecnyNavrat(parametry.get('dal'))
   const chybaZGoogle = parametry.get('chyba')
+  const infoZGoogle = parametry.get('info')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,20 +23,17 @@ export function LoginForm({ googleZapnuty }: { googleZapnuty: boolean }) {
     event.preventDefault()
     setBusy(true)
     setError(null)
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    setBusy(false)
-    if (!response.ok) {
-      const detail = (await response.json()) as { error?: string }
-      setError(detail.error ?? 'Přihlášení se nezdařilo.')
-      return
+    try {
+      const response = await fetchOrOffline('/api/login', jsonBody('POST', { email, password }), 'Přihlášení se nezdařilo.')
+      const data = await readJson<{ mustChangePassword: boolean }>(response)
+      // 401 tu znamená špatné heslo, ne vypršelé přihlášení — hláška serveru má přednost.
+      if (!response.ok) throw new Error(data.error ?? `Přihlášení se nezdařilo. ${SERVER_TROUBLE}`)
+      router.push(data.mustChangePassword ? '/zmena-hesla' : dal)
+      router.refresh()
+    } catch (submitError) {
+      setError(errorMessage(submitError, 'Přihlášení se nezdařilo.'))
+      setBusy(false)
     }
-    const { mustChangePassword } = (await response.json()) as { mustChangePassword?: boolean }
-    router.push(mustChangePassword ? '/zmena-hesla' : dal)
-    router.refresh()
   }
 
   return (
@@ -61,9 +61,18 @@ export function LoginForm({ googleZapnuty }: { googleZapnuty: boolean }) {
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {infoZGoogle && !error ? (
+          <p className="text-sm text-fg-soft" role="status">
+            {infoZGoogle}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
         <Button type="submit" disabled={busy || email.length === 0 || password.length === 0}>
-          Přihlásit se
+          {busy ? 'Přihlašuji…' : 'Přihlásit se'}
         </Button>
       </form>
 

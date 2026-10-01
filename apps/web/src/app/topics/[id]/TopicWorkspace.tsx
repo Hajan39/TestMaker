@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AI_QUESTION_TYPES, type Question } from '@testmaker/core/schema'
 import { Button, Card, EmptyState, MATERIALY_Z, OTAZKY, plural, pocet, toast } from '@testmaker/ui'
@@ -17,6 +17,7 @@ import type { GroupMaterial } from '@/components/MaterialRow'
 import { MaterialsStrip, type MaterialsStripHandle } from '@/components/MaterialsStrip'
 import { TopicQuestions, type TestUsage, type TopicQuestionsHandle, type VariantLink } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
+import { errorMessage } from '@/lib/requestJson'
 import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
 import { useMuzeMenit } from '@/components/Prava'
 
@@ -83,6 +84,15 @@ export function TopicWorkspace({
   // ohlásí jako volný.
   const [materialsUploading, setMaterialsUploading] = useState(false)
 
+  // Generování běží jen s otevřenou stránkou — zavření nebo obnovení ho
+  // utne, proto se prohlížeč napřed zeptá.
+  useEffect(() => {
+    if (!generating) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [generating])
+
   // Po obnovení seznamu přijdou tytéž otázky i v `questions` — podle id se
   // proto čerstvé, které už v seznamu jsou, vynechají, ať se nezdvojí.
   const shownQuestions = useMemo(() => {
@@ -117,6 +127,15 @@ export function TopicWorkspace({
     // dlouho to ještě potrvá).
     let hotovo = 0
     let cast: { done: number; total: number } | null = null
+    // Stream, který skončí bez `done` i bez `error` (spadlé spojení, vypršelá
+    // funkce), dřív skončil potichu — kolečko zmizelo a nic se neřeklo.
+    let started = false
+    let finished = false
+    const interrupted = () => {
+      setStatus(null)
+      setError('Generování se přerušilo — vzniklé otázky jsou uložené, zbytek spusť znovu.')
+      router.refresh()
+    }
     const prubeh = () => {
       const otazky = hotovo > 0 ? `Hotovo ${pocet(hotovo, OTAZKY)}` : 'Zatím žádná otázka není hotová'
       // `done` je počet už zpracovaných částí; pracuje se tedy na následující.
@@ -132,6 +151,8 @@ export function TopicWorkspace({
       await generateQuestionsStream(
         { topicId: topic.id, count: settings.count, difficulty: settings.difficulty, types: [...AI_QUESTION_TYPES] },
         (event) => {
+          started = true
+          if (event.type === 'done' || event.type === 'error') finished = true
           if (event.type === 'progress') {
             cast = { done: event.done, total: event.total }
             prubeh()
@@ -157,8 +178,10 @@ export function TopicWorkspace({
         },
         abortRef.current.signal,
       )
+      if (!finished) interrupted()
     } catch (streamError) {
-      setError(streamError instanceof Error ? streamError.message : String(streamError))
+      if (started && !finished) interrupted()
+      else setError(errorMessage(streamError, 'Generování se nepodařilo.'))
     } finally {
       setGenerating(false)
     }

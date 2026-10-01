@@ -6,6 +6,7 @@ import { Check, Pencil, X } from 'lucide-react'
 import { Button, Input, cn } from '@testmaker/ui'
 import { useMuzeMenit } from '@/components/Prava'
 import type { LibraryKind } from '@/lib/library'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 
 /**
  * Přejmenování na místě: název se při kliknutí na tužku promění v pole.
@@ -62,20 +63,11 @@ export function InlineName({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch('/api/library', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kind, id, name: next }),
-      })
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        setError(detail.error ?? 'Přejmenování se nepovedlo.')
-        return
-      }
+      await requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), 'Přejmenování se nepovedlo.')
       setEditing(false)
       router.refresh()
-    } catch (networkError) {
-      setError(networkError instanceof Error ? networkError.message : String(networkError))
+    } catch (saveError) {
+      setError(errorMessage(saveError, 'Přejmenování se nepovedlo.'))
     } finally {
       setBusy(false)
     }

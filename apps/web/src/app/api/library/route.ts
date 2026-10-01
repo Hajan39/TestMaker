@@ -31,10 +31,10 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams
     const kind = kindSchema.safeParse(params.get('kind'))
     const id = params.get('id')
-    if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
+    if (!kind.success || !id) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
 
     const impact = await measure(ucet, kind.data, id)
-    if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
+    if (!impact) return Response.json({ error: 'Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku.' }, { status: 404 })
     return Response.json(impact)
   })
 }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   return sRozsahem(
     async (ucet) => {
       const parsed = createSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
 
       const result = await createLibraryItem(ucet, parsed.data)
       if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
@@ -75,7 +75,7 @@ export async function PATCH(request: Request) {
   return sRozsahem(
     async (ucet) => {
       const parsed = renameSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
 
       const result = await renameLibraryItem(ucet, parsed.data)
       if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
@@ -97,10 +97,10 @@ export async function DELETE(request: Request) {
       const params = new URL(request.url).searchParams
       const kind = kindSchema.safeParse(params.get('kind'))
       const id = params.get('id')
-      if (!kind.success || !id) return Response.json({ error: 'Neplatný dotaz' }, { status: 400 })
+      if (!kind.success || !id) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
 
       const impact = await measure(ucet, kind.data, id)
-      if (!impact) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
+      if (!impact) return Response.json({ error: 'Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku.' }, { status: 404 })
 
       // Kaskády v databázi se postarají o vše níž; cizí klíče jsou zapnuté.
       if (kind.data === 'subject') {

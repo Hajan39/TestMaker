@@ -72,7 +72,7 @@ test.describe('správce druhé školy', () => {
   test('v záznamu vidí, že se k nim přepnul administrátor', async ({ page }) => {
     await page.goto('/sprava')
     await page.getByRole('tab', { name: 'Události a chyby' }).click()
-    const udalost = page.getByText('administrator-prepnul-skolu').first()
+    const udalost = page.getByText('Administrátor se přepnul do školy').first()
     await expect(udalost).toBeVisible()
     await expect(page.getByText('Administrátor', { exact: true }).first()).toBeVisible()
   })
