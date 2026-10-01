@@ -1,9 +1,8 @@
 /*
- * `source(none)` vypíná automatické prohledávání projektu. Tailwind jinak čte
- * i soubory, které se zdrojovým kódem nesouvisí — dočasné složky sestavení
- * (`.next-*`) nebo snímky obrazovek —, vytáhne z jejich binárního obsahu
- * náhodné řetězce jako názvy tříd a vyrobí z nich neplatné CSS, na kterém
- * build spadne. Zdroje si proto vyjmenujeme sami.
+ * `source(none)` turns off automatic project scanning. Otherwise Tailwind also
+ * reads files unrelated to the source — temporary build folders (`.next-*`)
+ * or screenshots — pulls random strings out of their binary content as class
+ * names and produces invalid CSS that breaks the build. So we list the sources ourselves.
  */
 @import "tailwindcss" source(none);
 @source "../**/*.{ts,tsx}";

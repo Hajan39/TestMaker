@@ -1,50 +1,52 @@
 /**
- * Společný základ pro obě cesty, jak dostat knihovnu jinam:
+ * Shared base for both ways of moving the library elsewhere:
  *
- *   1. `scripts/push-remote.ts` — z počítače přímo do Tursa (databáze do databáze).
- *   2. `/api/export` — záloha do jednoho souboru JSON a obnova z něj.
+ *   1. `scripts/push-remote.ts` — from the computer straight to Turso (database to database).
+ *   2. `/api/export` — backup into a single JSON file and restore from it.
  *
- * Obojí čte i zapisuje tytéž tabulky, ve stejném pořadí a stejným způsobem
- * (`insert … on conflict(id) do update`), aby se obě cesty chovaly shodně
- * a daly se opakovat. Nic se nikdy nemaže — sloučení je vždy podle `id`.
+ * Both read and write the same tables, in the same order and the same way
+ * (`insert … on conflict(id) do update`), so both paths behave alike and can
+ * be repeated. Nothing is ever deleted — merging is always by `id`.
  *
- * Schválně tu nikde nefiguruje `@/db`: tenhle modul používá i skript spouštěný
- * přes `tsx`, kde se alias `@/` nerozřeší, a hlavně si musí umět sáhnout na
- * libovolnou databázi, ne jen na tu, nad kterou běží aplikace.
+ * `@/db` deliberately appears nowhere here: this module is also used by a
+ * script run via `tsx`, where the `@/` alias does not resolve, and above all
+ * it must be able to reach any database, not only the one the app runs on.
  */
+import { t } from '@testmaker/core/i18n'
 import { and, asc, eq, getTableColumns, gt, sql, type SQL } from 'drizzle-orm'
 import type { AnySQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import * as schema from '../db/schema'
 
-/** Databáze, nad kterou se pracuje — aplikace i skript posílají svou vlastní. */
+/** The database being worked on — the app and the script each pass their own. */
 export type BackupDb = LibSQLDatabase<typeof schema>
 
-/** Jeden řádek tabulky tak, jak putuje v JSON. */
-export type Radek = Record<string, unknown>
+/** One table row as it travels in JSON. */
+export type Row = Record<string, unknown>
 
 /**
- * Tabulky v pořadí, ve kterém se smějí zapisovat: co na co odkazuje, to už
- * v cíli musí být. Fronta generování (`generation_jobs`) se nepřenáší —
- * je to pracovní stav jednoho počítače, ne obsah knihovny, a na druhé straně
- * by jen strašila záznamy o bězích, které se tam nikdy nekonaly. Zpětná vazba
- * z přegenerování (`question_feedback`) se nepřenáší ze stejného důvodu —
- * je to telemetrie k přehledu „AI kvalita", ne obsah knihovny, a po obnově
- * by stejně ukazovala na jiná (nově vzniklá) id otázek.
+ * Tables in the order they may be written: whatever is referenced must
+ * already be in the target. The generation queue (`generation_jobs`) is not
+ * transferred — it is one computer's working state, not library content, and
+ * on the other side it would only leave records of runs that never happened
+ * there. Regeneration feedback (`question_feedback`) is not transferred for
+ * the same reason — it is telemetry for the "AI quality" overview, not library
+ * content, and after a restore it would point at different (new) question ids.
  */
 /**
- * Rozsah zálohy a obnovy: vždy jedna škola. Filtrovat po učitelkách nemá
- * smysl — částečný soubor by po obnově zanechal otázky bez témat. Obnova
- * navíc souboru nevěří: školu i vlastníky si přepíše podle toho, kdo obnovuje
- * (viz `zapisRadky`), jinak by nahraný soubor uměl zapsat řádky do cizí školy.
+ * Scope of backup and restore: always one school. Filtering by teacher makes
+ * no sense — a partial file would leave questions without topics after a
+ * restore. Restore also does not trust the file: it rewrites the school and
+ * owners by who restores (see `writeRows`), otherwise an uploaded file could
+ * write rows into another school.
  */
-export interface RozsahZalohy {
+export interface BackupScope {
   schoolId: string
-  /** Komu připadne obsah, jehož původní vlastník v cíli neexistuje. */
+  /** Who gets content whose original owner does not exist in the target. */
   userId: string
 }
 
-export const TABULKY = {
+export const TABLES = {
   subjects: schema.subjects,
   grades: schema.grades,
   topics: schema.topics,
@@ -58,92 +60,92 @@ export const TABULKY = {
   test_items: schema.testItems,
 } as const
 
-export type NazevTabulky = keyof typeof TABULKY
+export type TableName = keyof typeof TABLES
 
 /**
- * Tabulka bez jejího konkrétního tvaru — společný dotaz nad všemi tabulkami
- * jinak nejde napsat. Primární klíč `id` má každá z nich a jen na
- * něj se tu sahá jmenovitě.
+ * A table without its concrete shape — otherwise a shared query over all
+ * tables cannot be written. Each has an `id` primary key and that is the only
+ * column referenced by name here.
  */
-type Tabulka = SQLiteTable & { id: AnySQLiteColumn }
+type Table = SQLiteTable & { id: AnySQLiteColumn }
 
-/** Tabulka podle názvu, v podobě, se kterou se dá pracovat obecně. */
-function tabulka(nazev: NazevTabulky): Tabulka {
-  return TABULKY[nazev] as unknown as Tabulka
+/** Table by name, in a form that can be worked with generically. */
+function tableOf(name: TableName): Table {
+  return TABLES[name] as unknown as Table
 }
 
-/** Pořadí zápisu. `Object.keys` by typově sklouzlo na `string[]`. */
-export const PORADI = Object.keys(TABULKY) as NazevTabulky[]
+/** Write order. `Object.keys` would degrade the type to `string[]`. */
+export const TABLE_ORDER = Object.keys(TABLES) as TableName[]
 
-/** Značka formátu v souboru zálohy — ať je poznat, když se nahraje něco jiného. */
+/** Format marker in the backup file — so uploading something else is detected. */
 export const FORMAT = 'testmaker-zaloha'
-export const VERZE = 1
+export const VERSION = 1
 
-/** Kolik řádků jde do jednoho `insert`. */
-export const DAVKA = 200
+/** How many rows go into one `insert`. */
+export const BATCH_SIZE = 200
 
 /**
- * Strop na velikost jedné dávky. Materiály nesou plné texty; dvě stě dlouhých
- * PDF v jednom příkazu je zbytečně velké sousto pro spojení do Tursa.
+ * Cap on one batch's size. Materials carry full texts; two hundred long PDFs
+ * in one statement is a needlessly big bite for the Turso connection.
  */
-const MAX_DAVKA_BAJTU = 1_000_000
+const MAX_BATCH_BYTES = 1_000_000
 
-export function jeTabulka(name: string): name is NazevTabulky {
-  return Object.prototype.hasOwnProperty.call(TABULKY, name)
+export function isTableName(name: string): name is TableName {
+  return Object.prototype.hasOwnProperty.call(TABLES, name)
 }
 
-/** Sloupce tabulky: klíč v JavaScriptu → název v databázi. */
-function sloupce(nazev: NazevTabulky): Record<string, { name: string; columnType: string }> {
-  return getTableColumns(tabulka(nazev)) as never
+/** Table columns: JavaScript key → database name. */
+function columns(name: TableName): Record<string, { name: string; columnType: string }> {
+  return getTableColumns(tableOf(name)) as never
 }
 
-/** Sloupce, ve kterých je binární obsah (dnes jediný: `assets.data`). */
-function binarniSloupce(nazev: NazevTabulky): string[] {
-  return Object.entries(sloupce(nazev))
+/** Columns holding binary content (today only `assets.data`). */
+function binaryColumns(name: TableName): string[] {
+  return Object.entries(columns(name))
     .filter(([, column]) => column.columnType === 'SQLiteBlobBuffer')
     .map(([key]) => key)
 }
 
 /**
- * Řádek z databáze do podoby, kterou unese JSON. Jediné, co JSON neumí, jsou
- * binární přílohy — ty jdou v base64.
+ * A database row into a form JSON can carry. The only thing JSON cannot hold
+ * is binary attachments — those go as base64.
  */
-export function doJson(nazev: NazevTabulky, row: Radek): Radek {
-  const binarni = binarniSloupce(nazev)
-  if (binarni.length === 0) return row
-  const kopie: Radek = { ...row }
-  for (const key of binarni) {
-    const value = kopie[key]
-    if (value instanceof Uint8Array) kopie[key] = Buffer.from(value).toString('base64')
+export function toJson(name: TableName, row: Row): Row {
+  const binary = binaryColumns(name)
+  if (binary.length === 0) return row
+  const copy: Row = { ...row }
+  for (const key of binary) {
+    const value = copy[key]
+    if (value instanceof Uint8Array) copy[key] = Buffer.from(value).toString('base64')
   }
-  return kopie
+  return copy
 }
 
 /**
- * Řádek z JSON zpátky do podoby pro zápis: zahodí sloupce, které schéma nezná
- * (starší nebo cizí soubor), a base64 přílohy převede zpět na binární data.
- * Sloupce, které v řádku nejsou, se nedoplňují — zapíší se výchozí hodnoty.
+ * A JSON row back into a writable form: drops columns the schema does not
+ * know (older or foreign file) and converts base64 attachments back to binary.
+ * Columns missing from the row are not filled in — defaults are written.
  */
-export function zJson(nazev: NazevTabulky, row: Radek): Radek {
-  const zname = sloupce(nazev)
-  const binarni = new Set(binarniSloupce(nazev))
-  const vysledek: Radek = {}
+export function fromJson(name: TableName, row: Row): Row {
+  const known = columns(name)
+  const binary = new Set(binaryColumns(name))
+  const result: Row = {}
   for (const [key, value] of Object.entries(row)) {
-    if (!Object.prototype.hasOwnProperty.call(zname, key)) continue
+    if (!Object.prototype.hasOwnProperty.call(known, key)) continue
     if (value === undefined) continue
-    vysledek[key] = binarni.has(key) && typeof value === 'string' ? Buffer.from(value, 'base64') : value
+    result[key] = binary.has(key) && typeof value === 'string' ? Buffer.from(value, 'base64') : value
   }
-  return vysledek
+  return result
 }
 
 /**
- * Přiřazení pro `do update`: přepiš všechno kromě `id`. Díky tomu je zápis
- * opakovatelný — druhý běh tytéž řádky jen srovná, nezaloží podruhé a
- * nespadne na porušeném unikátním klíči.
+ * Assignment for `do update`: overwrite everything except `id`. This makes
+ * writing repeatable — a second run only aligns the same rows, does not create
+ * them again and does not fail on a violated unique key.
  */
-function prepis(nazev: NazevTabulky): Record<string, SQL> {
+function overwrite(name: TableName): Record<string, SQL> {
   const set: Record<string, SQL> = {}
-  for (const [key, column] of Object.entries(sloupce(nazev))) {
+  for (const [key, column] of Object.entries(columns(name))) {
     if (column.name === 'id') continue
     set[key] = sql.raw(`excluded."${column.name}"`)
   }
@@ -151,342 +153,354 @@ function prepis(nazev: NazevTabulky): Record<string, SQL> {
 }
 
 /**
- * Odkaz řádku na jiný řádek téže tabulky — dopisuje se až nakonec, kdy už
- * jsou v cíli oba. Materiál ukazuje na originál téhož obsahu
- * (`duplicate_of_id`), otázka na kořen svých verzí (`variant_of`).
+ * A row's reference to another row of the same table — written only at the
+ * end, when both are in the target. A material points to the original of the
+ * same content (`duplicate_of_id`), a question to the root of its versions
+ * (`variant_of`).
  */
-export type OdkazDuplicity =
+export type SelfReference =
   | { id: string; duplicateOfId: string; duplicateScore: number | null }
   | { id: string; variantOf: string }
 
 /**
- * Rozdělí dávku tak, aby ani jeden `insert` nebyl neúnosně velký. Počet řádků
- * je jen horní mez; u materiálů s dlouhými texty rozhoduje spíš velikost.
+ * Splits a batch so no `insert` is unbearably large. The row count is only an
+ * upper bound; for materials with long texts the size matters more.
  */
-function nakrajej(rows: Radek[], max = DAVKA): Radek[][] {
-  const davky: Radek[][] = []
-  let aktualni: Radek[] = []
-  let bajtu = 0
+function splitIntoBatches(rows: Row[], max = BATCH_SIZE): Row[][] {
+  const batches: Row[][] = []
+  let current: Row[] = []
+  let bytes = 0
   for (const row of rows) {
-    const velikost = odhadniVelikost(row)
-    if (aktualni.length > 0 && (aktualni.length >= max || bajtu + velikost > MAX_DAVKA_BAJTU)) {
-      davky.push(aktualni)
-      aktualni = []
-      bajtu = 0
+    const size = estimateSize(row)
+    if (current.length > 0 && (current.length >= max || bytes + size > MAX_BATCH_BYTES)) {
+      batches.push(current)
+      current = []
+      bytes = 0
     }
-    aktualni.push(row)
-    bajtu += velikost
+    current.push(row)
+    bytes += size
   }
-  if (aktualni.length > 0) davky.push(aktualni)
-  return davky
+  if (current.length > 0) batches.push(current)
+  return batches
 }
 
-/** Hrubý odhad velikosti řádku; přesnost tu k ničemu není, jde jen o řád. */
-function odhadniVelikost(row: Radek): number {
-  let bajtu = 0
+/** Rough row size estimate; precision is useless here, only the magnitude matters. */
+function estimateSize(row: Row): number {
+  let bytes = 0
   for (const value of Object.values(row)) {
-    if (typeof value === 'string') bajtu += value.length
-    else if (value instanceof Uint8Array) bajtu += value.byteLength
-    else if (value && typeof value === 'object') bajtu += JSON.stringify(value).length
-    else bajtu += 8
+    if (typeof value === 'string') bytes += value.length
+    else if (value instanceof Uint8Array) bytes += value.byteLength
+    else if (value && typeof value === 'object') bytes += JSON.stringify(value).length
+    else bytes += 8
   }
-  return bajtu
+  return bytes
 }
 
-export interface VysledekZapisu {
-  zapsano: number
+export interface WriteResult {
+  written: number
   /**
-   * Odkazy uvnitř tabulky (duplicity materiálů, verze otázek), které se musí
-   * dopsat, až bude v cíli celá tabulka — viz `zapisOdkazyDuplicit`.
+   * References within the table (material duplicates, question versions) that
+   * must be written once the whole table is in the target — see `writeSelfReferences`.
    */
-  odkazy: OdkazDuplicity[]
+  links: SelfReference[]
 }
 
 /**
- * Zapíše (nebo srovná) řádky jedné tabulky.
+ * Writes (or aligns) the rows of one table.
  *
- * Materiály a otázky mají zvláštnost: `duplicate_of_id` (materiál) a
- * `variant_of` (verze otázky) ukazují na jiný řádek v téže tabulce, takže při
- * zápisu po dávkách seřazených podle `id` originál často ještě neexistuje —
- * verze, jejíž id se řadí před kořen, by spadla na cizím klíči. Odkazy se
- * proto v prvním průchodu vynechají a vrátí se volajícímu, aby je po
- * dokončení celé tabulky dopsal.
+ * Materials and questions have a quirk: `duplicate_of_id` (material) and
+ * `variant_of` (question version) point to another row in the same table, so
+ * when writing in batches ordered by `id` the original often does not exist
+ * yet — a version whose id sorts before its root would fail on the foreign
+ * key. The references are therefore left out in the first pass and returned
+ * to the caller to write once the whole table is done.
  */
-export async function zapisRadky(
+export async function writeRows(
   db: BackupDb,
-  nazev: NazevTabulky,
-  rows: Radek[],
-  rozsah: RozsahZalohy,
-): Promise<VysledekZapisu> {
-  if (rows.length === 0) return { zapsano: 0, odkazy: [] }
+  name: TableName,
+  rows: Row[],
+  scope: BackupScope,
+): Promise<WriteResult> {
+  if (rows.length === 0) return { written: 0, links: [] }
 
-  // Účty, které v cíli opravdu jsou. Co v souboru ukazuje jinam (jiná škola,
-  // dávno smazaná kolegyně), připadne tomu, kdo obnovu spustil — jinak by
-  // obnova spadla na cizím klíči, nebo hůř, zapsala data pod cizí identitu.
-  const znameUcty = new Set(
+  // Accounts that really exist in the target. Whatever in the file points
+  // elsewhere (another school, a long-deleted colleague) goes to whoever
+  // started the restore — otherwise the restore would fail on a foreign key
+  // or, worse, write data under someone else's identity.
+  const knownAccounts = new Set(
     (
       await db
         .select({ id: schema.users.id })
         .from(schema.users)
-        .where(eq(schema.users.schoolId, rozsah.schoolId))
+        .where(eq(schema.users.schoolId, scope.schoolId))
     ).map((row) => row.id),
   )
-  const kdo = (hodnota: unknown): string =>
-    typeof hodnota === 'string' && znameUcty.has(hodnota) ? hodnota : rozsah.userId
+  const who = (value: unknown): string =>
+    typeof value === 'string' && knownAccounts.has(value) ? value : scope.userId
 
-  const odkazy: OdkazDuplicity[] = []
-  const pripravene = rows.map((row) => {
-    const hodnoty = zJson(nazev, row)
-    if (typeof hodnoty.id !== 'string' || hodnoty.id.length === 0) {
-      throw new Error(`Řádek tabulky ${nazev} nemá id — soubor nejspíš není záloha TestMakeru.`)
+  const links: SelfReference[] = []
+  const prepared = rows.map((row) => {
+    const values = fromJson(name, row)
+    if (typeof values.id !== 'string' || values.id.length === 0) {
+      throw new BackupRowError(t('backup:errors.rowWithoutId', { table: name }))
     }
-    // Škola se přebírá z toho, kdo obnovuje, ne ze souboru.
-    hodnoty.schoolId = rozsah.schoolId
-    for (const sloupec of ['ownerId', 'requestedBy'] as const) {
-      if (sloupec in hodnoty) hodnoty[sloupec] = kdo(hodnoty[sloupec])
+    // The school comes from whoever restores, not from the file.
+    values.schoolId = scope.schoolId
+    for (const column of ['ownerId', 'requestedBy'] as const) {
+      if (column in values) values[column] = who(values[column])
     }
-    for (const sloupec of ['createdBy', 'reviewedBy'] as const) {
-      if (hodnoty[sloupec] != null) hodnoty[sloupec] = kdo(hodnoty[sloupec])
+    for (const column of ['createdBy', 'reviewedBy'] as const) {
+      if (values[column] != null) values[column] = who(values[column])
     }
-    if (nazev === 'materials' && typeof hodnoty.duplicateOfId === 'string') {
-      odkazy.push({
-        id: hodnoty.id,
-        duplicateOfId: hodnoty.duplicateOfId,
-        duplicateScore: typeof hodnoty.duplicateScore === 'number' ? hodnoty.duplicateScore : null,
+    if (name === 'materials' && typeof values.duplicateOfId === 'string') {
+      links.push({
+        id: values.id,
+        duplicateOfId: values.duplicateOfId,
+        duplicateScore: typeof values.duplicateScore === 'number' ? values.duplicateScore : null,
       })
-      hodnoty.duplicateOfId = null
+      values.duplicateOfId = null
     }
-    if (nazev === 'questions' && typeof hodnoty.variantOf === 'string') {
-      odkazy.push({ id: hodnoty.id, variantOf: hodnoty.variantOf })
-      hodnoty.variantOf = null
+    if (name === 'questions' && typeof values.variantOf === 'string') {
+      links.push({ id: values.id, variantOf: values.variantOf })
+      values.variantOf = null
     }
-    return hodnoty
+    return values
   })
 
-  const table = tabulka(nazev)
-  const set = prepis(nazev)
-  for (const davka of nakrajej(pripravene)) {
+  const table = tableOf(name)
+  const set = overwrite(name)
+  for (const batch of splitIntoBatches(prepared)) {
     try {
       await db
         .insert(table)
-        .values(davka as never)
+        .values(batch as never)
         .onConflictDoUpdate({ target: table.id, set })
     } catch (error) {
-      // Dávka spadla celá, ale vinu na tom má jeden řádek. Projde se znovu po
-      // jednom, aby šlo říct který — hláška ze SQLite sama o sobě neřekne nic,
-      // s čím by se dalo něco dělat.
-      for (const radek of davka) {
+      // The whole batch failed but one row is to blame. Go through it again
+      // one by one to tell which — the SQLite message alone says nothing
+      // actionable.
+      for (const row of batch) {
         await db
           .insert(table)
-          .values(radek as never)
+          .values(row as never)
           .onConflictDoUpdate({ target: table.id, set })
-          .catch((chyba: unknown) => {
-            throw new Error(vysvetli(nazev, radek, chyba ?? error))
+          .catch((cause: unknown) => {
+            throw explain(name, row, cause ?? error)
           })
       }
       throw error
     }
   }
-  return { zapsano: pripravene.length, odkazy }
+  return { written: prepared.length, links }
 }
 
 /**
- * Proč se řádek nezapsal, česky. Nejčastější případ zdaleka: v cíli už je
- * položka téhož jména, ale s jiným `id` — typicky když někdo mezitím založil
- * „PŘÍRODOPIS“ ručně i na druhé straně. Sloučit je podle jména nejde (jsou to
- * dvě různé věci se dvěma různými historiemi), takže se to musí rozhodnout
- * ručně.
+ * A restore error whose message explains to the user what went wrong and what
+ * to do (same name, missing parent, row without id). Anything else is a
+ * technical detail that belongs only in the server log.
  */
-function vysvetli(nazev: NazevTabulky, radek: Radek, chyba: unknown): string {
-  const detail = popisChyby(chyba)
-  const jmeno = [radek.name, radek.title, radek.fileName, radek.slug].find(
-    (hodnota) => typeof hodnota === 'string' && hodnota.length > 0,
+export class BackupRowError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BackupRowError'
+  }
+}
+
+/**
+ * Why a row was not written, in words for the user. By far the most common
+ * case: the target already has an item of the same name but a different `id`
+ * — typically when someone meanwhile created "PŘÍRODOPIS" by hand on the other
+ * side too. They cannot be merged by name (two different things with two
+ * different histories), so it has to be decided by hand.
+ */
+function explain(name: TableName, row: Row, cause: unknown): Error {
+  const detail = describeError(cause)
+  const displayName = [row.name, row.title, row.fileName, row.slug].find(
+    (value) => typeof value === 'string' && value.length > 0,
   )
-  const kdo = jmeno ? `„${String(jmeno)}“ (${String(radek.id)})` : String(radek.id)
+  const item = displayName
+    ? t('backup:errors.namedItem', { name: String(displayName), id: String(row.id) })
+    : String(row.id)
   if (/unique/i.test(detail)) {
-    return (
-      `V tabulce ${nazev} už je položka se stejným názvem jako ${kdo}, ale s jiným id. ` +
-      'Přejmenuj jednu z nich a spusť to znovu.'
-    )
+    return new BackupRowError(t('backup:errors.duplicateName', { table: name, item }))
   }
   if (/foreign key/i.test(detail)) {
-    return (
-      `Položka ${kdo} v tabulce ${nazev} patří pod něco, co v cíli není — ` +
-      'nejspíš se nepřenesla nadřazená položka. Spusť přenos celý znovu.'
-    )
+    return new BackupRowError(t('backup:errors.missingParent', { table: name, item }))
   }
-  return `Položku ${kdo} v tabulce ${nazev} se nepodařilo zapsat: ${detail}`
+  return new Error(t('backup:errors.writeFailed', { table: name, item, detail }))
 }
 
 /**
- * Text chyby i s tím, co ji způsobilo. Drizzle vlastní hlášku ze SQLite
- * (`UNIQUE constraint failed: …`) zabalí do `cause`, takže v `message` samotné
- * není a bez tohohle by se pod „něco se nepovedlo“ schovalo úplně všechno.
+ * Error text including what caused it. Drizzle wraps SQLite's own message
+ * (`UNIQUE constraint failed: …`) in `cause`, so it is not in `message` itself
+ * and without this everything would hide under "something went wrong".
  */
-function popisChyby(chyba: unknown): string {
-  const casti: string[] = []
-  let aktualni: unknown = chyba
-  for (let hloubka = 0; aktualni instanceof Error && hloubka < 5; hloubka++) {
-    casti.push(aktualni.message)
-    aktualni = (aktualni as { cause?: unknown }).cause
+function describeError(cause: unknown): string {
+  const parts: string[] = []
+  let current: unknown = cause
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    parts.push(current.message)
+    current = (current as { cause?: unknown }).cause
   }
-  return casti.length > 0 ? casti.join(' — ') : String(chyba)
+  return parts.length > 0 ? parts.join(' — ') : String(cause)
 }
 
 /**
- * Dopíše odkazy uvnitř tabulky: materiálu na originál téhož obsahu a verze
- * otázky na její kořen. Odkaz na řádek, který v cíli není (nepřenesl se,
- * nebo se mezitím smazal), se tiše přeskočí — lepší materiál navíc nebo
- * verze bez odkazu než spadlý přenos kvůli cizímu klíči.
+ * Writes references within a table: a material to the original of the same
+ * content and a question version to its root. A reference to a row missing in
+ * the target (not transferred, or deleted meanwhile) is silently skipped —
+ * an extra material or a version without a link is better than a transfer
+ * failing on a foreign key.
  *
- * Obě strany odkazu musí patřit škole toho, kdo obnovuje: odkazy posílá
- * prohlížeč, takže bez podmínky na školu by šlo přepsat řádek jiné školy.
+ * Both ends of the reference must belong to the restoring user's school: the
+ * browser sends the references, so without the school condition a row of
+ * another school could be overwritten.
  */
-export async function zapisOdkazyDuplicit(
+export async function writeSelfReferences(
   db: BackupDb,
-  odkazy: OdkazDuplicity[],
-  rozsah: { schoolId: string },
+  links: SelfReference[],
+  scope: { schoolId: string },
 ): Promise<number> {
-  let zapsano = 0
-  for (const odkaz of odkazy) {
-    const vysledek =
-      'variantOf' in odkaz
+  let written = 0
+  for (const reference of links) {
+    const result =
+      'variantOf' in reference
         ? await db.run(sql`
             update questions
-            set variant_of = ${odkaz.variantOf}
-            where id = ${odkaz.id} and school_id = ${rozsah.schoolId}
+            set variant_of = ${reference.variantOf}
+            where id = ${reference.id} and school_id = ${scope.schoolId}
               and exists (
-                select 1 from questions as koren
-                where koren.id = ${odkaz.variantOf} and koren.school_id = ${rozsah.schoolId}
+                select 1 from questions as root
+                where root.id = ${reference.variantOf} and root.school_id = ${scope.schoolId}
               )
           `)
         : await db.run(sql`
             update materials
-            set duplicate_of_id = ${odkaz.duplicateOfId}, duplicate_score = ${odkaz.duplicateScore}
-            where id = ${odkaz.id} and school_id = ${rozsah.schoolId}
+            set duplicate_of_id = ${reference.duplicateOfId}, duplicate_score = ${reference.duplicateScore}
+            where id = ${reference.id} and school_id = ${scope.schoolId}
               and exists (
                 select 1 from materials as orig
-                where orig.id = ${odkaz.duplicateOfId} and orig.school_id = ${rozsah.schoolId}
+                where orig.id = ${reference.duplicateOfId} and orig.school_id = ${scope.schoolId}
               )
           `)
-    zapsano += Number(vysledek.rowsAffected ?? 0)
+    written += Number(result.rowsAffected ?? 0)
   }
-  return zapsano
+  return written
 }
 
 /**
- * Čte tabulku po dávkách, seřazenou podle `id`. Kurzor (ne `offset`) proto,
- * že se tím čte přes primární klíč a paměť drží vždy jen jednu dávku —
- * materiály i otázky nesou plné texty a celá knihovna se do ní vejít nemusí.
+ * Reads a table in batches ordered by `id`. A cursor (not `offset`) because it
+ * reads via the primary key and memory only ever holds one batch — materials
+ * and questions carry full texts and the whole library may not fit.
  */
-export async function* citejTabulku(
+export async function* readTable(
   db: BackupDb,
-  nazev: NazevTabulky,
-  rozsah: { schoolId: string },
-  davka = DAVKA,
-): AsyncGenerator<Radek[]> {
-  const table = tabulka(nazev)
-  const skola = eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, rozsah.schoolId)
-  const vyber = await vyberSloupcu(db, nazev)
-  // Prázdný výběr = na sloupce se zeptat nedalo; pak se čte celý řádek podle schématu.
-  const uplny = Object.keys(vyber).length === 0
-  let posledni: string | null = null
+  name: TableName,
+  scope: { schoolId: string },
+  batch = BATCH_SIZE,
+): AsyncGenerator<Row[]> {
+  const table = tableOf(name)
+  const school = eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, scope.schoolId)
+  const selection = await selectColumns(db, name)
+  // Empty selection = columns could not be queried; then the full row is read per schema.
+  const full = Object.keys(selection).length === 0
+  let last: string | null = null
   for (;;) {
-    const zaklad = uplny ? db.select() : db.select(vyber as never)
-    const query = zaklad.from(table).orderBy(asc(table.id)).limit(davka)
-    const rows = (await (posledni === null
-      ? query.where(skola)
-      : query.where(and(skola, gt(table.id, posledni))))) as Radek[]
+    const base = full ? db.select() : db.select(selection as never)
+    const query = base.from(table).orderBy(asc(table.id)).limit(batch)
+    const rows = (await (last === null
+      ? query.where(school)
+      : query.where(and(school, gt(table.id, last))))) as Row[]
     if (rows.length === 0) return
     yield rows
-    posledni = rows[rows.length - 1]!.id as string
-    if (rows.length < davka) return
+    last = rows[rows.length - 1]!.id as string
+    if (rows.length < batch) return
   }
 }
 
 /**
- * Tabulky, které v dané databázi opravdu jsou. Stará záloha nebo databáze,
- * ve které ještě neproběhla poslední migrace, prostě některou tabulku nemá —
- * vyvážet se z ní nedá nic, ale to není důvod, aby celý běh spadl na
- * „no such table“.
+ * Tables that really exist in the given database. An old backup or a database
+ * that has not run the latest migration simply lacks some table — nothing can
+ * be exported from it, but that is no reason for the whole run to fail on
+ * "no such table".
  */
-export async function existujiciTabulky(db: BackupDb): Promise<Set<NazevTabulky>> {
-  const vysledek = await db.run(sql`select name from sqlite_master where type = 'table'`)
-  const nalezene = new Set(vysledek.rows.map((row) => String(row.name)))
-  return new Set(PORADI.filter((nazev) => nalezene.has(nazev)))
+export async function existingTables(db: BackupDb): Promise<Set<TableName>> {
+  const result = await db.run(sql`select name from sqlite_master where type = 'table'`)
+  const found = new Set(result.rows.map((row) => String(row.name)))
+  return new Set(TABLE_ORDER.filter((name) => found.has(name)))
 }
 
 /**
- * Sloupce k vyčtení: jen ty, které v databázi opravdu jsou. Databáze o jednu
- * migraci pozadu (přibyl sloupec, ale ještě se nemigrovalo) by jinak shodila
- * celý běh na „no such column“ — a přitom z ní jde v pohodě vyvézt všechno
- * ostatní.
+ * Columns to read: only those really in the database. A database one
+ * migration behind (a column was added but not migrated yet) would otherwise
+ * fail the whole run on "no such column" — while everything else can be
+ * exported from it just fine.
  */
-async function vyberSloupcu(db: BackupDb, nazev: NazevTabulky): Promise<Record<string, unknown>> {
-  // Kdyby se na sloupce zeptat nedalo, čte se prostě všechno podle schématu —
-  // to je správně vždycky, když databáze není o migraci pozadu.
-  const vysledek = await db
-    .run(sql`select name from pragma_table_info(${nazev})`)
+async function selectColumns(db: BackupDb, name: TableName): Promise<Record<string, unknown>> {
+  // If the columns cannot be queried, simply read everything per schema —
+  // always correct when the database is not a migration behind.
+  const result = await db
+    .run(sql`select name from pragma_table_info(${name})`)
     .catch(() => null)
-  if (!vysledek) return {}
-  const jsou = new Set(vysledek.rows.map((row) => String(row.name)))
-  const vyber: Record<string, unknown> = {}
-  const table = tabulka(nazev) as unknown as Record<string, unknown>
-  for (const [klic, column] of Object.entries(sloupce(nazev))) {
-    if (jsou.has(column.name)) vyber[klic] = table[klic]
+  if (!result) return {}
+  const present = new Set(result.rows.map((row) => String(row.name)))
+  const selection: Record<string, unknown> = {}
+  const table = tableOf(name) as unknown as Record<string, unknown>
+  for (const [key, column] of Object.entries(columns(name))) {
+    if (present.has(column.name)) selection[key] = table[key]
   }
-  return vyber
+  return selection
 }
 
-export type Pocty = Record<NazevTabulky, number>
+export type Counts = Record<TableName, number>
 
-/** Kolik čeho v databázi je. Slouží k porovnání obou stran přenosu. */
-export async function spocitej(db: BackupDb, rozsah: { schoolId: string }): Promise<Pocty> {
-  const jsou = await existujiciTabulky(db)
-  const pocty = prazdnePocty()
-  for (const nazev of PORADI) {
-    if (!jsou.has(nazev)) continue
-    const table = tabulka(nazev)
+/** How much of what is in the database. Used to compare both sides of a transfer. */
+export async function countRows(db: BackupDb, scope: { schoolId: string }): Promise<Counts> {
+  const present = await existingTables(db)
+  const counts = emptyCounts()
+  for (const name of TABLE_ORDER) {
+    if (!present.has(name)) continue
+    const table = tableOf(name)
     const [row] = await db
       .select({ value: sql<number>`count(*)` })
       .from(table)
-      .where(eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, rozsah.schoolId))
-    pocty[nazev] = Number(row?.value ?? 0)
+      .where(eq((table as unknown as { schoolId: AnySQLiteColumn }).schoolId, scope.schoolId))
+    counts[name] = Number(row?.value ?? 0)
   }
-  return pocty
+  return counts
 }
 
-/** Prázdné počty — hodí se jako výchozí hodnota při sčítání. */
-export function prazdnePocty(): Pocty {
-  const pocty = {} as Pocty
-  for (const nazev of PORADI) pocty[nazev] = 0
-  return pocty
+/** Empty counts — handy as the starting value when summing. */
+export function emptyCounts(): Counts {
+  const counts = {} as Counts
+  for (const name of TABLE_ORDER) counts[name] = 0
+  return counts
 }
 
 /**
- * Záloha po kouscích textu. Skládá se ručně, protože celý soubor (dnes ~2,5 MB
- * a poroste) nemá smysl držet v paměti jen proto, aby se z něj udělal jeden
- * řetězec — odpověď tak může odtékat průběžně.
+ * Backup in text chunks. Assembled by hand because there is no point holding
+ * the whole file (~2.5 MB today and growing) in memory just to make one
+ * string — the response can stream out as it goes.
  */
-export async function* zalohaKousky(
+export async function* backupChunks(
   db: BackupDb,
-  rozsah: { schoolId: string },
+  scope: { schoolId: string },
 ): AsyncGenerator<string> {
-  yield `{"format":${JSON.stringify(FORMAT)},"verze":${VERZE},"vytvoreno":${JSON.stringify(
+  yield `{"format":${JSON.stringify(FORMAT)},"verze":${VERSION},"vytvoreno":${JSON.stringify(
     new Date().toISOString(),
   )},"tabulky":{`
 
-  const jsou = await existujiciTabulky(db)
-  let prvniTabulka = true
-  for (const nazev of PORADI) {
-    if (!jsou.has(nazev)) continue
-    yield `${prvniTabulka ? '' : ','}${JSON.stringify(nazev)}:[`
-    prvniTabulka = false
-    let prvniRadek = true
-    for await (const rows of citejTabulku(db, nazev, rozsah)) {
-      const text = rows.map((row) => JSON.stringify(doJson(nazev, row))).join(',')
-      yield prvniRadek ? text : `,${text}`
-      prvniRadek = false
+  const present = await existingTables(db)
+  let firstTable = true
+  for (const name of TABLE_ORDER) {
+    if (!present.has(name)) continue
+    yield `${firstTable ? '' : ','}${JSON.stringify(name)}:[`
+    firstTable = false
+    let firstRow = true
+    for await (const rows of readTable(db, name, scope)) {
+      const text = rows.map((row) => JSON.stringify(toJson(name, row))).join(',')
+      yield firstRow ? text : `,${text}`
+      firstRow = false
     }
     yield ']'
   }
@@ -494,14 +508,14 @@ export async function* zalohaKousky(
   yield '}}'
 }
 
-/** Celá záloha jako jeden řetězec — pro testy a pro skript, ne pro odpověď. */
-export async function zalohaText(db: BackupDb, rozsah: { schoolId: string }): Promise<string> {
+/** The whole backup as one string — for tests and the script, not for the response. */
+export async function backupText(db: BackupDb, scope: { schoolId: string }): Promise<string> {
   let text = ''
-  for await (const kousek of zalohaKousky(db, rozsah)) text += kousek
+  for await (const chunk of backupChunks(db, scope)) text += chunk
   return text
 }
 
-/** Název staženého souboru: `testmaker-zaloha-2026-09-18.json`. */
-export function nazevSouboru(kdy = new Date()): string {
-  return `testmaker-zaloha-${kdy.toISOString().slice(0, 10)}.json`
+/** Name of the downloaded file: `testmaker-zaloha-2026-09-18.json`. */
+export function backupFileName(when = new Date()): string {
+  return `testmaker-zaloha-${when.toISOString().slice(0, 10)}.json`
 }

@@ -3,8 +3,9 @@ import { composeRandomTest, type RandomTestRequest } from '../src/compose/random
 import type { Question, QuestionType } from '../src/schema/question'
 
 /**
- * Náhodné sestavení písemky. Otázky se vyrábějí tady a ne přes `fixtures.ts`,
- * protože rozhoduje jen to, co výběr čte: téma, typ, obtížnost, stav a body.
+ * Random test composition. Questions are built here rather than via
+ * `fixtures.ts` because only what the selection reads matters: topic, type,
+ * difficulty, status and points.
  */
 function q(
   id: string,
@@ -34,7 +35,7 @@ function q(
   } as Question
 }
 
-/** Banka: čtyři témata po šesti otázkách, střídají se tři typy. */
+/** Bank: four topics with six questions each, cycling through three types. */
 function bank(): Question[] {
   const types: QuestionType[] = ['single_choice', 'open', 'short_answer']
   return ['t1', 't2', 't3', 't4'].flatMap((topic) =>
@@ -47,33 +48,33 @@ function bank(): Question[] {
   )
 }
 
-const zadani = (over: Partial<RandomTestRequest> = {}): RandomTestRequest => ({
+const assignment = (over: Partial<RandomTestRequest> = {}): RandomTestRequest => ({
   topicIds: ['t1', 't2', 't3', 't4'],
   limit: { kind: 'count', count: 10 },
   seed: 'seed-1',
   ...over,
 })
 
-/** Kolik otázek připadlo na které téma. */
-function podleTemat(questions: Question[]): Record<string, number> {
+/** How many questions fell on each topic. */
+function byTopic(questions: Question[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const question of questions) counts[question.topicId ?? '—'] = (counts[question.topicId ?? '—'] ?? 0) + 1
   return counts
 }
 
 describe('composeRandomTest', () => {
-  it('rozprostře otázky mezi vybraná témata, ne deset z jednoho', () => {
-    const result = composeRandomTest(bank(), zadani())
+  it('spreads questions across the chosen topics, not ten from one', () => {
+    const result = composeRandomTest(bank(), assignment())
     expect(result.questions).toHaveLength(10)
 
-    const counts = podleTemat(result.questions)
+    const counts = byTopic(result.questions)
     expect(Object.keys(counts).sort()).toEqual(['t1', 't2', 't3', 't4'])
-    // Deset otázek na čtyři témata: dvě nebo tři na každé, nic jiného.
+    // Ten questions over four topics: two or three each, nothing else.
     for (const count of Object.values(counts)) {
       expect(count).toBeGreaterThanOrEqual(2)
       expect(count).toBeLessThanOrEqual(3)
     }
-    // Hlášení o rozdělení odpovídá tomu, co opravdu vyšlo.
+    // The breakdown report matches what was actually picked.
     for (const share of result.topics) {
       expect(share.picked).toBe(counts[share.topicId ?? '—'] ?? 0)
       expect(share.available).toBe(6)
@@ -82,19 +83,19 @@ describe('composeRandomTest', () => {
     expect(result.notes).toEqual([])
   })
 
-  it('rozprostře otázky i mezi typy', () => {
-    const result = composeRandomTest(bank(), zadani({ limit: { kind: 'count', count: 9 } }))
+  it('spreads questions across types too', () => {
+    const result = composeRandomTest(bank(), assignment({ limit: { kind: 'count', count: 9 } }))
     const types = new Map<string, number>()
     for (const question of result.questions) types.set(question.type, (types.get(question.type) ?? 0) + 1)
     expect([...types.keys()].sort()).toEqual(['open', 'short_answer', 'single_choice'])
-    // Devět otázek, tři typy — po třech od každého.
+    // Nine questions, three types — three of each.
     for (const count of types.values()) expect(count).toBe(3)
   })
 
-  it('bere jen povolené typy a jen zvolenou obtížnost', () => {
+  it('takes only allowed types and only the chosen difficulty', () => {
     const result = composeRandomTest(
       bank(),
-      zadani({ types: ['open'], difficulty: 2, limit: { kind: 'count', count: 8 } }),
+      assignment({ types: ['open'], difficulty: 2, limit: { kind: 'count', count: 8 } }),
     )
     expect(result.questions.length).toBeGreaterThan(0)
     for (const question of result.questions) {
@@ -103,38 +104,38 @@ describe('composeRandomTest', () => {
     }
   })
 
-  it('losuje jen ze zaškrtnutých témat', () => {
-    const result = composeRandomTest(bank(), zadani({ topicIds: ['t2', 't3'] }))
+  it('draws only from the ticked topics', () => {
+    const result = composeRandomTest(bank(), assignment({ topicIds: ['t2', 't3'] }))
     expect(new Set(result.questions.map((question) => question.topicId))).toEqual(new Set(['t2', 't3']))
   })
 
-  it('bez „jen schválené“ bere i koncepty, se zaškrtnutím ne', () => {
+  it('without "approved only" takes drafts too, with it ticked it does not', () => {
     const questions = [
       q('a1', 't1', 'open'),
       q('a2', 't1', 'open', { status: 'draft' }),
       q('a3', 't1', 'open', { status: 'rejected' }),
     ]
-    const vse = composeRandomTest(questions, zadani({ topicIds: ['t1'], limit: { kind: 'count', count: 3 } }))
-    expect(vse.questions).toHaveLength(3)
+    const all = composeRandomTest(questions, assignment({ topicIds: ['t1'], limit: { kind: 'count', count: 3 } }))
+    expect(all.questions).toHaveLength(3)
 
-    const jenSchvalene = composeRandomTest(
+    const approvedOnly = composeRandomTest(
       questions,
-      zadani({ topicIds: ['t1'], limit: { kind: 'count', count: 3 }, onlyApproved: true }),
+      assignment({ topicIds: ['t1'], limit: { kind: 'count', count: 3 }, onlyApproved: true }),
     )
-    expect(jenSchvalene.questions.map((question) => question.id)).toEqual(['a1'])
-    expect(jenSchvalene.shortfall).toBe(2)
+    expect(approvedOnly.questions.map((question) => question.id)).toEqual(['a1'])
+    expect(approvedOnly.shortfall).toBe(2)
   })
 
-  it('když otázek není dost, vloží co je a řekne to', () => {
-    const result = composeRandomTest(bank(), zadani({ limit: { kind: 'count', count: 40 } }))
+  it('when there are not enough questions, inserts what there is and says so', () => {
+    const result = composeRandomTest(bank(), assignment({ limit: { kind: 'count', count: 40 } }))
     expect(result.questions).toHaveLength(24)
     expect(result.shortfall).toBe(16)
     expect(result.notes.join(' ')).toContain('jen 24 z požadovaných 40')
   })
 
-  it('u tématu bez vyhovující otázky to řekne zvlášť', () => {
+  it('reports a topic without any matching question separately', () => {
     const questions = [...bank(), ...[]]
-    const result = composeRandomTest(questions, zadani({ topicIds: ['t1', 'prazdne'] }))
+    const result = composeRandomTest(questions, assignment({ topicIds: ['t1', 'prazdne'] }))
     expect(result.topics.find((topic) => topic.topicId === 'prazdne')).toEqual({
       topicId: 'prazdne',
       picked: 0,
@@ -143,50 +144,50 @@ describe('composeRandomTest', () => {
     expect(result.notes.join(' ')).toContain('Jedno vybrané téma')
   })
 
-  it('bez jediné vyhovující otázky vrátí prázdno a poradí', () => {
-    const result = composeRandomTest(bank(), zadani({ types: ['matching'] }))
+  it('with no matching question at all returns nothing and gives advice', () => {
+    const result = composeRandomTest(bank(), assignment({ types: ['matching'] }))
     expect(result.questions).toEqual([])
     expect(result.notes.join(' ')).toContain('Filtrům nevyhovuje ani jedna otázka')
   })
 
-  it('umí se řídit celkovým počtem bodů', () => {
-    const result = composeRandomTest(bank(), zadani({ limit: { kind: 'points', points: 12 } }))
+  it('can follow a total point count', () => {
+    const result = composeRandomTest(bank(), assignment({ limit: { kind: 'points', points: 12 } }))
     expect(result.totalPoints).toBe(12)
     expect(result.shortfall).toBe(0)
     expect(result.questions.reduce((sum, question) => sum + question.points, 0)).toBe(12)
   })
 
-  it('u bodů nepřestřelí cíl, když se trefit dá', () => {
-    // Jedna otázka za pět bodů a dost jednobodových: cíl 4 b. musí vyjít přesně.
+  it('does not overshoot the points target when it can be hit', () => {
+    // One five-point question and plenty of one-pointers: a 4-point target must be hit exactly.
     const questions = [
       q('velka', 't1', 'open', { points: 5 }),
       ...Array.from({ length: 6 }, (_, i) => q(`mala-${i}`, 't1', 'short_answer', { points: 1 })),
     ]
-    const result = composeRandomTest(questions, zadani({ topicIds: ['t1'], limit: { kind: 'points', points: 4 } }))
+    const result = composeRandomTest(questions, assignment({ topicIds: ['t1'], limit: { kind: 'points', points: 4 } }))
     expect(result.totalPoints).toBe(4)
     expect(result.questions.map((question) => question.id)).not.toContain('velka')
   })
 
-  it('stejný seed dá stejný výběr i pořadí', () => {
-    const a = composeRandomTest(bank(), zadani({ seed: 'pisemka-1' }))
-    const b = composeRandomTest(bank(), zadani({ seed: 'pisemka-1' }))
+  it('the same seed gives the same selection and order', () => {
+    const a = composeRandomTest(bank(), assignment({ seed: 'pisemka-1' }))
+    const b = composeRandomTest(bank(), assignment({ seed: 'pisemka-1' }))
     expect(a.questions.map((question) => question.id)).toEqual(b.questions.map((question) => question.id))
   })
 
-  it('nezáleží na pořadí, ve kterém otázky přijdou z databáze', () => {
-    const a = composeRandomTest(bank(), zadani({ seed: 'pisemka-1' }))
-    const b = composeRandomTest([...bank()].reverse(), zadani({ seed: 'pisemka-1' }))
+  it('does not depend on the order questions come from the database', () => {
+    const a = composeRandomTest(bank(), assignment({ seed: 'pisemka-1' }))
+    const b = composeRandomTest([...bank()].reverse(), assignment({ seed: 'pisemka-1' }))
     expect(a.questions.map((question) => question.id)).toEqual(b.questions.map((question) => question.id))
   })
 
-  it('jiný seed dá jiný výběr nebo jiné pořadí', () => {
-    const a = composeRandomTest(bank(), zadani({ seed: 'pisemka-1' }))
-    const b = composeRandomTest(bank(), zadani({ seed: 'pisemka-2' }))
+  it('a different seed gives a different selection or order', () => {
+    const a = composeRandomTest(bank(), assignment({ seed: 'pisemka-1' }))
+    const b = composeRandomTest(bank(), assignment({ seed: 'pisemka-2' }))
     expect(a.questions.map((question) => question.id)).not.toEqual(b.questions.map((question) => question.id))
   })
 
-  it('táž otázka se ve výběru neopakuje', () => {
-    const result = composeRandomTest(bank(), zadani({ limit: { kind: 'count', count: 24 } }))
+  it('the same question is never picked twice', () => {
+    const result = composeRandomTest(bank(), assignment({ limit: { kind: 'count', count: 24 } }))
     expect(new Set(result.questions.map((question) => question.id)).size).toBe(24)
   })
 })

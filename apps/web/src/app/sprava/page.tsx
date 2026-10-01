@@ -1,4 +1,5 @@
 import { asc, desc, eq } from 'drizzle-orm'
+import { t } from '@testmaker/core/i18n'
 import { PageShell } from '@testmaker/ui'
 import { auditLog, db, schools, users } from '@/db'
 import { loadAiQuality } from '@/lib/aiQuality'
@@ -6,31 +7,33 @@ import { countJobs } from '@/lib/jobs'
 import { aiStatus } from '@/lib/ai'
 import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
-import { roleMuzeSpravovat } from '@/lib/role'
-import { ucetStranky } from '@/lib/uzivatel'
-import { SpravaScreen } from './SpravaScreen'
+import { roleCanManage } from '@/lib/role'
+import { pageAccount } from '@/lib/user'
+import { ManagementScreen } from './ManagementScreen'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Správa – TestMaker' }
+export function generateMetadata() {
+  return { title: t('admin:management.metaTitle') }
+}
 
-/** Kolik událostí se ukáže naráz. Starší si správce dohledá filtrem. */
-const UDALOSTI = 100
+/** How many events are shown at once. The manager finds older ones with a filter. */
+const EVENT_LIMIT = 100
 
 /**
- * Správa školy: účty, události a chyby, provoz. Sem se dostane jedině
- * správce — hlídá to brána i tahle stránka.
+ * School management: accounts, events and errors, operations. Only a manager
+ * gets here — both the gateway and this page check it.
  */
-export default async function SpravaPage() {
-  const ucet = await ucetStranky()
-  if (!roleMuzeSpravovat(ucet.role)) {
+export default async function ManagementPage() {
+  const account = await pageAccount()
+  if (!roleCanManage(account.role)) {
     return (
       <PageShell>
-        <p className="text-sm text-fg-soft">Do správy má přístup jen správce školy.</p>
+        <p className="text-sm text-fg-soft">{t('admin:management.noAccess')}</p>
       </PageShell>
     )
   }
 
-  const [uzivatele, udalosti, [skola], fronta, aiKvalita, pravidla] = await Promise.all([
+  const [accounts, events, [school], queue, aiQuality, rules] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -44,7 +47,7 @@ export default async function SpravaPage() {
         lastLoginAt: users.lastLoginAt,
       })
       .from(users)
-      .where(eq(users.schoolId, ucet.schoolId))
+      .where(eq(users.schoolId, account.schoolId))
       .orderBy(asc(users.name)),
     db
       .select({
@@ -55,13 +58,13 @@ export default async function SpravaPage() {
         entityId: auditLog.entityId,
         detail: auditLog.detail,
         severity: auditLog.severity,
-        kdo: users.name,
+        who: users.name,
       })
       .from(auditLog)
       .leftJoin(users, eq(users.id, auditLog.userId))
-      .where(eq(auditLog.schoolId, ucet.schoolId))
+      .where(eq(auditLog.schoolId, account.schoolId))
       .orderBy(desc(auditLog.at), desc(auditLog.id))
-      .limit(UDALOSTI),
+      .limit(EVENT_LIMIT),
     db
       .select({
         name: schools.name,
@@ -69,41 +72,41 @@ export default async function SpravaPage() {
         googleAutoJoin: schools.googleAutoJoin,
       })
       .from(schools)
-      .where(eq(schools.id, ucet.schoolId))
+      .where(eq(schools.id, account.schoolId))
       .limit(1),
-    countJobs(ucet),
-    loadAiQuality(ucet),
-    loadPromptRules(ucet),
+    countJobs(account),
+    loadAiQuality(account),
+    loadPromptRules(account),
   ])
   const ai = aiStatus()
 
   return (
     <PageShell>
-      <SpravaScreen
-        ja={ucet.userId}
-        skola={skola?.name ?? ''}
-        googleDomain={skola?.googleDomain ?? null}
-        googleAutoJoin={skola?.googleAutoJoin ?? false}
-        uzivatele={uzivatele.map((row) => ({
+      <ManagementScreen
+        me={account.userId}
+        school={school?.name ?? ''}
+        googleDomain={school?.googleDomain ?? null}
+        googleAutoJoin={school?.googleAutoJoin ?? false}
+        users={accounts.map((row) => ({
           id: row.id,
           email: row.email,
           name: row.name,
           role: row.role,
           status: row.status,
-          // Ven jde jen „heslo má / nemá"; hash na obrazovku nepatří.
-          maHeslo: Boolean(row.passwordHash),
-          maGoogle: Boolean(row.googleSub),
+          // Only "has a password / has not" goes out; the hash does not belong on screen.
+          hasPassword: Boolean(row.passwordHash),
+          hasGoogle: Boolean(row.googleSub),
           mustChangePassword: row.mustChangePassword,
           lastLoginAt: row.lastLoginAt,
         }))}
-        udalosti={udalosti}
-        fronta={fronta}
-        aiKvalita={aiKvalita}
-        pravidla={pravidla}
-        maxPravidel={MAX_ACTIVE_PROMPT_RULES}
+        events={events}
+        queue={queue}
+        aiQuality={aiQuality}
+        rules={rules}
+        maxRules={MAX_ACTIVE_PROMPT_RULES}
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
-        prihlasovani={authMode()}
+        authModeValue={authMode()}
       />
     </PageShell>
   )

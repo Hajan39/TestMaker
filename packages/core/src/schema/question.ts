@@ -1,7 +1,8 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 import { blockSchema } from './blocks'
 
-/** Typy otázek podporované aplikací. */
+/** Question types supported by the app. */
 export const QUESTION_TYPES = [
   'open',
   'draw',
@@ -18,30 +19,22 @@ export const QUESTION_TYPES = [
 
 export type QuestionType = (typeof QUESTION_TYPES)[number]
 
-export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  open: 'Volná odpověď',
-  draw: 'Nakresli a popiš',
-  short_answer: 'Krátká odpověď',
-  single_choice: 'Výběr jedné možnosti',
-  multi_choice: 'Výběr více možností',
-  true_false: 'Pravda / nepravda',
-  fill_blank: 'Doplňování do textu',
-  matching: 'Přiřazování dvojic',
-  ordering: 'Řazení',
-  table_fill: 'Doplňovací tabulka',
-  label_image: 'Popis obrázku',
+/** Name of the question type shown to the teacher (and used in model prompts). */
+export function questionTypeLabel(type: QuestionType): string {
+  return t(`core:questionTypes.${type}`)
 }
 
 /**
- * Typy, které generuje AI v aplikaci. Přiřazování, řazení a doplňování do
- * textu se přidaly, když generování přešlo na Gemini — ten indexy a počty
- * trefuje spolehlivě. Výběr více možností a volná odpověď přibyly
- * rozhodnutím majitele z 27. 9. 2026: `validateQuestionContent` u nich hlídá
- * totéž, co u ostatních (index mimo rozsah, opakovaná možnost…), takže
- * případné selhání modelu otázku jen zahodí, ne že by prošla do banky
- * rozbitá. Tabulky a popis obrázku zůstávají pro ruční tvorbu a pro otázky
- * z Claude Code (`/otazky`) — u tabulek model plete sloupce a řádky, popis
- * obrázku navíc potřebuje obrázek, který se ve fázi 1 negeneruje.
+ * Types the AI generates in the app. Matching, ordering and fill-in-the-blank
+ * were added when generation moved to Gemini — it gets indices and counts
+ * right reliably. Multiple choice and open answers were added by the owner's
+ * decision of 27 Sep 2026: `validateQuestionContent` checks the same things
+ * for them as for the others (index out of range, repeated option…), so a
+ * model failure only drops the question instead of letting it into the bank
+ * broken. Tables and image labelling stay for manual authoring and for
+ * questions from Claude Code (`/otazky`) — the model mixes up columns and rows
+ * in tables, and image labelling also needs an image, which phase 1 does not
+ * generate.
  */
 export const AI_QUESTION_TYPES = [
   'single_choice',
@@ -56,32 +49,33 @@ export const AI_QUESTION_TYPES = [
 
 export type AiQuestionType = (typeof AI_QUESTION_TYPES)[number]
 
-/* ------------------------------------------------------------------ payloady */
+/* ------------------------------------------------------------------ payloads */
 
 export const openPayloadSchema = z.object({
   prompt: z.string().min(3),
-  /** Počet linek na odpověď. */
+  /** Number of answer lines. */
   lines: z.number().int().min(1).max(20).default(4),
   answer: z.string().min(1),
 })
 
 /**
- * Nakresli a popiš — jako volná odpověď, jen se místo linek tiskne prázdné
- * místo na kresbu. Výška místa se udává v řádcích (`lines` × výška linky
- * z šablony), aby šla v písemce přepsat týmž `linesOverride` jako u `open`.
+ * Draw and describe — like an open answer, but blank space for a drawing is
+ * printed instead of lines. The height of the space is given in lines
+ * (`lines` × line height from the template), so it can be overridden in the
+ * test with the same `linesOverride` as for `open`.
  */
 export const drawPayloadSchema = z.object({
   prompt: z.string().min(3),
-  /** Výška prázdného místa v řádcích. */
+  /** Height of the blank space in lines. */
   lines: z.number().int().min(1).max(30).default(8),
-  /** Co má kresba obsahovat a jak ji popsat — do klíče. */
+  /** What the drawing should contain and how to label it — for the answer key. */
   answer: z.string().min(1),
 })
 
 export const shortAnswerPayloadSchema = z.object({
   prompt: z.string().min(3),
   answer: z.string().min(1),
-  /** Další uznávané varianty odpovědi. */
+  /** Other accepted answer variants. */
   acceptedAnswers: z.array(z.string().min(1)).max(10).default([]),
 })
 
@@ -107,11 +101,11 @@ export const trueFalsePayloadSchema = z.object({
 
 export const fillBlankPayloadSchema = z.object({
   prompt: z.string().default('Doplň chybějící výrazy.'),
-  /** Text s místy k doplnění označenými `___` (tři podtržítka). */
+  /** Text with blanks marked by `___` (three underscores). */
   text: z.string().min(5),
-  /** Správné výrazy v pořadí výskytu `___`. */
+  /** Correct expressions in order of the `___` occurrences. */
   blanks: z.array(z.string().min(1)).min(1).max(20),
-  /** Nabídka slov navíc (volitelná banka výrazů pod zadáním). */
+  /** Extra words on offer (optional word bank below the prompt). */
   wordBank: z.array(z.string().min(1)).max(30).default([]),
 })
 
@@ -120,10 +114,10 @@ export const matchingPayloadSchema = z.object({
   left: z.array(z.string().min(1)).min(2).max(12),
   right: z.array(z.string().min(1)).min(2).max(12),
   /**
-   * Dvojice [indexVlevo, indexVpravo]. Záměrně pole o dvou prvcích, ne
-   * `z.tuple` — z tuple vzniká JSON schéma s `items` jako polem schémat
-   * a Google Gemini takové schéma odmítne ("items must be a boolean or an
-   * object"). Délku hlídá `.length(2)`.
+   * Pairs [leftIndex, rightIndex]. Deliberately a two-element array, not
+   * `z.tuple` — a tuple produces a JSON schema with `items` as an array of
+   * schemas and Google Gemini rejects such a schema ("items must be a boolean
+   * or an object"). The length is enforced by `.length(2)`.
    */
   pairs: z
     .array(
@@ -138,52 +132,54 @@ export const matchingPayloadSchema = z.object({
 export const orderingPayloadSchema = z.object({
   prompt: z.string().min(3),
   /**
-   * Položky. U starších dat (bez `correctOrder`) i pro vykreslení (PDF, klíč
-   * odpovědí) platí, že jsou už ve správném pořadí — zamíchá je až tisk.
+   * Items. For older data (without `correctOrder`) and for rendering (PDF,
+   * answer key) they are already in the correct order — only printing
+   * shuffles them.
    */
   items: z.array(z.string().min(1)).min(3).max(12),
   /**
-   * Nepovinné: indexy do `items` udávající skutečně správné pořadí. Model si
-   * často splete "vypsat položky" a "vypsat je ve správném pořadí" a bez
-   * odděleného pole to nejde odhalit ani opravit. Když je vyplněné,
-   * `normalizeOrderingPayload` podle něj `items` přeuspořádá a pole samo se
-   * před uložením zahodí — na tvar uložených dat i PDF se tím nic nemění.
+   * Optional: indices into `items` giving the actual correct order. The model
+   * often confuses "list the items" with "list them in the correct order",
+   * and without a separate field that cannot be detected or fixed. When set,
+   * `normalizeOrderingPayload` reorders `items` by it and drops the field
+   * before saving — the shape of stored data and the PDF stay unchanged.
    */
   correctOrder: z.array(z.number().int().min(0)).min(3).max(12).optional(),
 })
 
 export const tableFillPayloadSchema = z.object({
   prompt: z.string().min(3),
-  /** Hlavičkový řádek tabulky. */
+  /** Header row of the table. */
   headers: z.array(z.string()).min(1).max(8),
-  /** Řádky; buňka `null` znamená místo k doplnění. */
+  /** Rows; a `null` cell is a blank to fill in. */
   rows: z.array(z.array(z.string().nullable()).min(1)).min(1).max(20),
-  /** Správné hodnoty pro `null` buňky v pořadí čtení po řádcích. */
+  /** Correct values for the `null` cells in row-by-row reading order. */
   answers: z.array(z.string().min(1)).min(1),
 })
 
 export const labelImagePayloadSchema = z.object({
   prompt: z.string().min(3),
   assetId: z.string().min(1),
-  /** Popisky očíslovaných míst v obrázku. */
+  /** Labels of the numbered spots in the image. */
   labels: z.array(z.string().min(1)).min(1).max(20),
 })
 
-/* ------------------------------------------------------------------ otázka */
+/* ------------------------------------------------------------------ question */
 
 const baseFields = {
-  /** Body za otázku; u testu bez známek se nevykreslují. */
+  /** Points for the question; not rendered for ungraded tests. */
   points: z.number().min(0).max(100).default(1),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2),
-  /** Poznámka do klíče (proč je odpověď správně). */
+  /** Note for the answer key (why the answer is correct). */
   explanation: z.string().max(1000).optional(),
   blocks: z.array(blockSchema).max(5).default([]),
-  /** Doklad původu: soubor a pasáž, o kterou se otázka opírá. */
+  /** Evidence of origin: the file and passage the question relies on. */
   evidence: z
     .object({
       fileName: z.string().min(1),
-      /* Délka se neomezuje — validace celého objektu by kvůli jediné otázce
-       * shodila celou dávku. Ořez i případ prázdné citace řeší až uložení. */
+      /* Length is not limited — validating the whole object would fail the
+       * entire batch because of a single question. Trimming and an empty
+       * quote are handled on save. */
       quote: z.string(),
     })
     .optional(),
@@ -205,32 +201,33 @@ export const questionContentSchema = z.discriminatedUnion('type', [
 
 export type QuestionContent = z.infer<typeof questionContentSchema>
 
-/** Nejdelší citace, kterou ukládáme jako doklad původu — delší se ořízne. */
+/** Longest quote stored as evidence of origin — longer ones are trimmed. */
 export const MAX_EVIDENCE_QUOTE_LENGTH = 400
 
 /**
- * Přeuspořádá `items` řazené otázky podle `correctOrder`, pokud ho model
- * vyplnil, a `correctOrder` z výsledku odstraní. Volá se před uložením, takže
- * PDF i klíč odpovědí (které pořadí berou přímo z `items`) o novém poli
- * vůbec nemusí vědět a nemusí se kvůli němu měnit.
+ * Reorders the `items` of an ordering question by `correctOrder` if the model
+ * filled it in, and removes `correctOrder` from the result. Called before
+ * saving, so the PDF and the answer key (which take the order straight from
+ * `items`) need not know about the new field at all.
  */
 export function normalizeOrderingPayload(q: QuestionContent): QuestionContent {
   if (q.type !== 'ordering') return q
   const { correctOrder, ...rest } = q.payload
   if (!correctOrder) return q
-  // Platnost correctOrder jako permutace indexů items ověřuje validateQuestionContent
-  // dřív, než se sem vůbec dostane — tady už jde jen o přeuspořádání.
+  // validateQuestionContent checks that correctOrder is a permutation of the
+  // item indices before we ever get here — this is only the reordering.
   return { ...q, payload: { ...rest, items: correctOrder.map((i) => rest.items[i] as string) } }
 }
 
 /**
- * Když model vrátí přiřazování s pravým sloupcem ve stejném pořadí jako
- * levý (dvojice `[0,0], [1,1], …`), na papíře by šlo přiřadit bez čtení —
- * stačí spojit řádek s řádkem naproti. Tahle funkce takový případ pozná
- * a pravý sloupec deterministicky posune o jednu pozici (cyklicky), takže
- * žádná položka nezůstane na svém původním místě, ale dvojice pořád
- * odkazují na tytéž věcné páry. Nejde o náhodu — stejný vstup musí dát
- * pokaždé stejný výstup, jinak by se testy i ruční ověření neshodovaly.
+ * When the model returns matching with the right column in the same order as
+ * the left one (pairs `[0,0], [1,1], …`), it could be solved on paper without
+ * reading — just connect each row with the one opposite. This function
+ * detects that case and deterministically shifts the right column by one
+ * position (cyclically), so no item stays in its original place while the
+ * pairs still point to the same factual pairs. It is not random — the same
+ * input must always give the same output, otherwise tests and manual checks
+ * would disagree.
  */
 export function normalizeMatchingPayload(q: QuestionContent): QuestionContent {
   if (q.type !== 'matching') return q
@@ -244,10 +241,11 @@ export function normalizeMatchingPayload(q: QuestionContent): QuestionContent {
 }
 
 /**
- * Doklad původu z odpovědi modelu na uložitelnou podobu. Schéma délku citace
- * nekontroluje (jedna moc dlouhá nebo krátká citace by jinak shodila celou
- * dávku generování) — ošetří se až tady, při ukládání: prázdná nebo jen
- * z bílých znaků citace znamená chybějící doklad, moc dlouhá se ořízne.
+ * Evidence of origin from the model's answer in storable form. The schema
+ * does not check the quote length (one quote that is too long or too short
+ * would otherwise fail the whole generation batch) — it is handled here, on
+ * save: an empty or whitespace-only quote means missing evidence, a too long
+ * one is trimmed.
  */
 export function normalizeEvidence(
   evidence: QuestionContent['evidence'],
@@ -265,56 +263,73 @@ export function normalizeEvidence(
 }
 
 /**
- * Důvody, kvůli kterým učitelka otázku přegeneruje. Každý dodává model do
- * promptu srozumitelnou nápovědu (`hint`) a případně posouvá obtížnost
- * náhrady (`shift`) — „moc těžká"/„moc lehká" jsou jediné dva důvody, které
- * s obtížností hýbou, ostatní ji nechávají beze změny.
+ * Reasons why the teacher regenerates a question. Each gives the model a
+ * clear hint in the prompt (`hint`) and possibly shifts the difficulty of the
+ * replacement (`shift`) — "too hard"/"too easy" are the only two reasons that
+ * move difficulty, the others keep it unchanged.
  *
- * `rule` je jiná věta než `hint`: `hint` mluví o *téhle* náhradě („Předchozí
- * verze…“), zatímco `rule` je obecné, časově neurčité pravidlo pro *každé*
- * další generování — do něj se předvyplňuje editor pravidla promptu ve
- * Správě (`SpravaScreen`, „Udělat z toho pravidlo"), když správce z častého
- * důvodu přegenerování udělá trvalé pravidlo školy.
+ * `rule` is a different sentence than `hint`: `hint` talks about *this*
+ * replacement ("Předchozí verze…"), whereas `rule` is a general, timeless
+ * rule for *every* further generation — it prefills the prompt rule editor in
+ * Management (`ManagementScreen`, "Udělat z toho pravidlo") when the admin
+ * turns a frequent regeneration reason into a permanent school rule.
+ *
+ * `hint` and `rule` are model prompt texts; `label` is shown in the UI and is
+ * a getter so it is translated at the moment of use.
  */
 export const REGENERATE_REASONS = {
   nesmysl: {
-    label: 'Nedává smysl',
+    get label() {
+      return t('core:regenerateReasons.nesmysl')
+    },
     hint: 'Předchozí verze nedávala smysl — zadání musí být jasné a jednoznačné.',
     rule: 'Zadání musí být jasné a jednoznačné.',
     shift: 0,
   },
   moznosti: {
-    label: 'Špatné možnosti',
+    get label() {
+      return t('core:regenerateReasons.moznosti')
+    },
     hint: 'Předchozí verze měla špatné možnosti — právě jedna musí být správná a ostatní věrohodně špatné.',
     rule: 'Právě jedna možnost je správná, ostatní jsou věrohodně špatné.',
     shift: 0,
   },
   mimo: {
-    label: 'Odpověď v materiálu není',
+    get label() {
+      return t('core:regenerateReasons.mimo')
+    },
     hint: 'Předchozí verze se ptala na něco, co v materiálu není — drž se doslova textu.',
     rule: 'Ptej se jen na to, co v materiálu doslova stojí.',
     shift: 0,
   },
   tezka: {
-    label: 'Moc těžká',
+    get label() {
+      return t('core:regenerateReasons.tezka')
+    },
     hint: 'Předchozí verze byla na ročník moc těžká.',
     rule: 'Otázky drž spíš na spodní hranici náročnosti ročníku.',
     shift: -1,
   },
   lehka: {
-    label: 'Moc lehká',
+    get label() {
+      return t('core:regenerateReasons.lehka')
+    },
     hint: 'Předchozí verze byla moc lehká.',
     rule: 'Otázky drž spíš na horní hranici náročnosti ročníku.',
     shift: 1,
   },
   cestina: {
-    label: 'Špatná čeština',
+    get label() {
+      return t('core:regenerateReasons.cestina')
+    },
     hint: 'Předchozí verze měla chyby v češtině — piš spisovně a jednoduše.',
     rule: 'Piš spisovnou a jednoduchou češtinou bez chyb.',
     shift: 0,
   },
   odkaz: {
-    label: 'Odkazuje na materiál',
+    get label() {
+      return t('core:regenerateReasons.odkaz')
+    },
     hint: 'Předchozí verze odkazovala na materiál — otázka musí stát sama, bez zmínky o textu nebo zdroji.',
     rule: 'Otázka nikdy neodkazuje na materiál, text ani zdroj; stojí sama.',
     shift: 0,
@@ -326,7 +341,7 @@ export type RegenerateReason = keyof typeof REGENERATE_REASONS
 export const QUESTION_STATUSES = ['draft', 'approved', 'rejected'] as const
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number]
 
-/** Otázka načtená z databáze — metadata plus obsah (diskriminovaná unie podle `type`). */
+/** Question loaded from the database — metadata plus content (discriminated union by `type`). */
 export interface QuestionMeta {
   id: string
   topicId: string | null
@@ -335,17 +350,17 @@ export interface QuestionMeta {
   status: QuestionStatus
   createdAt: string
   /**
-   * Kořenová otázka, ze které tahle vznikla jako lehčí nebo těžší verze.
-   * `null` u kořenové otázky samotné. Verze verze se váže vždycky na kořen,
-   * ne na svého bezprostředního předchůdce — jinak by se verze skládaly do
-   * řetězu a karta otázky by neuměla ukázat všechny verze pohromadě.
+   * Root question this one was created from as an easier or harder version.
+   * `null` for the root question itself. A version of a version always links
+   * to the root, not to its immediate predecessor — otherwise versions would
+   * form a chain and the question card could not show all versions together.
    */
   variantOf: string | null
 }
 
 export type Question = QuestionContent & QuestionMeta
 
-/** Výchozí počet bodů podle typu otázky. */
+/** Default points by question type. */
 export const DEFAULT_POINTS: Record<QuestionType, number> = {
   open: 3,
   draw: 3,
@@ -361,12 +376,13 @@ export const DEFAULT_POINTS: Record<QuestionType, number> = {
 }
 
 /**
- * Body podle rozsahu odpovědi, jak je dává učitelka: bod za každé doplnění,
- * přiřazení nebo popisek, bod za jednoslovnou odpověď a výběr jedné možnosti,
- * dva body za výběr více možností. Model body jen hádá (nabízel i 10 bodů za
- * krátké přiřazení), proto se u těchto typů jeho číslo nepřebírá. Volná
- * odpověď a kresba nemají co počítat — u nich rozhoduje rozsah odpovědi,
- * který pozná jen model nebo učitelka, a funkce vrací `null`.
+ * Points by the scope of the answer, as the teacher gives them: a point per
+ * blank, pair or label, a point for a one-word answer and single choice, two
+ * points for multiple choice. The model only guesses points (it offered even
+ * 10 points for a short matching), so its number is not taken for these
+ * types. Open answers and drawings have nothing to count — the scope of the
+ * answer decides there, which only the model or the teacher can judge, and
+ * the function returns `null`.
  */
 export function pointsByScope(q: QuestionContent): number | null {
   switch (q.type) {
@@ -392,67 +408,67 @@ export function pointsByScope(q: QuestionContent): number | null {
   }
 }
 
-/* ------------------------------------------------------------------ validace */
+/* ------------------------------------------------------------------ validation */
 
-/** Doplňková kontrola, kterou samotné zod schéma neumí (indexy, počty). */
+/** Additional checks the zod schema alone cannot do (indices, counts). */
 export function validateQuestionContent(q: QuestionContent): string[] {
   const errors: string[] = []
   switch (q.type) {
     case 'single_choice':
       if (q.payload.correctIndex >= q.payload.options.length) {
-        errors.push('correctIndex mimo rozsah možností')
+        errors.push(t('core:validation.correctIndexOutOfRange'))
       }
       break
     case 'multi_choice': {
       const n = q.payload.options.length
-      if (q.payload.correctIndices.some((i) => i >= n)) errors.push('correctIndices mimo rozsah')
+      if (q.payload.correctIndices.some((i) => i >= n)) errors.push(t('core:validation.correctIndicesOutOfRange'))
       if (new Set(q.payload.correctIndices).size !== q.payload.correctIndices.length) {
-        errors.push('correctIndices obsahuje duplicity')
+        errors.push(t('core:validation.correctIndicesDuplicate'))
       }
-      // Správná může být jedna, víc i všechny — žák nesmí z tvaru otázky
-      // uhodnout, kolik jich má označit.
+      // One, several or all may be correct — the pupil must not guess from the
+      // shape of the question how many to mark.
       const normalizedOptions = q.payload.options.map((o) => o.trim().toLowerCase())
       if (new Set(normalizedOptions).size !== normalizedOptions.length) {
-        errors.push('možnosti se opakují')
+        errors.push(t('core:validation.optionsRepeat'))
       }
       break
     }
     case 'fill_blank': {
       const placeholders = (q.payload.text.match(/___/g) ?? []).length
       if (placeholders !== q.payload.blanks.length) {
-        errors.push(`počet ___ (${placeholders}) neodpovídá počtu blanks (${q.payload.blanks.length})`)
+        errors.push(t('core:validation.blanksMismatch', { placeholders, blanks: q.payload.blanks.length }))
       }
       break
     }
     case 'matching': {
       const { left, right, pairs } = q.payload
       if (pairs.some(([l, r]) => l >= left.length || r >= right.length)) {
-        errors.push('pairs odkazují mimo rozsah')
+        errors.push(t('core:validation.pairsOutOfRange'))
       }
       if (new Set(pairs.map(([l]) => l)).size !== pairs.length) {
-        errors.push('levý sloupec se v pairs opakuje')
+        errors.push(t('core:validation.leftRepeats'))
       }
       if (new Set(pairs.map(([, r]) => r)).size !== pairs.length) {
-        errors.push('pravý sloupec se v pairs opakuje')
+        errors.push(t('core:validation.rightRepeats'))
       }
-      // Každá položka vlevo musí mít dvojici — jinak na papíře zůstane řádek,
-      // který nejde přiřadit k ničemu. Vpravo naopak položek navíc (distraktorů)
-      // být může, ty se do pairs prostě nezahrnou.
+      // Every item on the left needs a pair — otherwise a row remains on paper
+      // that cannot be matched to anything. Extra items on the right
+      // (distractors) are allowed, they are simply not part of pairs.
       if (pairs.length !== left.length) {
-        errors.push('každá položka vlevo musí mít dvojici')
+        errors.push(t('core:validation.leftUnpaired'))
       }
       break
     }
     case 'ordering': {
       const { items, correctOrder } = q.payload
       if (new Set(items).size !== items.length) {
-        errors.push('items obsahují duplicity')
+        errors.push(t('core:validation.itemsDuplicate'))
       }
       if (correctOrder) {
         const inRange = correctOrder.every((i) => i >= 0 && i < items.length)
         const isPermutation = correctOrder.length === items.length && new Set(correctOrder).size === items.length
         if (!inRange || !isPermutation) {
-          errors.push('correctOrder není platná permutace indexů items')
+          errors.push(t('core:validation.correctOrderInvalid'))
         }
       }
       break
@@ -460,11 +476,11 @@ export function validateQuestionContent(q: QuestionContent): string[] {
     case 'table_fill': {
       const cols = q.payload.headers.length
       if (q.payload.rows.some((r) => r.length !== cols)) {
-        errors.push('řádky nemají stejný počet sloupců jako hlavička')
+        errors.push(t('core:validation.rowsColumnMismatch'))
       }
       const blanks = q.payload.rows.flat().filter((c) => c === null).length
       if (blanks !== q.payload.answers.length) {
-        errors.push(`počet prázdných buněk (${blanks}) neodpovídá počtu answers (${q.payload.answers.length})`)
+        errors.push(t('core:validation.blankCellsMismatch', { blanks, answers: q.payload.answers.length }))
       }
       break
     }
@@ -472,21 +488,21 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       break
   }
 
-  // Slabší modely rády vrátí výběr z možností schovaný do textu zadání a typ
-  // označí jako krátkou odpověď. Na papíře pak stojí „a) … b) … c) …" a pod tím
-  // linka na odpověď, přestože to měl být výběr. Do banky takovou otázku pustit
-  // nesmíme — je to chyba zadání, ne jen jiná forma.
+  // Weaker models like to return a choice hidden in the prompt text and mark
+  // the type as a short answer. The paper then shows "a) … b) … c) …" with an
+  // answer line below, although it should have been a choice. Such a question
+  // must not get into the bank — it is a broken prompt, not just another form.
   if (TYPES_WITHOUT_INLINE_OPTIONS.has(q.type)) {
     const prompt = (q.payload as { prompt?: unknown }).prompt
     if (typeof prompt === 'string' && countInlineOptions(prompt) >= 3) {
-      errors.push('zadání obsahuje vypsané možnosti (a), b), c)…) — patří do typu s výběrem, ne sem')
+      errors.push(t('core:validation.inlineOptions'))
     }
   }
 
   return errors
 }
 
-/** Typy, u kterých se možnosti vypisují zvlášť, takže v zadání nemají co dělat. */
+/** Types whose options are listed separately, so they have no place in the prompt. */
 const TYPES_WITHOUT_INLINE_OPTIONS = new Set<QuestionType>([
   'open',
   'draw',
@@ -496,9 +512,9 @@ const TYPES_WITHOUT_INLINE_OPTIONS = new Set<QuestionType>([
 ])
 
 /**
- * Kolik značek typu „a)", „B)" nebo „3)" je v textu na začátku výčtu. Hledá se
- * jen za mezerou nebo na začátku řádku, aby se nechytly zkratky uvnitř věty
- * („odpověď a) platí" ano, „např) " ne).
+ * How many markers like "a)", "B)" or "3)" start an enumeration in the text.
+ * Only after a space or at the start of a line, so abbreviations inside a
+ * sentence are not caught ("odpověď a) platí" yes, "např) " no).
  */
 function countInlineOptions(text: string): number {
   const matches = text.match(/(^|[\s(])[a-eA-E1-5][).]\s/g)

@@ -1,14 +1,15 @@
 import Link from 'next/link'
-import { Card, OTAZKY, TEMATA, pocet } from '@testmaker/ui'
+import { Card } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { NewLibraryItem, RenameLibraryItem } from '@/components/LibraryItemDialogs'
 import type { SubjectNode } from '@/lib/library'
 
 /**
- * Úvod jako rozcestník na třídy: předměty jako sekce, ročníky jako dlaždice
- * „Předmět · ročník", které vedou na `/tridy/[gradeId]`. Nahrazuje dřívější
- * postranní panel s ročníky — ten patřil ke stromu ročník-po-ročníku, tady
- * je celá třída jedna dlaždice.
+ * Home as a signpost to classes: subjects as sections, grades as
+ * "Subject · grade" tiles leading to `/tridy/[gradeId]`. Replaces the former
+ * grades sidebar — that belonged to the grade-by-grade tree; here a whole
+ * class is one tile.
  */
 export function ClassTiles({ tree }: { tree: SubjectNode[] }) {
   return (
@@ -25,7 +26,7 @@ export function ClassTiles({ tree }: { tree: SubjectNode[] }) {
           </div>
 
           {subject.grades.length === 0 ? (
-            <p className="px-1 text-sm text-fg-muted">Zatím bez ročníku.</p>
+            <p className="px-1 text-sm text-fg-muted">{t('library:classTiles.noGrades')}</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {subject.grades.map((grade) => {
@@ -34,10 +35,10 @@ export function ClassTiles({ tree }: { tree: SubjectNode[] }) {
                   <Link key={grade.id} href={`/tridy/${grade.id}`}>
                     <Card className="p-4 hover:border-brand">
                       <h3 className="min-w-0 flex-1 text-sm font-medium text-fg">
-                        {subject.name} · {grade.name || 'Bez ročníku'}
+                        {subject.name} · {grade.name || t('library:labels.noGrade')}
                       </h3>
                       <p className="mt-1 text-sm text-fg-muted">
-                        {pocet(grade.topics.length, TEMATA)} · {pocet(questionCount, OTAZKY)}
+                        {t('library:count.topics', { count: grade.topics.length })} · {t('library:count.questions', { count: questionCount })}
                       </p>
                     </Card>
                   </Link>

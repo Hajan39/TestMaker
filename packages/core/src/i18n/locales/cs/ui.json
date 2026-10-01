@@ -1,0 +1,76 @@
+{
+  "navList": {
+    "unreviewedDrafts": "Čekají nezkontrolované koncepty"
+  },
+  "deleteButton": {
+    "findingImpact": "Zjišťuji, co zmizí…",
+    "irreversible": "Akci nejde vrátit zpět."
+  },
+  "themeToggle": {
+    "group": "Motiv",
+    "light": "Světlý motiv",
+    "dark": "Tmavý motiv",
+    "system": "Podle systému"
+  },
+  "print": {
+    "preparing": "Připravuji tisk…",
+    "failed": "PDF se nepodařilo připravit.",
+    "retry": "Zkus to za chvíli znovu; když to nepomůže, obnov stránku."
+  },
+  "threePane": {
+    "first": "Předměty a ročníky",
+    "second": "Témata ročníku",
+    "content": "Obsah tématu"
+  },
+  "paper": {
+    "puzzle": {
+      "notInGrid": "{{word}}: v mřížce není",
+      "phrase": "Tajenka:",
+      "rows": "Doplňovačka:",
+      "clues": "Otázky:"
+    },
+    "header": {
+      "titlePlaceholder": "Název písemky",
+      "variantB": "(varianta B)",
+      "points": "Body: ______ / {{total}}",
+      "grade": "Známka: ______",
+      "teacher": "Vyučující: {{teacher}}",
+      "note": "Poznámka: {{note}}"
+    },
+    "question": {
+      "points": "({{points}} b.)",
+      "image": "obrázek",
+      "imageToLabel": "obrázek k popisu",
+      "answer": "Odpověď:",
+      "statement": "Tvrzení",
+      "yes": "ANO",
+      "no": "NE",
+      "wordBank": "Nabídka: {{words}}",
+      "matchingHint": "Do rámečku napiš písmeno možnosti vpravo, která patří k položce vlevo.",
+      "orderingHint": "Do rámečku napiš pořadové číslo (1, 2, 3, …), v jakém pořadí položky jdou za sebou."
+    }
+  },
+  "questionPreview": {
+    "points": "{{points}} b.",
+    "difficulty": {
+      "1": "lehká",
+      "2": "střední",
+      "3": "těžká"
+    },
+    "status": {
+      "approved": "schváleno",
+      "draft": "koncept",
+      "rejected": "zamítnuto"
+    },
+    "manual": "vlastní",
+    "keyNote": "Pozn. do klíče: {{note}}",
+    "modelAnswer": "Vzorová odpověď ({{lines}} ř.)",
+    "drawingContent": "Co má kresba obsahovat ({{lines}} ř. místa)",
+    "answer": "Odpověď",
+    "yes": "ANO",
+    "no": "NE",
+    "fill": "Doplnit",
+    "pairs": "Dvojice",
+    "labels": "Popisky"
+  }
+}

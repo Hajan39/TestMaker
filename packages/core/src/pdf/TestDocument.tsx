@@ -1,4 +1,5 @@
 import { Document, Page, Text, View } from '@react-pdf/renderer'
+import { t } from '../i18n'
 import type { Question } from '../schema/question'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
@@ -15,10 +16,10 @@ import { sanitizeText } from './text'
 
 const LIGHT = '0.6pt solid #999'
 
-/** Jeden generický dokument řízený `template.config` — žádná šablona není hard-coded. */
+/** One generic document driven by `template.config` — no template is hard-coded. */
 export function TestDocument({ test, template, items, variant, withKey, assets }: RenderableTest) {
   const config = template.config
-  // Hlavolam ve variantě B dostane jiný seed — mřížka i klíč pak berou tentýž.
+  // A puzzle in variant B gets a different seed — grid and key then use the same one.
   const ordered = buildVariant(items, variant, test.id).map((item) =>
     item.kind === 'puzzle' && item.puzzle ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) } : item,
   )
@@ -29,10 +30,10 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
   )
 
   let questionIndex = -1
-  // Samostatný hlavolam (viz `loadRenderablePuzzle`) žádnou variantu nemá —
-  // „varianta A“ v klíči i v patičce by jen mátla.
+  // A standalone puzzle (see `loadRenderablePuzzle`) has no variant —
+  // "variant A" in the key and footer would only confuse.
   const standalonePuzzle = ordered.length === 1 && ordered[0]?.kind === 'puzzle' && test.variants === 1
-  // Pracovní list se v aplikaci na varianty nedělí — „varianta A“ by jen mátla.
+  // Worksheets are not split into variants in the app — "variant A" would only confuse.
   const variantLabel =
     (standalonePuzzle || (test.kind === 'pracovni_list' && test.variants === 1)) && variant === 'A' ? null : variant
   const firstContent = ordered.findIndex((item) => item.kind !== 'page_break')
@@ -76,13 +77,13 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
                 key={item.id}
                 puzzle={item.puzzle}
                 config={config}
-                // Co už řekla hlavička, hlavolam neopakuje (samostatný hlavolam
-                // má v hlavičce svůj nadpis i pokyn).
+                // The puzzle does not repeat what the header already says (a
+                // standalone puzzle has its title and instructions in the header).
                 showTitle={puzzleHeadShown(item.puzzle, config, heading).title}
                 showInstructions={puzzleHeadShown(item.puzzle, config, heading).instructions}
-                // První položka hned pod hlavičkou se drží pohromadě jen po
-                // řádcích — celá by se mohla přesunout na druhou stranu a na
-                // první by zůstala jen hlavička.
+                // The first item right below the header stays together only by
+                // rows — as a whole it could move to page two, leaving only the
+                // header on page one.
                 keepTogether={index !== firstContent && puzzleKeepsTogether(item, config, heading)}
               />
             )
@@ -113,14 +114,14 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
             )
           }
           if (item.kind === 'text') {
-            // Poškozený obsah (neznámá varianta) nesmí vzít s sebou celý list —
-            // text se aspoň vytiskne jako obyčejný odstavec.
+            // Broken content (unknown variant) must not take the whole worksheet
+            // down — the text is at least printed as a plain paragraph.
             return (
               <TextBlock key={item.id} text={item.text ?? ''} variant={item.textContent?.variant ?? 'text'} config={config} />
             )
           }
           if (item.kind === 'table') {
-            // Poškozená tabulka se vynechá; editor ji ukazuje jako chybnou.
+            // A broken table is skipped; the editor shows it as invalid.
             return item.table ? <TableBlock key={item.id} table={item.table} /> : null
           }
           if (item.kind === 'page_break') return <View key={item.id} break />
@@ -179,12 +180,12 @@ function Header({
             }}
           >
             {sanitizeText(config.header.title.uppercase ? test.title.toUpperCase() : test.title)}
-            {variant === 'B' ? '  (varianta B)' : ''}
+            {variant === 'B' ? `  ${t('pdf:header.variantB')}` : ''}
           </Text>
           {showScore ? (
             <View style={{ width: 110, border: '1pt solid #111', padding: 4 }}>
-              <Text style={{ fontSize: 8 }}>Body: ______ / {totalPoints}</Text>
-              <Text style={{ fontSize: 8, marginTop: 4 }}>Známka: ______</Text>
+              <Text style={{ fontSize: 8 }}>{t('pdf:header.points', { total: totalPoints })}</Text>
+              <Text style={{ fontSize: 8, marginTop: 4 }}>{t('pdf:header.grade')}</Text>
             </View>
           ) : null}
         </View>
@@ -196,11 +197,11 @@ function Header({
         </Text>
       ) : null}
 
-      {/* Vyučující a poznámka jsou součástí datového modelu testu (`test.header`), ale
-          nejsou to pole, která by žák doplňoval — proto se netisknou přes `config.header.fields`
-          (ta jsou pro linky k vyplnění), ale jako pevný řádek hlavičky, jen pokud jsou vyplněné. */}
+      {/* Teacher and note are part of the test data model (`test.header`), but they are
+          not fields the pupil fills in — so they are not printed via `config.header.fields`
+          (those are fill-in lines) but as a fixed header line, only when filled in. */}
       {test.header.teacher ? (
-        <Text style={{ marginBottom: 6 }}>Vyučující: {sanitizeText(test.header.teacher)}</Text>
+        <Text style={{ marginBottom: 6 }}>{t('pdf:header.teacher', { name: sanitizeText(test.header.teacher) })}</Text>
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -230,7 +231,7 @@ function Header({
 
       {test.header.note ? (
         <Text style={{ marginBottom: 6, fontStyle: 'italic', color: '#333' }}>
-          Poznámka: {sanitizeText(test.header.note)}
+          {t('pdf:header.note', { note: sanitizeText(test.header.note) })}
         </Text>
       ) : null}
 
@@ -278,7 +279,7 @@ function QuestionView({
         <Text style={{ flex: 1, fontWeight: 'bold' }}>{sanitizeText(prompt)}</Text>
         {showPoints ? (
           <Text style={{ fontSize: 8, color: '#555', marginLeft: 6 }}>
-            ({formatPoints(points)} b.)
+            {t('pdf:points', { points: formatPoints(points) })}
           </Text>
         ) : null}
       </View>
@@ -295,12 +296,12 @@ function QuestionView({
 }
 
 /**
- * Hlavolam v písemce. Nadpis, pokyn a mřížka (u tajenky políčka věty) jsou
- * vždy nerozdělitelné — rozpůlená mřížka přes zlom stránky je nepoužitelná.
- * Když se hlavolam podle odhadu vejde na stranu (`keepTogether`), drží se
- * pohromadě celý a případně se přesune na další stranu. Vyšší hlavolam se
- * láme po řádcích seznamu slov, doplňovačky a otázek; celý nerozdělitelný by
- * ho react-pdf slisoval do jedné strany.
+ * A puzzle in a test. Title, instructions and grid (for a cryptogram the
+ * phrase boxes) are always unbreakable — a grid split by a page break is
+ * useless. When the puzzle fits a page by estimate (`keepTogether`), it stays
+ * together as a whole and moves to the next page if needed. A taller puzzle
+ * breaks by rows of the word list, crossword and clues; kept whole, react-pdf
+ * would squash it onto one page.
  */
 export function PuzzleView({
   puzzle,
@@ -318,8 +319,9 @@ export function PuzzleView({
   const body = (
     <PuzzleBody
       puzzle={puzzle}
-      // Když se drží pohromadě celý, mezeru nad sebou nese obal. Bez nadpisu
-      // i pokynu (samostatný hlavolam je má v hlavičce) stačí mezera pod hlavičkou.
+      // When kept together as a whole, the wrapper carries the space above. Without
+      // title and instructions (a standalone puzzle has them in the header) the
+      // space below the header is enough.
       spacingBefore={keepTogether || (!showTitle && !showInstructions) ? 0 : config.sectionStyle.spacingBefore}
       head={
         <>
@@ -335,8 +337,8 @@ export function PuzzleView({
       }
     />
   )
-  // Rozdělitelný hlavolam se vrací jako plochý seznam bloků přímo do stránky
-  // (viz `PuzzleBody`) — žádný obalový `View`.
+  // A breakable puzzle is returned as a flat list of blocks directly into the
+  // page (see `PuzzleBody`) — no wrapping `View`.
   return keepTogether ? (
     <View style={{ marginTop: config.sectionStyle.spacingBefore }} wrap={false}>
       {body}
@@ -374,12 +376,12 @@ function KeyPage({
       }}
     >
       <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 2 }}>
-        Klíč – {sanitizeText(test.title)}
-        {variantLabel ? ` (varianta ${variantLabel})` : ''}
+        {t('pdf:key.title', { title: sanitizeText(test.title) })}
+        {variantLabel ? ` ${t('pdf:key.variant', { variant: variantLabel })}` : ''}
       </Text>
       {test.graded ? (
         <Text style={{ fontSize: 9, color: '#555', marginBottom: 10 }}>
-          Celkem {formatPoints(totalPoints)} bodů
+          {t('pdf:key.totalPoints', { points: formatPoints(totalPoints) })}
         </Text>
       ) : (
         <View style={{ marginBottom: 10 }} />
@@ -395,14 +397,14 @@ function KeyPage({
         }
         if (item.kind === 'puzzle' && item.puzzle) {
           return (
-            // Nerozdělitelný je jen nadpis s mřížkou; popis, kde které slovo
-            // leží, se u velké osmisměrky smí přelomit na další stranu.
+            // Only the title with the grid is unbreakable; the description of
+            // where each word lies may break onto the next page for a large grid.
             <PuzzleBody
               key={item.id}
               puzzle={item.puzzle}
               solved
               spacingBefore={8}
-              head={<Text style={{ fontWeight: 'bold' }}>{sanitizeText(`Řešení – ${item.puzzle.title}`)}</Text>}
+              head={<Text style={{ fontWeight: 'bold' }}>{sanitizeText(t('pdf:key.solution', { title: item.puzzle.title }))}</Text>}
             />
           )
         }
@@ -419,7 +421,7 @@ function KeyPage({
               <Text style={{ fontWeight: 'bold' }}>{questionLabel(index, config.numbering) || `${index + 1}.`} </Text>
               {sanitizeText(formatAnswer(question, variant))}
               {test.graded ? (
-                <Text style={{ color: '#555', fontSize: 8 }}> ({formatPoints(points)} b.)</Text>
+                <Text style={{ color: '#555', fontSize: 8 }}> {t('pdf:points', { points: formatPoints(points) })}</Text>
               ) : null}
             </Text>
             {question.explanation ? (
@@ -446,22 +448,25 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B' | null; testTitle: 
         flexDirection: 'row',
         justifyContent: 'space-between',
         paddingHorizontal: 40,
-        // Výška řádku zděděná ze stránky se u textu s `render` při každém
-        // přepočtu stránky znovu násobí velikostí písma (react-pdf 4.9 převádí
-        // už převedené body jako násobek). Číslo strany pak narostlo do tisíců
-        // bodů a celé zápatí odjelo mimo papír. Prázdná hodnota znamená
-        // přirozenou výšku z metrik fontu a přepočet ji nemění.
+        // The line height inherited from the page gets multiplied by the font
+        // size again on every page relayout for text with `render` (react-pdf
+        // 4.9 converts already converted points as a multiplier). The page
+        // number then grew to thousands of points and the footer slid off the
+        // paper. An empty value means the natural height from font metrics,
+        // which relayout does not change.
         lineHeight: '',
       }}
     >
       <Text style={{ fontSize: 8, color: '#777' }}>
         {sanitizeText(testTitle)}
-        {variant ? ` · varianta ${variant}` : ''}
+        {variant ? ` · ${t('pdf:footer.variant', { variant })}` : ''}
       </Text>
       <Text
         style={{ fontSize: 8, color: '#777' }}
-        // Počítá se jen v rámci písemky — stránky klíče za ní se do „z celkem" nepřičítají.
-        render={({ subPageNumber, subPageTotalPages }) => `strana ${subPageNumber} / ${subPageTotalPages}`}
+        // Counted within the test only — key pages after it are not added to the total.
+        render={({ subPageNumber, subPageTotalPages }) =>
+          t('pdf:footer.page', { page: subPageNumber, total: subPageTotalPages })
+        }
       />
     </View>
   )

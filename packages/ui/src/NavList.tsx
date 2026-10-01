@@ -1,19 +1,20 @@
 import type { ReactNode } from 'react'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
 export interface NavListItem {
   id: string
   label: string
   count?: number
-  /** Téma má nezkontrolované koncepty. */
+  /** The topic has unreviewed drafts. */
   flag?: boolean
 }
 
 /**
- * Seznam v postranním panelu: položka, počet a tečka u nedodělků.
- * `renderItem` vykresluje obal celého řádku (typicky odkaz), aby byl
- * klikatelný celý řádek, ne jen text — počet a tečka pak nejsou mrtvá zóna.
- * Aktivní řádek nese `aria-current="page"` na tomto odkazu.
+ * Sidebar list: item, count and a dot for unfinished work.
+ * `renderItem` renders the wrapper of the whole row (typically a link) so the
+ * whole row is clickable, not just the text — the count and dot are not a dead
+ * zone. The active row carries `aria-current="page"` on that link.
  */
 export function NavList({
   items,
@@ -37,7 +38,7 @@ export function NavList({
           >
             {item.flag ? (
               <span
-                aria-label="Čekají nezkontrolované koncepty"
+                aria-label={t('ui:navList.unreviewedDrafts')}
                 className="size-1.5 shrink-0 rounded-full bg-draft-fg"
               />
             ) : null}

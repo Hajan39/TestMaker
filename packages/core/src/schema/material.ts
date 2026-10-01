@@ -1,21 +1,21 @@
 import { z } from 'zod'
 
-/** Materiál po extrakci textu v prohlížeči — na server jde jen text, ne binárka. */
+/** Material after text extraction in the browser — only the text goes to the server, not the binary. */
 export const extractedMaterialSchema = z.object({
-  /** Relativní cesta ze zvolené složky, např. `PŘÍRODOPIS/8. ročník/Buňka.pdf`. */
+  /** Relative path from the chosen folder, e.g. `PŘÍRODOPIS/8. ročník/Buňka.pdf`. */
   relativePath: z.string().min(1),
   fileName: z.string().min(1),
   subject: z.string().min(1),
-  /** Ročník; u předmětů bez členění null. */
+  /** Grade; null for subjects without grades. */
   grade: z.string().nullable(),
   topic: z.string().min(1),
   mimeType: z.string().default('application/octet-stream'),
   sizeBytes: z.number().int().min(0),
   text: z.string(),
   pageCount: z.number().int().min(0).nullable(),
-  /** Text je podezřele krátký → pravděpodobně sken, čeká na OCR (fáze 2). */
+  /** Text is suspiciously short → probably a scan, waiting for OCR (phase 2). */
   needsOcr: z.boolean().default(false),
-  /** SHA-256 extrahovaného textu, brání duplicitnímu importu. */
+  /** SHA-256 of the extracted text, prevents duplicate imports. */
   contentHash: z.string().min(8),
 })
 
@@ -23,7 +23,7 @@ export type ExtractedMaterial = z.infer<typeof extractedMaterialSchema>
 
 export const importBatchSchema = z.object({
   materials: z.array(extractedMaterialSchema).min(1).max(50),
-  /** Když je vyplněné, jdou všechny materiály rovnou sem — pole subject/grade/topic se ignorují. */
+  /** When set, all materials go straight here — the subject/grade/topic fields are ignored. */
   topicId: z.string().min(1).optional(),
 })
 

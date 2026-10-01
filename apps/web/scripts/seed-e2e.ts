@@ -1,22 +1,22 @@
 /**
- * Postaví databázi pro testy v prohlížeči (Playwright) od nuly.
+ * Builds the database for browser tests (Playwright) from scratch.
  *
- *   pnpm --filter @testmaker/web e2e:db            # postaví znovu (smaže starou)
- *   pnpm --filter @testmaker/web e2e:db --if-missing  # postaví, jen když ještě není
+ *   pnpm --filter @testmaker/web e2e:db            # rebuilds (deletes the old one)
+ *   pnpm --filter @testmaker/web e2e:db --if-missing  # builds only when missing
  *
- * Testy nesmějí sahat na ostrou `local.db` — jeden dřívější běh z ní smazal
- * skutečné předměty. Proto mají vlastní soubor `e2e.db`, který je kdykoli
- * k zahození: obsah je celý vymyšlený, nic se sem nekopíruje z knihovny
- * majitele.
+ * Tests must not touch the live `local.db` — an earlier run deleted real
+ * subjects from it. So they have their own `e2e.db` file, disposable at any
+ * time: the content is entirely made up, nothing is copied from the owner's
+ * library.
  *
- * Data odpovídají tomu, co testy v `e2e/**` očekávají:
- *   - téma s „fotosyntéza“ v názvu pod předmětem PŘÍRODOPIS (hledání v knihovně),
- *   - téma „Měkkýši“ s materiálem, který má v názvu „Mollusca“ (hledání podle souboru),
- *   - ročník „6. ročník“ s dost tématy na rolování a s dlouhým názvem bez mezer,
- *   - témata se schválenými otázkami všech typů a obtížností (banka, osnova testu),
- *   - téma s pevným id `csxxOerbvKhz` (test zmrazení otázky ho má natvrdo),
- *   - vestavěné šablony `builtin-*` (náhledy šablon, tisk testu),
- *   - hotový pracovní list s pevným id `e2e-pracovni-list` (přehled listů, značka „ověř“).
+ * The data matches what the tests in `e2e/**` expect:
+ *   - a topic with "fotosyntéza" in its name under the PŘÍRODOPIS subject (library search),
+ *   - the topic "Měkkýši" with a material named with "Mollusca" (search by file),
+ *   - the grade "6. ročník" with enough topics to scroll and a long name without spaces,
+ *   - topics with approved questions of all types and difficulties (bank, test outline),
+ *   - a topic with the fixed id `csxxOerbvKhz` (the question freeze test hard-codes it),
+ *   - built-in templates `builtin-*` (template previews, test printing),
+ *   - a finished worksheet with the fixed id `e2e-pracovni-list` (worksheet overview, "ověř" flag).
  */
 import { existsSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -28,9 +28,9 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 import { nanoid } from 'nanoid'
 import { BUILT_IN_TEMPLATES } from '@testmaker/core/schema'
 import * as schema from '../src/db/schema'
-import { nasaditSablony } from '../src/db/sablony'
-import { zahesovat } from '../src/lib/heslo'
-import { VYCHOZI_UCET_ID } from '../src/lib/vychozi'
+import { seedTemplates } from '../src/db/templates'
+import { hashPassword } from '../src/lib/password'
+import { DEFAULT_ACCOUNT_ID } from '../src/lib/defaultAccount'
 import { MIN_USABLE_TOPIC_CHARS } from '../src/db/schema'
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -39,7 +39,7 @@ const onlyIfMissing = process.argv.includes('--if-missing')
 
 const newId = () => nanoid(12)
 
-/** Odstavec o zadaném tématu, dost dlouhý, aby téma nebylo „chudé“. */
+/** A paragraph about the given topic, long enough for the topic not to be "thin". */
 function text(topic: string, sentence: string): string {
   const body = `${sentence} `.repeat(8)
   return `${topic}\n\n${body}\nPoznámky k opakování: ${body}`
@@ -52,7 +52,7 @@ interface SeedQuestion {
   payload: Record<string, unknown>
 }
 
-/** Sada otázek všech běžných typů a obtížností pro jedno téma. */
+/** A set of questions of all common types and difficulties for one topic. */
 function questionSet(topic: string): SeedQuestion[] {
   return [
     {
@@ -97,13 +97,13 @@ function questionSet(topic: string): SeedQuestion[] {
 }
 
 interface SeedTopic {
-  /** Pevné id se vyplňuje jen tam, kde ho nějaký test zná natvrdo. */
+  /** A fixed id is set only where some test hard-codes it. */
   id?: string
   name: string
-  /** Název souboru materiálu; když chybí, odvodí se z názvu tématu. */
+  /** Material file name; when missing, derived from the topic name. */
   fileName?: string
   sentence: string
-  /** Téma dostane sadu otázek (banka otázek, osnova testu). */
+  /** The topic gets a question set (question bank, test outline). */
   withQuestions?: boolean
 }
 
@@ -118,8 +118,8 @@ interface SeedSubject {
 }
 
 /**
- * Doplňková témata, aby měl ročník co rolovat (test na rolování čeká obsah
- * delší než okno) a dlaždice se měly kam lámat.
+ * Filler topics so the grade has something to scroll (the scrolling test
+ * expects content taller than the window) and tiles have room to wrap.
  */
 const fillerNames = [
   'Buňka a její části',
@@ -185,15 +185,15 @@ const SUBJECTS: SeedSubject[] = [
           },
           {
             name: 'Měkkýši',
-            // Shoda padne na název souboru, ne na název tématu — hledání podle
-            // „Mollusca“ pak ukáže, že se trefilo do souboru.
+            // The match hits the file name, not the topic name — searching for
+            // "Mollusca" then shows it found the file.
             fileName: '6.22 Měkkýši (Mollusca) — zápis do sešitu.txt',
             sentence: 'Měkkýši mají měkké tělo, často chráněné schránkou, a patří mezi bezobratlé.',
             withQuestions: true,
           },
           {
-            // Dlouhý název bez mezer: přesně na něm se pozná, jestli se dlaždice
-            // umí zalomit, nebo text vyčnívá ven.
+            // A long name without spaces: exactly this shows whether the tile
+            // can wrap or the text sticks out.
             name: 'prirodopis-6_pl-bezobratli-vztahy._test_2018',
             sentence: 'Pracovní list na vztahy mezi bezobratlými živočichy k opakování před písemkou.',
             withQuestions: true,
@@ -218,7 +218,7 @@ const SUBJECTS: SeedSubject[] = [
         name: '8. ročník',
         topics: [
           {
-            // Test zmrazení otázky má tohle id natvrdo v souboru.
+            // The question freeze test has this id hard-coded.
             id: 'csxxOerbvKhz',
             name: 'Dýchací soustava',
             sentence:
@@ -254,64 +254,64 @@ const SUBJECTS: SeedSubject[] = [
   },
 ]
 
-/** Škola, do které patří všechna zkušební data. */
-const SKOLA_ID = 'skola-vyvoj'
+/** The school all test data belongs to. */
+const SCHOOL_ID = 'skola-vyvoj'
 
 /**
- * Účty pro testy. Hesla jsou stejná jako v `playwright.login.config.ts`;
- * testovací databáze se kdykoli zahodí, takže tady nic tajného není.
+ * Accounts for tests. The passwords match `playwright.login.config.ts`; the
+ * test database is disposable, so there is nothing secret here.
  */
-export const E2E_HESLO = 'e2e-tajne-heslo'
-const UCTY = [
+export const E2E_PASSWORD = 'e2e-tajne-heslo'
+const ACCOUNTS = [
   {
-    id: VYCHOZI_UCET_ID,
+    id: DEFAULT_ACCOUNT_ID,
     email: 'spravce@localhost',
     name: 'Vývojový správce',
     role: 'spravce' as const,
-    heslo: E2E_HESLO,
+    password: E2E_PASSWORD,
   },
   {
     id: 'e2e-ucitelka-a',
     email: 'ucitelka.a@localhost',
     name: 'Učitelka A',
     role: 'ucitelka' as const,
-    heslo: E2E_HESLO,
+    password: E2E_PASSWORD,
   },
   {
     id: 'e2e-ucitelka-b',
     email: 'ucitelka.b@localhost',
     name: 'Učitelka B',
     role: 'ucitelka' as const,
-    heslo: E2E_HESLO,
+    password: E2E_PASSWORD,
   },
   {
     id: 'e2e-nahled',
     email: 'nahled@localhost',
     name: 'Náhled',
     role: 'nahled' as const,
-    heslo: E2E_HESLO,
+    password: E2E_PASSWORD,
   },
   {
     id: 'e2e-administrator',
     email: 'admin@localhost',
     name: 'Administrátor',
     role: 'administrator' as const,
-    heslo: E2E_HESLO,
+    password: E2E_PASSWORD,
   },
 ]
 
 /**
- * Druhá škola pro testy administrátora: vlastní správce, učitelka a její
- * soukromá písemka, kterou smí vidět jen ona a administrátor.
+ * A second school for administrator tests: its own manager, a teacher and her
+ * private test, which only she and the administrator may see.
  */
-const DRUHA_SKOLA_ID = 'skola-druha'
-/** Model v záznamech volání; test administrace ho hledá v přehledu „Použití AI“. */
-export const AI_POUZITI_MODEL = 'google:e2e-pouziti'
-export const SOUKROMA_PISEMKA_C = 'Soukromá písemka učitelky C'
+const SECOND_SCHOOL_ID = 'skola-druha'
+/** Model in the call records; the administration test looks for it in the "Použití AI" overview. */
+export const AI_USAGE_MODEL = 'google:e2e-pouziti'
+export const PRIVATE_TEST_C = 'Soukromá písemka učitelky C'
 
-/** Hotový pracovní list výchozího účtu (`e2e/pracovni-listy.spec.ts` ho má natvrdo). */
-const E2E_PRACOVNI_LIST_ID = 'e2e-pracovni-list'
-const UCTY_DRUHE_SKOLY = [
+/** A finished worksheet of the default account (`e2e/worksheets.spec.ts` hard-codes it). */
+const E2E_WORKSHEET_ID = 'e2e-pracovni-list'
+const SECOND_SCHOOL_ACCOUNTS = [
   { id: 'e2e-spravce-b', email: 'spravce.b@localhost', name: 'Správce B', role: 'spravce' as const },
   { id: 'e2e-ucitelka-c', email: 'ucitelka.c@localhost', name: 'Učitelka C', role: 'ucitelka' as const },
 ]
@@ -329,28 +329,29 @@ async function main() {
   await migrate(db, { migrationsFolder: resolve(webRoot, 'drizzle') })
 
   /*
-   * Škola a účty. Hlavní běh testů jede s vypnutým přihlašováním a pracuje pod
-   * výchozím správcem; ostatní účty jsou tu pro běh s přihlášením, kde se
-   * ověřuje, že učitelka nevidí cizí písemku a náhled nesmí nic měnit.
-   * Hesla jsou schválně v kódu — je to zahoditelná testovací databáze.
+   * School and accounts. The main test run has sign-in off and works as the
+   * default manager; the other accounts are for the signed-in run, which
+   * checks that a teacher does not see someone else's test and preview cannot
+   * change anything. The passwords are in the code on purpose — it is a
+   * disposable test database.
    */
-  await db.insert(schema.schools).values({ id: SKOLA_ID, name: 'Vývoj', slug: 'vyvoj' })
-  for (const ucet of UCTY) {
+  await db.insert(schema.schools).values({ id: SCHOOL_ID, name: 'Vývoj', slug: 'vyvoj' })
+  for (const account of ACCOUNTS) {
     await db.insert(schema.users).values({
-      id: ucet.id,
-      schoolId: SKOLA_ID,
-      email: ucet.email,
-      name: ucet.name,
-      role: ucet.role,
-      passwordHash: ucet.heslo ? await zahesovat(ucet.heslo) : null,
+      id: account.id,
+      schoolId: SCHOOL_ID,
+      email: account.email,
+      name: account.name,
+      role: account.role,
+      passwordHash: account.password ? await hashPassword(account.password) : null,
     })
   }
 
-  // Vestavěné šablony — na `builtin-klasicka` stojí tisk testu i náhledy.
+  // Built-in templates — test printing and previews rely on `builtin-klasicka`.
   for (const [index, template] of BUILT_IN_TEMPLATES.entries()) {
     await db.insert(schema.templates).values({
       id: `builtin-${template.slug}`,
-      schoolId: SKOLA_ID,
+      schoolId: SCHOOL_ID,
       slug: template.slug,
       name: template.name,
       description: template.description,
@@ -360,27 +361,27 @@ async function main() {
     })
   }
 
-  await db.insert(schema.schools).values({ id: DRUHA_SKOLA_ID, name: 'Druhá škola', slug: 'druha' })
-  for (const ucet of UCTY_DRUHE_SKOLY) {
+  await db.insert(schema.schools).values({ id: SECOND_SCHOOL_ID, name: 'Druhá škola', slug: 'druha' })
+  for (const account of SECOND_SCHOOL_ACCOUNTS) {
     await db.insert(schema.users).values({
-      ...ucet,
-      schoolId: DRUHA_SKOLA_ID,
-      passwordHash: await zahesovat(E2E_HESLO),
+      ...account,
+      schoolId: SECOND_SCHOOL_ID,
+      passwordHash: await hashPassword(E2E_PASSWORD),
     })
   }
-  await nasaditSablony(db, DRUHA_SKOLA_ID)
-  const [sablonaDruhe] = await db
+  await seedTemplates(db, SECOND_SCHOOL_ID)
+  const [secondTemplate] = await db
     .select({ id: schema.templates.id })
     .from(schema.templates)
-    .where(eq(schema.templates.schoolId, DRUHA_SKOLA_ID))
+    .where(eq(schema.templates.schoolId, SECOND_SCHOOL_ID))
     .limit(1)
   await db.insert(schema.tests).values({
     id: newId(),
-    schoolId: DRUHA_SKOLA_ID,
+    schoolId: SECOND_SCHOOL_ID,
     ownerId: 'e2e-ucitelka-c',
     visibility: 'soukrome',
-    title: SOUKROMA_PISEMKA_C,
-    templateId: sablonaDruhe!.id,
+    title: PRIVATE_TEST_C,
+    templateId: secondTemplate!.id,
     header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
   })
 
@@ -389,17 +390,17 @@ async function main() {
   let topicCount = 0
   let questionCount = 0
   /**
-   * Téma pro záložku „AI kvalita“ ve Správě: potřebuje otázky s nastaveným
-   * modelem a pár řádků `question_feedback`, jinak by e2e test tabulku
-   * nikdy nedostal na oči a jen by tiše přijal prázdný stav.
+   * Topic for the "AI kvalita" tab in Management: it needs questions with a
+   * model set and a few `question_feedback` rows, otherwise the e2e test
+   * would never see the table and would silently accept the empty state.
    */
-  let aiKvalitaTopicId: string | null = null
+  let aiQualityTopicId: string | null = null
 
   for (const subject of SUBJECTS) {
     const subjectId = newId()
     await db
       .insert(schema.subjects)
-      .values({ id: subjectId, schoolId: SKOLA_ID, name: subject.name, position: subjectPosition++ })
+      .values({ id: subjectId, schoolId: SCHOOL_ID, name: subject.name, position: subjectPosition++ })
 
     let gradePosition = 0
     for (const grade of subject.grades) {
@@ -408,7 +409,7 @@ async function main() {
         .insert(schema.grades)
         .values({
           id: gradeId,
-          schoolId: SKOLA_ID,
+          schoolId: SCHOOL_ID,
           subjectId,
           name: grade.name,
           position: gradePosition++,
@@ -420,7 +421,7 @@ async function main() {
         const body = text(topic.name, topic.sentence)
         await db.insert(schema.topics).values({
           id: topicId,
-          schoolId: SKOLA_ID,
+          schoolId: SCHOOL_ID,
           gradeId,
           name: topic.name,
           position: topicPosition++,
@@ -428,12 +429,12 @@ async function main() {
           lowContent: body.length < MIN_USABLE_TOPIC_CHARS,
         })
         topicCount += 1
-        if (topic.name === 'Fotosyntéza a dýchání rostlin') aiKvalitaTopicId = topicId
+        if (topic.name === 'Fotosyntéza a dýchání rostlin') aiQualityTopicId = topicId
 
         const fileName = topic.fileName ?? `${topic.name}.txt`
         await db.insert(schema.materials).values({
           id: newId(),
-          schoolId: SKOLA_ID,
+          schoolId: SCHOOL_ID,
           topicId,
           fileName,
           relativePath: `${subject.name}/${grade.name}/${fileName}`,
@@ -451,8 +452,8 @@ async function main() {
         for (const question of questionSet(topic.name)) {
           await db.insert(schema.questions).values({
             id: newId(),
-            schoolId: SKOLA_ID,
-            createdBy: VYCHOZI_UCET_ID,
+            schoolId: SCHOOL_ID,
+            createdBy: DEFAULT_ACCOUNT_ID,
             topicId,
             materialId: null,
             type: question.type,
@@ -462,7 +463,7 @@ async function main() {
             difficulty: question.difficulty,
             source: 'manual',
             status: 'approved',
-            // Text pro hledání v bance se plní při každém zápisu otázky.
+            // The bank search text is filled on every question write.
             searchText: `${JSON.stringify(question.payload)} `.toLocaleLowerCase('cs'),
           })
           questionCount += 1
@@ -472,13 +473,14 @@ async function main() {
   }
 
   /**
-   * Data pro záložku „AI kvalita“ ve Správě: čtyři otázky od jednoho modelu,
-   * z toho dvě později přegenerované se stejným důvodem — přehled tak má co
-   * spočítat (podíl 50 %, nejčastější důvod „Moc těžká“, i předmět s nejvíc
-   * přegenerováním) a e2e test si na konkrétní čísla může sáhnout.
+   * Data for the "AI kvalita" tab in Management: four questions from one
+   * model, two of them later regenerated with the same reason — so the
+   * overview has something to compute (a 50 % share, the top reason "Moc
+   * těžká", and the subject with the most regenerations) and the e2e test can
+   * check concrete numbers.
    */
-  if (aiKvalitaTopicId) {
-    const AI_KVALITA_MODEL = 'e2e:model-a'
+  if (aiQualityTopicId) {
+    const AI_QUALITY_MODEL = 'e2e:model-a'
     const aiQuestionIds: string[] = []
     for (let i = 0; i < 4; i++) {
       const id = newId()
@@ -490,9 +492,9 @@ async function main() {
       }
       await db.insert(schema.questions).values({
         id,
-        schoolId: SKOLA_ID,
-        createdBy: VYCHOZI_UCET_ID,
-        topicId: aiKvalitaTopicId,
+        schoolId: SCHOOL_ID,
+        createdBy: DEFAULT_ACCOUNT_ID,
+        topicId: aiQualityTopicId,
         materialId: null,
         type: 'single_choice',
         payload,
@@ -500,60 +502,62 @@ async function main() {
         points: 1,
         difficulty: 2,
         source: 'ai',
-        model: AI_KVALITA_MODEL,
+        model: AI_QUALITY_MODEL,
         status: 'approved',
         searchText: `${JSON.stringify(payload)} `.toLocaleLowerCase('cs'),
       })
       questionCount += 1
     }
-    // Jen dvě ze čtyř se „přegenerovaly“ — zbylé dvě ukazují, že podíl umí
-    // být i menší než 100 %.
+    // Only two of four were "regenerated" — the other two show the share can
+    // be below 100 %.
     for (const questionId of aiQuestionIds.slice(0, 2)) {
       await db.insert(schema.questionFeedback).values({
         id: newId(),
-        schoolId: SKOLA_ID,
+        schoolId: SCHOOL_ID,
         questionId,
         replacementId: null,
-        model: AI_KVALITA_MODEL,
+        model: AI_QUALITY_MODEL,
         reason: 'tezka',
         note: null,
-        createdBy: VYCHOZI_UCET_ID,
+        createdBy: DEFAULT_ACCOUNT_ID,
       })
     }
   }
 
   /*
-   * Pár volání modelu pro přehled „Použití AI“ v administraci: úspěch, limit
-   * a nepoužitelná odpověď, otázky i hlavolam, v obou školách.
+   * A few model calls for the "Použití AI" overview in administration:
+   * success, limit and an unusable response, questions and a puzzle, in both
+   * schools.
    */
-  const volani = [
-    { schoolId: SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'ok', inputTokens: 5200, outputTokens: 900 },
-    { schoolId: SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'limit', inputTokens: null, outputTokens: null },
-    { schoolId: SKOLA_ID, task: 'otazky', model: 'openrouter:e2e-zaloha:free', outcome: 'ok', inputTokens: 4800, outputTokens: 850 },
-    { schoolId: SKOLA_ID, task: 'hlavolam', model: 'openrouter:e2e-zaloha:free', outcome: 'bad_shape', inputTokens: null, outputTokens: null },
-    { schoolId: DRUHA_SKOLA_ID, task: 'otazky', model: AI_POUZITI_MODEL, outcome: 'ok', inputTokens: 3100, outputTokens: 600 },
+  const calls = [
+    { schoolId: SCHOOL_ID, task: 'otazky', model: AI_USAGE_MODEL, outcome: 'ok', inputTokens: 5200, outputTokens: 900 },
+    { schoolId: SCHOOL_ID, task: 'otazky', model: AI_USAGE_MODEL, outcome: 'limit', inputTokens: null, outputTokens: null },
+    { schoolId: SCHOOL_ID, task: 'otazky', model: 'openrouter:e2e-zaloha:free', outcome: 'ok', inputTokens: 4800, outputTokens: 850 },
+    { schoolId: SCHOOL_ID, task: 'hlavolam', model: 'openrouter:e2e-zaloha:free', outcome: 'bad_shape', inputTokens: null, outputTokens: null },
+    { schoolId: SECOND_SCHOOL_ID, task: 'otazky', model: AI_USAGE_MODEL, outcome: 'ok', inputTokens: 3100, outputTokens: 600 },
   ] as const
-  for (const radek of volani) {
-    await db.insert(schema.aiCalls).values({ id: newId(), userId: null, durationMs: 4200, ...radek })
+  for (const row of calls) {
+    await db.insert(schema.aiCalls).values({ id: newId(), userId: null, durationMs: 4200, ...row })
   }
 
   /**
-   * Jeden hotový pracovní list, aby měl přehled listů co ukázat a e2e test
-   * značky „ověř“ i podvrženého generování měl kam sáhnout (pevné id).
+   * One finished worksheet so the worksheet overview has something to show
+   * and the e2e tests for the "ověř" flag and faked generation have a target
+   * (fixed id).
    */
   await db.insert(schema.tests).values({
-    id: E2E_PRACOVNI_LIST_ID,
-    schoolId: SKOLA_ID,
-    ownerId: VYCHOZI_UCET_ID,
+    id: E2E_WORKSHEET_ID,
+    schoolId: SCHOOL_ID,
+    ownerId: DEFAULT_ACCOUNT_ID,
     kind: 'pracovni_list',
     title: 'E2E pracovní list o fotosyntéze',
-    topicId: aiKvalitaTopicId,
+    topicId: aiQualityTopicId,
     brief: JSON.stringify({ title: 'Fotosyntéza a dýchání rostlin', instructions: '', ownText: '' }),
     graded: false,
     templateId: 'builtin-pracovni-list',
     header: { school: '', subject: '', className: '', teacher: '', date: '', note: '' },
   })
-  const polozkyListu = [
+  const sheetItems = [
     { kind: 'heading' as const, text: 'Fotosyntéza' },
     { kind: 'text' as const, text: 'Rostliny ze světla, vody a oxidu uhličitého vyrábějí cukry.', content: { variant: 'text' } },
     { kind: 'text' as const, text: 'Jeden strom vyrobí za rok kyslík pro několik lidí.', content: { variant: 'fun_fact' }, needsCheck: true },
@@ -575,12 +579,12 @@ async function main() {
     },
   ]
   await db.insert(schema.testItems).values(
-    polozkyListu.map((polozka, position) => ({
+    sheetItems.map((item, position) => ({
       id: newId(),
-      schoolId: SKOLA_ID,
-      testId: E2E_PRACOVNI_LIST_ID,
+      schoolId: SCHOOL_ID,
+      testId: E2E_WORKSHEET_ID,
       position,
-      ...polozka,
+      ...item,
     })),
   )
 

@@ -2,12 +2,12 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { GET, PATCH, POST, PUT } from '@/app/api/topics/route'
 import { db, grades, materials, questions, topics } from '@/db'
-import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, UCET } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, ACCOUNT } from './helpers'
 
 /**
- * Správa skupin: přejmenování, přeřazení do ročníku, přesun materiálu a
- * sloučení témat. Všechno to hýbe daty napříč knihovnou — chyba se pozná až
- * tím, že materiál nebo otázky zmizí.
+ * Group management: renaming, moving to a grade, moving a material and merging
+ * topics. All of it moves data across the library — a bug shows only when a
+ * material or questions disappear.
  */
 
 async function topicRow(id: string) {
@@ -25,20 +25,20 @@ async function questionRow(id: string) {
   return row
 }
 
-describe('nabídky pro správu skupiny', () => {
-  it('vrátí ostatní témata téhož ročníku, sebe ne', async () => {
+describe('options for managing a group', () => {
+  it('returns the other topics of the same grade, not itself', async () => {
     const { gradeId, topicId } = await seedTopic({ topic: 'Savci' })
-    const sousedId = crypto.randomUUID()
-    await db.insert(topics).values({ id: sousedId, schoolId: UCET.schoolId, gradeId, name: 'Ptáci' })
+    const neighborId = crypto.randomUUID()
+    await db.insert(topics).values({ id: neighborId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Ptáci' })
 
     const response = await GET(req(`/api/topics?siblingsOf=${topicId}`))
     const body = (await response.json()) as { topics: { id: string }[] }
-    expect(body.topics.map((row) => row.id)).toEqual([sousedId])
+    expect(body.topics.map((row) => row.id)).toEqual([neighborId])
   })
 
-  it('vrátí ročníky téhož předmětu', async () => {
+  it('returns the grades of the same subject', async () => {
     const { subjectId, topicId } = await seedTopic({ grade: '8. ročník' })
-    await db.insert(grades).values({ id: crypto.randomUUID(), schoolId: UCET.schoolId, subjectId, name: '9. ročník' })
+    await db.insert(grades).values({ id: crypto.randomUUID(), schoolId: ACCOUNT.schoolId, subjectId, name: '9. ročník' })
 
     const response = await GET(req(`/api/topics?gradesOf=${topicId}`))
     const body = (await response.json()) as { grades: { name: string }[]; currentGrade: string }
@@ -46,149 +46,149 @@ describe('nabídky pro správu skupiny', () => {
     expect(body.currentGrade).toBe('8. ročník')
   })
 
-  it('bez parametru vrátí prázdno, ne chybu', async () => {
+  it('without a parameter returns empty, not an error', async () => {
     const response = await GET(req('/api/topics'))
     await expect(response.json()).resolves.toEqual({ topics: [], grades: [] })
   })
 })
 
-describe('přejmenování a přeřazení skupiny', () => {
-  it('přejmenuje téma', async () => {
+describe('renaming and moving a group', () => {
+  it('renames a topic', async () => {
     const { topicId } = await seedTopic({ topic: 'Původní' })
     const response = await PATCH(jsonReq('/api/topics', 'PATCH', { id: topicId, name: '  Nový název  ' }))
     expect(response.status).toBe(200)
     expect((await topicRow(topicId))?.name).toBe('Nový název')
   })
 
-  it('přeřadí téma do ročníku, který ještě není, a založí ho', async () => {
+  it("moves a topic to a grade that doesn't exist yet and creates it", async () => {
     const { subjectId, gradeId, topicId } = await seedTopic({ grade: '8. ročník' })
     const response = await PATCH(jsonReq('/api/topics', 'PATCH', { id: topicId, gradeName: '9. ročník' }))
     expect(response.status).toBe(200)
 
-    const novy = (await topicRow(topicId))!.gradeId
-    expect(novy).not.toBe(gradeId)
-    const [grade] = await db.select().from(grades).where(eq(grades.id, novy)).limit(1)
+    const newItem = (await topicRow(topicId))!.gradeId
+    expect(newItem).not.toBe(gradeId)
+    const [grade] = await db.select().from(grades).where(eq(grades.id, newItem)).limit(1)
     expect(grade).toMatchObject({ subjectId, name: '9. ročník' })
   })
 
-  it('do existujícího ročníku téhož předmětu nezaloží druhý', async () => {
+  it("doesn't create a second grade for an existing one in the same subject", async () => {
     const { subjectId, topicId } = await seedTopic({ grade: '8. ročník' })
-    const cilId = crypto.randomUUID()
-    await db.insert(grades).values({ id: cilId, schoolId: UCET.schoolId, subjectId, name: '9. ročník' })
+    const targetId = crypto.randomUUID()
+    await db.insert(grades).values({ id: targetId, schoolId: ACCOUNT.schoolId, subjectId, name: '9. ročník' })
 
     await PATCH(jsonReq('/api/topics', 'PATCH', { id: topicId, gradeName: '9. ročník' }))
 
-    expect((await topicRow(topicId))?.gradeId).toBe(cilId)
-    const vsechny = await db.select().from(grades).where(eq(grades.subjectId, subjectId))
-    expect(vsechny).toHaveLength(2)
+    expect((await topicRow(topicId))?.gradeId).toBe(targetId)
+    const all = await db.select().from(grades).where(eq(grades.subjectId, subjectId))
+    expect(all).toHaveLength(2)
   })
 
-  it('neznámé téma při změně ročníku je 404', async () => {
+  it('an unknown topic when changing grade is 404', async () => {
     const response = await PATCH(jsonReq('/api/topics', 'PATCH', { id: 'nic', gradeName: '9. ročník' }))
     expect(response.status).toBe(404)
   })
 
-  it('požadavek, který nic nemění, je 400', async () => {
+  it('a request that changes nothing is 400', async () => {
     const { topicId } = await seedTopic()
     const response = await PATCH(jsonReq('/api/topics', 'PATCH', { id: topicId }))
     expect(response.status).toBe(400)
   })
 })
 
-describe('přesun materiálu do jiné skupiny', () => {
-  it('materiál se přesune a oběma tématům se přepočte objem textu', async () => {
+describe('moving a material to another group', () => {
+  it('the material moves and both topics get their text volume recomputed', async () => {
     const { gradeId, topicId } = await seedTopic()
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Cílové téma' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Cílové téma' })
     const text = 'Text materiálu o savcích. '.repeat(60)
     const materialId = await seedMaterial(topicId, { text })
-    // Objemy odpovídají stavu před přesunem.
+    // The volumes match the state before the move.
     await db.update(topics).set({ usableCharCount: text.length }).where(eq(topics.id, topicId))
 
-    const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: cilId }))
+    const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: targetId }))
     expect(response.status).toBe(200)
 
-    expect((await materialRow(materialId))?.topicId).toBe(cilId)
+    expect((await materialRow(materialId))?.topicId).toBe(targetId)
     expect((await topicRow(topicId))?.usableCharCount).toBe(0)
-    expect((await topicRow(cilId))?.usableCharCount).toBe(text.length)
+    expect((await topicRow(targetId))?.usableCharCount).toBe(text.length)
   })
 
-  it('tentýž obsah v cílové skupině přesun odmítne českou hláškou, ne chybou databáze', async () => {
+  it('the same content in the target group refuses the move with a Czech message, not a database error', async () => {
     const { gradeId, topicId } = await seedTopic()
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Cíl s týmž obsahem' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Cíl s týmž obsahem' })
     const materialId = await seedMaterial(topicId)
     const hash = (await materialRow(materialId))!.contentHash
-    const dvojnikId = await seedMaterial(cilId)
-    await db.update(materials).set({ contentHash: hash }).where(eq(materials.id, dvojnikId))
+    const duplicateId = await seedMaterial(targetId)
+    await db.update(materials).set({ contentHash: hash }).where(eq(materials.id, duplicateId))
 
-    const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: cilId }))
+    const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: targetId }))
     expect(response.status).toBe(409)
     const body = (await response.json()) as { error: string }
     expect(body.error).toContain('už v cílové skupině je')
-    // Materiál zůstal, kde byl.
+    // The material stayed where it was.
     expect((await materialRow(materialId))?.topicId).toBe(topicId)
   })
 
-  it('odkazy na přesunutý materiál jako na originál se ruší, ať se generování nic nevynechává', async () => {
+  it('links to the moved material as an original are dropped so generation skips nothing', async () => {
     const { gradeId, topicId } = await seedTopic()
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Jiné téma' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Jiné téma' })
     const originalId = await seedMaterial(topicId, { fileName: 'Originál.docx' })
-    const kopieId = await seedMaterial(topicId, { fileName: 'Kopie.pdf' })
+    const copyId = await seedMaterial(topicId, { fileName: 'Kopie.pdf' })
     await db
       .update(materials)
       .set({ duplicateOfId: originalId, duplicateScore: 0.9 })
-      .where(eq(materials.id, kopieId))
+      .where(eq(materials.id, copyId))
 
-    await PUT(jsonReq('/api/topics', 'PUT', { materialId: originalId, topicId: cilId }))
+    await PUT(jsonReq('/api/topics', 'PUT', { materialId: originalId, topicId: targetId }))
 
-    expect((await materialRow(kopieId))?.duplicateOfId).toBeNull()
-    expect((await materialRow(kopieId))?.duplicateScore).toBeNull()
+    expect((await materialRow(copyId))?.duplicateOfId).toBeNull()
+    expect((await materialRow(copyId))?.duplicateScore).toBeNull()
   })
 
-  it('otázky vygenerované z materiálu jdou s ním, včetně schválených', async () => {
+  it('questions generated from the material go with it, approved ones included', async () => {
     const { gradeId, topicId } = await seedTopic()
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Nové téma' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Nové téma' })
     const materialId = await seedMaterial(topicId, { fileName: 'Savci.pdf' })
-    const otazkaId = await seedQuestion(topicId, { prompt: 'Čím krmí savci mláďata?', status: 'approved' })
-    await db.update(questions).set({ materialId }).where(eq(questions.id, otazkaId))
-    // Otázka bez vazby na materiál — třeba ručně psaná — zůstává v tématu.
-    const ciziId = await seedQuestion(topicId, { prompt: 'Otázka odjinud' })
+    const questionId = await seedQuestion(topicId, { prompt: 'Čím krmí savci mláďata?', status: 'approved' })
+    await db.update(questions).set({ materialId }).where(eq(questions.id, questionId))
+    // A question without a material link — e.g. hand-written — stays in the topic.
+    const foreignId = await seedQuestion(topicId, { prompt: 'Otázka odjinud' })
 
-    await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: cilId }))
+    await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: targetId }))
 
-    expect((await questionRow(otazkaId))?.topicId).toBe(cilId)
-    expect((await questionRow(ciziId))?.topicId).toBe(topicId)
+    expect((await questionRow(questionId))?.topicId).toBe(targetId)
+    expect((await questionRow(foreignId))?.topicId).toBe(topicId)
   })
 
-  it('otázky z materiálu téhož jména v jiném tématu zůstávají, kde jsou', async () => {
+  it('questions from a same-named material in another topic stay where they are', async () => {
     const { gradeId, topicId } = await seedTopic()
-    const cilId = crypto.randomUUID()
-    const jinyId = crypto.randomUUID()
+    const targetId = crypto.randomUUID()
+    const otherId = crypto.randomUUID()
     await db.insert(topics).values([
-      { id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Cíl' },
-      { id: jinyId, schoolId: UCET.schoolId, gradeId, name: 'Nedotčené téma' },
+      { id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Cíl' },
+      { id: otherId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Nedotčené téma' },
     ])
     const materialId = await seedMaterial(topicId, { fileName: 'Savci.pdf' })
-    // Otázka ukazuje na přesouvaný materiál, ale visí u úplně jiného tématu
-    // (pozůstatek staršího přesunu). Cizí téma se přesunem měnit nesmí.
-    const ciziId = await seedQuestion(jinyId)
-    await db.update(questions).set({ materialId }).where(eq(questions.id, ciziId))
+    // The question points at the moved material but hangs in a completely
+    // different topic (left over from an older move). A foreign topic must not change.
+    const foreignId = await seedQuestion(otherId)
+    await db.update(questions).set({ materialId }).where(eq(questions.id, foreignId))
 
-    await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: cilId }))
+    await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: targetId }))
 
-    expect((await questionRow(ciziId))?.topicId).toBe(jinyId)
+    expect((await questionRow(foreignId))?.topicId).toBe(otherId)
   })
 
-  it('neznámý materiál je 404', async () => {
+  it('an unknown material is 404', async () => {
     const { topicId } = await seedTopic()
     const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId: 'nic', topicId }))
     expect(response.status).toBe(404)
   })
 
-  it('do tématu mimo mou školu (nebo neexistujícího) materiál nepřesune', async () => {
+  it("doesn't move a material into a topic outside my school (or a missing one)", async () => {
     const { topicId } = await seedTopic()
     const materialId = await seedMaterial(topicId)
     const response = await PUT(jsonReq('/api/topics', 'PUT', { materialId, topicId: 'cizi-tema' }))
@@ -197,53 +197,53 @@ describe('přesun materiálu do jiné skupiny', () => {
   })
 })
 
-describe('sloučení skupin', () => {
-  it('přesune materiály i otázky a původní téma smaže', async () => {
-    const { gradeId, topicId: zdrojId } = await seedTopic({ topic: 'Zdroj' })
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Cíl' })
-    const materialId = await seedMaterial(zdrojId, { fileName: 'Zdroj.docx' })
-    const otazkaId = await seedQuestion(zdrojId)
+describe('merging groups', () => {
+  it('moves materials and questions and deletes the original topic', async () => {
+    const { gradeId, topicId: sourceId } = await seedTopic({ topic: 'Zdroj' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Cíl' })
+    const materialId = await seedMaterial(sourceId, { fileName: 'Zdroj.docx' })
+    const questionId = await seedQuestion(sourceId)
 
-    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: zdrojId, targetId: cilId }))
+    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: sourceId, targetId: targetId }))
     expect(response.status).toBe(200)
 
-    expect((await materialRow(materialId))?.topicId).toBe(cilId)
-    const [otazka] = await db.select().from(questions).where(eq(questions.id, otazkaId)).limit(1)
-    expect(otazka?.topicId).toBe(cilId)
-    expect(await topicRow(zdrojId)).toBeUndefined()
+    expect((await materialRow(materialId))?.topicId).toBe(targetId)
+    const [question] = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1)
+    expect(question?.topicId).toBe(targetId)
+    expect(await topicRow(sourceId)).toBeUndefined()
   })
 
-  it('do tématu mimo mou školu nesloučí a zdroj nechá být', async () => {
-    const { topicId: zdrojId } = await seedTopic({ topic: 'Zdroj bez cíle' })
-    const materialId = await seedMaterial(zdrojId)
-    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: zdrojId, targetId: 'cizi-tema' }))
+  it("doesn't merge into a topic outside my school and leaves the source alone", async () => {
+    const { topicId: sourceId } = await seedTopic({ topic: 'Zdroj bez cíle' })
+    const materialId = await seedMaterial(sourceId)
+    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: sourceId, targetId: 'cizi-tema' }))
     expect(response.status).toBe(404)
-    expect((await materialRow(materialId))?.topicId).toBe(zdrojId)
-    expect(await topicRow(zdrojId)).toBeDefined()
+    expect((await materialRow(materialId))?.topicId).toBe(sourceId)
+    expect(await topicRow(sourceId)).toBeDefined()
   })
 
-  it('obsah, který cílová skupina už má, se zahodí — v tématu smí být jen jednou', async () => {
-    const { gradeId, topicId: zdrojId } = await seedTopic({ topic: 'Zdroj se shodou' })
-    const cilId = crypto.randomUUID()
-    await db.insert(topics).values({ id: cilId, schoolId: UCET.schoolId, gradeId, name: 'Cíl se shodou' })
+  it('content the target group already has is dropped — it may be in a topic only once', async () => {
+    const { gradeId, topicId: sourceId } = await seedTopic({ topic: 'Zdroj se shodou' })
+    const targetId = crypto.randomUUID()
+    await db.insert(topics).values({ id: targetId, schoolId: ACCOUNT.schoolId, gradeId, name: 'Cíl se shodou' })
 
-    const cilMaterialId = await seedMaterial(cilId, { fileName: 'Společný.docx' })
-    const hash = (await materialRow(cilMaterialId))!.contentHash
-    const zdrojMaterialId = await seedMaterial(zdrojId, { fileName: 'Společný kopie.docx' })
-    await db.update(materials).set({ contentHash: hash }).where(eq(materials.id, zdrojMaterialId))
-    const jinyId = await seedMaterial(zdrojId, { fileName: 'Navíc.docx' })
+    const targetMaterialId = await seedMaterial(targetId, { fileName: 'Společný.docx' })
+    const hash = (await materialRow(targetMaterialId))!.contentHash
+    const sourceMaterialId = await seedMaterial(sourceId, { fileName: 'Společný kopie.docx' })
+    await db.update(materials).set({ contentHash: hash }).where(eq(materials.id, sourceMaterialId))
+    const otherId = await seedMaterial(sourceId, { fileName: 'Navíc.docx' })
 
-    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: zdrojId, targetId: cilId }))
+    const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: sourceId, targetId: targetId }))
     expect(response.status).toBe(200)
 
-    expect(await materialRow(zdrojMaterialId)).toBeUndefined()
-    expect((await materialRow(jinyId))?.topicId).toBe(cilId)
-    const vCili = await db.select().from(materials).where(eq(materials.topicId, cilId))
-    expect(vCili).toHaveLength(2)
+    expect(await materialRow(sourceMaterialId)).toBeUndefined()
+    expect((await materialRow(otherId))?.topicId).toBe(targetId)
+    const inTarget = await db.select().from(materials).where(eq(materials.topicId, targetId))
+    expect(inTarget).toHaveLength(2)
   })
 
-  it('sloučení tématu se sebou samým je 400', async () => {
+  it('merging a topic with itself is 400', async () => {
     const { topicId } = await seedTopic()
     const response = await POST(jsonReq('/api/topics', 'POST', { sourceId: topicId, targetId: topicId }))
     expect(response.status).toBe(400)

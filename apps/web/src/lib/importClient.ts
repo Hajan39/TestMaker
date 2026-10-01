@@ -4,6 +4,7 @@ import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { skipReason } from '@testmaker/core/extract'
 import type { ExtractResponse } from '@/workers/extract.worker'
 import { jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 export interface FileEntry {
   file: File
@@ -16,8 +17,8 @@ export interface Triage {
 }
 
 /**
- * Soubory z `<input type=file>`. U výběru složky nese cestu `webkitRelativePath`,
- * u výběru jednotlivých souborů žádná cesta není — zbude samotný název.
+ * Files from `<input type=file>`. A folder pick carries the path in
+ * `webkitRelativePath`; picking single files has no path — just the name remains.
  */
 export function entriesFromInput(files: FileList | null): FileEntry[] {
   return Array.from(files ?? []).map((file) => ({
@@ -26,7 +27,7 @@ export function entriesFromInput(files: FileList | null): FileEntry[] {
   }))
 }
 
-/** Rozdělí soubory na ty ke zpracování a přeskočené i s důvodem. */
+/** Splits files into those to process and the skipped ones with a reason. */
 export function triageEntries(entries: FileEntry[]): Triage {
   const accepted: FileEntry[] = []
   const skipped: { relativePath: string; reason: string }[] = []
@@ -41,11 +42,11 @@ export function triageEntries(entries: FileEntry[]): Triage {
 }
 
 /**
- * Soubory z přetažení, včetně celých složek.
+ * Files from a drag and drop, including whole folders.
  *
- * Přetažená složka se v `dataTransfer.files` tváří jako jediný soubor bez
- * obsahu — projít se dá jedině přes `webkitGetAsEntry`. Když prohlížeč tohle
- * rozhraní nemá, zbydou aspoň jednotlivé soubory.
+ * A dropped folder shows up in `dataTransfer.files` as a single empty file —
+ * it can only be walked via `webkitGetAsEntry`. When the browser lacks that
+ * API, at least the individual files remain.
  */
 export async function filesFromDrop(dataTransfer: DataTransfer): Promise<FileEntry[]> {
   const roots = Array.from(dataTransfer.items ?? [])
@@ -79,7 +80,7 @@ async function walkDropEntry(
 
   if (!entry.isDirectory) return
   const reader = (entry as FileSystemDirectoryEntry).createReader()
-  // `readEntries` vrací složku po dávkách (v Chrome po stovce), dokud nedojdou.
+  // `readEntries` returns the folder in batches (a hundred in Chrome) until exhausted.
   for (;;) {
     const batch = await new Promise<FileSystemEntry[]>((resolve) => {
       reader.readEntries(resolve, () => resolve([]))
@@ -89,7 +90,7 @@ async function walkDropEntry(
   }
 }
 
-/** Zpracuje soubory ve workeru; `onResult` dostane každý výsledek hned. */
+/** Processes the files in a worker; `onResult` gets each result right away. */
 export async function extractAll(
   entries: FileEntry[],
   onResult: (result: ExtractResponse) => void,
@@ -117,13 +118,13 @@ export async function extractAll(
 }
 
 export interface UploadOptions {
-  /** Nahrání rovnou do tohoto tématu — pole subject/grade/topic materiálu se ignorují. */
+  /** Upload straight into this topic — the material's subject/grade/topic fields are ignored. */
   topicId?: string
   batchSize?: number
   onProgress?: (done: number, total: number) => void
 }
 
-/** Odešle materiály po dávkách; vrátí souhrn. */
+/** Sends materials in batches; returns a summary. */
 export async function uploadMaterials(
   items: ExtractedMaterial[],
   options: UploadOptions = {},
@@ -134,14 +135,14 @@ export async function uploadMaterials(
 
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize)
-    // Server posílá vysvětlení česky (neplatná data, téma se nenašlo); syrové
-    // tělo odpovědi (třeba HTML chybové stránky) by učitelce nic neřeklo.
+    // The server sends a readable explanation (invalid data, topic not found);
+    // a raw response body (say an HTML error page) would tell the teacher nothing.
     const result = await requestJson<{ imported: number; duplicates: number }>(
       '/api/materials',
       jsonBody('POST', { materials: batch, ...(topicId ? { topicId } : {}) }),
       imported + duplicates > 0
-        ? 'Část souborů se uložila, zbytek ne — nahraj je znovu, uložené se nezdvojí.'
-        : 'Soubory se nepodařilo uložit.',
+        ? t('library:importClient.partiallySaved')
+        : t('library:importClient.saveFailed'),
     )
     imported += result.imported ?? 0
     duplicates += result.duplicates ?? 0
@@ -151,7 +152,7 @@ export async function uploadMaterials(
   return { imported, duplicates }
 }
 
-/** Kam se dá po importu pokračovat: rovnou do tématu, nebo do jeho ročníku. */
+/** Where to continue after import: straight into the topic, or into its grade. */
 export interface ImportDestination {
   topicId: string
   topicName: string
@@ -160,11 +161,11 @@ export interface ImportDestination {
 }
 
 /**
- * Dohledá v knihovně téma, do kterého import spadl.
+ * Finds the library topic the import landed in.
  *
- * Server může název tématu při slučování zvolit jinak, než ho učitelka
- * napsala („Měkkýši“ místo „6.22 Měkkýši (Mollusca)“), proto se hledá
- * a shoda se ověřuje přes předmět a ročník, ne přes uhodnuté id.
+ * When merging, the server may pick a different topic name than the teacher
+ * typed ("Měkkýši" instead of "6.22 Měkkýši (Mollusca)"), so it is searched
+ * and the match is verified by subject and grade, not by a guessed id.
  */
 export async function lookupDestination(
   subject: string,

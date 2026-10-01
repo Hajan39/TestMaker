@@ -1,178 +1,185 @@
 /**
- * Obnova ze zálohy na straně prohlížeče.
+ * Restore from backup on the browser side.
  *
- * Nahrávání podléhá stropu 4,5 MB na jeden požadavek (Vercel), takže se soubor
- * krájí tady: tabulka po tabulce, po dávkách, a posílá se na `/api/export`.
- * Pořadí tabulek drží sám soubor — záloha je zapsaná tak, že nadřazené
- * položky jsou dřív než ty, které se na ně odkazují, a JSON pořadí klíčů
- * zachovává.
+ * Uploading is subject to a 4.5 MB per-request cap (Vercel), so the file is
+ * sliced here: table by table, in batches, and sent to `/api/export`. The
+ * file itself keeps the table order — the backup is written with parents
+ * before the items referencing them, and JSON preserves key order.
  *
- * Schválně bez importu `lib/backup`: ten sahá na schéma databáze a do
- * prohlížeče nepatří.
+ * Deliberately no import of `lib/backup`: it touches the database schema and
+ * does not belong in the browser.
  */
 
+import { t } from '@testmaker/core/i18n'
 import { jsonBody, requestJson } from '@/lib/requestJson'
 
-/** Řádek zálohy; co v něm je, řeší až server proti schématu. */
-type Radek = Record<string, unknown>
+/** A backup row; what it contains is checked by the server against the schema. */
+type Row = Record<string, unknown>
 
-export interface Zaloha {
+export interface Backup {
   format: string
   verze: number
   vytvoreno?: string
-  tabulky: Record<string, Radek[]>
+  tabulky: Record<string, Row[]>
 }
 
-export interface Prubeh {
-  tabulka: string
-  hotovo: number
-  celkem: number
+export interface Progress {
+  table: string
+  done: number
+  total: number
 }
 
-/** Kolik řádků nejvýš v jedné dávce. */
-const DAVKA = 200
+/** Maximum rows in one batch. */
+const BATCH_SIZE = 200
 
 /**
- * Strop na velikost jedné dávky. Vercel pustí požadavek do 4,5 MB; dva
- * megabajty jsou dost velké sousto na to, aby obnova netrvala věčně, a pořád
- * s rezervou i pro hlavičky a nabobtnání JSONu.
+ * Cap on one batch's size. Vercel accepts requests up to 4.5 MB; two
+ * megabytes is a big enough bite for the restore not to take forever, with
+ * room to spare for headers and JSON bloat.
  */
-const MAX_BAJTU = 2_000_000
+const MAX_BYTES = 2_000_000
 
 const FORMAT = 'testmaker-zaloha'
 
 /**
- * Přečte a ověří soubor zálohy. Chyby jsou české a říkají, co se stalo —
- * nejčastěji se sem dostane úplně jiný soubor.
+ * Reads and validates a backup file. The errors tell the user what happened
+ * — most often a completely different file ends up here.
  */
-export function prectiZalohu(text: string): Zaloha {
+export function parseBackup(text: string): Backup {
   let data: unknown
   try {
     data = JSON.parse(text)
   } catch {
-    throw new Error('Soubor se nepodařilo přečíst — není to platný JSON. Vybrala jsi soubor zálohy?')
+    throw new Error(t('backup:errors.invalidJson'))
   }
-  if (!data || typeof data !== 'object') throw new Error('Soubor zálohy je prázdný.')
-  const zaloha = data as Partial<Zaloha>
-  if (zaloha.format !== FORMAT) {
-    throw new Error('Tohle není záloha TestMakeru. Vyber soubor, který jsi stáhla tlačítkem Stáhnout zálohu.')
+  if (!data || typeof data !== 'object') throw new Error(t('backup:errors.empty'))
+  const backup = data as Partial<Backup>
+  if (backup.format !== FORMAT) {
+    throw new Error(t('backup:errors.notBackup'))
   }
-  if (!zaloha.tabulky || typeof zaloha.tabulky !== 'object') {
-    throw new Error('Záloha je poškozená — chybí v ní obsah knihovny. Nejspíš se nestáhla celá.')
+  if (!backup.tabulky || typeof backup.tabulky !== 'object') {
+    throw new Error(t('backup:errors.corrupted'))
   }
-  return { format: zaloha.format, verze: zaloha.verze ?? 1, vytvoreno: zaloha.vytvoreno, tabulky: zaloha.tabulky }
+  return { format: backup.format, verze: backup.verze ?? 1, vytvoreno: backup.vytvoreno, tabulky: backup.tabulky }
 }
 
-/** Kolik čeho záloha obsahuje — pro potvrzení před obnovou. */
-export function poctyVZaloze(zaloha: Zaloha): Record<string, number> {
-  const pocty: Record<string, number> = {}
-  for (const [nazev, radky] of Object.entries(zaloha.tabulky)) {
-    pocty[nazev] = Array.isArray(radky) ? radky.length : 0
+/** How much of what the backup contains — for the confirmation before restoring. */
+export function countsInBackup(backup: Backup): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const [name, rows] of Object.entries(backup.tabulky)) {
+    counts[name] = Array.isArray(rows) ? rows.length : 0
   }
-  return pocty
+  return counts
 }
 
 /**
- * Odkaz na jiný řádek téže tabulky — materiálu na originál téhož obsahu,
- * verze otázky na kořen. Dopisuje se, až je v cíli celá tabulka.
+ * A reference to another row of the same table — a material to the original
+ * of the same content, a question version to its root. Written once the whole
+ * table is in the target.
  */
-type Odkaz =
+type SelfReference =
   | { id: string; duplicateOfId: string; duplicateScore: number | null }
   | { id: string; variantOf: string }
 
 /**
- * Nahraje zálohu zpátky do knihovny. Slučuje se podle `id`, nic se nemaže,
- * takže se tentýž soubor dá nahrát opakovaně, aniž by se cokoli zdvojilo.
+ * Uploads a backup back into the library. Merging is by `id` and nothing is
+ * deleted, so the same file can be uploaded repeatedly without duplicating
+ * anything.
  *
- * Vrací počty řádků, které server přijal — v rozhraní se z nich skládá výpis
- * „co se navezlo“.
+ * Returns the row counts the server accepted — the UI builds the "what was
+ * loaded" list from them.
  */
-export async function obnovZeZalohy(
-  zaloha: Zaloha,
-  onPrubeh?: (prubeh: Prubeh) => void,
+export async function restoreFromBackup(
+  backup: Backup,
+  onProgress?: (progress: Progress) => void,
 ): Promise<Record<string, number>> {
-  const navezeno: Record<string, number> = {}
-  const odkazy = new Map<string, Odkaz[]>()
+  const restored: Record<string, number> = {}
+  const links = new Map<string, SelfReference[]>()
 
-  for (const [tabulka, radky] of Object.entries(zaloha.tabulky)) {
-    if (!Array.isArray(radky) || radky.length === 0) {
-      navezeno[tabulka] = 0
+  for (const [table, rows] of Object.entries(backup.tabulky)) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      restored[table] = 0
       continue
     }
-    let hotovo = 0
-    onPrubeh?.({ tabulka, hotovo, celkem: radky.length })
-    for (const davka of nakrajej(radky)) {
-      const odpoved = await posli({ tabulka, radky: davka })
-      hotovo += Number(odpoved.zapsano ?? 0)
-      if (Array.isArray(odpoved.odkazy) && odpoved.odkazy.length > 0) {
-        const tabulkove = odkazy.get(tabulka) ?? []
-        tabulkove.push(...(odpoved.odkazy as Odkaz[]))
-        odkazy.set(tabulka, tabulkove)
+    let done = 0
+    onProgress?.({ table, done, total: rows.length })
+    for (const batch of splitIntoBatches(rows)) {
+      const response = await send({ table, rows: batch })
+      done += Number(response.written ?? 0)
+      if (Array.isArray(response.links) && response.links.length > 0) {
+        const tableLinks = links.get(table) ?? []
+        tableLinks.push(...(response.links as SelfReference[]))
+        links.set(table, tableLinks)
       }
-      onPrubeh?.({ tabulka, hotovo, celkem: radky.length })
+      onProgress?.({ table, done, total: rows.length })
     }
-    navezeno[tabulka] = hotovo
+    restored[table] = done
   }
 
-  // Materiál označený jako duplicita ukazuje na jiný materiál, verze otázky
-  // na svůj kořen; ten v cíli mohl při zápisu po dávkách ještě chybět, takže
-  // se odkazy dopisují až teď.
-  for (const [tabulka, seznam] of odkazy) {
-    for (let i = 0; i < seznam.length; i += DAVKA) {
-      await posli({ tabulka, odkazy: seznam.slice(i, i + DAVKA) })
+  // A material marked as a duplicate points to another material, a question
+  // version to its root; during batched writing that may still have been
+  // missing in the target, so the references are written only now.
+  for (const [table, list] of links) {
+    for (let i = 0; i < list.length; i += BATCH_SIZE) {
+      await send({ table, links: list.slice(i, i + BATCH_SIZE) })
     }
   }
 
-  return navezeno
+  return restored
 }
 
-/** Rozdělí řádky na dávky podle počtu i podle velikosti v bajtech. */
-function nakrajej(radky: Radek[]): Radek[][] {
-  const davky: Radek[][] = []
-  let aktualni: Radek[] = []
-  let bajtu = 0
-  for (const radek of radky) {
-    const velikost = JSON.stringify(radek).length
-    if (aktualni.length > 0 && (aktualni.length >= DAVKA || bajtu + velikost > MAX_BAJTU)) {
-      davky.push(aktualni)
-      aktualni = []
-      bajtu = 0
+/** Splits rows into batches by count and by size in bytes. */
+function splitIntoBatches(rows: Row[]): Row[][] {
+  const batches: Row[][] = []
+  let current: Row[] = []
+  let bytes = 0
+  for (const row of rows) {
+    const size = JSON.stringify(row).length
+    if (current.length > 0 && (current.length >= BATCH_SIZE || bytes + size > MAX_BYTES)) {
+      batches.push(current)
+      current = []
+      bytes = 0
     }
-    aktualni.push(radek)
-    bajtu += velikost
+    current.push(row)
+    bytes += size
   }
-  if (aktualni.length > 0) davky.push(aktualni)
-  return davky
+  if (current.length > 0) batches.push(current)
+  return batches
 }
 
-async function posli(telo: unknown): Promise<Record<string, unknown>> {
-  return requestJson<Record<string, unknown>>('/api/export', jsonBody('POST', telo), 'Obnova se nepovedla.')
+async function send(body: unknown): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>('/api/export', jsonBody('POST', body), t('backup:errors.restoreFailed'))
 }
 
 /**
- * České tvary názvů tabulek — jedna trojice (pro jednu, pro dvě až čtyři, pro
- * pět a víc), ze které se skloňuje v rozhraní i v přehledu přenosu. Učitelka
- * i majitel u přenosu čtou tatáž slova.
+ * Tables with a translated name. The UI and the transfer overview use the
+ * same words, so the teacher and the owner read the same thing.
  */
-export const TVARY_TABULEK: Record<string, readonly [string, string, string]> = {
-  subjects: ['předmět', 'předměty', 'předmětů'],
-  grades: ['ročník', 'ročníky', 'ročníků'],
-  topics: ['téma', 'témata', 'témat'],
-  materials: ['materiál', 'materiály', 'materiálů'],
-  assets: ['příloha', 'přílohy', 'příloh'],
-  questions: ['otázka', 'otázky', 'otázek'],
-  puzzles: ['hlavolam', 'hlavolamy', 'hlavolamů'],
-  templates: ['šablona', 'šablony', 'šablon'],
-  tests: ['test', 'testy', 'testů'],
-  test_items: ['položka testu', 'položky testů', 'položek testů'],
+const NAMED_TABLES = [
+  'subjects',
+  'grades',
+  'topics',
+  'materials',
+  'assets',
+  'questions',
+  'puzzles',
+  'templates',
+  'tests',
+  'test_items',
+] as const
+
+type NamedTable = (typeof NAMED_TABLES)[number]
+
+function isNamedTable(name: string): name is NamedTable {
+  return (NAMED_TABLES as readonly string[]).includes(name)
 }
 
-/** Tvary pro počet; u neznámé tabulky zbývá jen její název. */
-export function tvaryTabulky(nazev: string): readonly [string, string, string] {
-  return TVARY_TABULEK[nazev] ?? [nazev, nazev, nazev]
+/** The count with the table's word in the right form; an unknown table keeps just its name. */
+export function tableCount(name: string, count: number): string {
+  return isNamedTable(name) ? t(`backup:tableCounts.${name}`, { count }) : `${count} ${name}`
 }
 
-/** Název tabulky česky v množném čísle („materiály“) — popisek, ne počet. */
-export function popisTabulky(nazev: string): string {
-  return tvaryTabulky(nazev)[1]
+/** The table's name in the plural ("materiály") — a label, not a count. */
+export function tableLabel(name: string): string {
+  return isNamedTable(name) ? t(`backup:tableNames.${name}`) : name
 }

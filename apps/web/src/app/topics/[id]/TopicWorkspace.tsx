@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AI_QUESTION_TYPES, type Question } from '@testmaker/core/schema'
-import { Button, Card, EmptyState, MATERIALY_Z, OTAZKY, plural, pocet, toast } from '@testmaker/ui'
+import { Button, Card, EmptyState, toast } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import {
   AiUnavailable,
   DEFAULT_SIMPLE_SETTINGS,
@@ -19,7 +20,7 @@ import { TopicQuestions, type TestUsage, type TopicQuestionsHandle, type Variant
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { errorMessage } from '@/lib/requestJson'
 import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 
 export function TopicWorkspace({
   topic,
@@ -35,57 +36,57 @@ export function TopicWorkspace({
   usableCharCount,
   ai,
 }: {
-  /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
+  /** Topic metadata needed to create a test straight from the question selection. */
   topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
-  /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
+  /** Default template for a new test (the same choice as for a test from scratch). */
   defaultTemplateId: string
-  /** Materiály tématu — beze změny se předávají i do pruhu materiálů pod hlavní akcí. */
+  /** The topic's materials — passed unchanged to the materials strip below the main action. */
   materials: GroupMaterial[]
   questions: Question[]
-  /** Testy, ve kterých už otázky jsou — jen ty, na které je volající vidí. */
+  /** Tests that already contain the questions — only those the caller can see. */
   usage: Record<string, TestUsage[]>
-  /** Počet smazaných (zamítnutých) otázek tématu — pro přepínač „Smazané". */
+  /** Number of the topic's deleted (rejected) questions — for the „Smazané" toggle. */
   rejectedCount: number
-  /** Lehčí a těžší verze podle kořene, pro řádek „Verze: …" na kartě otázky. */
+  /** Easier and harder versions by root, for the „Verze: …" row on the question card. */
   variantLinks: Record<string, VariantLink[]>
-  /** Seznam otázek je useknutý limitem — v tématu jich je víc, než se vypisuje. */
+  /** The question list is cut off by a limit — the topic has more than are listed. */
   listTruncated: boolean
-  /** Kolik otázek se nejvýš vypisuje; do hlášky o useknutém seznamu. */
+  /** The most questions listed; for the message about the truncated list. */
   listLimit: number
-  /** Použitelného textu (bez duplicit) je málo na písemku — generování zůstává možné, jen ne jako výchozí volba. */
+  /** Too little usable text (without duplicates) for a test — generation stays possible, just not as the default choice. */
   lowContent: boolean
-  /** Použitelný text tématu ve znacích — stejné číslo, které karta ukazuje ve `StatRow`. */
+  /** The topic's usable text in characters — the same number the page shows in `StatRow`. */
   usableCharCount: number
   ai: { configured: boolean; provider: string; model: string; problems: string[] }
 }) {
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const router = useRouter()
   const [settings, setSettings] = useState<SimpleGenerateSettings>(DEFAULT_SIMPLE_SETTINGS)
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   /**
-   * Otázky vytvořené v tomhle běhu. Seznam níž se obnovuje až po doběhnutí
-   * (router.refresh), a čekat na to znamená deset minut koukat na kolečko —
-   * tyhle se do seznamu přidají hned, jak je server uloží.
+   * Questions created in this run. The list below only refreshes once the run
+   * finishes (router.refresh), and waiting for that means staring at a spinner
+   * for ten minutes — these are added to the list as soon as the server saves them.
    */
   const [fresh, setFresh] = useState<Question[]>([])
-  /** Dokončený běh: souhrn zůstane na obrazovce i po zmizení hlášky. */
+  /** A finished run: the summary stays on screen even after the toast disappears. */
   const [outcome, setOutcome] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const materialsStripRef = useRef<MaterialsStripHandle>(null)
   const topicQuestionsRef = useRef<TopicQuestionsHandle>(null)
-  // Nahrání prvního materiálu nebo napsání první otázky z prázdného stavu
-  // odkrývá zbytek stránky ještě dřív, než dojede `router.refresh()` — jinak
-  // by tlačítko v `EmptyState` muselo mířit na skrytou plochu.
+  // Uploading the first material or writing the first question from the empty
+  // state reveals the rest of the page before `router.refresh()` finishes —
+  // otherwise the button in `EmptyState` would have to target a hidden area.
   const [revealed, setRevealed] = useState(false)
-  // Zatímco se v pruhu materiálů čte nebo ukládá soubor, generování by sáhlo
-  // po textu, který ještě není hotový — tlačítko proto počká, než se pruh
-  // ohlásí jako volný.
+  // While the materials strip reads or saves a file, generation would grab
+  // text that is not ready yet — so the button waits until the strip reports
+  // it is idle.
   const [materialsUploading, setMaterialsUploading] = useState(false)
 
-  // Generování běží jen s otevřenou stránkou — zavření nebo obnovení ho
-  // utne, proto se prohlížeč napřed zeptá.
+  // Generation only runs while the page is open — closing or reloading cuts
+  // it off, so the browser asks first.
   useEffect(() => {
     if (!generating) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -93,61 +94,61 @@ export function TopicWorkspace({
     return () => window.removeEventListener('beforeunload', warn)
   }, [generating])
 
-  // Po obnovení seznamu přijdou tytéž otázky i v `questions` — podle id se
-  // proto čerstvé, které už v seznamu jsou, vynechají, ať se nezdvojí.
+  // After the list refreshes, the same questions also arrive in `questions` —
+  // fresh ones already in the list are skipped by id so they don't repeat.
   const shownQuestions = useMemo(() => {
     const known = new Set(questions.map((question) => question.id))
     return [...fresh.filter((question) => !known.has(question.id)), ...questions]
   }, [fresh, questions])
 
-  // Ukazujeme jen to, co skutečně půjde do modelu: generování duplicitní
-  // obsah, ručně vynechaný materiál i sken bez textové vrstvy vždycky
-  // přeskočí, takže se nesmí počítat ani tady — jinak na obrazovce stojí
-  // velké číslo a hned pod ním upozornění, že materiálů je málo.
+  // Show only what really goes to the model: generation always skips
+  // duplicate content, manually excluded materials and scans without a text
+  // layer, so they must not count here either — otherwise the screen shows a
+  // big number with a warning about too few materials right below it.
   const usable = materials.filter(isUsableMaterial)
-  // Stejná hranice, jakou generování hlídá na serveru (`MIN_GENERATE_CHARS`) —
-  // tlačítko se zakáže dřív, než by učitelka čekala na chybovou hlášku.
+  // The same threshold generation enforces on the server (`MIN_GENERATE_CHARS`) —
+  // the button is disabled before the teacher would wait for an error message.
   const tooLittleText = usableCharCount < MIN_GENERATE_CHARS
-  // Téma úplně bez obsahu (žádný materiál, žádná otázka) dostane jednotnou
-  // výzvu místo karty generování a pruhu materiálů — obojí by jen ukazovalo
-  // vlastní prázdný stav vedle sebe.
+  // A topic with no content at all (no material, no question) gets a single
+  // prompt instead of the generation card and materials strip — both would
+  // just show their own empty states side by side.
   const isEmpty = materials.length === 0 && questions.length === 0
-  const showEmptyState = isEmpty && muzeMenit && !revealed
+  const showEmptyState = isEmpty && canEdit && !revealed
 
   async function generate() {
     setError(null)
     setGenerating(true)
     setOutcome(null)
     setFresh([])
-    setStatus('Spouštím generování…')
+    setStatus(t('generation:topicGeneration.starting'))
     announceGeneration()
     abortRef.current = new AbortController()
-    // Průběh se skládá ze dvou údajů: kolik otázek už je hotových (to učitelku
-    // zajímá) a kde se model v materiálech nachází (to jen dokresluje, jak
-    // dlouho to ještě potrvá).
-    let hotovo = 0
+    // Progress has two parts: how many questions are done (what the teacher
+    // cares about) and where the model is in the materials (which only hints
+    // at how long it will still take).
+    let done = 0
     let cast: { done: number; total: number } | null = null
-    // Stream, který skončí bez `done` i bez `error` (spadlé spojení, vypršelá
-    // funkce), dřív skončil potichu — kolečko zmizelo a nic se neřeklo.
+    // A stream ending without `done` or `error` (dropped connection, timed-out
+    // function) used to end silently — the spinner vanished and nothing was said.
     let started = false
     let finished = false
     const interrupted = () => {
       setStatus(null)
-      setError('Generování se přerušilo — vzniklé otázky jsou uložené, zbytek spusť znovu.')
+      setError(t('generation:topicGeneration.interrupted'))
       router.refresh()
     }
-    const prubeh = () => {
-      const otazky = hotovo > 0 ? `Hotovo ${pocet(hotovo, OTAZKY)}` : 'Zatím žádná otázka není hotová'
-      // `done` je počet už zpracovaných částí; pracuje se tedy na následující.
-      // Když je hotová i poslední, žádná další už nezbývá a nemá se co hlásit.
-      const zbyva = cast && cast.done < cast.total
-      setStatus(zbyva ? `${otazky} · pracuji na části ${cast!.done + 1} z ${cast!.total}` : otazky)
+    const progress = () => {
+      const doneText = done > 0 ? t('generation:topicGeneration.doneSoFar', { count: done }) : t('generation:topicGeneration.noneDoneYet')
+      // `done` is the number of parts already processed, so work is on the next.
+      // When the last one is done too, nothing remains and there is nothing to report.
+      const remaining = cast && cast.done < cast.total
+      setStatus(remaining ? `${doneText} · ${t('generation:topicGeneration.workingOnPart', { part: cast!.done + 1, total: cast!.total })}` : doneText)
     }
 
     try {
-      // Typy i režim se v tématu nevybírají — posílá se pevně všechno, co
-      // model umí, a vždycky se přidávají nové otázky (nikdy „doplnit na
-      // celkový počet"), to je pro hromadné generování, ne pro jedno téma.
+      // Types and mode are not chosen in a topic — everything the model can do
+      // is always sent, and new questions are always added (never „doplnit na
+      // celkový počet"); that is for bulk generation, not for a single topic.
       await generateQuestionsStream(
         { topicId: topic.id, count: settings.count, difficulty: settings.difficulty, types: [...AI_QUESTION_TYPES] },
         (event) => {
@@ -155,22 +156,22 @@ export function TopicWorkspace({
           if (event.type === 'done' || event.type === 'error') finished = true
           if (event.type === 'progress') {
             cast = { done: event.done, total: event.total }
-            prubeh()
+            progress()
           } else if (event.type === 'saved') {
-            hotovo = event.created
-            // Nejnovější nahoře — stejně jako seznam otázek pod tím.
+            done = event.created
+            // Newest on top — just like the question list below.
             setFresh((current) => [...event.questions.slice().reverse(), ...current])
-            prubeh()
+            progress()
           } else if (event.type === 'done') {
             setStatus(null)
-            // Podrobný souhrn (co se zahodilo, kolikrát model selhal) má jedno
-            // místo — trvalý řádek v kartě. Bublina jen upozorní, že je hotovo,
-            // ať se táž věta nečte dvakrát vedle sebe.
+            // The detailed summary (what was discarded, how often the model
+            // failed) has one place — a lasting line in the card. The toast only
+            // says it is done, so the same sentence isn't read twice side by side.
             setOutcome(summarizeRun(event))
             toast.success(
               event.created > 0
-                ? `Hotovo, ${event.created} ${plural(event.created, 'nová', 'nové', 'nových')} ${plural(event.created, ...OTAZKY)}.`
-                : 'Hotovo, ale nevznikla ani jedna otázka.',
+                ? t('generation:topicGeneration.doneToast', { count: event.created })
+                : t('generation:topicGeneration.doneToastNone'),
               { duration: 12_000 },
             )
             router.refresh()
@@ -181,7 +182,7 @@ export function TopicWorkspace({
       if (!finished) interrupted()
     } catch (streamError) {
       if (started && !finished) interrupted()
-      else setError(errorMessage(streamError, 'Generování se nepodařilo.'))
+      else setError(errorMessage(streamError, t('generation:topicGeneration.failed')))
     } finally {
       setGenerating(false)
     }
@@ -190,25 +191,25 @@ export function TopicWorkspace({
   return (
     <div
       className="space-y-5"
-      // Přetažení souboru mimo pruh materiálů by prohlížeč defaultně otevřel
-      // jako novou stránku a učitelka by o rozpracovanou práci přišla. Celá
-      // plocha tématu proto přetažení přebírá a posílá ho do pruhu, jako by
-      // ho pustila přímo na jeho ploše — vlastní zóna pruhu přetažení dál
-      // nepouští (`stopPropagation`), ať se totéž nezpracuje dvakrát.
+      // A file dropped outside the materials strip would by default be opened
+      // by the browser as a new page and the teacher would lose her work. The
+      // whole topic area therefore takes over the drop and passes it to the
+      // strip as if dropped right on it — the strip's own zone does not let the
+      // drop through (`stopPropagation`), so it is not handled twice.
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault()
-        if (muzeMenit) materialsStripRef.current?.handleExternalDrop(event.dataTransfer)
+        if (canEdit) materialsStripRef.current?.handleExternalDrop(event.dataTransfer)
       }}
     >
-      {/* Téma úplně bez obsahu dostane jednu jasnou výzvu místo karty
-          generování a pruhu materiálů — obojí by tu jen ukazovalo vlastní
-          prázdný stav vedle sebe. Zmizí sama, jakmile něco přibude
-          (`router.refresh()` po uložení), `revealed` jen předbíhá, než dojede. */}
+      {/* A topic with no content gets one clear prompt instead of the
+          generation card and materials strip — both would just show their own
+          empty states side by side. It disappears once something is added
+          (`router.refresh()` after saving); `revealed` only runs ahead of it. */}
       {showEmptyState ? (
         <EmptyState
-          title="Téma je zatím prázdné."
-          hint="Nahraj materiál, ze kterého mají vzniknout otázky, nebo si první otázku napiš sama."
+          title={t('library:topicWorkspace.emptyTitle')}
+          hint={t('library:topicWorkspace.emptyHint')}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button
@@ -217,7 +218,7 @@ export function TopicWorkspace({
                   materialsStripRef.current?.openUpload()
                 }}
               >
-                Nahrát materiál
+                {t('library:topicWorkspace.uploadMaterial')}
               </Button>
               <Button
                 variant="outline"
@@ -226,34 +227,35 @@ export function TopicWorkspace({
                   topicQuestionsRef.current?.openCreate()
                 }}
               >
-                Napsat otázku
+                {t('library:topicWorkspace.writeQuestion')}
               </Button>
             </div>
           }
         />
-      ) : ai.configured && muzeMenit ? (
-        /* Náhled si téma prohlíží a tiskne, ale negeneruje — karta by mu jen
-           nabízela tlačítko, které skončí odmítnutím. */
+      ) : ai.configured && canEdit ? (
+        /* A viewer browses and prints the topic but does not generate — the
+           card would only offer a button that ends in a refusal. */
         <Card className="gap-2 p-3">
-          {/* Karta byla nadpis, dva odstavce a teprve pak tlačítko. Podstatné
-              je jediné: tlačítko, kolik otázek vznikne a kde se to doladí —
-              zbytek patří do nastavení, které je hned vedle. */}
+          {/* The card used to be a heading, two paragraphs and only then a
+              button. Only one thing matters: the button, how many questions
+              will be created and where to fine-tune it — the rest belongs in
+              the settings right next to it. */}
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={lowContent ? 'outline' : 'default'}
               disabled={generating || usable.length === 0 || tooLittleText || materialsUploading}
               onClick={() => void generate()}
             >
-              Vygenerovat otázky
+              {t('generation:topicGeneration.generate')}
             </Button>
             <span className="text-sm text-fg-muted">
               {materialsUploading
-                ? 'Počkej, až se soubory nahrají.'
+                ? t('generation:topicGeneration.waitForUpload')
                 : usable.length === 0
-                  ? 'Nejdřív nahraj materiál nebo ho zapni pro generování.'
+                  ? t('generation:topicGeneration.noUsableMaterial')
                   : tooLittleText
-                    ? 'Použitelného textu je zatím míň než 200 znaků — na otázky to nestačí.'
-                    : `Vznikne ${pocet(settings.count, OTAZKY)} z ${pocet(usable.length, MATERIALY_Z)}.`}
+                    ? t('generation:topicGeneration.tooLittleText')
+                    : t('generation:topicGeneration.willCreate', { questions: t('library:count.questions', { count: settings.count }), materials: t('library:count.materialsGenitive', { count: usable.length }) })}
             </span>
             <div className="ml-auto">
               <SimpleGenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
@@ -262,22 +264,22 @@ export function TopicWorkspace({
 
           {lowContent ? (
             <p className="text-sm text-fg-muted">
-              Materiálů je v tomhle tématu málo — otázek vznikne jen pár a budou se opakovat.
+              {t('generation:topicGeneration.lowContent')}
             </p>
           ) : null}
 
-          {generating ? <ProgressLine label={status ?? 'Spouštím generování…'} /> : null}
+          {generating ? <ProgressLine label={status ?? t('generation:topicGeneration.starting')} /> : null}
 
-          {/* Souhrn běhu zůstává na obrazovce i po zmizení hlášky — nové otázky
-              jsou hned vidět jako karty pod tím, není kam dál chodit. */}
+          {/* The run summary stays on screen after the toast disappears — the new
+              questions are visible right away as cards below, nowhere else to go. */}
           {!generating && outcome ? <p className="text-sm text-fg-soft">{outcome}</p> : null}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
-      ) : muzeMenit ? (
+      ) : canEdit ? (
         <AiUnavailable problems={ai.problems} />
       ) : null}
 
-      {muzeMenit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
+      {canEdit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
 
       <div className={showEmptyState ? 'hidden' : undefined}>
         <MaterialsStrip
@@ -291,8 +293,7 @@ export function TopicWorkspace({
 
       {listTruncated ? (
         <p className="text-sm text-fg-muted">
-          Otázek je v tomhle tématu víc, než se sem vejde — vypisuje se prvních {listLimit}{' '}
-          od nejnovější. Zbytek najdeš v bance otázek, kde se dá filtrovat i hledat.
+          {t('library:topicWorkspace.listTruncated', { limit: listLimit })}
         </p>
       ) : null}
 
@@ -312,9 +313,10 @@ export function TopicWorkspace({
 }
 
 /**
- * Věta o tom, jak generování dopadlo: kolik otázek vzniklo, kolik se zahodilo
- * a proč. Zahozené otázky nejsou chyba učitelky — ale když jich je hodně,
- * je to jediná stopa po tom, že model nad materiálem tápe.
+ * A sentence on how generation went: how many questions were created, how
+ * many discarded and why. Discarded questions are not the teacher's fault —
+ * but when there are many, it is the only trace that the model struggles
+ * with the material.
  */
 function summarizeRun(event: {
   created: number
@@ -324,18 +326,18 @@ function summarizeRun(event: {
   models?: string[]
 }): string {
   if (event.created === 0) {
-    return 'Nevznikla ani jedna otázka. Zkus to prosím znovu, případně s menším počtem otázek.'
+    return t('generation:topicGeneration.summaryNone')
   }
-  const parts = [`Vytvořeno ${pocet(event.created, OTAZKY)}.`]
+  const parts = [t('generation:topicGeneration.summaryCreated', { questions: t('library:count.questions', { count: event.created }) })]
   if (event.rejected > 0) {
-    // Věta nesmí záviset na počtu: „1 otázka — byly neúplné“ se neshodovalo.
-    parts.push(`Zahozeno: ${pocet(event.rejected, OTAZKY)} — neúplné nebo si odporovaly.`)
+    // The sentence must not depend on the count: „1 otázka — byly neúplné“ did not agree.
+    parts.push(t('generation:topicGeneration.summaryRejected', { questions: t('library:count.questions', { count: event.rejected }) }))
   }
   if (event.failedCalls > 0) {
-    parts.push(`${event.failedCalls}× model odpověděl něčím, co se nedalo použít.`)
+    parts.push(t('generation:topicGeneration.summaryFailedCalls', { count: event.failedCalls }))
   }
-  // Když se v jednom tématu vystřídalo víc modelů, otázky nemusí být stejně
-  // kvalitní — učitelka to má vědět dřív, než je začne číst.
-  if ((event.models?.length ?? 0) > 1) parts.push('Otázky psalo víc různých modelů, kvalita se může lišit.')
+  // When several models took turns on one topic, the questions may differ in
+  // quality — the teacher should know before she starts reading them.
+  if ((event.models?.length ?? 0) > 1) parts.push(t('generation:topicGeneration.summaryMixedModels'))
   return parts.join(' ')
 }

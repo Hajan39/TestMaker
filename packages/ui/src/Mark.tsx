@@ -1,4 +1,4 @@
-/** Značka TestMakeru: list papíru s opravenou fajfkou. */
+/** The TestMaker logo: a sheet of paper with a correction tick. */
 export function Mark({ className = 'size-5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 512 512" className={className} role="img" aria-label="TestMaker">

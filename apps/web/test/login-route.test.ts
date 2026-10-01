@@ -3,17 +3,18 @@ import { eq } from 'drizzle-orm'
 import { POST as login } from '@/app/api/login/route'
 import { POST as logout } from '@/app/api/logout/route'
 import { db, sessions, users } from '@/db'
-import { zahesovat } from '@/lib/heslo'
-import { LOGIN_MAX_ATTEMPTS, SESSION_COOKIE, clearLoginAttempts, overitRelaci } from '@/lib/session'
-import { UCET } from './helpers'
+import { hashPassword } from '@/lib/password'
+import { LOGIN_MAX_ATTEMPTS, SESSION_COOKIE, clearLoginAttempts, verifySession } from '@/lib/session'
+import { ACCOUNT } from './helpers'
 
 /**
- * Testy jdou přímo na obsluhu tras, ne přes běžící server: zajímá nás, co
- * odpoví na desátý a jedenáctý pokus, co pošle v cookie a jak se zachová
- * k zablokovanému účtu. Model ani žádná síť se odtud nevolá.
+ * The tests call the route handlers directly, not through a running server:
+ * we care what it answers to the tenth and eleventh attempt, what it sends in
+ * the cookie and how it treats a blocked account. Neither the model nor any
+ * network is called from here.
  */
-const HESLO = 'tajne-heslo-ucitelky'
-const TAJEMSTVI = 'secret-na-podpis'
+const PASSWORD = 'tajne-heslo-ucitelky'
+const SECRET = 'secret-na-podpis'
 const EMAIL = 'ucitelka@skola.cz'
 
 function request(email: string, password: string, ip: string): Request {
@@ -26,16 +27,16 @@ function request(email: string, password: string, ip: string): Request {
 
 beforeEach(async () => {
   clearLoginAttempts()
-  process.env.AUTH_SECRET = TAJEMSTVI
+  process.env.AUTH_SECRET = SECRET
   await db.delete(sessions)
   await db.delete(users).where(eq(users.email, EMAIL))
   await db.insert(users).values({
     id: 'ucet-prihlaseni',
-    schoolId: UCET.schoolId,
+    schoolId: ACCOUNT.schoolId,
     email: EMAIL,
     name: 'Učitelka',
     role: 'ucitelka',
-    passwordHash: await zahesovat(HESLO),
+    passwordHash: await hashPassword(PASSWORD),
   })
 })
 
@@ -44,29 +45,29 @@ afterEach(async () => {
   await db.delete(users).where(eq(users.email, EMAIL))
 })
 
-describe('přihlášení účtem', () => {
-  it('se správným heslem vrátí podepsanou cookie s identitou', async () => {
-    const response = await login(request(EMAIL, HESLO, '10.0.0.1'))
+describe('account sign-in', () => {
+  it('returns a signed cookie with the identity for the correct password', async () => {
+    const response = await login(request(EMAIL, PASSWORD, '10.0.0.1'))
     expect(response.status).toBe(200)
     const cookie = response.headers.get('set-cookie') ?? ''
     expect(cookie).toContain('HttpOnly')
 
     const value = cookie.match(new RegExp(`${SESSION_COOKIE}=([^;]+)`))?.[1]
-    const relace = await overitRelaci(value, TAJEMSTVI)
-    expect(relace?.uid).toBe('ucet-prihlaseni')
-    expect(relace?.role).toBe('ucitelka')
+    const session = await verifySession(value, SECRET)
+    expect(session?.uid).toBe('ucet-prihlaseni')
+    expect(session?.role).toBe('ucitelka')
 
-    // Relace vzniká i v databázi, jinak by ji nešlo odvolat.
-    const ulozene = await db.select().from(sessions).where(eq(sessions.userId, 'ucet-prihlaseni'))
-    expect(ulozene).toHaveLength(1)
+    // The session is also created in the database, otherwise it could not be revoked.
+    const saved = await db.select().from(sessions).where(eq(sessions.userId, 'ucet-prihlaseni'))
+    expect(saved).toHaveLength(1)
   })
 
-  it('velikost písmen v e-mailu nerozhoduje', async () => {
-    const response = await login(request(EMAIL.toUpperCase(), HESLO, '10.0.0.9'))
+  it('e-mail letter case does not matter', async () => {
+    const response = await login(request(EMAIL.toUpperCase(), PASSWORD, '10.0.0.9'))
     expect(response.status).toBe(200)
   })
 
-  it('s chybným heslem vrátí 401 a žádnou cookie', async () => {
+  it('returns 401 and no cookie for a wrong password', async () => {
     const response = await login(request(EMAIL, 'uplne-jine', '10.0.0.2'))
     expect(response.status).toBe(401)
     expect(response.headers.get('set-cookie')).toBeNull()
@@ -75,45 +76,45 @@ describe('přihlášení účtem', () => {
     })
   })
 
-  it('neznámý e-mail se chová stejně jako chybné heslo', async () => {
-    const response = await login(request('nikdo@skola.cz', HESLO, '10.0.0.5'))
+  it('an unknown e-mail behaves the same as a wrong password', async () => {
+    const response = await login(request('nikdo@skola.cz', PASSWORD, '10.0.0.5'))
     expect(response.status).toBe(401)
   })
 
-  it('zablokovaný účet se nepřihlásí ani se správným heslem', async () => {
+  it('a blocked account does not sign in even with the correct password', async () => {
     await db.update(users).set({ status: 'zablokovany' }).where(eq(users.email, EMAIL))
-    const response = await login(request(EMAIL, HESLO, '10.0.0.6'))
+    const response = await login(request(EMAIL, PASSWORD, '10.0.0.6'))
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining('zablokovaný'),
     })
   })
 
-  it('účet čekající na schválení dostane vysvětlení, ne mlčení', async () => {
+  it('an account awaiting approval gets an explanation, not silence', async () => {
     await db.update(users).set({ status: 'ceka' }).where(eq(users.email, EMAIL))
-    const response = await login(request(EMAIL, HESLO, '10.0.0.7'))
+    const response = await login(request(EMAIL, PASSWORD, '10.0.0.7'))
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining('správce'),
     })
   })
 
-  it('po deseti pokusech odmítne další s 429 a hlavičkou Retry-After', async () => {
+  it('after ten attempts rejects further ones with 429 and a Retry-After header', async () => {
     for (let i = 0; i < LOGIN_MAX_ATTEMPTS; i += 1) {
       const response = await login(request(EMAIL, 'spatne', '10.0.0.3'))
       expect([401, 429]).toContain(response.status)
     }
-    const blocked = await login(request(EMAIL, HESLO, '10.0.0.3'))
+    const blocked = await login(request(EMAIL, PASSWORD, '10.0.0.3'))
     expect(blocked.status).toBe(429)
     expect(Number(blocked.headers.get('retry-after') ?? '1')).toBeGreaterThan(0)
-    // Ani správné heslo neprojde, dokud se okno neuvolní.
+    // Not even the correct password gets through until the window frees up.
     expect(blocked.headers.get('set-cookie')).toBeNull()
   })
 
-  it('bez nastaveného tajemství odpoví 503 a vysvětlí, co chybí', async () => {
+  it('answers 503 without a secret set and explains what is missing', async () => {
     delete process.env.AUTH_SECRET
     process.env.VERCEL = '1'
-    const response = await login(request(EMAIL, HESLO, '10.0.0.4'))
+    const response = await login(request(EMAIL, PASSWORD, '10.0.0.4'))
     delete process.env.VERCEL
     expect(response.status).toBe(503)
     await expect(response.json()).resolves.toMatchObject({
@@ -122,10 +123,10 @@ describe('přihlášení účtem', () => {
   })
 })
 
-describe('odhlášení', () => {
-  it('pošle prázdnou cookie s nulovou platností', async () => {
-    // Bez tajemství se aplikace chová jako na notebooku a odhlášení nesahá
-    // po cookie — tady jde jen o to, co se posílá zpátky do prohlížeče.
+describe('sign-out', () => {
+  it('sends an empty cookie with zero lifetime', async () => {
+    // Without a secret the app behaves as on a laptop and sign-out does not
+    // touch the cookie — this is only about what is sent back to the browser.
     delete process.env.AUTH_SECRET
     const response = await logout()
     expect(response.status).toBe(200)

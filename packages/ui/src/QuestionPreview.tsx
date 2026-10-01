@@ -1,14 +1,13 @@
 import type { Question, QuestionContent } from '@testmaker/core/schema'
-import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
+import { questionTypeLabel } from '@testmaker/core/schema'
+import { t } from '@testmaker/core/i18n'
 import { displayOrder } from '@testmaker/core/pdf/layout'
 import { Badge } from './ui/badge'
 import { cn } from './cn'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-const DIFFICULTY_LABELS = ['', 'lehká', 'střední', 'těžká']
-
-/** Náhled otázky v aplikaci — vizuálně blízko tomu, co vyjde do PDF. */
+/** In-app question preview — visually close to what ends up in the PDF. */
 export function QuestionPreview({
   question,
   showAnswers = true,
@@ -17,9 +16,9 @@ export function QuestionPreview({
 }: {
   question: Question | QuestionContent
   showAnswers?: boolean
-  /** Odznak stavu (schváleno/koncept/zamítnuto) — jen tam, kde stav ještě
-   *  něco rozhoduje (fronta ke kontrole). Jinde by jen zabíral místo, protože
-   *  otázka v tématu i v bance je vždy použitelná. */
+  /** Status badge (approved/draft/rejected) — only where the status still
+   *  matters (the review queue). Elsewhere it would just take space, since a
+   *  question in a topic or the bank is always usable. */
   showStatus?: boolean
   className?: string
 }) {
@@ -27,28 +26,28 @@ export function QuestionPreview({
   return (
     <div className={cn('text-sm', className)}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="secondary">{QUESTION_TYPE_LABELS[question.type]}</Badge>
-        <Badge variant="secondary">{question.points} b.</Badge>
-        <Badge variant="secondary">{DIFFICULTY_LABELS[question.difficulty]}</Badge>
-        {/* Stav, ne akce: značková zelená patří tlačítkům. Odznak se navíc
-            ukazuje jen tam, kde `showStatus` řekne, že stav ještě rozhoduje
-            (fronta ke kontrole) — jinde je otázka vždy použitelná a odznak by
-            jen zabíral místo. */}
+        <Badge variant="secondary">{questionTypeLabel(question.type)}</Badge>
+        <Badge variant="secondary">{t('ui:questionPreview.points', { points: question.points })}</Badge>
+        <Badge variant="secondary">{t(`ui:questionPreview.difficulty.${question.difficulty}`)}</Badge>
+        {/* A status, not an action: brand green belongs to buttons. The badge is
+            also shown only where `showStatus` says the status still matters
+            (the review queue) — elsewhere the question is always usable and the
+            badge would just take space. */}
         {showStatus && 'status' in question && question.status === 'approved' ? (
-          <Badge variant="status">schváleno</Badge>
+          <Badge variant="status">{t('ui:questionPreview.status.approved')}</Badge>
         ) : null}
         {showStatus && 'status' in question && question.status === 'draft' ? (
-          <Badge className="bg-draft-bg text-draft-fg">koncept</Badge>
+          <Badge className="bg-draft-bg text-draft-fg">{t('ui:questionPreview.status.draft')}</Badge>
         ) : null}
         {showStatus && 'status' in question && question.status === 'rejected' ? (
-          <Badge variant="destructive">zamítnuto</Badge>
+          <Badge variant="destructive">{t('ui:questionPreview.status.rejected')}</Badge>
         ) : null}
-        {'source' in question && question.source === 'manual' ? <Badge variant="secondary">vlastní</Badge> : null}
+        {'source' in question && question.source === 'manual' ? <Badge variant="secondary">{t('ui:questionPreview.manual')}</Badge> : null}
       </div>
       <p className="mt-2 font-medium text-fg">{payload.prompt ?? payload.text ?? ''}</p>
       <Body question={question} showAnswers={showAnswers} />
       {showAnswers && question.explanation ? (
-        <p className="mt-2 text-xs text-fg-muted">Pozn. do klíče: {question.explanation}</p>
+        <p className="mt-2 text-xs text-fg-muted">{t('ui:questionPreview.keyNote', { note: question.explanation })}</p>
       ) : null}
     </div>
   )
@@ -64,16 +63,16 @@ function Body({
   switch (question.type) {
     case 'open':
       return showAnswers ? (
-        <Answer label={`Vzorová odpověď (${question.payload.lines} ř.)`}>{question.payload.answer}</Answer>
+        <Answer label={t('ui:questionPreview.modelAnswer', { lines: question.payload.lines })}>{question.payload.answer}</Answer>
       ) : null
 
     case 'draw':
       return showAnswers ? (
-        <Answer label={`Co má kresba obsahovat (${question.payload.lines} ř. místa)`}>{question.payload.answer}</Answer>
+        <Answer label={t('ui:questionPreview.drawingContent', { lines: question.payload.lines })}>{question.payload.answer}</Answer>
       ) : null
 
     case 'short_answer':
-      return showAnswers ? <Answer label="Odpověď">{question.payload.answer}</Answer> : null
+      return showAnswers ? <Answer label={t('ui:questionPreview.answer')}>{question.payload.answer}</Answer> : null
 
     case 'single_choice':
       return (
@@ -117,7 +116,7 @@ function Body({
               {statement.text}
               {showAnswers ? (
                 <span className="ml-2 font-medium text-brand">
-                  {statement.isTrue ? 'ANO' : 'NE'}
+                  {statement.isTrue ? t('ui:questionPreview.yes') : t('ui:questionPreview.no')}
                 </span>
               ) : null}
             </li>
@@ -130,7 +129,7 @@ function Body({
         <div className="mt-1.5 text-fg-soft">
           <p>{question.payload.text}</p>
           {showAnswers ? (
-            <Answer label="Doplnit">{question.payload.blanks.join(' · ')}</Answer>
+            <Answer label={t('ui:questionPreview.fill')}>{question.payload.blanks.join(' · ')}</Answer>
           ) : null}
         </div>
       )
@@ -153,7 +152,7 @@ function Body({
             ))}
           </ul>
           {showAnswers ? (
-            <Answer label="Dvojice" className="sm:col-span-2">
+            <Answer label={t('ui:questionPreview.pairs')} className="sm:col-span-2">
               {question.payload.pairs.map(([l, r]) => `${l + 1}–${LETTERS[r]}`).join(', ')}
             </Answer>
           ) : null}
@@ -161,8 +160,8 @@ function Body({
       )
 
     case 'ordering':
-      // Položky v zamíchaném pořadí jako na papíře (varianta A); s odpověďmi
-      // se u každé ukáže, kolikátá ve správném pořadí je.
+      // Items in shuffled order as on paper (variant A); with answers each
+      // shows its position in the correct order.
       return (
         <ul className="mt-1.5 space-y-0.5 text-fg-soft">
           {displayOrder(question, 'A').map((sourceIndex) => (
@@ -199,12 +198,12 @@ function Body({
               ))}
             </tbody>
           </table>
-          {showAnswers ? <Answer label="Doplnit">{question.payload.answers.join(' · ')}</Answer> : null}
+          {showAnswers ? <Answer label={t('ui:questionPreview.fill')}>{question.payload.answers.join(' · ')}</Answer> : null}
         </div>
       )
 
     case 'label_image':
-      return showAnswers ? <Answer label="Popisky">{question.payload.labels.join(' · ')}</Answer> : null
+      return showAnswers ? <Answer label={t('ui:questionPreview.labels')}>{question.payload.labels.join(' · ')}</Answer> : null
 
     default:
       return null

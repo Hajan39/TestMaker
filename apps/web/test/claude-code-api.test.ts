@@ -1,27 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { GET as zdroj } from '@/app/api/topics/[id]/zdroj/route'
-import { POST as nahrat } from '@/app/api/topics/[id]/otazky-soubor/route'
+import { GET as source } from '@/app/api/topics/[id]/zdroj/route'
+import { POST as upload } from '@/app/api/topics/[id]/otazky-soubor/route'
 import { db, schools, users } from '@/db'
 import { newId } from '@/lib/ids'
-import { req, seedMaterial, seedTopic, seedUcet } from './helpers'
+import { req, seedMaterial, seedTopic, seedAccount } from './helpers'
 
 /**
- * Stažení materiálů a nahrání otázek z Claude Code přes route handlery:
- * role, rozsah školy a chyby souboru. Přihlašování je v testech vypnuté,
- * takže se za jiný účet vydáváme přes `E2E_UZIVATEL` (výchozí účet bez
- * přihlášení), stejně jako prohlížečové testy.
+ * Downloading materials and uploading questions from Claude Code via the route
+ * handlers: roles, school scope and file errors. Sign-in is disabled in tests,
+ * so we impersonate another account via `E2E_UZIVATEL` (the default account
+ * without sign-in), just like the browser tests.
  */
 
 const TEXT = 'Houby nemají chlorofyl, a proto si potravu nevyrábějí samy. '.repeat(8)
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
-function soubor(topicId: string, body: string): Request {
+function file(topicId: string, body: string): Request {
   return req(`/api/topics/${topicId}/otazky-soubor`, { method: 'POST', body })
 }
 
-/** Učitelka z jiné školy — cizí téma pro ni nesmí existovat. */
-async function ucitelkaJineSkoly(): Promise<string> {
+/** A teacher from another school — a foreign topic must not exist for her. */
+async function otherSchoolTeacher(): Promise<string> {
   const schoolId = newId()
   await db.insert(schools).values({ id: schoolId, name: 'Jiná škola', slug: `jina-${schoolId}` })
   const userId = newId()
@@ -39,12 +39,12 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('stažení materiálů tématu pro Claude Code', () => {
-  it('vrátí text s hlavičkou a materiály', async () => {
+describe('downloading topic materials for Claude Code', () => {
+  it('returns the text with a header and the materials', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
 
-    const response = await zdroj(req(`/api/topics/${topicId}/zdroj`), params(topicId))
+    const response = await source(req(`/api/topics/${topicId}/zdroj`), params(topicId))
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/plain')
     const text = await response.text()
@@ -52,27 +52,27 @@ describe('stažení materiálů tématu pro Claude Code', () => {
     expect(text).toContain('=== houby.pdf ===')
   })
 
-  it('náhled si materiály stáhnout smí — jen čte', async () => {
+  it('a viewer may download materials — it only reads', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
-    vi.stubEnv('E2E_UZIVATEL', (await seedUcet({ role: 'nahled' })).userId)
+    vi.stubEnv('E2E_UZIVATEL', (await seedAccount({ role: 'nahled' })).userId)
 
-    const response = await zdroj(req(`/api/topics/${topicId}/zdroj`), params(topicId))
+    const response = await source(req(`/api/topics/${topicId}/zdroj`), params(topicId))
     expect(response.status).toBe(200)
   })
 
-  it('téma cizí školy se tváří jako neexistující', async () => {
+  it("another school's topic looks nonexistent", async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
-    vi.stubEnv('E2E_UZIVATEL', await ucitelkaJineSkoly())
+    vi.stubEnv('E2E_UZIVATEL', await otherSchoolTeacher())
 
-    const response = await zdroj(req(`/api/topics/${topicId}/zdroj`), params(topicId))
+    const response = await source(req(`/api/topics/${topicId}/zdroj`), params(topicId))
     expect(response.status).toBe(404)
   })
 })
 
-describe('nahrání otázek z Claude Code', () => {
-  const PLATNY = JSON.stringify({
+describe('uploading questions from Claude Code', () => {
+  const VALID = JSON.stringify({
     questions: [
       {
         type: 'short_answer',
@@ -82,38 +82,38 @@ describe('nahrání otázek z Claude Code', () => {
     ],
   })
 
-  it('platný soubor nahraje a řekne, kolik otázek přibylo', async () => {
+  it('imports a valid file and reports how many questions were added', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
 
-    const response = await nahrat(soubor(topicId, PLATNY), params(topicId))
+    const response = await upload(file(topicId, VALID), params(topicId))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ created: 1, rejected: [] })
   })
 
-  it('náhled nahrávat nesmí — 403', async () => {
+  it('a viewer may not upload — 403', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
-    vi.stubEnv('E2E_UZIVATEL', (await seedUcet({ role: 'nahled' })).userId)
+    vi.stubEnv('E2E_UZIVATEL', (await seedAccount({ role: 'nahled' })).userId)
 
-    const response = await nahrat(soubor(topicId, PLATNY), params(topicId))
+    const response = await upload(file(topicId, VALID), params(topicId))
     expect(response.status).toBe(403)
   })
 
-  it('do tématu cizí školy nic nenahraje — 404', async () => {
+  it("uploads nothing into another school's topic — 404", async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
-    vi.stubEnv('E2E_UZIVATEL', await ucitelkaJineSkoly())
+    vi.stubEnv('E2E_UZIVATEL', await otherSchoolTeacher())
 
-    const response = await nahrat(soubor(topicId, PLATNY), params(topicId))
+    const response = await upload(file(topicId, VALID), params(topicId))
     expect(response.status).toBe(404)
   })
 
-  it('neplatný JSON vrátí 400 s českou hláškou, co s tím', async () => {
+  it('invalid JSON returns 400 with a Czech message saying what to do', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
 
-    const response = await nahrat(soubor(topicId, '{nejde'), params(topicId))
+    const response = await upload(file(topicId, '{nejde'), params(topicId))
     expect(response.status).toBe(400)
     const body = (await response.json()) as { error: string }
     expect(body.error).toContain('není platný JSON')

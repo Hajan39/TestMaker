@@ -1,25 +1,26 @@
 import type { ReactNode } from 'react'
 import type { TemplateConfig, TestHeaderConfig } from '@testmaker/core/schema'
 import { formatPoints } from '@testmaker/core/pdf/layout'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
 /**
- * List papíru ve tvaru A4. Slouží skladači testu: učitelka skládá písemku
- * rovnou na stránce, na které ji uvidí i vytištěnou.
+ * An A4 sheet of paper. Used by the test composer: the teacher composes the
+ * test right on the page she will see printed.
  *
- * Rozměry uvnitř listu se zapisují v bodech PDF (pt) přes proměnnou
- * `--paper-pt`. Ta se počítá z šířky samotného listu (`cqw`), takže se celá
- * stránka — písmo, okraje, linky — zmenšuje i zvětšuje v jednom měřítku a
- * poměry zůstávají stejné jako na papíře, ať je sloupec jakkoli široký.
+ * Sizes inside the sheet are written in PDF points (pt) via the `--paper-pt`
+ * variable. It is derived from the sheet's own width (`cqw`), so the whole
+ * page — font, margins, lines — scales at one ratio and proportions match
+ * paper, however wide the column is.
  *
- * Papírové tokeny (`--color-paper`, `--color-paper-fg`, `--color-paper-line`)
- * se v tmavém režimu nemění: list zůstává světlý, protože ukazuje papír.
+ * Paper tokens (`--color-paper`, `--color-paper-fg`, `--color-paper-line`) do
+ * not change in dark mode: the sheet stays light because it depicts paper.
  */
 
-/** Šířka A4 v bodech PDF (210 mm). */
+/** A4 width in PDF points (210 mm). */
 const PAGE_WIDTH_PT = 595.28
 
-/** Milimetry na body — táž převodní konstanta jako v `pdf/styles.ts`. */
+/** Millimetres to points — the same conversion constant as in `pdf/styles.ts`. */
 const mm = (value: number): number => value * 2.834645669
 
 export function PaperSheet({
@@ -32,9 +33,9 @@ export function PaperSheet({
 }: {
   config: TemplateConfig
   children: ReactNode
-  /** Levá část zápatí (název a varianta), jen když ho šablona tiskne. */
+  /** Left part of the footer (title and variant), only when the template prints it. */
   footerLeft?: string
-  /** Pravá část zápatí („strana 1 / 2“). */
+  /** Right part of the footer ("strana 1 / 2"). */
   footerRight?: string
   className?: string
   bodyClassName?: string
@@ -43,9 +44,9 @@ export function PaperSheet({
   const pt = (value: number) => `calc(${value} * ${ptValue})`
 
   return (
-    // Vnější obal je dotazovací kontejner: `cqw` uvnitř listu se počítá z jeho
-    // šířky. Výšku A4 drží `min-height`, ne `aspect-ratio` — delší obsah, než
-    // odhad čekal, se tak vysází pod sebe a nevyleze z listu ven.
+    // The outer wrapper is a query container: `cqw` inside the sheet is based on
+    // its width. The A4 height is a `min-height`, not `aspect-ratio` — content
+    // longer than estimated flows down instead of overflowing the sheet.
     <div className="mx-auto w-full" style={{ containerType: 'inline-size' }}>
       <div
         data-slot="paper-sheet"
@@ -54,7 +55,7 @@ export function PaperSheet({
           className,
         )}
         style={{
-          // Odsud dolů platí `--paper-pt` a všechno se měří v bodech PDF.
+          // From here down `--paper-pt` applies and everything is in PDF points.
           ['--paper-pt' as string]: ptValue,
           minHeight: `calc(100cqw * 297 / 210)`,
           fontSize: pt(config.page.fontSize),
@@ -86,11 +87,11 @@ export function PaperSheet({
 }
 
 /**
- * Hlavička testu tak, jak se vytiskne — název, políčko na body a známku,
- * popis, vyučující, linky k vyplnění a poznámka. Tiskne se jen na prvním
- * listu, proto ji `PaperSheet` nevykresluje sám a vkládá se jako obsah.
+ * The test header as it prints — title, points and grade box, description,
+ * teacher, lines to fill in and a note. Printed only on the first sheet, so
+ * `PaperSheet` does not render it itself; it is passed as content.
  *
- * Vzorem je `Header` v `pdf/TestDocument.tsx`.
+ * Modelled on `Header` in `pdf/TestDocument.tsx`.
  */
 export function PaperHeader({
   title,
@@ -137,16 +138,16 @@ export function PaperHeader({
               ? config.header.title.uppercase
                 ? title.toUpperCase()
                 : title
-              : 'Název písemky'}
-            {variant === 'B' ? '  (varianta B)' : ''}
+              : t('ui:paper.header.titlePlaceholder')}
+            {variant === 'B' ? `  ${t('ui:paper.header.variantB')}` : ''}
           </h3>
           {showScore ? (
             <div
               className="shrink-0 border border-paper-fg"
               style={{ width: pt(110), padding: pt(4), fontSize: pt(8) }}
             >
-              <p>Body: ______ / {formatPoints(totalPoints)}</p>
-              <p style={{ marginTop: pt(4) }}>Známka: ______</p>
+              <p>{t('ui:paper.header.points', { total: formatPoints(totalPoints) })}</p>
+              <p style={{ marginTop: pt(4) }}>{t('ui:paper.header.grade')}</p>
             </div>
           ) : null}
         </div>
@@ -158,7 +159,7 @@ export function PaperHeader({
         </p>
       ) : null}
 
-      {header.teacher ? <p style={{ marginBottom: pt(6) }}>Vyučující: {header.teacher}</p> : null}
+      {header.teacher ? <p style={{ marginBottom: pt(6) }}>{t('ui:paper.header.teacher', { teacher: header.teacher })}</p> : null}
 
       <div className="flex flex-wrap">
         {config.header.fields.map((field) => {
@@ -185,7 +186,7 @@ export function PaperHeader({
 
       {header.note ? (
         <p className="italic opacity-80" style={{ marginBottom: pt(6) }}>
-          Poznámka: {header.note}
+          {t('ui:paper.header.note', { note: header.note })}
         </p>
       ) : null}
 

@@ -6,11 +6,12 @@ import { Search } from 'lucide-react'
 import { Delayed, Input, LoadingList } from '@testmaker/ui'
 import type { LibrarySearchResult } from '@/lib/library'
 import { errorMessage, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Hledání přes celou knihovnu, ne jen ve zvoleném ročníku. Hledá v názvech
- * témat i v názvech materiálů — u témat jako „PL - potravní řetězce" bývá
- * název souboru výmluvnější než název tématu.
+ * Search across the whole library, not just the selected grade. Matches topic
+ * names and material file names — for topics like "PL - potravní řetězce" the
+ * file name is often more telling than the topic name.
  */
 export function LibrarySearch() {
   const router = useRouter()
@@ -21,18 +22,18 @@ export function LibrarySearch() {
   const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Krátký dotaz se nehledá; výsledky se neukládají prázdné, jen se nezobrazí.
-  // (Nastavovat stav rovnou v efektu vede na řetězení překreslení.)
+  // A short query isn't searched; results aren't cleared, just not shown.
+  // (Setting state directly in an effect leads to cascading re-renders.)
   const needle = query.trim()
   const searching = needle.length >= 2
 
   useEffect(() => {
     if (needle.length < 2) return
-    // `setLoading` až uvnitř časovače: stav se nemá měnit synchronně v efektu
-    // (React to hlásí jako řetězení překreslení) a u rychlého psaní se tak
-    // hláška „Hledám…" ani neukáže zbytečně.
-    // Každý dotaz má vlastní `AbortController`: pomalá odpověď na starší
-    // dotaz jinak přepsala výsledky novějšího.
+    // `setLoading` only inside the timer: state shouldn't change synchronously
+    // in an effect (React reports it as cascading re-renders), and with fast
+    // typing the "Hledám…" message doesn't flash needlessly.
+    // Each query has its own `AbortController`: otherwise a slow response to an
+    // older query overwrote the newer one's results.
     const controller = new AbortController()
     const timeout = setTimeout(() => {
       setLoading(true)
@@ -40,13 +41,13 @@ export function LibrarySearch() {
       requestJson<{ results: LibrarySearchResult[] }>(
         `/api/library/search?q=${encodeURIComponent(needle)}`,
         { signal: controller.signal },
-        'Hledání se nepodařilo.',
+        t('library:search.failed'),
       )
         .then((data) => setResults(data.results ?? []))
         .catch((searchError: unknown) => {
           if (controller.signal.aborted) return
           setResults([])
-          setError(errorMessage(searchError, 'Hledání se nepodařilo.'))
+          setError(errorMessage(searchError, t('library:search.failed')))
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false)
@@ -83,8 +84,8 @@ export function LibrarySearch() {
             setOpen(true)
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Hledat v celé knihovně…"
-          aria-label="Hledat v celé knihovně"
+          placeholder={t('library:search.placeholder')}
+          aria-label={t('library:search.label')}
           className="h-8 pl-7 text-sm"
         />
       </div>
@@ -92,17 +93,17 @@ export function LibrarySearch() {
       {open && searching ? (
         <div className="absolute inset-x-2 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-[var(--radius-outer)] border border-line bg-surface p-1 shadow-lg">
           {loading ? (
-            // Kostra místo hlášky „Hledám…“: nabídka si udrží výšku, takže při
-            // psaní dalšího písmene neposkakuje a výsledky naskočí na místo,
-            // kam se člověk už dívá. Ukáže se až po prodlevě — hledání v malé
-            // knihovně je hotové dřív, než by ji bylo vidět.
-            <Delayed label="Hledám…" className="p-1">
+            // A skeleton instead of a "Hledám…" message: the menu keeps its
+            // height, so it doesn't jump while typing the next letter and results
+            // land where one is already looking. It shows only after a delay — a
+            // search in a small library finishes before it would be visible.
+            <Delayed label={t('library:search.searching')} className="p-1">
               <LoadingList items={3} />
             </Delayed>
           ) : error ? (
             <p className="px-2 py-2 text-sm text-danger">{error}</p>
           ) : results.length === 0 ? (
-            <p className="px-2 py-2 text-sm text-fg-muted">Nic neodpovídá hledání „{needle}&ldquo;.</p>
+            <p className="px-2 py-2 text-sm text-fg-muted">{t('library:search.noResults', { query: needle })}</p>
           ) : (
             <ul className="space-y-0.5">
               {results.map((result) => (
@@ -114,8 +115,8 @@ export function LibrarySearch() {
                   >
                     <span className="block truncate text-sm text-fg">{result.topicName}</span>
                     <span className="block truncate text-xs text-fg-muted">
-                      {result.subjectName} · {result.gradeName || 'Bez ročníku'}
-                      {result.matchedFileName ? ` · soubor „${result.matchedFileName}"` : ''}
+                      {result.subjectName} · {result.gradeName || t('library:labels.noGrade')}
+                      {result.matchedFileName ? ` · ${t('library:search.matchedFile', { name: result.matchedFileName })}` : ''}
                     </span>
                   </button>
                 </li>

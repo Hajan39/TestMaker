@@ -1,14 +1,15 @@
 import { topicSourceFile } from '@/lib/questionFile'
-import { sRozsahem } from '@/lib/uzivatel'
+import { withScope } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
-/** Materiály tématu jako text pro Claude Code (`/otazky`). */
+/** The topic's materials as text for Claude Code (`/otazky`). */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     const { id } = await params
-    const file = await topicSourceFile(ucet, id)
-    if (!file) return Response.json({ error: 'Téma se nenašlo' }, { status: 404 })
+    const file = await topicSourceFile(account, id)
+    if (!file) return Response.json({ error: t('library:questionFile.topicNotFound') }, { status: 404 })
     return new Response(file.text, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',

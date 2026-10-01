@@ -1,9 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
 import { db, questions } from '@/db'
 import { createVariant, isTopicBusy, topicBusyMessage, variantDifficultyLimitMessage } from '@/lib/generation'
-import { skola, sRozsahem } from '@/lib/uzivatel'
+import { inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -14,43 +15,43 @@ const bodySchema = z.object({
 })
 
 /**
- * Vytvoří lehčí nebo těžší verzi otázky na stejnou látku. Původní otázka
- * zůstává v bance beze změny — verze je nová otázka navíc, ne náhrada.
+ * Creates an easier or harder version of a question on the same content. The
+ * original stays unchanged in the bank — the variant is an extra question, not a replacement.
  */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     if (!isAiConfigured()) {
-      return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
+      return Response.json({ error: aiNotConfiguredMessage() }, { status: 503 })
     }
 
     const parsed = bodySchema.safeParse(await request.json())
     if (!parsed.success) {
-      return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+      return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
     }
 
     const [original] = await db
       .select({ id: questions.id, topicId: questions.topicId, difficulty: questions.difficulty })
       .from(questions)
-      .where(and(skola(ucet, questions), eq(questions.id, parsed.data.id)))
+      .where(and(inSchool(account, questions), eq(questions.id, parsed.data.id)))
       .limit(1)
-    if (!original) return Response.json({ error: 'Otázka mezitím zmizela, obnov stránku.' }, { status: 404 })
+    if (!original) return Response.json({ error: t('generation:regenerateApi.questionGone') }, { status: 404 })
     if (!original.topicId) {
       return Response.json(
-        { error: 'Otázka nepatří k žádnému tématu, nemá se z čeho generovat verze' },
+        { error: t('generation:variant.questionWithoutTopic') },
         { status: 409 },
       )
     }
 
-    // Stejná přednost jako u náhrady: dávkové generování tématu má přednost
-    // před jednou verzí, aby obě volání nepracovala se stejným seznamem
-    // „těmhle otázkám se vyhni".
-    const busy = await isTopicBusy(ucet, original.topicId)
+    // Same precedence as for a replacement: the topic's batch generation goes
+    // before a single variant so both calls don't work from the same
+    // "avoid these questions" list.
+    const busy = await isTopicBusy(account, original.topicId)
     if (busy) {
-      return Response.json({ error: topicBusyMessage(busy.kdo) }, { status: 409 })
+      return Response.json({ error: topicBusyMessage(busy.who) }, { status: 409 })
     }
 
-    // Hranice obtížnosti se hlásí dřív, než se vůbec sáhne na model —
-    // učitelka nemá čekat na odpověď modelu na dotaz, který nejde splnit.
+    // The difficulty limit is reported before the model is even touched —
+    // the teacher shouldn't wait for a model answer to a request that can't be met.
     const originalDifficulty = (original.difficulty as 1 | 2 | 3) ?? 2
     const targetDifficulty = originalDifficulty + (parsed.data.direction === 'easier' ? -1 : 1)
     if (targetDifficulty < 1 || targetDifficulty > 3) {
@@ -58,14 +59,14 @@ export async function POST(request: Request) {
     }
 
     try {
-      const question = await createVariant(ucet, parsed.data.id, parsed.data.direction, {
+      const question = await createVariant(account, parsed.data.id, parsed.data.direction, {
         signal: request.signal,
       })
       return Response.json({ question })
     } catch (error) {
-      // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
+      // Provider messages are English and technical; translate them.
       const { message } = describeAiError(error)
       return Response.json({ error: message }, { status: 502 })
     }
-  }, { zapis: true })
+  }, { write: true })
 }

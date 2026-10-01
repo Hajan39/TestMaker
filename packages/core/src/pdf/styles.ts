@@ -1,6 +1,6 @@
 import type { TemplateConfig } from '../schema/template'
 
-/** Milimetry na body (1 pt = 1/72", 1 mm = 2.8346 pt). */
+/** Millimetres to points (1 pt = 1/72", 1 mm = 2.8346 pt). */
 export const mm = (value: number): number => value * 2.834645669
 
 export const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as const

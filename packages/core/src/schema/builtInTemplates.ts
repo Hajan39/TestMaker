@@ -13,7 +13,10 @@ export interface BuiltInTemplate {
   config: TemplateConfig
 }
 
-/** Vestavěné šablony se při migraci nasypou do tabulky `templates`. */
+/**
+ * Built-in templates are seeded into the `templates` table on migration.
+ * Their names, descriptions and field labels are stored data, not UI texts.
+ */
 export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
   {
     slug: 'klasicka',

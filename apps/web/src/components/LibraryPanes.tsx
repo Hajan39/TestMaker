@@ -5,11 +5,11 @@ import { TopicList } from '@/components/TopicList'
 import type { GradeNode, SubjectNode } from '@/lib/library'
 
 /**
- * Tři sloupce sdílené úvodem, stránkou třídy i stránkou tématu: první sloupec
- * jsou předměty a ročníky, druhý témata zvoleného ročníku, třetí je obsah,
- * který si nese vlastní stránka. Kdo v knihovně ještě nic nemá, dostane
- * obsah bez rámu — prázdný postranní panel by jen budil dojem, že tam něco
- * chybí.
+ * Three columns shared by home, the class page and the topic page: the first
+ * holds subjects and grades, the second the selected grade's topics, the third
+ * the content the page brings itself. Whoever has nothing in the library yet
+ * gets the content without the frame — an empty sidebar would only suggest
+ * something is missing.
  */
 export function LibraryPanes({
   tree,
@@ -21,7 +21,7 @@ export function LibraryPanes({
   tree: SubjectNode[]
   grade: GradeNode | null
   activeTopicId?: string
-  /** Název obsahové plochy (i záložky na telefonu); bez něj „Obsah tématu". */
+  /** Name of the content area (and its tab on a phone); defaults to "Obsah tématu". */
   contentLabel?: string
   children: ReactNode
 }) {

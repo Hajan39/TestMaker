@@ -3,24 +3,25 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
-import { Badge, Card, MATERIALY, OTAZKY, Tooltip, TooltipContent, TooltipTrigger, pocet } from '@testmaker/ui'
+import { Badge, Card, Tooltip, TooltipContent, TooltipTrigger } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { InlineName } from '@/components/InlineName'
 import type { TopicJobState } from '@/lib/library'
 
 /**
- * Dlaždice tématu v přehledu ročníku. Názvy bývají dlouhé a bez mezer
- * (`prirodopis-6_pl-bezobratli-vztahy._test_2018`), proto se zkracují
- * a celé znění se ukáže při najetí myší.
+ * A topic tile in the grade overview. Names tend to be long and without spaces
+ * (`prirodopis-6_pl-bezobratli-vztahy._test_2018`), so they are truncated and
+ * the full text shows on hover.
  *
- * Dlaždice má tři řádky a každý má jednu úlohu:
+ * The tile has three rows, each with one job:
  *
- * 1. samotný název a tužka k přejmenování — nic víc, ať jde přehled ročníku
- *    přejet očima po názvech,
- * 2. čísla: kolik má téma materiálů a otázek,
- * 3. odznaky: co v tématu vázne.
+ * 1. the name itself and the rename pencil — nothing more, so the grade
+ *    overview can be scanned by names,
+ * 2. numbers: how many materials and questions the topic has,
+ * 3. badges: what is stuck in the topic.
  *
- * Dřív stály odznaky vedle názvu a čísla pod nimi totéž opakovala. Název se
- * tím krátil o to dřív, čím víc se u tématu dělo.
+ * Badges used to sit next to the name and the numbers below repeated the same.
+ * The name got truncated the sooner, the more was going on in the topic.
  */
 export function TopicTile({
   id,
@@ -35,18 +36,18 @@ export function TopicTile({
   name: string
   materialCount: number
   questionCount: number
-  /** Použitelného textu je málo na písemku — viz `MIN_USABLE_TOPIC_CHARS`. */
+  /** Too little usable text for a test — see `MIN_USABLE_TOPIC_CHARS`. */
   lowContent?: boolean
-  /** Fronta generování na stránce třídy — jinde se nezjišťuje. */
+  /** Generation queue state on the class page — not looked up elsewhere. */
   jobState?: TopicJobState
-  /** Doplňková akce u tématu (na stránce třídy „Přesunout do…“). */
+  /** Extra action on the topic (on the class page "Přesunout do…"). */
   actions?: ReactNode
 }) {
   return (
     <Card className="gap-1.5 p-3 hover:border-brand">
-      {/* Přejmenování patří k názvu, proto je uvnitř karty, ne vedle ní.
-          Název je odkaz jako zbytek dlaždice — kliknutí na něj dřív nedělalo
-          nic; tužka i pole přejmenování proklik samy zastaví. */}
+      {/* Renaming belongs to the name, so it's inside the card, not next to it.
+          The name is a link like the rest of the tile — clicking it used to do
+          nothing; the pencil and the rename field stop the click themselves. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Link href={`/topics/${id}`} className="flex min-w-0 items-center gap-1">
@@ -55,7 +56,7 @@ export function TopicTile({
               id={id}
               name={name}
               className="text-sm text-fg-soft"
-              label="Přejmenovat téma"
+              label={t('library:itemDialogs.topic.rename')}
             />
           </Link>
         </TooltipTrigger>
@@ -66,8 +67,8 @@ export function TopicTile({
 
       <Link href={`/topics/${id}`} className="block">
         <p className="truncate text-xs text-fg-muted">
-          {pocet(materialCount, MATERIALY)}
-          {questionCount > 0 ? ` · ${pocet(questionCount, OTAZKY)}` : ''}
+          {t('library:count.materials', { count: materialCount })}
+          {questionCount > 0 ? ` · ${t('library:count.questions', { count: questionCount })}` : ''}
         </p>
       </Link>
 
@@ -76,12 +77,12 @@ export function TopicTile({
           {jobState === 'running' ? (
             <Badge variant="status">
               <Loader2 className="size-3 animate-spin" aria-hidden />
-              Generuje se…
+              {t('library:topicTile.generating')}
             </Badge>
           ) : null}
-          {jobState === 'queued' ? <Badge variant="status">Čeká ve frontě</Badge> : null}
-          {questionCount === 0 ? <Badge variant="status">bez otázek</Badge> : null}
-          {lowContent ? <Badge variant="status">málo textu</Badge> : null}
+          {jobState === 'queued' ? <Badge variant="status">{t('library:topicTile.queued')}</Badge> : null}
+          {questionCount === 0 ? <Badge variant="status">{t('library:topicTile.noQuestions')}</Badge> : null}
+          {lowContent ? <Badge variant="status">{t('library:topicTile.lowContent')}</Badge> : null}
         </Link>
       ) : null}
 

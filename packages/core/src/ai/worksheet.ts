@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 import {
   normalizeMatchingPayload,
   normalizeOrderingPayload,
@@ -27,15 +28,16 @@ import { fitMaterials } from './puzzleWords'
 import { AI_SETTINGS } from './settings'
 
 /**
- * Pracovní list od modelu: celý list jedním voláním a přegenerování jednoho
- * kusu. Model se pravidel z promptu spolehlivě nedrží, proto všechno, co jde
- * ověřit (tvar úlohy, tabulky, délka textu), ověřuje `checkWorksheetItems`
- * v kódu — vadná položka se vyřadí a list vznikne ze zbytku.
+ * Worksheet from the model: the whole worksheet in one call and regeneration
+ * of a single item. The model does not reliably stick to the prompt rules, so
+ * everything that can be verified (task shape, tables, text length) is
+ * verified by `checkWorksheetItems` in code — a broken item is dropped and
+ * the worksheet is built from the rest.
  */
 
 const S = AI_SETTINGS.worksheet
 
-/** Položka listu po ověření, připravená k uložení. */
+/** Worksheet item after verification, ready to be saved. */
 export type WorksheetItemDraft =
   | { kind: 'heading' | 'instruction'; text: string; needsCheck: false }
   | { kind: 'text'; text: string; content: TextItemContent; needsCheck: boolean }
@@ -45,13 +47,13 @@ export type WorksheetItemDraft =
 export interface WorksheetResult {
   title: string
   items: WorksheetItemDraft[]
-  /** Kolik položek model nevrátil v pořádku a vynechaly se. */
+  /** How many items the model returned broken and were skipped. */
   dropped: number
-  /** Modely, které odpověděly (`poskytovatel:model`). */
+  /** Models that answered (`provider:model`). */
   models: string[]
 }
 
-/** Jedno volání modelu; v testech se podstrkuje, aby nesahaly na skutečný model. */
+/** One model call; faked in tests so they never touch a real model. */
 export type WorksheetCall = (input: {
   config: AiConfig
   system: string
@@ -61,25 +63,28 @@ export type WorksheetCall = (input: {
 }) => Promise<unknown>
 
 export interface WorksheetAiOptions {
-  /** Žebříček modelů; bez něj se čte z prostředí (`AI_MODELS`). */
+  /** Model ladder; read from the environment (`AI_MODELS`) without it. */
   models?: AiConfig[]
   signal?: AbortSignal
-  /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
+  /** Fake model call for tests; not passed in the app. */
   callModel?: WorksheetCall
-  /** Posluchač pokusů o volání (přehled použití AI); core ho jen předá žebříčku. */
+  /** Listener for call attempts (AI usage overview); core only passes it to the ladder. */
   onCall?: AiCallListener
 }
 
-export const WORKSHEET_TOO_FEW_MESSAGE =
-  'Model nevrátil dost použitelných položek na pracovní list. Zkus to znovu, případně uprav pokyn ' +
-  '(třeba méně druhů položek) nebo přidej vlastní text.'
+/** Error when the model did not return enough usable items for a worksheet. */
+export function worksheetTooFewMessage(): string {
+  return t('ai:worksheet.tooFew')
+}
 
-export const WORKSHEET_ITEM_FAILED_MESSAGE =
-  'Model nevrátil položku v pořádku. Zkus přegenerování znovu, nebo položku uprav ručně.'
+/** Error when regenerating a worksheet item failed. */
+export function worksheetItemFailedMessage(): string {
+  return t('ai:worksheet.itemFailed')
+}
 
 const fromMaterials = z.boolean()
 
-/** Položka tak, jak ji model vrací. Tabulka bez kontrol napříč poli — ty jdou až v kódu. */
+/** Item as the model returns it. Table without cross-field checks — those happen in code. */
 const modelItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('heading'), text: z.string(), fromMaterials }),
   z.object({ kind: z.literal('instruction'), text: z.string(), fromMaterials }),
@@ -91,12 +96,12 @@ const modelItemSchema = z.discriminatedUnion('kind', [
 const worksheetResponseSchema = z.object({ title: z.string(), items: z.array(modelItemSchema).min(1) })
 const itemResponseSchema = z.object({ item: modelItemSchema })
 
-/** Ověří jednu položku; vadná vrací `null`. */
+/** Verifies one item; a broken one returns `null`. */
 function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null {
   const parsed = modelItemSchema.safeParse(raw)
   if (!parsed.success) return null
   const item = parsed.data
-  // Bez dodaného textu nemůže nic vycházet z materiálů, ať model tvrdí cokoli.
+  // Without supplied text nothing can be based on the materials, whatever the model claims.
   const needsCheck = !hasSource || !item.fromMaterials
 
   switch (item.kind) {
@@ -107,7 +112,7 @@ function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null 
     }
     case 'text': {
       const text = item.text.trim()
-      // Delší text se vyřadí, ne ořízne — useknutá věta nedává smysl.
+      // A longer text is dropped, not trimmed — a cut-off sentence makes no sense.
       if (!text || text.length > S.textMax) return null
       return { kind: 'text', text, content: { variant: item.variant }, needsCheck }
     }
@@ -124,9 +129,10 @@ function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null 
 }
 
 /**
- * Projde položky od modelu: vadné vyřadí (a spočítá), `fromMaterials: false`
- * převede na značku „ověř“. Bez materiálů i vlastního textu (`hasSource`)
- * dostane značku všechno kromě nadpisů a pokynů.
+ * Goes through the model's items: drops (and counts) broken ones, turns
+ * `fromMaterials: false` into the "check" flag. Without materials and own
+ * text (`hasSource`) everything except headings and instructions gets the
+ * flag.
  */
 export function checkWorksheetItems(
   raw: unknown[],
@@ -143,9 +149,9 @@ export function checkWorksheetItems(
 }
 
 /**
- * Jediné místo, kde se pro listy staví žebříček modelů. Odpověď ve špatném
- * tvaru se nezahazuje celá: vrátí se surové JSON a položky se zachrání po
- * jedné (vzor: záchrana dávky u otázek).
+ * The only place where the model ladder is built for worksheets. An answer in
+ * the wrong shape is not discarded entirely: the raw JSON is returned and the
+ * items are salvaged one by one (pattern: batch salvage for questions).
  */
 async function callWorksheet(
   schema: z.ZodType,
@@ -177,7 +183,7 @@ function materialsFor(request: WorksheetRequest): string {
   return fitMaterials(request.materials, S.materialChars, S.materialChunkChars)
 }
 
-/** Vygeneruje celý pracovní list jedním voláním modelu. Nic neukládá. */
+/** Generates the whole worksheet in one model call. Saves nothing. */
 export async function generateWorksheet(
   request: WorksheetRequest,
   options: WorksheetAiOptions = {},
@@ -192,10 +198,10 @@ export async function generateWorksheet(
   const raw = Array.isArray(answer.items) ? answer.items : []
   const { items, dropped } = checkWorksheetItems(raw, { hasSource: hasSource(request) })
   const kept = items.slice(0, S.maxItems)
-  // Nadpis nebo pokyn na konci listu (typicky po ořezu) už nemá k čemu patřit.
+  // A heading or instruction at the end of the worksheet (typically after trimming) has nothing to belong to.
   while (kept.length > 0 && isStructural(kept[kept.length - 1]!)) kept.pop()
   const content = kept.filter((item) => !isStructural(item))
-  if (content.length < S.minItems) throw new Error(WORKSHEET_TOO_FEW_MESSAGE + describeDropped(dropped))
+  if (content.length < S.minItems) throw new Error(worksheetTooFewMessage() + describeDropped(dropped))
   const title = typeof answer.title === 'string' && answer.title.trim() ? answer.title.trim() : request.title
   return { title, items: kept, dropped, models }
 }
@@ -204,15 +210,13 @@ function isStructural(item: WorksheetItemDraft): boolean {
   return item.kind === 'heading' || item.kind === 'instruction'
 }
 
-/** Dovětek k chybě, kolik položek model zkazil — bez něj učitelka neví, jestli pomůže jiný pokyn. */
+/** Error suffix saying how many items the model broke — without it the teacher cannot tell whether another instruction would help. */
 function describeDropped(dropped: number): string {
   if (dropped === 0) return ''
-  if (dropped === 1) return ' (1 položka byla vadná a vynechala se.)'
-  if (dropped < 5) return ` (${dropped} položky byly vadné a vynechaly se.)`
-  return ` (${dropped} položek bylo vadných a vynechalo se.)`
+  return ` ${t('ai:worksheet.dropped', { count: dropped })}`
 }
 
-/** Sedí položka na to, o co se žádalo? */
+/** Does the item match what was requested? */
 function matchesTarget(item: WorksheetItemDraft, target: WorksheetTarget): boolean {
   switch (target.kind) {
     case 'text':
@@ -226,9 +230,9 @@ function matchesTarget(item: WorksheetItemDraft, target: WorksheetTarget): boole
 }
 
 /**
- * Nová podoba jednoho kusu listu. `existing` jsou texty ostatních položek,
- * aby se neopakovaly. Vadná položka nebo položka jiného druhu končí českou
- * chybou — list se nemění.
+ * New version of one worksheet item. `existing` are the texts of the other
+ * items so they do not repeat. A broken item or an item of another kind ends
+ * with a localized error — the worksheet does not change.
  */
 export async function regenerateWorksheetItem(
   request: WorksheetRequest,
@@ -243,6 +247,6 @@ export async function regenerateWorksheetItem(
     options,
   )
   const item = checkItem((value as { item?: unknown } | null)?.item, hasSource(request))
-  if (!item || !matchesTarget(item, target)) throw new Error(WORKSHEET_ITEM_FAILED_MESSAGE)
+  if (!item || !matchesTarget(item, target)) throw new Error(worksheetItemFailedMessage())
   return item
 }

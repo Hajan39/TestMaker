@@ -1,11 +1,12 @@
 /**
- * Tisk hlavolamů: zalamování přes stránky, odhad výšky proti skutečnému
- * PDF a to, co se na papír smí (a nesmí) dostat.
+ * Puzzle printing: page breaking, height estimate against the real PDF and
+ * what may (and may not) end up on paper.
  *
- * Případy jsou ty, na kterých se tisk dřív rozsypal: osmisměrka 20 × 20
- * s nápovědami, tajenka s dlouhou větou a klíč velké osmisměrky. Nerozdělitelný
- * blok vyšší než strana react-pdf nepřesune, ale slisuje do jedné strany —
- * překrývající se otázky, slitá mřížka, seznam slov mimo papír.
+ * The cases are those where printing used to fall apart: a 20 × 20 word search
+ * with clues, a cryptogram with a long phrase and the key of a large word
+ * search. React-pdf does not move an unbreakable block taller than a page but
+ * squashes it onto one page — overlapping clues, a mashed grid, a word list
+ * off the paper.
  */
 import { createElement } from 'react'
 import { Document, Page, Text, renderToBuffer } from '@react-pdf/renderer'
@@ -85,7 +86,7 @@ const WS20_CLUES = wordsearch({ size: 20, n: 40, clues: true })
 const WS20 = wordsearch({ size: 20, n: 40 })
 const CRYPTO = cryptogram('Kyslík pro život')
 const CRYPTO_LONG = cryptogram('Dýchání je výměna plynů v plicích', 'Tajenka o dýchání')
-/** Na „J“ a „Ě“ ve větě nezbude žádné slovo — řádky 8 a 13 chybí. */
+/** No word is left for „J“ and „Ě“ in the phrase — rows 8 and 13 are missing. */
 const CRYPTO_MISSING = CRYPTO_LONG
 
 const puzzleItem = (puzzle: PuzzleContent, id = 'pz'): ResolvedTestItem => ({
@@ -100,7 +101,7 @@ const puzzleItem = (puzzle: PuzzleContent, id = 'pz'): ResolvedTestItem => ({
   puzzle,
 })
 
-/** Samostatný hlavolam tak, jak ho skládá `loadRenderablePuzzle`. */
+/** A standalone puzzle as `loadRenderablePuzzle` assembles it. */
 function standalone(puzzle: PuzzleContent, slug: string, withKey = true): RenderableTest {
   return {
     test: makeTest({
@@ -133,7 +134,7 @@ function inTest(puzzle: PuzzleContent, slug: string, variant: 'A' | 'B' = 'A'): 
 interface Glyph {
   str: string
   x: number
-  /** Účaří měřené od horního okraje stránky. */
+  /** Baseline measured from the top edge of the page. */
   y: number
 }
 
@@ -147,7 +148,7 @@ async function pagesOf(buffer: Buffer, pageHeight = 842): Promise<Glyph[][]> {
     const glyphs: Glyph[] = []
     for (const item of content.items) {
       if (!('str' in item) || !item.str.trim()) continue
-      // Velká písmena s háčkem vrací pdf.js rozložená (E + háček).
+      // pdf.js returns uppercase letters with a caron decomposed (E + caron).
       glyphs.push({ str: item.str.normalize('NFC'), x: item.transform[4] as number, y: pageHeight - (item.transform[5] as number) })
     }
     pages.push(glyphs)
@@ -156,7 +157,7 @@ async function pagesOf(buffer: Buffer, pageHeight = 842): Promise<Glyph[][]> {
   return pages
 }
 
-/** Řádky strany: texty se stejným účařím spojené za sebou. */
+/** Lines of a page: texts with the same baseline joined in sequence. */
 function lines(page: Glyph[]): string[] {
   const byY = new Map<number, Glyph[]>()
   for (const glyph of page) {
@@ -171,7 +172,7 @@ function lines(page: Glyph[]): string[] {
   )
 }
 
-/** Editační vzdálenost bez ohledu na velikost písmen nejvýš třetina délky. */
+/** Case-insensitive edit distance of at most a third of the length. */
 function nearlyEqual(a: string, b: string): boolean {
   const x = [...a.trim().toLowerCase()]
   const y = [...b.trim().toLowerCase()]
@@ -196,15 +197,15 @@ async function renderPages(renderable: RenderableTest): Promise<Glyph[][]> {
   return pagesOf(await renderToBuffer(createElement(TestDocument, renderable) as never))
 }
 
-/** Strany zadání (bez klíče). */
+/** Question pages (without the key). */
 function testPages(pages: Glyph[][]): Glyph[][] {
   const key = pages.findIndex((page) => page.some((g) => g.str.startsWith('Klíč')))
   return key === -1 ? pages : pages.slice(0, key)
 }
 
 /**
- * Skutečná výška hlavolamu: vykreslí se na vysoký papír (aby se nelámal)
- * a za něj značka; výška je poloha značky pod horním okrajem.
+ * Real puzzle height: rendered on tall paper (so it does not break) followed
+ * by a marker; the height is the marker position below the top edge.
  */
 async function renderedHeight(puzzle: PuzzleContent, slug: string): Promise<number> {
   const config = makeTemplate(slug).config
@@ -232,11 +233,11 @@ async function renderedHeight(puzzle: PuzzleContent, slug: string): Promise<numb
   )
   const [page] = await pagesOf(buffer, height)
   const marker = page!.find((g) => g.str.includes('ZZKONECZZ'))!
-  // Účaří dvoubodového písma leží asi 1,6 pt pod horní hranou značky.
+  // The baseline of a two-point font lies about 1.6 pt below the top edge of the marker.
   return marker.y - 1.6 - padding.paddingTop
 }
 
-describe('tisk hlavolamu přes stránky', () => {
+describe('printing a puzzle across pages', () => {
   let warn: ReturnType<typeof vi.spyOn>
   beforeEach(() => {
     warn = vi.spyOn(console, 'warn')
@@ -253,35 +254,35 @@ describe('tisk hlavolamu přes stránky', () => {
     [`${slug}: samostatná tajenka s dlouhou větou`, () => standalone(CRYPTO_LONG, slug)],
   ] as [string, () => RenderableTest][])
 
-  it.each(cases)('%s se nerozsype', async (_, make) => {
+  it.each(cases)('%s does not fall apart', async (_, make) => {
     const renderable = make()
     const pages = await renderPages(renderable)
     const config = renderable.template.config
     const bottom = 842 - mm(config.page.marginBottomMm)
 
-    // React-pdf varuje, když nerozdělitelný blok nemá kam uhnout — a pak ho slisuje.
+    // React-pdf warns when an unbreakable block has nowhere to go — and then squashes it.
     expect(warn.mock.calls.flat().join(' ')).not.toContain("can't wrap")
     for (const page of pages) {
-      // Zápatí („strana X / Y" a vedle něj název) leží v dolním okraji záměrně;
-      // pozná se podle řádku s číslem strany.
+      // The footer („strana X / Y" with the title next to it) sits in the bottom
+      // margin on purpose; it is recognised by the page number line.
       const footerY = page.find((g) => /strana \d+ \/ \d+/.test(g.str))?.y
       const body = footerY === undefined ? page : page.filter((g) => Math.abs(g.y - footerY) > 2)
-      // Žádný text pod dolním okrajem (slisovaný blok z papíru přetekl).
+      // No text below the bottom margin (a squashed block overflowed the paper).
       expect(Math.max(...body.map((g) => g.y))).toBeLessThan(bottom + 1)
-      // Žádná prázdná strana.
+      // No empty page.
       expect(page.length).toBeGreaterThan(0)
     }
-    // Náhled stránkuje stejně jako PDF.
+    // The preview paginates the same as the PDF.
     const heading = { title: renderable.test.title, description: renderable.test.description }
     expect(paginate(renderable.items, config, heading)).toHaveLength(testPages(pages).length)
   })
 
-  it('mřížka se nikdy nerozdělí: všechny řádky osmisměrky jsou na jedné straně', async () => {
+  it('the grid never splits: all word search rows are on one page', async () => {
     for (const slug of TEMPLATES) {
       const pages = testPages(await renderPages(inTest(WS20_CLUES, slug)))
       const built = buildPuzzle(WS20_CLUES)
       if (built.kind !== 'wordsearch') throw new Error('čekala se osmisměrka')
-      // Poslední řádek mřížky jako text po buňkách; musí ležet na téže straně jako první.
+      // The last grid row as text by cells; it must lie on the same page as the first.
       const firstRow = built.wordSearch.grid[0]!.join('')
       const lastRow = built.wordSearch.grid[19]!.join('')
       const pageWith = (row: string) =>
@@ -292,19 +293,20 @@ describe('tisk hlavolamu přes stránky', () => {
   })
 })
 
-describe('samostatný hlavolam', () => {
-  it('nadpis i pokyn jsou na papíře jen jednou a první strana nese hlavolam', async () => {
+describe('standalone puzzle', () => {
+  it('title and instructions appear only once on paper and the first page carries the puzzle', async () => {
     for (const slug of TEMPLATES) {
       for (const puzzle of [WS20_CLUES, CRYPTO_LONG, WS20]) {
         const pages = testPages(await renderPages(standalone(puzzle, slug, false)))
-        // Nadpis je tučně a tučné písmo občas ztratí písmena (samostatná
-        // chyba písma), proto se hledá řádek, který se od nadpisu liší nejvýš
-        // ve třetině znaků. Kompaktní šablona tiskne nadpis velkými písmeny.
+        // The title is bold and the bold font sometimes loses letters (a
+        // separate font bug), so we look for a line that differs from the title
+        // in at most a third of its characters. The compact template prints
+        // the title in capitals.
         const titles = pages.flatMap(lines).filter((line) => nearlyEqual(line, puzzle.title))
         expect(titles, `${slug} ${puzzle.title}`).toHaveLength(1)
         const all = pages.map(pageText).join(' ').toLowerCase()
         expect(all.split('najdi v mřížce').length + all.split('doplň slova').length - 2).toBe(1)
-        // První strana není jen hlavička: je na ní mřížka, resp. políčka tajenky.
+        // The first page is not just the header: it has the grid or the cryptogram boxes.
         const built = buildPuzzle(puzzle)
         const marker = built.kind === 'wordsearch' ? built.wordSearch.grid[0]!.join('') : 'Doplňovačka'
         expect(pages[0]!.map((g) => g.str.trim()).join(''), `${slug} ${puzzle.title}`).toContain(marker)
@@ -312,22 +314,23 @@ describe('samostatný hlavolam', () => {
     }
   })
 
-  it('klíč samostatného hlavolamu neuvádí variantu', async () => {
+  it('the key of a standalone puzzle does not mention a variant', async () => {
     const pages = await renderPages(standalone(CRYPTO, 'klasicka'))
     const all = pages.map(pageText).join(' ')
     expect(all).toContain('Klíč')
     expect(all).not.toContain('varianta')
   })
 
-  it('klíč písemky variantu dál uvádí', async () => {
+  it('the key of a test still mentions the variant', async () => {
     const pages = await renderPages(inTest(CRYPTO, 'klasicka'))
     expect(pages.map(pageText).join(' ')).toContain('(varianta A)')
   })
 })
 
-describe('odhad výšky hlavolamu', () => {
-  // Skutečná výška z vykresleného PDF; odhad smí být o málo vyšší (rezerva),
-  // ne nižší — podhodnocený odhad by v náhledu ukázal méně stran než tisk.
+describe('puzzle height estimate', () => {
+  // Real height from the rendered PDF; the estimate may be slightly higher
+  // (margin), not lower — an underestimate would show fewer pages in the
+  // preview than the print.
   const cases: [string, PuzzleContent][] = [
     ['osmisměrka 20×20 s nápovědami', WS20_CLUES],
     ['osmisměrka 20×20', WS20],
@@ -337,7 +340,7 @@ describe('odhad výšky hlavolamu', () => {
     ['tajenka s dlouhou větou', CRYPTO_LONG],
   ]
   for (const slug of TEMPLATES) {
-    it.each(cases)(`${slug}: %s odpovídá PDF do 10 %%`, async (_, puzzle) => {
+    it.each(cases)(`${slug}: %s matches the PDF within 10 %%`, async (_, puzzle) => {
       const real = await renderedHeight(puzzle, slug)
       const estimate = estimateHeight(puzzleItem(puzzle), makeTemplate(slug).config)
       expect(estimate).toBeGreaterThanOrEqual(real)
@@ -345,18 +348,18 @@ describe('odhad výšky hlavolamu', () => {
     })
   }
 
-  it('hlavolam vyšší než strana se v odhadu láme na další stranu, nepřesouvá se celý', () => {
+  it('a puzzle taller than a page breaks onto the next page in the estimate instead of moving whole', () => {
     const config = makeTemplate('klasicka').config
     expect(estimateHeight(puzzleItem(CRYPTO_LONG), config)).toBeGreaterThan(usablePageHeight(config))
     const pages = paginate([puzzleItem(CRYPTO_LONG), ...makeItems().slice(1, 2)], config)
-    // Hlavolam začíná na první straně, jeho zbytek a otázka za ním jsou na druhé.
+    // The puzzle starts on the first page; its rest and the question after it are on the second.
     expect(pages).toHaveLength(2)
     expect(pages[0]!.map((i) => i.id)).toEqual(['pz'])
   })
 })
 
-describe('co se na papír dostane', () => {
-  it('slovo, které se do mřížky nevešlo, v seznamu pro žáka není, v klíči ano', async () => {
+describe('what ends up on paper', () => {
+  it('a word that did not fit the grid is not in the pupil list, but is in the key', async () => {
     const puzzle = wordsearch({ size: 12, n: 40, title: 'Přeplněná osmisměrka' })
     const built = buildPuzzle(puzzle)
     if (built.kind !== 'wordsearch') throw new Error('čekala se osmisměrka')
@@ -372,7 +375,7 @@ describe('co se na papír dostane', () => {
     for (const placement of built.wordSearch.placements) expect(pupil).toContain(placement.word.toUpperCase())
   })
 
-  it('tajenka s chybějícími řádky má ta písmena ve větě předvyplněná a čísla řádků sedí s větou', async () => {
+  it('a cryptogram with missing rows has those phrase letters pre-filled and row numbers match the phrase', async () => {
     const built = buildPuzzle(CRYPTO_MISSING)
     if (built.kind !== 'cryptogram') throw new Error('čekala se tajenka')
     const numbers = built.cryptogram.rows.map((row) => row.number)
@@ -384,13 +387,13 @@ describe('co se na papír dostane', () => {
     const pupil = testPages(await renderPages(standalone(CRYPTO_MISSING, 'klasicka', false)))
     const text = pupil.map(pageText).join(' ')
     const letters = built.cryptogram.phraseWords.flat()
-    // Předvyplněná jsou jen písmena bez řádku; ostatní políčka jsou prázdná.
+    // Only letters without a row are pre-filled; other boxes are empty.
     const filled = pupil.flat().filter((g) => g.str.trim().length === 1 && /\p{Lu}/u.test(g.str))
     expect(filled.map((g) => g.str).sort()).toEqual(missing.map((n) => letters[n - 1]!).sort())
     for (const n of missing) expect(text).not.toMatch(new RegExp(`(^|\\s)${n}\\.(\\s|$)`))
   })
 
-  it('políčka tajenky jsou pro děti dost velká a nejširší řádek se vejde na stránku', () => {
+  it('cryptogram boxes are big enough for children and the widest row fits the page', () => {
     const built = buildPuzzle(CRYPTO_LONG)
     if (built.kind !== 'cryptogram') throw new Error('čekala se tajenka')
     const { boxSize, widthInBoxes } = cryptogramLayout(built.cryptogram)
@@ -398,7 +401,7 @@ describe('co se na papír dostane', () => {
     expect(widthInBoxes * boxSize + CRYPTOGRAM_NUMBER_WIDTH).toBeLessThanOrEqual(PUZZLE_USABLE_WIDTH)
   })
 
-  it('velmi dlouhé slovo políčka zmenší, aby se řádek vešel na stránku', async () => {
+  it('a very long word shrinks the boxes so the row fits the page', async () => {
     const long = puzzleContentSchema.parse({
       kind: 'cryptogram',
       title: 'Dlouhá slova',
@@ -421,8 +424,8 @@ describe('co se na papír dostane', () => {
   })
 })
 
-describe('varianta B', () => {
-  it('osmisměrka i tajenka vyjdou jinak než ve variantě A, ale stejně dobře', () => {
+describe('variant B', () => {
+  it('word search and cryptogram come out different from variant A, but just as good', () => {
     for (const puzzle of [wordsearch({ size: 14, n: 12 }), CRYPTO]) {
       const other = puzzleForVariant(puzzle, 'B')
       expect(other.payload.seed).not.toBe(puzzle.payload.seed)
@@ -433,8 +436,8 @@ describe('varianta B', () => {
     }
   })
 
-  it('když by jiný seed dopadl hůř, zůstane zadání varianty A', () => {
-    // Přeplněná mřížka: s jiným seedem se může vejít méně slov.
+  it('when another seed would turn out worse, variant A stays', () => {
+    // An overcrowded grid: with another seed fewer words may fit.
     for (const seed of ['1', '2', '3', '4', '5', '6', '7', '8']) {
       const puzzle = puzzleContentSchema.parse({
         kind: 'wordsearch',
@@ -451,7 +454,7 @@ describe('varianta B', () => {
     }
   })
 
-  it('PDF varianty B tiskne jinou mřížku a klíč k ní', async () => {
+  it('the variant B PDF prints a different grid and its key', async () => {
     const puzzle = wordsearch({ size: 14, n: 12 })
     const gridOf = (p: PuzzleContent) => {
       const built = buildPuzzle(p)

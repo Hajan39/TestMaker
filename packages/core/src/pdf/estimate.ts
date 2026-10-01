@@ -13,39 +13,40 @@ import {
 } from './layout'
 import { mm } from './styles'
 
-/** Výška A4 v bodech (PDF pt); 1 pt = 1/72". */
+/** A4 height in points (PDF pt); 1 pt = 1/72". */
 const PAGE_HEIGHT_PT = 842
-/** Šířka A4 v bodech. */
+/** A4 width in points. */
 const PAGE_WIDTH_PT = 595.28
 
 /**
- * Paušál za obrázkový blok — `QuestionBody.tsx` ho vykresluje v šířce dané
- * procenty sloupce, skutečná výška závisí na poměru stran obrázku, který
- * odhad nezná. 130 pt odpovídá běžnému ilustračnímu obrázku ve středním
- * měřítku (marginTop 6 + marginBottom 4 z `BlockView` plus samotný obrázek).
+ * Flat allowance for an image block — `QuestionBody.tsx` renders it at a
+ * width given as a percentage of the column; the real height depends on the
+ * image aspect ratio, which the estimate does not know. 130 pt matches a
+ * typical illustration at medium scale (marginTop 6 + marginBottom 4 from
+ * `BlockView` plus the image itself).
  */
 const IMAGE_BLOCK_HEIGHT = 130
 
-/** Výška jednoho řádku tabulkového bloku — stejný odhad jako `table_fill`. */
+/** Height of one table block row — same estimate as `table_fill`. */
 const TABLE_BLOCK_ROW_HEIGHT = 20
 
-/** Okraje tabulkového bloku (marginTop/marginBottom kolem `View` v `BlockView`). */
+/** Table block margins (marginTop/marginBottom around the `View` in `BlockView`). */
 const TABLE_BLOCK_MARGIN = 10
 
-/** Výška jednoho řádku textu v bodech, odvozená z velikosti písma šablony. */
+/** Height of one text line in points, derived from the template font size. */
 function lineHeight(config: TemplateConfig): number {
   return config.page.fontSize * config.page.lineHeight
 }
 
-/** Hrubý odhad počtu řádků, které zabere zadání dané délky. */
+/** Rough estimate of the number of lines a question text of a given length takes. */
 function promptLines(prompt: string): number {
   return Math.max(1, Math.ceil(prompt.length / 70))
 }
 
 /**
- * Paušální přirážka za přílohový blok otázky (obrázek nebo tabulka) — bez
- * ní by test s přílohami vycházel o celou stranu kratší, než ve skutečnosti
- * je. Přesnost se nečeká, jen řádová blízkost skutečnému PDF.
+ * Flat surcharge for a question attachment block (image or table) — without
+ * it a test with attachments would come out a whole page shorter than it
+ * really is. Precision is not expected, just the right order of magnitude.
  */
 function blockHeight(block: Block): number {
   if (block.kind === 'image') return IMAGE_BLOCK_HEIGHT
@@ -53,39 +54,40 @@ function blockHeight(block: Block): number {
 }
 
 /**
- * Odhad výšky hlavičky testu (nadpis, podtitul, řádky s poli) — tiskne se
- * jen jednou, na první straně, proto ji `paginate` přičítá jen tam. Vychází
- * z toho, co vykresluje `Header` v `TestDocument.tsx`; hodnota polí testu
- * (název, popis) do configu nepatří, takže se počítá jen se strukturou.
+ * Estimated height of the test header (title, subtitle, field rows) — printed
+ * only once, on the first page, so `paginate` adds it only there. Based on
+ * what `Header` in `TestDocument.tsx` renders; test field values (title,
+ * description) are not part of the config, so only the structure counts.
  */
 function estimateHeaderHeight(config: TemplateConfig, heading?: PrintHeading): number {
   if (!config.header.show) return 0
   const line = lineHeight(config)
-  // marginBottom celé hlavičky (`View` v `Header`).
+  // marginBottom of the whole header (`View` in `Header`).
   let height = 12
   if (config.header.title.show) {
-    // Řádek nadpisu + marginBottom pod ním.
+    // Title line + marginBottom below it.
     height += config.header.title.fontSize + 8
   }
   const description = heading?.description?.trim()
   if (description) {
-    // Popis testu (u samostatného hlavolamu jeho pokyn) + marginBottom 6.
+    // Test description (for a standalone puzzle its instructions) + marginBottom 6.
     height += wrappedLines(description, contentWidth(config), config.page.fontSize) * line + 6
   }
   if (config.header.fields.length > 0) {
     const totalWidthPercent = config.header.fields.reduce((sum, field) => sum + field.widthPercent, 0)
     const rows = Math.max(1, Math.ceil(totalWidthPercent / 100))
-    // Řádek pole (linka nebo text) + marginBottom 6 z `Header`.
+    // Field row (line or text) + marginBottom 6 from `Header`.
     height += rows * (line + 6)
   }
   return height
 }
 
 /**
- * Nadpis a popis testu, jak je tiskne hlavička. Odhad podle nich pozná,
- * co hlavolam neopakuje (samostatný hlavolam má nadpis i pokyn v hlavičce),
- * a u samostatného hlavolamu započítá do hlavičky i pokyn. Bez nich (náhled
- * ve skladači) se počítá s hlavolamem i s jeho nadpisem.
+ * Test title and description as printed by the header. The estimate uses
+ * them to tell what the puzzle does not repeat (a standalone puzzle has its
+ * title and instructions in the header) and, for a standalone puzzle, counts
+ * the instructions into the header. Without them (builder preview) the puzzle
+ * is counted with its title.
  */
 export interface PrintHeading {
   title: string
@@ -93,8 +95,9 @@ export interface PrintHeading {
 }
 
 /**
- * Co z hlavičky hlavolamu se tiskne: nadpis a pokyn se vynechají, když totéž
- * už stojí v hlavičce testu. Jedno pravidlo pro `TestDocument` i odhad.
+ * Which parts of the puzzle head are printed: title and instructions are
+ * skipped when the test header already shows the same. One rule for
+ * `TestDocument` and the estimate.
  */
 export function puzzleHeadShown(
   puzzle: PuzzleContent,
@@ -110,23 +113,23 @@ export function puzzleHeadShown(
 }
 
 /**
- * Bezpečnostní rezerva pro odhad výšky položky. Porovnání s doopravdy
- * vykresleným PDF (viz `render-samples.test.ts`) ukázalo, že hrubý odhad
- * bez rezervy systematicky podhodnocuje skutečnou výšku — u devíti ukázkových
- * otázek v kompaktní šabloně předpověděl jednu stranu, skutečné PDF
- * potřebovalo dvě. Otázka se navíc na stránce nedělí (kromě typu `open`),
- * takže i malé podhodnocení u otázek před ní může celou další otázku
- * vytlačit na novou stranu a odhad selže. Učitelka se podle odhadu rozhoduje,
- * kolik kopií poslat do tiskárny — raději o stranu navíc v náhledu, než aby
- * jí vytiskárna nečekaně vytiskla neúplnou písemku.
+ * Safety margin for the item height estimate. Comparing with the actually
+ * rendered PDF (see `render-samples.test.ts`) showed that the rough estimate
+ * without a margin systematically underestimates the real height — for nine
+ * sample questions in the compact template it predicted one page, the real
+ * PDF needed two. A question also does not split across pages (except type
+ * `open`), so even a small underestimate of earlier questions can push the
+ * next question onto a new page and the estimate fails. The teacher decides
+ * how many copies to print based on the estimate — better one page too many
+ * in the preview than an unexpectedly incomplete printed test.
  */
 const SAFETY_MARGIN = 1.15
 
 /**
- * Odhad výšky vykreslené položky v bodech (PDF pt). Slouží hrubému náhledu v
- * prohlížeči a stránkování — nejde o přesný layout, jen o to, aby se test
- * rozdělil na stránky přibližně stejně jako skutečné PDF (raději s rezervou,
- * viz `SAFETY_MARGIN`).
+ * Estimated height of a rendered item in points (PDF pt). Serves the rough
+ * browser preview and pagination — not an exact layout, just enough for the
+ * test to split into pages roughly like the real PDF (with a margin, see
+ * `SAFETY_MARGIN`).
  */
 export function estimateHeight(item: ResolvedTestItem, config: TemplateConfig, heading?: PrintHeading): number {
   if (item.kind === 'page_break') return 0
@@ -138,29 +141,29 @@ export function estimateHeight(item: ResolvedTestItem, config: TemplateConfig, h
 }
 
 /**
- * Hlavolam se počítá téměř přesně (rozměry buněk i políček jsou pevné, text
- * se zalamuje podle šířek písmen), proto stačí malá rezerva — velká by
- * zbytečně posílala hlavolam na další stranu a lámala ho tam, kde se vejde.
+ * Puzzles are computed almost exactly (cell and box sizes are fixed, text
+ * wraps by letter widths), so a small margin suffices — a large one would
+ * needlessly push the puzzle to the next page and break it where it fits.
  */
 const PUZZLE_SAFETY_MARGIN = 1.01
 
 /**
- * Do jaké části výšky strany se hlavolam musí podle odhadu vejít, aby se
- * tiskl nerozdělitelně celý. Rezerva kryje nepřesnost odhadu: nerozdělitelný
- * blok vyšší než strana react-pdf slisuje a tisk je k nepotřebě.
+ * Fraction of the page height a puzzle must fit into (by estimate) to be
+ * printed unbroken. The margin covers estimate error: react-pdf squashes an
+ * unbreakable block taller than the page and the print becomes useless.
  */
 const KEEP_TOGETHER_LIMIT = 0.9
 
-/** Využitelná výška strany (bez horního a dolního okraje). */
+/** Usable page height (without top and bottom margins). */
 export function usablePageHeight(config: TemplateConfig): number {
   return PAGE_HEIGHT_PT - mm(config.page.marginTopMm) - mm(config.page.marginBottomMm)
 }
 
 /**
- * Tiskne se hlavolam celý nerozdělitelně? Ano, když se podle odhadu vejde na
- * stranu s rezervou — pak se radši celý přesune na další stranu, než aby se
- * seznam slov odtrhl od mřížky. Vyšší hlavolam se láme po řádcích. Rozhoduje
- * o tom `TestDocument` i `paginate`, aby náhled lámal stejně jako PDF.
+ * Is the puzzle printed as one unbreakable block? Yes when, by estimate, it
+ * fits a page with a margin — then it rather moves whole to the next page than
+ * have the word list torn from the grid. A taller puzzle breaks by rows. Both
+ * `TestDocument` and `paginate` use this so the preview breaks like the PDF.
  */
 export function puzzleKeepsTogether(item: ResolvedTestItem, config: TemplateConfig, heading?: PrintHeading): boolean {
   return estimateHeight(item, config, heading) <= usablePageHeight(config) * KEEP_TOGETHER_LIMIT
@@ -169,8 +172,8 @@ export function puzzleKeepsTogether(item: ResolvedTestItem, config: TemplateConf
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
 
 /**
- * Průměrná šířka znaku v em — změřeno na písmech Noto Sans/Serif nad českým
- * textem (malá písmena kolem 0,48 em, velká kolem 0,6 em, mezera 0,26 em).
+ * Average character width in em — measured on Noto Sans/Serif over Czech text
+ * (lowercase about 0.48 em, uppercase about 0.6 em, space 0.26 em).
  */
 function charWidth(char: string): number {
   if (char === ' ') return 0.26
@@ -178,8 +181,8 @@ function charWidth(char: string): number {
 }
 
 /**
- * Kolik řádků zabere text v dané šířce. React-pdf láme po slovech (dělení
- * slov je vypnuté, viz `fonts.ts`), tak se láme i tady.
+ * How many lines a text takes at a given width. React-pdf wraps by words
+ * (hyphenation is disabled, see `fonts.ts`), so it wraps the same here.
  */
 export function wrappedLines(text: string, width: number, fontSize: number): number {
   const space = charWidth(' ') * fontSize
@@ -197,31 +200,31 @@ export function wrappedLines(text: string, width: number, fontSize: number): num
   return lines
 }
 
-/** Šířka textové plochy stránky. */
+/** Width of the page text area. */
 function contentWidth(config: TemplateConfig): number {
   return PAGE_WIDTH_PT - mm(config.page.marginLeftMm) - mm(config.page.marginRightMm)
 }
 
 /**
- * Výška hlavolamu po nerozdělitelných kusech, přesně v pořadí, v jakém je
- * tiskne `PuzzleBody`: první kus je hlavička s mřížkou (resp. s políčky
- * tajenky), další jsou jednotlivé řádky seznamů, mezi které se smí vložit
- * zlom stránky. Pro jinou položku než hlavolam vrací `null`.
+ * Puzzle height in unbreakable chunks, in exactly the order `PuzzleBody`
+ * prints them: the first chunk is the head with the grid (or the cryptogram
+ * boxes), the rest are individual list rows, between which a page break may
+ * fall. Returns `null` for an item that is not a puzzle.
  */
 export function puzzleParts(item: ResolvedTestItem, config: TemplateConfig, heading?: PrintHeading): number[] | null {
   if (item.kind !== 'puzzle' || !item.puzzle) return null
   const puzzle = item.puzzle
   const width = contentWidth(config)
-  // React-pdf přepočte řádkování stránky (násobek) na body podle písma
-  // stránky a potomkům ho dědí v bodech — řádek nadpisu i drobného textu
-  // (9 pt) je proto vysoký stejně jako řádek běžného textu. Změřeno.
+  // React-pdf converts the page line height (a multiplier) to points using the
+  // page font and children inherit it in points — so a title line and a small
+  // text line (9 pt) are as tall as a normal text line. Measured.
   const pageLine = lineHeight(config)
   const small = 9
   const smallLine = pageLine
 
   const shown = puzzleHeadShown(puzzle, config, heading)
   const head =
-    // Bez nadpisu i pokynu odpadá i mezera nad hlavolamem (viz `PuzzleView`).
+    // Without title and instructions the space above the puzzle goes too (see `PuzzleView`).
     (shown.title || shown.instructions ? config.sectionStyle.spacingBefore : 0) +
     (shown.title ? pageLine : 0) +
     (shown.instructions ? wrappedLines(puzzleInstructions(puzzle), width, config.page.fontSize) * pageLine : 0)
@@ -241,7 +244,7 @@ export function puzzleParts(item: ResolvedTestItem, config: TemplateConfig, head
             wrappedLines(`${entry.word.toUpperCase()}${showClues ? ` – ${entry.clue}` : ''}`, columnWidth, small),
           ),
       )
-      // marginTop 8 nad seznamem se přičte k prvnímu řádku.
+      // marginTop 8 above the list is added to the first row.
       rows.push(lines * smallLine + 2 + (i === 0 ? 8 : 0))
     }
     return [head + grid, ...rows]
@@ -249,7 +252,7 @@ export function puzzleParts(item: ResolvedTestItem, config: TemplateConfig, head
 
   const result = built.cryptogram
   const { boxSize } = cryptogramLayout(result)
-  // Políčka věty se zalamují po slovech (mezi slovy 8 pt).
+  // Phrase boxes wrap by words (8 pt between words).
   let phraseLines = 1
   let used = 0
   for (const word of result.phraseWords) {
@@ -269,14 +272,14 @@ export function puzzleParts(item: ResolvedTestItem, config: TemplateConfig, head
   return [head + phrase, ...gridRows, ...clues]
 }
 
-/** Výška řádku tabulky listu: nejvyšší buňka, nejméně místo na psaní rukou. */
+/** Worksheet table row height: the tallest cell, at least room for handwriting. */
 function tableRowHeight(cells: string[], config: TemplateConfig): number {
   const cellWidth = contentWidth(config) / cells.length - 2 * WORKSHEET_LAYOUT.cellPadding
   const lines = Math.max(...cells.map((cell) => wrappedLines(cell, cellWidth, config.page.fontSize)))
   return Math.max(WORKSHEET_LAYOUT.rowMinHeight, lines * lineHeight(config) + 2 * WORKSHEET_LAYOUT.cellPadding)
 }
 
-/** Výška záhlaví tabulky — na každé další straně se tiskne znovu. */
+/** Table header height — printed again on every following page. */
 export function tableHeaderHeight(item: ResolvedTestItem, config: TemplateConfig): number {
   if (item.kind !== 'table' || !item.table) return 0
   const cellWidth = contentWidth(config) / item.table.header.length - 2 * WORKSHEET_LAYOUT.cellPadding
@@ -285,10 +288,10 @@ export function tableHeaderHeight(item: ResolvedTestItem, config: TemplateConfig
 }
 
 /**
- * Výška tabulky listu po nerozdělitelných kusech, jak je tiskne `TableBlock`:
- * první kus je mezera, popisek, záhlaví a první řádek (záhlaví se od řádků
- * neodtrhne), další jsou jednotlivé řádky. Pro jinou položku (i poškozenou
- * tabulku) vrací `null`.
+ * Worksheet table height in unbreakable chunks as `TableBlock` prints them:
+ * the first chunk is spacing, caption, header and first row (the header never
+ * separates from the rows), the rest are individual rows. Returns `null` for
+ * any other item (including a broken table).
  */
 export function tableParts(item: ResolvedTestItem, config: TemplateConfig): number[] | null {
   if (item.kind !== 'table' || !item.table) return null
@@ -348,7 +351,7 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
       break
     }
     case 'true_false':
-      // hlavičkový řádek + řádek na tvrzení
+      // header row + one row per statement
       body = (question.payload.statements.length + 1) * 18
       break
     case 'fill_blank':
@@ -361,7 +364,7 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
       body = question.payload.items.length * 19
       break
     case 'table_fill':
-      // hlavičkový řádek + datové řádky
+      // header row + data rows
       body = (question.payload.rows.length + 1) * 20
       break
     case 'label_image':
@@ -377,14 +380,14 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
 }
 
 /**
- * Rozdělí položky testu na stránky podle odhadované výšky. Zalomení
- * (`page_break`) vždy začne novou stranu, i kdyby se zbytek vešel.
+ * Splits test items into pages by estimated height. A break (`page_break`)
+ * always starts a new page, even if the rest would fit.
  *
- * Hlavolam, který se netiskne nerozdělitelně (viz `puzzleKeepsTogether`),
- * se láme po řádcích stejně jako v PDF: patří na stranu, kde začíná, ale jeho
- * zbytek zabírá místo na dalších stranách. Strana, na kterou přeteče jen
- * zbytek hlavolamu, je v seznamu prázdná — i tak se vytiskne, a počet stran
- * proto musí sedět.
+ * A puzzle not printed as one block (see `puzzleKeepsTogether`) breaks by
+ * rows just like in the PDF: it belongs to the page where it starts, but its
+ * rest takes space on the following pages. A page that only receives the
+ * overflow of a puzzle is empty in the list — it is still printed, so the
+ * page count must match.
  */
 export function paginate(
   items: ResolvedTestItem[],
@@ -396,9 +399,9 @@ export function paginate(
 
   const pages: ResolvedTestItem[][] = []
   let current: ResolvedTestItem[] = []
-  // Hlavička se tiskne jen jednou na první straně, proto zabírá místo jen tam.
+  // The header is printed only once on the first page, so it takes space only there.
   let used = estimateHeaderHeight(config, heading)
-  // Na stranu přetekl zbytek hlavolamu z předchozí — strana není prázdná.
+  // The rest of a puzzle overflowed onto this page from the previous one — the page is not empty.
   let continued = false
 
   const newPage = () => {
@@ -431,8 +434,8 @@ export function paginate(
       return
     }
 
-    // Tabulka listu se láme po řádcích; na další straně se před řádky
-    // zopakuje záhlaví, takže zabere místo i tam.
+    // A worksheet table breaks by rows; the header repeats before the rows on
+    // the next page, so it takes space there too.
     const table = tableParts(item, config)
     if (table) {
       const header = tableHeaderHeight(item, config) * SAFETY_MARGIN

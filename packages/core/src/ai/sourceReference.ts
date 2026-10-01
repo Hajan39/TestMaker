@@ -1,22 +1,24 @@
 import type { QuestionContent } from '../schema/question'
 
 /**
- * Fráze, kterými model prozrazuje, že se otázka opírá o materiál místo toho,
- * aby stála sama ("Kteří zástupci jsou uvedeni v materiálu?"). Žák materiál
- * u písemky nemusí mít po ruce vůbec, natož při opravě — otázka na něj
- * odkazovat nesmí.
+ * Phrases by which the model reveals that a question leans on the material
+ * instead of standing on its own ("Kteří zástupci jsou uvedeni v materiálu?").
+ * The pupil may not have the material at hand during the test at all, let
+ * alone while it is being marked — a question must not refer to it.
  *
- * Kontroluje se text bez diakritiky a bez rozdílu velikosti písmen, aby
- * "V materiálu" i "v materiálech" chytila stejná fráze. Vzory jsou schválně
- * vázané na slovo za předložkou (`v materiálu`, `podle textu`…), ne na holé
- * podstatné jméno — "stavební materiál" nebo "Ze kterého materiálu se
- * vyrábí sklo?" jsou běžné otázky na látku/hmotu a odkazem na zdroj nejsou.
+ * The text is checked without diacritics and case-insensitively, so that
+ * "V materiálu" and "v materiálech" are caught by the same phrase. The
+ * patterns are deliberately bound to the word after a preposition
+ * (`v materiálu`, `podle textu`…), not to the bare noun — "stavební materiál"
+ * or "Ze kterého materiálu se vyrábí sklo?" are ordinary questions about a
+ * substance and do not reference a source.
  */
 /**
- * Podstatná jména, kterými se v tomto kontextu myslí *materiál k písemce*, ne
- * ledajaký text. Bez tohohle omezení by "uveden… v" a "zmíněn… v" chytily i
- * "Který rok je uveden v Ústavě…" nebo "Jaké zvíře je zmíněno v básni Máj?" —
- * to jsou běžné otázky na obsah díla, ne odkaz na materiál k písemce.
+ * Nouns that in this context mean *the test material*, not just any text.
+ * Without this restriction "uveden… v" and "zmíněn… v" would also catch
+ * "Který rok je uveden v Ústavě…" or "Jaké zvíře je zmíněno v básni Máj?" —
+ * ordinary questions about the content of a work, not a reference to the
+ * test material.
  */
 const SOURCE_NOUN = '(material(u|ech)|text(u|ech)|clanku|ukazce|zdroji|prezentaci)'
 
@@ -41,13 +43,13 @@ const REFERENCE_PATTERNS: RegExp[] = [
 ]
 
 /**
- * "Na obrázku" je odkaz na materiál, jen když otázka vlastní obrázek nemá —
- * s vlastním obrázkem (`blocks`, `kind: 'image'`) je to normální zadání
- * ("Co je znázorněno na obrázku?" k obrázku hned pod otázkou).
+ * "Na obrázku" references the material only when the question has no image
+ * of its own — with its own image (`blocks`, `kind: 'image'`) it is an
+ * ordinary prompt ("Co je znázorněno na obrázku?" for the image right below).
  */
 const IMAGE_REFERENCE_PATTERN = /\bna\s+obrazku\b/
 
-/** Bez diakritiky a velkých písmen — vzory výše ji tak nemusí řešit. */
+/** Without diacritics and upper case — so the patterns above need not handle them. */
 function normalize(text: string): string {
   return text
     .normalize('NFD')
@@ -55,14 +57,14 @@ function normalize(text: string): string {
     .toLowerCase()
 }
 
-/** Odkazuje tenhle text (zadání, možnost, tvrzení…) na materiál/text/zdroj? */
+/** Does this text (prompt, option, statement…) refer to the material/text/source? */
 function textReferencesSource(text: string, hasImageBlock: boolean): boolean {
   const normalized = normalize(text)
   if (REFERENCE_PATTERNS.some((pattern) => pattern.test(normalized))) return true
   return !hasImageBlock && IMAGE_REFERENCE_PATTERN.test(normalized)
 }
 
-/** Text z blocku (obrázek, tabulka), který žák u otázky vidí. */
+/** Text of a block (image, table) the pupil sees with the question. */
 function blockTexts(question: QuestionContent): string[] {
   return question.blocks.flatMap((block) => {
     if (block.kind === 'image') return block.caption ? [block.caption] : []
@@ -71,9 +73,9 @@ function blockTexts(question: QuestionContent): string[] {
 }
 
 /**
- * Všechen text otázky, který uvidí žák — zadání, možnosti, tvrzení, buňky
- * tabulky apod. Nepatří sem `explanation` ani `evidence` — ty čte jen
- * učitelka v klíči, žákovi se netisknou.
+ * All question text the pupil will see — prompt, options, statements, table
+ * cells etc. Not `explanation` or `evidence` — only the teacher reads those
+ * in the answer key; they are not printed for the pupil.
  */
 function pupilVisibleTexts(question: QuestionContent): string[] {
   const texts: string[] = [question.payload.prompt, ...blockTexts(question)]
@@ -112,9 +114,9 @@ function pupilVisibleTexts(question: QuestionContent): string[] {
 }
 
 /**
- * Odkazuje otázka na materiál/text/zdroj místo toho, aby stála sama? Kontrola
- * projde všechen text, který uvidí žák (`pupilVisibleTexts`) — stačí, aby
- * odkazovala jediná jeho část (třeba jedno tvrzení v pravda/nepravda).
+ * Does the question refer to the material/text/source instead of standing on
+ * its own? Checks all text the pupil will see (`pupilVisibleTexts`) — a
+ * single referencing part is enough (e.g. one true/false statement).
  */
 export function referencesSource(question: QuestionContent): boolean {
   const hasImageBlock = question.blocks.some((block) => block.kind === 'image')

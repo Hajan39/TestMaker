@@ -1,0 +1,433 @@
+{
+  "count": {
+    "questions_one": "{{count}} otázka",
+    "questions_few": "{{count}} otázky",
+    "questions_other": "{{count}} otázek",
+    "topics_one": "{{count}} téma",
+    "topics_few": "{{count}} témata",
+    "topics_other": "{{count}} témat",
+    "topicsGenitive_one": "{{count}} tématu",
+    "topicsGenitive_few": "{{count}} témat",
+    "topicsGenitive_other": "{{count}} témat",
+    "materials_one": "{{count}} materiál",
+    "materials_few": "{{count}} materiály",
+    "materials_other": "{{count}} materiálů",
+    "materialsGenitive_one": "{{count}} materiálu",
+    "materialsGenitive_few": "{{count}} materiálů",
+    "materialsGenitive_other": "{{count}} materiálů",
+    "grades_one": "{{count}} ročník",
+    "grades_few": "{{count}} ročníky",
+    "grades_other": "{{count}} ročníků"
+  },
+  "word": {
+    "questions_one": "otázka",
+    "questions_few": "otázky",
+    "questions_other": "otázek",
+    "materials_one": "materiál",
+    "materials_few": "materiály",
+    "materials_other": "materiálů"
+  },
+  "questionDefaults": {
+    "trueFalsePrompt": "Rozhodni, zda jsou tvrzení pravdivá.",
+    "fillBlankPrompt": "Doplň chybějící výrazy.",
+    "matchingPrompt": "Přiřaď k sobě odpovídající dvojice."
+  },
+  "questionStatus": {
+    "saveFailed": "Změnu se nepodařilo uložit. Zkus to prosím znovu."
+  },
+  "selectionBar": {
+    "selected": "Vybráno {{selected}}",
+    "points_one": "{{count}} bod",
+    "points_few": "{{count}} body",
+    "points_other": "{{count}} bodů",
+    "hiddenByFilter": "({{count}} skryté filtrem)",
+    "clear": "Zrušit výběr",
+    "creating": "Vytvářím…",
+    "createTest": "Vytvořit test"
+  },
+  "topicPage": {
+    "loading": "Načítám téma…",
+    "notFoundTitle": "Téma už neexistuje",
+    "notFoundHint": "Nejspíš se smazalo nebo sloučilo s jiným. Najdeš ho přes jeho třídu.",
+    "allClasses": "Všechny třídy",
+    "rename": "Přejmenovat téma",
+    "charsAvailable": "znaků k dispozici"
+  },
+  "questionFile": {
+    "topicNotFound": "Téma se nenašlo"
+  },
+  "import": {
+    "metaTitle": "Import materiálů – TestMaker",
+    "title": "Import materiálů",
+    "intro": "Vyber složku, jednotlivé soubory, nebo je sem přetáhni. Text se vytáhne přímo v prohlížeči, na server se posílá jen text, ne soubory. Ze struktury složek se odhadne Předmět → Ročník → Téma — v náhledu si odhad projdeš a opravíš dřív, než se cokoli uloží.",
+    "loading": "Načítám import…",
+    "errorReason": "chyba",
+    "readFailed": "Soubory se nepodařilo přečíst.",
+    "pickFolder": "Vybrat složku",
+    "pickFiles": "Vybrat soubory",
+    "dropHint": "Nebo sem soubory i celé složky přetáhni myší.",
+    "supported": "Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí. Nic se neuloží dřív, než si zařazení v náhledu projdeš.",
+    "reading": "Čtu soubory",
+    "saving": "Ukládám",
+    "imported": "Naimportováno {{materials}}",
+    "alreadyInLibrary": ", {{duplicates}} už v knihovně bylo",
+    "whereNext": "Kam chceš pokračovat?",
+    "topicLink": "Téma {{name}}",
+    "gradeLink": "Ročník {{name}}",
+    "noGrade": "bez ročníku",
+    "allClasses": "Všechny třídy",
+    "previewTitle": "Náhled importu: {{topics}}, {{files}}",
+    "files_one": "{{count}} soubor",
+    "files_few": "{{count}} soubory",
+    "files_other": "{{count}} souborů",
+    "previewHint": "Zkontroluj zařazení. Co se uloží, rozhoduje tlačítko níž — teď ještě v knihovně nic není.",
+    "importButton": "Importovat ({{n}})",
+    "subject": "Předmět",
+    "subjectPlaceholder": "Doplň předmět",
+    "grade": "Ročník",
+    "topic": "Téma",
+    "excludeTopic": "Vynechat téma",
+    "restoreTopic": "Vrátit zpět",
+    "subjectMissing": "Předmět z cesty vyčíst nešel. Doplň ho, jinak téma skončí v „Nezařazeno“.",
+    "nearDuplicateSubject": "V knihovně už je „{{name}}“. Napiš to stejně, ať nevzniknou dva předměty.",
+    "includeFile": "Zahrnout {{name}}",
+    "needsOcr": "skoro bez textu – nejspíš sken",
+    "lowText": "málo textu",
+    "nothingSelected": "Z tématu se neuloží nic — všechny řádky jsou vynechané.",
+    "failedTitle": "Nepodařilo se přečíst ({{n}})",
+    "skippedTitle": "Přeskočeno ({{n}})"
+  },
+  "questionCard": {
+    "restore": "Obnovit",
+    "selectForTest": "Vybrat do testu",
+    "inTest": "V testu:",
+    "andMore": "a další {{count}}",
+    "versions": "Verze:",
+    "easier": "lehčí",
+    "harder": "těžší"
+  },
+  "importIssues": {
+    "skip": {
+      "hidden": "skrytý soubor",
+      "temporary": "dočasný soubor",
+      "systemFolder": "systémová složka",
+      "image": "obrázek (zatím nepodporován)",
+      "unsupported": "nepodporovaná přípona",
+      "oldFormat": "starý formát – převeď na .docx / .odp",
+      "emptyText": "soubor neobsahuje žádný text"
+    }
+  },
+  "claudeCodeImport": {
+    "label": "Otázky z Claude Code:",
+    "download": "Stáhnout materiály",
+    "upload": "Nahrát otázky",
+    "uploading": "Nahrávám…",
+    "uploadOffline": "Otázky se nepodařilo nahrát — zkontroluj připojení a zkus to znovu.",
+    "uploadFailed": "Otázky se nepodařilo nahrát.",
+    "uploaded": "Nahráno {{questions}}",
+    "rejectedSuffix": ", {{rejected}} neprošlo kontrolou (spusť v Claude Code otazky:over)"
+  },
+  "libraryItems": {
+    "nameRequired": {
+      "subject": "Předmět se bez názvu založit nedá.",
+      "grade": "Ročník se bez názvu založit nedá.",
+      "topic": "Téma se bez názvu založit nedá."
+    },
+    "subjectExists": "Předmět „{{name}}“ v knihovně už je.",
+    "gradeNeedsSubject": "Ročník patří vždy do nějakého předmětu. Vyber nejdřív předmět, pod který ho chceš založit.",
+    "parentSubjectMissing": "Předmět, do kterého měl ročník patřit, v knihovně není.",
+    "gradeExists": "Ročník „{{name}}“ v tomto předmětu už je.",
+    "topicNeedsGrade": "Téma patří vždy do nějakého ročníku. Vyber nejdřív ročník, ve kterém má téma vzniknout.",
+    "parentGradeMissing": "Ročník, do kterého mělo téma patřit, v knihovně není.",
+    "topicExists": "Téma „{{name}}“ v tomto ročníku už je.",
+    "nameEmpty": "Název nesmí zůstat prázdný.",
+    "subjectMissing": "Předmět v knihovně není.",
+    "renameSubjectExists": "Předmět „{{name}}“ v knihovně už je. Dva předměty téhož jména by nešlo rozlišit — zvol jiný název, nebo ročníky z tohoto předmětu přeřaď po tématech do toho druhého a tenhle smaž.",
+    "gradeMissing": "Ročník v knihovně není.",
+    "renameGradeExists": "Ročník „{{name}}“ v tomto předmětu už je. Zvol jiný název, nebo témata odtud přesuň do něj — v podrobnostech tématu přes „Upravit téma“ a volbu ročníku.",
+    "topicMissing": "Téma v knihovně není.",
+    "renameTopicExists": "Téma „{{name}}“ v tomto ročníku už je. Zvol jiný název, nebo obě témata spoj — v podrobnostech tématu přes „Upravit téma“ a „Sloučit do jiného tématu“."
+  },
+  "questions": {
+    "noPrompt": "(bez zadání)"
+  },
+  "questionEditor": {
+    "problems": {
+      "prompt": "Zadání je moc krátké — napiš aspoň pár slov.",
+      "options": "Doplň možnosti odpovědí: žádná nesmí zůstat prázdná a musí jich být dost (u jedné správné aspoň 2, u více správných aspoň 3).",
+      "correctIndex": "Označ správnou odpověď.",
+      "correctIndices": "Označ aspoň jednu správnou odpověď.",
+      "answer": "Vyplň správnou odpověď do klíče.",
+      "acceptedAnswers": "Další přípustné odpovědi nesmějí být prázdné (nejvýš 10).",
+      "statements": "Každé tvrzení musí mít aspoň pár písmen; tvrzení může být nejvýš 12.",
+      "text": "Napiš text s místy k doplnění a označ je třemi podtržítky ___.",
+      "blanks": "Ke každému místu ___ doplň správný výraz.",
+      "wordBank": "Slova v nabídce nesmějí být prázdná (nejvýš 30).",
+      "left": "Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.",
+      "right": "Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.",
+      "pairs": "Přiřaď k sobě aspoň dvě dvojice.",
+      "items": "Vyplň aspoň tři položky k seřazení, žádná nesmí zůstat prázdná.",
+      "headers": "Doplň záhlaví tabulky.",
+      "rows": "Tabulka musí mít aspoň jeden řádek.",
+      "answers": "Doplň správné odpovědi do prázdných buněk tabulky.",
+      "lines": "Počet řádků na odpověď je moc velký — zvol menší číslo.",
+      "points": "Body musí být číslo od 0 do 100.",
+      "explanation": "Poznámka do klíče je moc dlouhá — zkrať ji pod 1000 znaků.",
+      "incomplete": "Otázka není vyplněná celá. Zkontroluj zadání, odpovědi a správné řešení."
+    },
+    "saveFailed": "Otázku se nepodařilo uložit.",
+    "type": "Typ",
+    "points": "Body",
+    "difficulty": "Obtížnost",
+    "difficultyEasy": "Lehká",
+    "difficultyMedium": "Střední",
+    "difficultyHard": "Těžká",
+    "explanation": "Poznámka do klíče (nepovinné)",
+    "explanationPlaceholder": "Proč je odpověď správně — vytiskne se jen do klíče pro učitele.",
+    "editTitle": "Upravit otázku",
+    "newTitle": "Nová otázka"
+  },
+  "libraryApi": {
+    "itemGone": "Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku."
+  },
+  "labels": {
+    "noGrade": "Bez ročníku"
+  },
+  "materialRow": {
+    "saveFailed": "Nepovedlo se to uložit.",
+    "saveFailedRetry": "Nepovedlo se to uložit, zkus to prosím znovu.",
+    "chars": "{{chars}} znaků",
+    "pages": ", {{pages}} str.",
+    "needsOcr": "skoro bez textu",
+    "duplicateOf": "stejný obsah jako {{name}}",
+    "otherMaterial": "jiný materiál",
+    "duplicateScore": " (shoda {{percent}} %)",
+    "useForGeneration": "Použít pro generování",
+    "useForGenerationAria": "Použít pro generování: {{name}}",
+    "loadingTopics": "Načítám témata…",
+    "moveTo": "Přesunout do…",
+    "deleteTitle": "Smazat materiál?",
+    "deleteDescription": "Materiál „{{name}}\" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.",
+    "deleteFailed": "Materiál se nepodařilo smazat.",
+    "deleted": "Materiál „{{name}}“ smazán."
+  },
+  "importClient": {
+    "partiallySaved": "Část souborů se uložila, zbytek ne — nahraj je znovu, uložené se nezdvojí.",
+    "saveFailed": "Soubory se nepodařilo uložit."
+  },
+  "payloadFields": {
+    "prompt": "Zadání",
+    "lines": "Počet linek",
+    "openAnswer": "Vzorová odpověď (do klíče)",
+    "space": "Místo (řádků)",
+    "drawAnswer": "Co má kresba obsahovat (do klíče)",
+    "shortAnswer": "Správná odpověď",
+    "acceptedAnswers": "Další uznávané odpovědi (oddělené středníkem)",
+    "options": "Možnosti (zaškrtni správné)",
+    "remove": "Odebrat",
+    "addOption": "Přidat možnost",
+    "statements": "Tvrzení (zaškrtnuté = pravdivé)",
+    "addStatement": "Přidat tvrzení",
+    "fillBlankText": "Text s vynechávkami — místo k doplnění zapiš jako ___",
+    "blankStats": "Vynechávek v textu: {{placeholders}}, doplňovaných výrazů: {{blanks}}",
+    "blanks": "Správné výrazy v pořadí (oddělené středníkem)",
+    "wordBank": "Nabídka slov navíc (nepovinné, oddělené středníkem)",
+    "leftColumn": "Levý sloupec",
+    "rightColumn": "Pravý sloupec",
+    "pairs": "Správné dvojice",
+    "empty": "(prázdné)",
+    "orderingItems": "Položky ve správném pořadí (při tisku se zamíchají)",
+    "headers": "Hlavička (oddělená středníkem)",
+    "rows": "Řádky — prázdné pole = buňka k doplnění",
+    "cellPlaceholder": "k doplnění",
+    "addRow": "Přidat řádek",
+    "tableAnswers": "Správné hodnoty pro prázdné buňky po řádcích (oddělené středníkem)",
+    "tableStats": "Prázdných buněk: {{blankCount}}, zadaných hodnot: {{answers}}",
+    "add": "Přidat"
+  },
+  "topicsApi": {
+    "materialGone": "Materiál mezitím zmizel, obnov stránku.",
+    "sameFileInTarget": "Tentýž soubor už v cílové skupině je, přesouvat ho tam nemá smysl.",
+    "mergeIntoSelf": "Téma nejde sloučit samo se sebou. Vyber jiné cílové téma.",
+    "topicGone": "Téma se nenašlo — mezitím ho nejspíš někdo smazal. Obnov stránku a vyber jiné."
+  },
+  "materialsApi": {
+    "materialGone": "Materiál mezitím zmizel, obnov stránku."
+  },
+  "grade": {
+    "contentLabel": "Obsah třídy",
+    "loading": "Načítám třídu…",
+    "notFoundTitle": "Třída už neexistuje",
+    "notFoundHint": "Nejspíš se smazala. Vyber si jinou na úvodní obrazovce.",
+    "allClasses": "Všechny třídy"
+  },
+  "classTiles": {
+    "noGrades": "Zatím bez ročníku."
+  },
+  "classTopics": {
+    "generateForClass": "Vygenerovat pro celou třídu",
+    "addTopic": "Přidat téma",
+    "emptyTitle": "V téhle třídě zatím není žádné téma",
+    "emptyHint": "Přidej téma tlačítkem nahoře, nebo do ní naimportuj materiály."
+  },
+  "topicWorkspace": {
+    "emptyTitle": "Téma je zatím prázdné.",
+    "emptyHint": "Nahraj materiál, ze kterého mají vzniknout otázky, nebo si první otázku napiš sama.",
+    "uploadMaterial": "Nahrát materiál",
+    "writeQuestion": "Napsat otázku",
+    "listTruncated": "Otázek je v tomhle tématu víc, než se sem vejde — vypisuje se prvních {{limit}} od nejnovější. Zbytek najdeš v bance otázek, kde se dá filtrovat i hledat."
+  },
+  "deleteFromLibrary": {
+    "title": {
+      "subject": "Smazat předmět",
+      "grade": "Smazat ročník",
+      "topic": "Smazat téma"
+    },
+    "confirmTitle": "{{title}}?",
+    "questionsAccusative_one": "{{count}} otázku",
+    "questionsAccusative_few": "{{count}} otázky",
+    "questionsAccusative_other": "{{count}} otázek",
+    "impactLead": "Smaže se",
+    "impactWith": "a s ním {{parts}}.",
+    "impactNothing": "(nic pod tím zatím není).",
+    "affectedTests": "Pozor: otázky z tohoto místa jsou použité v uložených testech ({{tests}}). Z těch testů zmizí.",
+    "filesStay": "Soubory na disku zůstanou. Materiály se dají znovu naimportovat ze složky.",
+    "impactFailed": "Nepodařilo se zjistit, co se smaže — zavři dialog a otevři ho znovu.",
+    "failed": "Mazání se nepodařilo."
+  },
+  "inlineName": {
+    "failed": "Přejmenování se nepovedlo.",
+    "renameNamed": "Přejmenovat: {{name}}",
+    "rename": "Přejmenovat",
+    "newName": "Nový název",
+    "saveName": "Uložit název",
+    "cancelRename": "Zrušit přejmenování"
+  },
+  "itemDialogs": {
+    "subject": {
+      "newItem": "Nový předmět",
+      "rename": "Přejmenovat předmět",
+      "label": "Název předmětu",
+      "hint": "Např. Přírodopis. Ročníky a témata se do něj doplní potom."
+    },
+    "grade": {
+      "newItem": "Nový ročník",
+      "rename": "Přejmenovat ročník",
+      "label": "Název ročníku",
+      "hint": "Např. 8. ročník. Ročníky se řadí podle čísla na začátku názvu."
+    },
+    "topic": {
+      "newItem": "Nové téma",
+      "rename": "Přejmenovat téma",
+      "label": "Název tématu",
+      "hint": "Téma vznikne prázdné — otázky do něj můžeš napsat sama nebo k němu přidat materiály."
+    },
+    "saveFailed": "Nepovedlo se to uložit.",
+    "create": "Založit",
+    "creating": "Zakládám…"
+  },
+  "search": {
+    "failed": "Hledání se nepodařilo.",
+    "placeholder": "Hledat v celé knihovně…",
+    "label": "Hledat v celé knihovně",
+    "searching": "Hledám…",
+    "noResults": "Nic neodpovídá hledání „{{query}}“.",
+    "matchedFile": "soubor „{{name}}\""
+  },
+  "materialsStrip": {
+    "optionsLoadFailed": "Nabídku témat a ročníků se nepodařilo načíst.",
+    "optionsLoadHint": "Klikni na Hotovo a otevři úpravy znovu.",
+    "saveFailed": "Změnu se nepodařilo uložit.",
+    "selectedTopic": "vybraného tématu",
+    "merged": "Téma sloučeno do „{{name}}“.",
+    "scanWarning": "„{{name}}\" je nejspíš sken bez textu — otázky z něj nevzniknou.",
+    "title": "Materiály",
+    "skippedSuffix_one": " + {{count}} vynechaný",
+    "skippedSuffix_few": " + {{count}} vynechané",
+    "skippedSuffix_other": " + {{count}} vynechaných",
+    "editTopic": "Upravit téma",
+    "upload": "Nahrát materiály",
+    "dropHint": "Nebo sem soubory přetáhni myší.",
+    "keepOpen": "Nechte stránku otevřenou, než se soubory nahrají.",
+    "moved": "Materiál přesunut do „{{name}}“.",
+    "topicName": "Název tématu",
+    "renamed": "Téma přejmenováno.",
+    "movedToNoGrade": "Téma přeřazeno mezi témata bez ročníku.",
+    "movedToGrade": "Téma přeřazeno do ročníku {{grade}}.",
+    "loadingGrades": "Načítám ročníky…",
+    "noGrade": "Bez ročníku",
+    "otherGrade": "Jiný ročník…",
+    "newGradeName": "Název nového ročníku",
+    "newGradePlaceholder": "Např. 8. ročník",
+    "regrading": "Přeřazuji…",
+    "regrade": "Přeřadit",
+    "regradeHint": "Přeřadí celé téma i s materiály a otázkami do zvoleného ročníku téhož předmětu. Ročník, který ještě neexistuje, se založí.",
+    "mergeLabel": "Sloučit do jiného tématu",
+    "pickTopic": "Vyber téma…",
+    "merge": "Sloučit",
+    "merging": "Slučuji…",
+    "mergeTitle": "Sloučit „{{source}}“ do „{{target}}“?",
+    "mergeDescription": "Materiály i otázky se přesunou do vybraného tématu a téma „{{name}}“ zmizí. Materiály se stejným obsahem, jaký cílové téma už má, se smažou.",
+    "irreversible": "Akci nejde vrátit zpět.",
+    "mergeHint": "Materiály i otázky se přesunou do vybraného tématu, toto zanikne.",
+    "deleteHint": "Smazání tématu odstraní i jeho materiály a otázky. Soubory na disku zůstanou.",
+    "deleteTopic": "Smazat téma",
+    "allAlreadyInTopic": "Všechny soubory už v tématu byly.",
+    "uploaded": "Nahráno {{materials}}.",
+    "uploadedWithDuplicates": "Nahráno {{materials}} ({{duplicates}}).",
+    "duplicatesInTopic_one": "{{count}} už v tématu byl",
+    "duplicatesInTopic_few": "{{count}} už v tématu byly",
+    "duplicatesInTopic_other": "{{count}} už v tématu bylo"
+  },
+  "topicQuestions": {
+    "createTestFailedStatus": "Test se nepodařilo založit ({{status}})",
+    "createTestFailed": "Test se nepodařilo založit.",
+    "deleted": "Otázka smazána",
+    "undo": "Vrátit zpět",
+    "undone": "Vráceno zpět",
+    "undoFailed": "Vrácení se nepodařilo.",
+    "deleteFailed": "Otázku se nepodařilo smazat.",
+    "loadDeletedFailed": "Smazané otázky se nepodařilo načíst.",
+    "loadMoreDeletedFailed": "Další smazané otázky se nepodařilo načíst.",
+    "restored": "Otázka obnovena",
+    "restoreFailed": "Otázku se nepodařilo obnovit.",
+    "heading": "Otázky ({{count}})",
+    "type": "Typ",
+    "allTypes": "Všechny typy",
+    "difficulty": "Obtížnost",
+    "allDifficulties": "Všechny",
+    "onlyUnused": "Jen nepoužité v testu",
+    "deletedToggle": "Smazané ({{count}})",
+    "emptyTitle": "V tématu zatím nejsou otázky.",
+    "emptyHintEditor": "Nech je vygenerovat, nebo napiš první sama.",
+    "emptyHintViewer": "Nech je vygenerovat.",
+    "noMatchTitle": "Filtru neodpovídá žádná otázka.",
+    "resetFilter": "Zrušit filtr",
+    "deletedHeading": "Smazané otázky",
+    "noDeleted": "Žádné smazané otázky.",
+    "loadMore": "Načíst další"
+  },
+  "moveTopic": {
+    "loadFailed": "Ročníky se nepodařilo načíst.",
+    "failed": "Přesun se nepovedl.",
+    "moved": "Téma přesunuto do {{grade}}",
+    "failedRetry": "Přesun se nepovedl, zkus to prosím znovu.",
+    "label": "Přesunout téma do jiného ročníku",
+    "placeholder": "Přesunout do…",
+    "noOtherGrade": "V předmětu není jiný ročník"
+  },
+  "rowActions": {
+    "label": "Akce"
+  },
+  "topicList": {
+    "noGradeTitle": "Zatím není vybraný ročník",
+    "noGradeHint": "Vyber ročník v levém sloupci a objeví se tu jeho témata.",
+    "addTopic": "+ téma"
+  },
+  "topicTile": {
+    "generating": "Generuje se…",
+    "queued": "Čeká ve frontě",
+    "noQuestions": "bez otázek",
+    "lowContent": "málo textu"
+  }
+}

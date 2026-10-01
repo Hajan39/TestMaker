@@ -15,15 +15,15 @@ import { POST as createTest } from '@/app/api/tests/route'
 import { POST as addToTest } from '@/app/api/puzzles/[id]/to-test/route'
 import { loadTestItems } from '@/lib/tests'
 import { insertPuzzle, loadRenderablePuzzle, suggestPuzzleWords } from '@/lib/puzzles'
-import { jsonReq, req, seedMaterial, seedTemplate, seedTopic, seedUcet, UCET } from './helpers'
+import { jsonReq, req, seedMaterial, seedTemplate, seedTopic, seedAccount, ACCOUNT } from './helpers'
 
-/** Materiál musí mít dost textu, jinak se vytažení slov odmítne ještě před modelem. */
+/** The material needs enough text, otherwise word extraction is refused before the model. */
 const TEXT =
   'Rostlina se skládá z kořene, stonku, listů, květu a plodu. V listech probíhá fotosyntéza. '.repeat(
     6,
   )
 
-const OSMISMERKA = {
+const WORDSEARCH = {
   kind: 'wordsearch' as const,
   title: 'Části rostliny',
   instructions: '',
@@ -35,8 +35,8 @@ const OSMISMERKA = {
   payload: { cols: 10, rows: 10, seed: 'test', showClues: false },
 }
 
-/** Podvržený model: vrátí dvojice slovo + nápověda, nikdy mřížku. */
-const modelVratiSlova: typeof generatePuzzleWords = async () => ({
+/** Stubbed model: returns word + clue pairs, never a grid. */
+const modelReturnsWords: typeof generatePuzzleWords = async () => ({
   entries: [
     { word: 'fotosyntéza', clue: 'Děj v zelených listech' },
     { word: 'chloroplast', clue: 'Zelené tělísko v buňce' },
@@ -47,16 +47,16 @@ const modelVratiSlova: typeof generatePuzzleWords = async () => ({
   stats: { requested: 2, returned: 2, usable: 2, dropped: 0 },
 })
 
-/** Podvržený model, kterému došel denní limit. */
-const modelSelze: typeof generatePuzzleWords = async () => {
+/** Stubbed model that ran out of its daily quota. */
+const modelFails: typeof generatePuzzleWords = async () => {
   throw new Error('You exceeded your current quota, please check your plan')
 }
 
-describe('hlavolamy v knihovně', () => {
-  it('uloží se, najde v seznamu a dá se přepsat i smazat', async () => {
+describe('puzzles in the library', () => {
+  it('is saved, listed, and can be overwritten and deleted', async () => {
     const { topicId } = await seedTopic()
 
-    const created = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId, puzzle: OSMISMERKA }))
+    const created = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId, puzzle: WORDSEARCH }))
     expect(created.status).toBe(200)
     const { puzzle } = (await created.json()) as { puzzle: { id: string; title: string } }
     expect(puzzle.title).toBe('Části rostliny')
@@ -69,7 +69,7 @@ describe('hlavolamy v knihovně', () => {
     const params = Promise.resolve({ id: puzzle.id })
     const updated = await updatePuzzleRoute(
       jsonReq(`/api/puzzles/${puzzle.id}`, 'PUT', {
-        puzzle: { ...OSMISMERKA, title: 'Rostlina podruhé' },
+        puzzle: { ...WORDSEARCH, title: 'Rostlina podruhé' },
       }),
       { params },
     )
@@ -84,41 +84,41 @@ describe('hlavolamy v knihovně', () => {
     expect(await db.select().from(puzzles).where(eq(puzzles.id, puzzle.id))).toHaveLength(0)
   })
 
-  it('neplatný hlavolam se neuloží a vysvětlí se to', async () => {
+  it('an invalid puzzle is not saved and the reason is explained', async () => {
     const response = await createPuzzle(
       jsonReq('/api/puzzles', 'POST', {
         topicId: null,
-        puzzle: { ...OSMISMERKA, entries: [{ word: 'list', clue: 'Zelený orgán' }] },
+        puzzle: { ...WORDSEARCH, entries: [{ word: 'list', clue: 'Zelený orgán' }] },
       }),
     )
     expect(response.status).toBe(400)
     const { error } = (await response.json()) as { error: string }
-    // Česká věta, ze které je poznat, co opravit — ne obecné „neplatná data".
+    // A sentence that tells what to fix — not a generic "invalid data".
     expect(error).toContain('aspoň 2')
     expect(error).not.toContain('Neplatná data')
   })
 
-  it('neexistující téma se odmítne česky, ne pádem na cizím klíči', async () => {
+  it('a missing topic is refused with a message, not a foreign key failure', async () => {
     const response = await createPuzzle(
-      jsonReq('/api/puzzles', 'POST', { topicId: 'neexistuje', puzzle: OSMISMERKA }),
+      jsonReq('/api/puzzles', 'POST', { topicId: 'neexistuje', puzzle: WORDSEARCH }),
     )
     expect(response.status).toBe(404)
     const { error } = (await response.json()) as { error: string }
     expect(error).toContain('téma se nenašlo')
   })
 
-  it('hlavolam k tisku se skládá z jediné položky druhu puzzle', async () => {
+  it('a printable puzzle consists of a single item of kind puzzle', async () => {
     await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(UCET, 
-      { ...OSMISMERKA, kind: 'cryptogram', payload: { phrase: 'les', seed: 'a' } },
+    const saved = await insertPuzzle(ACCOUNT, 
+      { ...WORDSEARCH, kind: 'cryptogram', payload: { phrase: 'les', seed: 'a' } },
       { topicId },
     )
 
-    const renderable = await loadRenderablePuzzle(UCET, saved.id, { withKey: true })
+    const renderable = await loadRenderablePuzzle(ACCOUNT, saved.id, { withKey: true })
     expect(renderable?.items).toHaveLength(1)
     expect(renderable?.items[0]?.kind).toBe('puzzle')
-    // Hlavolam se neznámkuje — políčko na body a známku na papíře nemá co dělat.
+    // A puzzle is not graded — a points box or a grade has no place on the paper.
     expect(renderable?.test.graded).toBe(false)
 
     const puzzle = renderable?.items[0]?.puzzle
@@ -129,11 +129,11 @@ describe('hlavolamy v knihovně', () => {
   })
 })
 
-describe('hlavolam jako pátý druh položky testu', () => {
-  it('zařadí se do písemky a nese si zmrazený snímek', async () => {
+describe('puzzle as the fifth test item kind', () => {
+  it('is added to a test and carries a frozen snapshot', async () => {
     const templateId = await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId })
+    const saved = await insertPuzzle(ACCOUNT, WORDSEARCH, { topicId })
 
     const response = await createTest(
       jsonReq('/api/tests', 'POST', {
@@ -146,25 +146,25 @@ describe('hlavolam jako pátý druh položky testu', () => {
     expect(response.status).toBe(200)
     const { id } = (await response.json()) as { id: string }
 
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items).toHaveLength(1)
     expect(items[0]?.kind).toBe('puzzle')
     expect(items[0]?.puzzle?.title).toBe('Části rostliny')
     const [stored] = await db.select().from(testItems).where(eq(testItems.testId, id))
     expect(stored?.puzzleSnapshot).toBeTruthy()
 
-    // Úprava hlavolamu v knihovně nesmí změnit už zařazenou písemku.
+    // Editing the puzzle in the library must not change a test it is already in.
     await db.update(puzzles).set({ title: 'Úplně jiný hlavolam' }).where(eq(puzzles.id, saved.id))
-    const after = await loadTestItems(UCET, id)
+    const after = await loadTestItems(ACCOUNT, id)
     expect(after[0]?.puzzle?.title).toBe('Části rostliny')
   })
 })
 
-describe('zařazení hlavolamu do hotové písemky', () => {
-  it('přibude na konci písemky i se snímkem', async () => {
+describe('adding a puzzle to an existing test', () => {
+  it('is appended to the end of the test with a snapshot', async () => {
     const templateId = await seedTemplate()
     const { topicId } = await seedTopic()
-    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId })
+    const saved = await insertPuzzle(ACCOUNT, WORDSEARCH, { topicId })
 
     const created = await createTest(
       jsonReq('/api/tests', 'POST', {
@@ -181,14 +181,14 @@ describe('zařazení hlavolamu do hotové písemky', () => {
     })
     expect(response.status).toBe(200)
 
-    const items = await loadTestItems(UCET, testId)
+    const items = await loadTestItems(ACCOUNT, testId)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'puzzle'])
     expect(items[1]?.puzzle?.title).toBe('Části rostliny')
     expect(items[1]?.puzzleSnapshot).toBeTruthy()
   })
 
-  it('do neexistující písemky se hlavolam nezařadí', async () => {
-    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId: null })
+  it('is not added to a missing test', async () => {
+    const saved = await insertPuzzle(ACCOUNT, WORDSEARCH, { topicId: null })
     const response = await addToTest(
       jsonReq(`/api/puzzles/${saved.id}/to-test`, 'POST', { testId: 'neexistuje' }),
       { params: Promise.resolve({ id: saved.id }) },
@@ -197,24 +197,24 @@ describe('zařazení hlavolamu do hotové písemky', () => {
   })
 })
 
-describe('slova od modelu', () => {
-  it('model dodá dvojice slovo a nápověda', async () => {
+describe('words from the model', () => {
+  it('the model supplies word and clue pairs', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
 
-    const result = await suggestPuzzleWords(UCET, topicId, {
+    const result = await suggestPuzzleWords(ACCOUNT, topicId, {
       kind: 'wordsearch',
       count: 2,
-      generate: modelVratiSlova,
+      generate: modelReturnsWords,
     })
     expect(result.entries.map((entry) => entry.word)).toEqual(['fotosyntéza', 'chloroplast'])
     expect(result.models).toEqual(['google:gemini-flash-latest'])
   })
 
-  it('téma bez materiálů se odmítne dřív, než se model vůbec zavolá', async () => {
+  it('a topic without materials is refused before the model is called', async () => {
     const { topicId } = await seedTopic()
     await expect(
-      suggestPuzzleWords(UCET, topicId, {
+      suggestPuzzleWords(ACCOUNT, topicId, {
         kind: 'wordsearch',
         count: 5,
         generate: async () => {
@@ -224,37 +224,37 @@ describe('slova od modelu', () => {
     ).rejects.toThrow(/málo textu/)
   })
 
-  it('chyba modelu propadne volajícímu, ať ji přeloží do češtiny', async () => {
+  it('a model error propagates to the caller so it can be translated', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: TEXT })
     await expect(
-      suggestPuzzleWords(UCET, topicId, { kind: 'cryptogram', count: 5, generate: modelSelze }),
+      suggestPuzzleWords(ACCOUNT, topicId, { kind: 'cryptogram', count: 5, generate: modelFails }),
     ).rejects.toThrow(/quota/)
   })
 
-  it('vynechaný materiál se do zdroje pro hlavolam nedostane', async () => {
+  it('an excluded material does not make it into the puzzle source', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'pouzity.txt', text: TEXT })
-    const vynechanyId = await seedMaterial(topicId, { fileName: 'vynechany.txt', text: TEXT })
-    await db.update(materials).set({ excluded: true }).where(eq(materials.id, vynechanyId))
+    const skippedId = await seedMaterial(topicId, { fileName: 'vynechany.txt', text: TEXT })
+    await db.update(materials).set({ excluded: true }).where(eq(materials.id, skippedId))
 
-    let poslanyText = ''
-    await suggestPuzzleWords(UCET, topicId, {
+    let sentText = ''
+    await suggestPuzzleWords(ACCOUNT, topicId, {
       kind: 'wordsearch',
       count: 2,
       generate: async (request) => {
-        poslanyText = request.text
+        sentText = request.text
         return { entries: [], rejected: [], adjusted: [], models: [], stats: { requested: 2, returned: 0, usable: 0, dropped: 0 } }
       },
     })
 
-    expect(poslanyText).toContain('pouzity.txt')
-    expect(poslanyText).not.toContain('vynechany.txt')
+    expect(sentText).toContain('pouzity.txt')
+    expect(sentText).not.toContain('vynechany.txt')
   })
 })
 
-/** Téma v úplně jiné škole — z téhle školy nesmí být vidět ani jménem. */
-async function seedCiziTema(): Promise<string> {
+/** A topic in a different school — must not be visible from this school even by name. */
+async function seedForeignTopic(): Promise<string> {
   const schoolId = 'skola-hlavolamu-jinde'
   await db.insert(schools).values({ id: schoolId, name: 'Jiná škola', slug: 'jinde' }).onConflictDoNothing()
   const subjectId = newId()
@@ -266,64 +266,64 @@ async function seedCiziTema(): Promise<string> {
   return topicId
 }
 
-describe('rozsah hlavolamů v API', () => {
-  it('hlavolam kolegyně se tváří jako neexistující ve všech cestách', async () => {
+describe('puzzle scope in the API', () => {
+  it("a colleague's puzzle looks non-existent on every route", async () => {
     const templateId = await seedTemplate()
-    const kolegyne = await seedUcet()
-    const cizi = await insertPuzzle(kolegyne, OSMISMERKA, { topicId: null })
-    const params = () => ({ params: Promise.resolve({ id: cizi.id }) })
+    const colleague = await seedAccount()
+    const foreign = await insertPuzzle(colleague, WORDSEARCH, { topicId: null })
+    const params = () => ({ params: Promise.resolve({ id: foreign.id }) })
 
-    expect((await getPuzzleRoute(req(`/api/puzzles/${cizi.id}`), params())).status).toBe(404)
+    expect((await getPuzzleRoute(req(`/api/puzzles/${foreign.id}`), params())).status).toBe(404)
     expect(
-      (await updatePuzzleRoute(jsonReq(`/api/puzzles/${cizi.id}`, 'PUT', { puzzle: OSMISMERKA }), params()))
+      (await updatePuzzleRoute(jsonReq(`/api/puzzles/${foreign.id}`, 'PUT', { puzzle: WORDSEARCH }), params()))
         .status,
     ).toBe(404)
     expect(
-      (await deletePuzzleRoute(req(`/api/puzzles/${cizi.id}`, { method: 'DELETE' }), params())).status,
+      (await deletePuzzleRoute(req(`/api/puzzles/${foreign.id}`, { method: 'DELETE' }), params())).status,
     ).toBe(404)
-    expect((await puzzlePdf(req(`/api/puzzles/${cizi.id}/pdf`), params())).status).toBe(404)
+    expect((await puzzlePdf(req(`/api/puzzles/${foreign.id}/pdf`), params())).status).toBe(404)
 
     const created = await createTest(
       jsonReq('/api/tests', 'POST', { title: 'Moje písemka', templateId, header: {}, items: [] }),
     )
     const { id: testId } = (await created.json()) as { id: string }
     expect(
-      (await addToTest(jsonReq(`/api/puzzles/${cizi.id}/to-test`, 'POST', { testId }), params())).status,
+      (await addToTest(jsonReq(`/api/puzzles/${foreign.id}/to-test`, 'POST', { testId }), params())).status,
     ).toBe(404)
-    expect(await loadTestItems(UCET, testId)).toEqual([])
+    expect(await loadTestItems(ACCOUNT, testId)).toEqual([])
 
-    // Hlavolam kolegyně zůstal, jak byl.
-    const [row] = await db.select().from(puzzles).where(eq(puzzles.id, cizi.id))
-    expect(row?.title).toBe(OSMISMERKA.title)
+    // The colleague's puzzle stayed as it was.
+    const [row] = await db.select().from(puzzles).where(eq(puzzles.id, foreign.id))
+    expect(row?.title).toBe(WORDSEARCH.title)
   })
 
-  it('téma jiné školy se k hlavolamu nepřipojí a jeho název neprosákne', async () => {
-    const ciziTema = await seedCiziTema()
+  it("another school's topic does not link to the puzzle and its name does not leak", async () => {
+    const foreignTopic = await seedForeignTopic()
 
-    const created = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: ciziTema, puzzle: OSMISMERKA }))
+    const created = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: foreignTopic, puzzle: WORDSEARCH }))
     expect(created.status).toBe(404)
 
-    const saved = await insertPuzzle(UCET, OSMISMERKA, { topicId: null })
+    const saved = await insertPuzzle(ACCOUNT, WORDSEARCH, { topicId: null })
     const updated = await updatePuzzleRoute(
-      jsonReq(`/api/puzzles/${saved.id}`, 'PUT', { puzzle: OSMISMERKA, topicId: ciziTema }),
+      jsonReq(`/api/puzzles/${saved.id}`, 'PUT', { puzzle: WORDSEARCH, topicId: foreignTopic }),
       { params: Promise.resolve({ id: saved.id }) },
     )
     expect(updated.status).toBe(404)
     const [row] = await db.select().from(puzzles).where(eq(puzzles.id, saved.id))
     expect(row?.topicId).toBeNull()
 
-    // I kdyby vazba v databázi vznikla jinudy, seznam název cizího tématu nevydá.
-    await db.update(puzzles).set({ topicId: ciziTema }).where(eq(puzzles.id, saved.id))
+    // Even if the link were created in the database another way, the list does not reveal the foreign topic name.
+    await db.update(puzzles).set({ topicId: foreignTopic }).where(eq(puzzles.id, saved.id))
     const listed = await listPuzzles(req('/api/puzzles'))
     const { puzzles: list } = (await listed.json()) as { puzzles: { id: string; topicName: string | null }[] }
     expect(list.find((item) => item.id === saved.id)?.topicName).toBeNull()
   })
 })
 
-describe('rozbitý hlavolam se netiskne ani nezařazuje', () => {
-  /** Slovo delší než mřížka: uložit jde, vytisknout ne. */
-  const ROZBITA = {
-    ...OSMISMERKA,
+describe('a broken puzzle is neither printed nor added', () => {
+  /** A word longer than the grid: it can be saved, not printed. */
+  const BROKEN = {
+    ...WORDSEARCH,
     entries: [
       { word: 'fotosyntéza', clue: 'Děj v zelených listech' },
       { word: 'list', clue: 'Zelený orgán' },
@@ -331,14 +331,14 @@ describe('rozbitý hlavolam se netiskne ani nezařazuje', () => {
     payload: { cols: 6, rows: 6, seed: 'rozbita', showClues: false },
   }
 
-  it('uložit jako rozpracovaný jde', async () => {
-    const response = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: null, puzzle: ROZBITA }))
+  it('can be saved as a draft', async () => {
+    const response = await createPuzzle(jsonReq('/api/puzzles', 'POST', { topicId: null, puzzle: BROKEN }))
     expect(response.status).toBe(200)
   })
 
-  it('tisk i zařazení odmítne s českým vysvětlením', async () => {
+  it('refuses both printing and adding with an explanation', async () => {
     const templateId = await seedTemplate()
-    const saved = await insertPuzzle(UCET, ROZBITA, { topicId: null })
+    const saved = await insertPuzzle(ACCOUNT, BROKEN, { topicId: null })
     const params = () => ({ params: Promise.resolve({ id: saved.id }) })
 
     const pdf = await puzzlePdf(req(`/api/puzzles/${saved.id}/pdf`), params())
@@ -353,6 +353,6 @@ describe('rozbitý hlavolam se netiskne ani nezařazuje', () => {
     expect(response.status).toBe(422)
     const { error } = (await response.json()) as { error: string }
     expect(error).toContain('nevejde')
-    expect(await loadTestItems(UCET, testId)).toEqual([])
+    expect(await loadTestItems(ACCOUNT, testId)).toEqual([])
   })
 })

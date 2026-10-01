@@ -1,64 +1,65 @@
+import { t } from '@testmaker/core/i18n'
 import { z } from 'zod'
-import { roleJeAdministrator } from '@/lib/role'
-import { seznamSkol, upravitSkolu, zalozitSkolu, zmenySkolySchema } from '@/lib/skoly'
-import { sRozsahem, zapsatAudit, type Prihlaseny } from '@/lib/uzivatel'
+import { isAdministratorRole } from '@/lib/role'
+import { listSchools, updateSchool, createSchool, schoolChangesSchema } from '@/lib/schools'
+import { withScope, writeAudit, type SignedInUser } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
-const zalozitSchema = zmenySkolySchema.extend({ name: z.string().max(200) })
-const upravitSchema = zmenySkolySchema.extend({ id: z.string().min(1) })
+const createSchema = schoolChangesSchema.extend({ name: z.string().max(200) })
+const updateSchema = schoolChangesSchema.extend({ id: z.string().min(1) })
 
 /**
- * Administrace škol. Kdo není administrátor, dostane 404 — z odpovědi nemá
- * být poznat, že tu vůbec něco je.
+ * School administration. Anyone who is not an administrator gets 404 — the
+ * response must not reveal that anything is here at all.
  */
-function jenAdministrator(handler: (ucet: Prihlaseny) => Promise<Response>): Promise<Response> {
-  return sRozsahem(async (ucet) => {
-    if (!roleJeAdministrator(ucet.role)) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
-    return handler(ucet)
+function adminOnly(handler: (account: SignedInUser) => Promise<Response>): Promise<Response> {
+  return withScope(async (account) => {
+    if (!isAdministratorRole(account.role)) return Response.json({ error: t('admin:errors.notFound') }, { status: 404 })
+    return handler(account)
   })
 }
 
 export async function GET() {
-  return jenAdministrator(async (ucet) => Response.json({ skoly: (await seznamSkol(ucet)) ?? [] }))
+  return adminOnly(async (account) => Response.json({ schools: (await listSchools(account)) ?? [] }))
 }
 
 export async function POST(request: Request) {
-  return jenAdministrator(async (ucet) => {
-    const parsed = zalozitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  return adminOnly(async (account) => {
+    const parsed = createSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
 
-    const vysledek = await zalozitSkolu(ucet, parsed.data)
-    if (!vysledek.ok) return Response.json({ error: vysledek.chyba }, { status: vysledek.status })
+    const result = await createSchool(account, parsed.data)
+    if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
 
-    await zapsatAudit({
-      schoolId: vysledek.id,
-      userId: ucet.userId,
+    await writeAudit({
+      schoolId: result.id,
+      userId: account.userId,
       action: 'skola-zalozena',
       entity: 'school',
-      entityId: vysledek.id,
+      entityId: result.id,
       detail: parsed.data,
     })
-    return Response.json({ id: vysledek.id })
+    return Response.json({ id: result.id })
   })
 }
 
 export async function PATCH(request: Request) {
-  return jenAdministrator(async (ucet) => {
-    const parsed = upravitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  return adminOnly(async (account) => {
+    const parsed = updateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
 
-    const { id, ...zmeny } = parsed.data
-    const vysledek = await upravitSkolu(ucet, id, zmeny)
-    if (!vysledek.ok) return Response.json({ error: vysledek.chyba }, { status: vysledek.status })
+    const { id, ...changes } = parsed.data
+    const result = await updateSchool(account, id, changes)
+    if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
 
-    await zapsatAudit({
+    await writeAudit({
       schoolId: id,
-      userId: ucet.userId,
+      userId: account.userId,
       action: 'skola-upravena',
       entity: 'school',
       entityId: id,
-      detail: zmeny,
+      detail: changes,
     })
     return Response.json({ ok: true })
   })

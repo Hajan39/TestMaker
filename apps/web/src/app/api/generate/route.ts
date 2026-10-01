@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
-import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
 import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
-import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
+import { withScope, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -12,28 +13,28 @@ const bodySchema = z.object({
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
-  /** `add` = vytvořit `count` nových, `target` = doplnit téma na `count`. */
+  /** `add` = create `count` new ones, `target` = top the topic up to `count`. */
   mode: z.enum(['add', 'target']).default('add'),
 })
 
-/** Streamuje průběh generování jako text, aby UI vidělo postup u dlouhých materiálů. */
+/** Streams generation progress as text so the UI sees progress on long materials. */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   if (!isAiConfigured()) {
-    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
+    return Response.json({ error: aiNotConfiguredMessage() }, { status: 503 })
   }
 
   const parsed = bodySchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
 
-  // Rezervace tématu: dvě generování naráz nad týmž tématem by o sobě nevěděla
-  // a vyrobila by tytéž otázky dvakrát.
-  const jobId = await claimTopic(ucet, parsed.data.topicId)
+  // Claim the topic: two simultaneous generations over one topic wouldn't know
+  // about each other and would produce the same questions twice.
+  const jobId = await claimTopic(account, parsed.data.topicId)
   if (!jobId) {
     return Response.json(
-      { error: 'Pro tohle téma už generování běží. Počkej, než doběhne.' },
+      { error: t('generation:generateApi.alreadyRunning') },
       { status: 409 },
     )
   }
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
       try {
         send({ type: 'start' })
         const outcome = await generateForTopic(
-          ucet,
+          account,
           parsed.data.topicId,
           {
             count: parsed.data.count,
@@ -58,21 +59,21 @@ export async function POST(request: Request) {
           {
             signal: request.signal,
             onProgress: (done, total) => send({ type: 'progress', done, total }),
-            // Po každé uložené dávce: kolik otázek už je hotových a jaké to
-            // jsou. Bez toho se u dlouhého materiálu deset minut točí jen
-            // kolečko a nic nenapovídá, že práce opravdu přibývá.
+            // After each saved batch: how many questions are done and which.
+            // Without it a long material shows only a spinner for ten minutes
+            // and nothing hints that work is really progressing.
             onSaved: ({ created, questions }) => send({ type: 'saved', created, questions }),
           },
         )
         await releaseTopic(jobId, { created: outcome.created })
         send({ type: 'done', ...outcome })
       } catch (error) {
-        // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
+        // Provider messages are English and technical; translate them.
         const { message } = describeAiError(error)
         await releaseTopic(jobId, { error: message })
-        await zapsatAudit({
-          schoolId: ucet.schoolId,
-          userId: ucet.userId,
+        await writeAudit({
+          schoolId: account.schoolId,
+          userId: account.userId,
           action: 'generovani-chyba',
           entity: 'topic',
           entityId: parsed.data.topicId,
@@ -89,5 +90,5 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
   })
-  }, { zapis: true })
+  }, { write: true })
 }

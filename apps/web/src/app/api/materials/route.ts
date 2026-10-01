@@ -6,29 +6,30 @@ import { db, materials, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
 import { ensureTopic } from '@/lib/library'
-import { skola, sRozsahem } from '@/lib/uzivatel'
+import { inSchool, withScope } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
-/** Přijme dávku materiálů s už extrahovaným textem (binárky se neposílají). */
+/** Accepts a batch of materials with already extracted text (binaries are never sent). */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = importBatchSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return NextResponse.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
 
-  // Nahrání z konkrétního tématu: pole subject/grade/topic se ignorují a
-  // materiály jdou vždycky do tohohle tématu podle id, ne podle jmen —
-  // ta se mezitím mohla přejmenovat.
+  // Upload from a specific topic: the subject/grade/topic fields are ignored
+  // and materials always go into this topic by id, not by names — those may
+  // have been renamed in the meantime.
   let fixedTopicId: string | null = null
   if (parsed.data.topicId) {
     const [topic] = await db
       .select({ id: topics.id })
       .from(topics)
-      .where(and(skola(ucet, topics), eq(topics.id, parsed.data.topicId)))
+      .where(and(inSchool(account, topics), eq(topics.id, parsed.data.topicId)))
       .limit(1)
-    if (!topic) return NextResponse.json({ error: 'Téma se nenašlo' }, { status: 404 })
+    if (!topic) return NextResponse.json({ error: t('library:questionFile.topicNotFound') }, { status: 404 })
     fixedTopicId = topic.id
   }
 
@@ -36,23 +37,23 @@ export async function POST(request: Request) {
   const hashes = parsed.data.materials.map((m) => m.contentHash)
   const relativePaths = parsed.data.materials.map((m) => m.relativePath)
 
-  // Tentýž obsah smí být v knihovně vícekrát, jen ne dvakrát v jednom tématu —
-  // pracovní list ze sedmého i osmého ročníku patří do obou témat. Proto se
-  // už známé materiály evidují po dvojici (téma, obsah), ne jen podle obsahu.
+  // The same content may be in the library several times, just not twice in
+  // one topic — a worksheet for both grade 7 and grade 8 belongs to both topics.
+  // So known materials are tracked per (topic, content) pair, not by content alone.
   const existing = await db
     .select({ hash: materials.contentHash, topicId: materials.topicId })
     .from(materials)
-    .where(and(skola(ucet, materials), inArray(materials.contentHash, hashes)))
+    .where(and(inSchool(account, materials), inArray(materials.contentHash, hashes)))
   const known = new Set(existing.map((row) => knownKey(row.topicId, row.hash)))
 
-  // Podle relativní cesty poznáme opakovaný import téhož souboru. Když se
-  // od minula změnil obsah (jiný hash), stará verze se nahradí novou, ať v
-  // tématu nezůstávají obě a negeneruje se z nich dvakrát.
+  // The relative path identifies a repeated import of the same file. When its
+  // content changed since last time (different hash), the old version is
+  // replaced so the topic doesn't keep both and generate from them twice.
   //
-  // Při nahrání do konkrétního tématu je relativní cesta jen název souboru
-  // (žádná složková struktura), takže stejně pojmenovaný soubor v jiném
-  // tématu je normální — hledání minulé verze se proto omezí na tohle téma,
-  // ať nahrání do tématu B neposmazává a nepřejmenovává materiály v tématu A.
+  // When uploading into a specific topic the relative path is just the file
+  // name (no folder structure), so an equally named file in another topic is
+  // normal — the search for a prior version is limited to this topic, so an
+  // upload into topic B doesn't delete or rename materials in topic A.
   const priorByPath = new Map(
     (
       await db
@@ -66,8 +67,8 @@ export async function POST(request: Request) {
         .from(materials)
         .where(
           fixedTopicId
-            ? and(skola(ucet, materials), eq(materials.topicId, fixedTopicId), inArray(materials.relativePath, relativePaths))
-            : and(skola(ucet, materials), inArray(materials.relativePath, relativePaths)),
+            ? and(inSchool(account, materials), eq(materials.topicId, fixedTopicId), inArray(materials.relativePath, relativePaths))
+            : and(inSchool(account, materials), inArray(materials.relativePath, relativePaths)),
         )
     ).map((row) => [row.relativePath, row]),
   )
@@ -81,16 +82,16 @@ export async function POST(request: Request) {
   for (const material of parsed.data.materials) {
     const prior = priorByPath.get(material.relativePath)
     if (prior && prior.contentHash === material.contentHash) {
-      // Stejný soubor se stejným obsahem — nic se nezměnilo.
+      // Same file with the same content — nothing changed.
       duplicates += 1
       continue
     }
 
-    // Téma známe ještě před rozhodnutím o duplicitě: tentýž obsah v jiném
-    // tématu je legitimní nový materiál, ne duplicita.
+    // The topic is resolved before the duplicate decision: the same content in
+    // another topic is a legitimate new material, not a duplicate.
     const topicId =
       fixedTopicId ??
-      (await ensureTopic(ucet, {
+      (await ensureTopic(account, {
         subject: material.subject,
         grade: material.grade,
         topic: material.topic,
@@ -98,9 +99,9 @@ export async function POST(request: Request) {
       }))
 
     if (prior) {
-      // Soubor na této cestě byl už dřív importovaný, ale s jiným obsahem —
-      // nahrazujeme starou verzi, aby v tématu nezůstaly obě.
-      await db.delete(materials).where(and(skola(ucet, materials), eq(materials.id, prior.id)))
+      // A file at this path was imported before, but with different content —
+      // the old version is replaced so the topic doesn't keep both.
+      await db.delete(materials).where(and(inSchool(account, materials), eq(materials.id, prior.id)))
       known.delete(knownKey(prior.topicId, prior.contentHash))
       priorByPath.delete(material.relativePath)
       touchedTopics.add(prior.topicId)
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
     }
 
     if (known.has(knownKey(topicId, material.contentHash))) {
-      // Tentýž obsah už v tomhle tématu je (třeba pod jiným názvem souboru).
+      // The same content is already in this topic (maybe under another file name).
       duplicates += 1
       continue
     }
@@ -116,8 +117,8 @@ export async function POST(request: Request) {
     const id = newId()
     await db.insert(materials).values({
       id,
-      schoolId: ucet.schoolId,
-      createdBy: ucet.userId,
+      schoolId: account.schoolId,
+      createdBy: account.userId,
       topicId,
       fileName: material.fileName,
       relativePath: material.relativePath,
@@ -128,81 +129,81 @@ export async function POST(request: Request) {
       pageCount: material.pageCount,
       needsOcr: material.needsOcr,
       contentHash: material.contentHash,
-      // Nahrání nové verze souboru, který učitelka dřív ručně vyřadila,
-      // vyřazení zachovává — jinak by se změněný soubor tiše vrátil do
-      // generování, aniž by o tom rozhodla znovu.
+      // Uploading a new version of a file the teacher manually excluded keeps
+      // the exclusion — otherwise the changed file would silently return to
+      // generation without her deciding again.
       excluded: prior?.excluded ?? false,
     })
     known.add(knownKey(topicId, material.contentHash))
     touchedTopics.add(topicId)
     imported += 1
 
-    // Stejný obsah v jiném formátu (PDF vytištěné z prezentace) označíme,
-    // ať se z něj negenerují tytéž otázky podruhé.
-    const link = await linkDuplicates(ucet, id)
+    // Mark the same content in another format (a PDF printed from a
+    // presentation) so the same questions aren't generated from it twice.
+    const link = await linkDuplicates(account, id)
     if (link.duplicateOfId) sameContent += 1
   }
 
-  for (const topicId of touchedTopics) await recomputeTopicContent(ucet, topicId)
+  for (const topicId of touchedTopics) await recomputeTopicContent(account, topicId)
 
   return NextResponse.json({ imported, duplicates, sameContent, replaced })
-  }, { zapis: true })
+  }, { write: true })
 }
 
-/** Smaže materiál i otázky, které z něj vznikly (cizí klíč je `set null`, proto mažeme ručně). */
+/** Deletes a material and the questions made from it (the foreign key is `set null`, hence the manual delete). */
 export async function DELETE(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const id = new URL(request.url).searchParams.get('id')
-      if (!id) return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
+      if (!id) return NextResponse.json({ error: t('api:invalidRequest') }, { status: 400 })
       const [row] = await db
         .select({ topicId: materials.topicId })
         .from(materials)
-        .where(and(skola(ucet, materials), eq(materials.id, id)))
+        .where(and(inSchool(account, materials), eq(materials.id, id)))
         .limit(1)
-      await db.delete(materials).where(and(skola(ucet, materials), eq(materials.id, id)))
-      // Materiály, které na smazaný ukazovaly jako na duplicitu, řeší cizí klíč
-      // (`set null`) sám — tady jen přepočítáme použitelný objem textu tématu.
-      if (row) await recomputeTopicContent(ucet, row.topicId)
+      await db.delete(materials).where(and(inSchool(account, materials), eq(materials.id, id)))
+      // Materials pointing at the deleted one as a duplicate are handled by the
+      // foreign key (`set null`) — here we only recompute the topic's usable text.
+      if (row) await recomputeTopicContent(account, row.topicId)
       return NextResponse.json({ ok: true })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
 const excludeSchema = z.object({ id: z.string().min(1), excluded: z.boolean() })
 
-/** Vynechá (nebo vrátí zpátky) materiál z generování otázek. */
+/** Excludes a material from question generation (or brings it back). */
 export async function PATCH(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = excludeSchema.safeParse(await request.json())
       if (!parsed.success) {
-        return NextResponse.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+        return NextResponse.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
       }
 
       const [row] = await db
         .select({ topicId: materials.topicId })
         .from(materials)
-        .where(and(skola(ucet, materials), eq(materials.id, parsed.data.id)))
+        .where(and(inSchool(account, materials), eq(materials.id, parsed.data.id)))
         .limit(1)
-      if (!row) return NextResponse.json({ error: 'Materiál mezitím zmizel, obnov stránku.' }, { status: 404 })
+      if (!row) return NextResponse.json({ error: t('library:materialsApi.materialGone') }, { status: 404 })
 
       await db
         .update(materials)
         .set({ excluded: parsed.data.excluded })
-        .where(and(skola(ucet, materials), eq(materials.id, parsed.data.id)))
-      // Vynechaný materiál se přestává počítat do použitelného textu tématu,
-      // takže se stejně jako po smazání musí přepočítat.
-      await recomputeTopicContent(ucet, row.topicId)
+        .where(and(inSchool(account, materials), eq(materials.id, parsed.data.id)))
+      // An excluded material stops counting toward the topic's usable text,
+      // so it must be recomputed just like after a delete.
+      await recomputeTopicContent(account, row.topicId)
 
       return NextResponse.json({ ok: true })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
-/** Klíč pro evidenci už známých materiálů: tentýž obsah v témže tématu. */
+/** Key for tracking known materials: the same content in the same topic. */
 function knownKey(topicId: string, contentHash: string): string {
   return `${topicId}\n${contentHash}`
 }

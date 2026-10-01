@@ -1,18 +1,18 @@
 import { expect, test } from '@playwright/test'
 
 /**
- * Náhled importu. Dokud si učitelka zařazení neprojde, v knihovně nesmí nic
- * přibýt — právě odhad Předmět → Ročník → Téma z cesty je to, co se nejčastěji
- * netrefí. Test proto importuje dva samostatné soubory (bez složky, tedy
- * s prázdným zařazením), v náhledu zařazení doplní, jeden řádek vynechá
- * a teprve pak uloží.
+ * Import preview. Until the teacher reviews the filing, nothing may appear in
+ * the library — the Subject → Grade → Topic guess from the path is what most
+ * often misses. So the test imports two standalone files (no folder, hence an
+ * empty filing), fills in the filing in the preview, leaves one row out and
+ * only then saves.
  */
 
 const SUBJECT = 'PŘÍRODOPIS'
 const GRADE = '7. ročník'
 const TOPIC = 'Hmyz a jeho vývoj'
 
-/** Dost dlouhý text, aby se soubor nezahodil jako prázdný a téma nebylo chudé. */
+/** Text long enough that the file isn't discarded as empty and the topic isn't thin. */
 function text(sentence: string): string {
   return `${sentence} `.repeat(30)
 }
@@ -29,66 +29,66 @@ const DROPPED = {
   buffer: Buffer.from(text('Opakování na hmyz před písemkou z bezobratlých.'), 'utf8'),
 }
 
-test.describe('náhled importu', () => {
-  test('samostatné soubory se zařadí ručně a uloží se jen vybrané', async ({ page }) => {
-    // Úklid po případném dřívějším spadlém běhu: téma téhož jména by rozbilo
-    // kontrolu „dokud se náhled nepotvrdí, v knihovně nic není".
-    const zbytky = await page.request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
-    for (const found of ((await zbytky.json()) as { results: { topicId: string }[] }).results) {
+test.describe('import preview', () => {
+  test('standalone files are filed by hand and only the selected ones are saved', async ({ page }) => {
+    // Clean up after a possibly crashed earlier run: a topic of the same name
+    // would break the "nothing in the library until the preview is confirmed" check.
+    const leftovers = await page.request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
+    for (const found of ((await leftovers.json()) as { results: { topicId: string }[] }).results) {
       await page.request.delete(`/api/library?kind=topic&id=${encodeURIComponent(found.topicId)}`)
     }
 
     await page.goto('/import')
 
-    // Vedle výběru složky musí být i výběr jednotlivých souborů a zóna pro přetažení.
+    // Next to the folder picker there must be a file picker and a drop zone.
     await expect(page.getByRole('button', { name: 'Vybrat složku' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Vybrat soubory' })).toBeVisible()
     await expect(page.getByText('přetáhni myší')).toBeVisible()
 
     await page.locator('[data-testid="import-files"]').setInputFiles([KEPT, DROPPED])
 
-    // Oba soubory patří k témuž tématu, takže z nich vznikne jediná skupina
-    // — a protože cesta u samostatného souboru nic neříká, zůstane bez předmětu.
+    // Both files belong to the same topic, so they form a single group — and
+    // since a standalone file's path says nothing, it stays without a subject.
     const group = page.locator('[data-testid="import-group"]')
     await expect(group).toHaveCount(1)
     await expect(page.getByText('Předmět z cesty vyčíst nešel')).toBeVisible()
     await expect(group.getByLabel('Téma')).toHaveValue(TOPIC)
 
-    // Dokud se náhled nepotvrdí, v knihovně nic není.
+    // Until the preview is confirmed, the library has nothing.
     const before = await page.request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
     expect(((await before.json()) as { results: unknown[] }).results).toHaveLength(0)
 
-    // Zařazení doplníme po znacích jako od učitelky: `fill()` ve WebKitu
-    // u těchto polí nevyvolá React onChange.
+    // Type the filing character by character like the teacher would: `fill()`
+    // in WebKit doesn't fire React onChange on these fields.
     await group.getByLabel('Předmět').pressSequentially(SUBJECT)
     await group.getByLabel('Ročník').pressSequentially(GRADE)
 
-    // Jeden řádek vynecháme — do knihovny má jít jen ten druhý.
+    // Leave one row out — only the other should go into the library.
     await group.getByRole('checkbox', { name: `Zahrnout ${DROPPED.name}` }).click()
     await expect(page.getByRole('button', { name: 'Importovat (1)' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Importovat (1)' }).click()
     await expect(page.getByText(/Naimportováno 1 materiál/)).toBeVisible()
 
-    // Po importu se nabídne, kam pokračovat — ne jen přehled.
+    // After import it offers where to continue — not just an overview.
     await expect(page.getByRole('button', { name: `Ročník ${GRADE}` })).toBeVisible()
     await page.getByRole('button', { name: `Téma ${TOPIC}` }).click()
 
     await expect(page).toHaveURL(/\/topics\//)
     await expect(page.getByRole('heading', { name: TOPIC })).toBeVisible()
 
-    // Materiály jsou na stránce tématu sbalené; rozbalíme je, ať je vidět,
-    // co se naimportovalo a co ne.
+    // Materials are collapsed on the topic page; expand them to see what was
+    // imported and what wasn't.
     await page.getByRole('button', { name: /^Materiály/ }).click()
     await expect(page.getByText(KEPT.name).first()).toBeVisible()
     await expect(page.getByText(DROPPED.name)).toHaveCount(0)
 
-    // Uklidit po sobě: téma, které test založil, v knihovně zůstat nesmí.
+    // Clean up: the topic created by the test must not stay in the library.
     const topicId = new URL(page.url()).pathname.split('/').pop() ?? ''
     expect(topicId).not.toHaveLength(0)
     const deleted = await page.request.delete(
       `/api/library?kind=topic&id=${encodeURIComponent(topicId)}`,
     )
-    expect(deleted.ok(), 'zkušební téma se nepodařilo uklidit').toBe(true)
+    expect(deleted.ok(), 'failed to clean up the test topic').toBe(true)
   })
 })

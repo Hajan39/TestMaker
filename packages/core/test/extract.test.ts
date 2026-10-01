@@ -1,7 +1,7 @@
 /**
- * Extraktory běží v prohlížeči, takže test používá jsdom pro DOMParser
- * a skutečné soubory ze složky `sources/` (ta není v gitu — test se přeskočí,
- * pokud soubory chybí).
+ * Extractors run in the browser, so the test uses jsdom for DOMParser and
+ * real files from the `sources/` folder (not in git — the test is skipped
+ * when the files are missing).
  */
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -24,7 +24,7 @@ beforeAll(() => {
 const file = (relative: string) => readFile(resolve(SOURCES, relative))
 
 describe.skipIf(!hasSources)('extraktory na reálných materiálech', () => {
-  it('ODP prezentace: text slidů i poznámky', async () => {
+  it('ODP presentation: slide text and notes', async () => {
     const result = await extractOdf(await file('PŘÍRODOPIS/8. ročník/11. Dýchací soustava.odp'))
     expect(result.text).toContain('Dýchací soustava')
     expect(result.text).toContain('průdušnice')
@@ -33,37 +33,37 @@ describe.skipIf(!hasSources)('extraktory na reálných materiálech', () => {
     expect(result.needsOcr).toBe(false)
   })
 
-  it('ODT dokument', async () => {
+  it('ODT document', async () => {
     const result = await extractOdf(await file('PŘÍRODOPIS/6.ročník/test- Ploštěnci.odt'))
     expect(result.text.length).toBeGreaterThan(100)
     expect(result.text.toLowerCase()).toContain('ploštěn')
   })
 
-  it('DOCX dokument', async () => {
+  it('DOCX document', async () => {
     const result = await extractDocx(await file('ZE/ČR.docx'))
     expect(result.text.length).toBeGreaterThan(100)
   })
 
-  it('ODT s tabulkou: buňky na řádku jsou oddělené', async () => {
+  it('ODT with a table: cells in a row are separated', async () => {
     const result = await extractOdf(await file('PŘÍRODOPIS/6.ročník/test - ostnokožci.odt'))
     expect(result.text).toContain('lilijice')
-    // Původní extrakce nevkládala mezi buňky žádný oddělovač — bez něj
-    // nejde poznat, kde končí jedna buňka a začíná další.
+    // The original extraction inserted no separator between cells — without
+    // it there is no telling where one cell ends and the next begins.
     expect(result.text).toContain('| lilijice')
   })
 
-  it('ODT: nadpisy jsou označené, model tak pozná strukturu', async () => {
+  it('ODT: headings are marked so the model sees the structure', async () => {
     const result = await extractOdf(await file('PŘÍRODOPIS/8. ročník/Buňky a tkáně.odt'))
     expect(result.text).toContain('## Stavba buňky')
   })
 
-  it('DOCX s tabulkou: buňky na řádku jsou oddělené', async () => {
+  it('DOCX with a table: cells in a row are separated', async () => {
     const result = await extractDocx(await file('PŘÍRODOPIS/6.ročník/projevy_zivota_pl (1).docx'))
     expect(result.text).toContain('dráždivost')
     expect(result.text).toMatch(/dráždivost \| /)
   })
 
-  it('HTML stránka', async () => {
+  it('HTML page', async () => {
     const html = await readFile(
       resolve(SOURCES, 'PŘÍRODOPIS/9. ročník/Krystalová stavba minerálů I. - Učebna.html'),
       'utf8',
@@ -74,15 +74,15 @@ describe.skipIf(!hasSources)('extraktory na reálných materiálech', () => {
   })
 })
 
-describe('processFile: soubor bez textu', () => {
-  it('krátký .txt (< 40 znaků) se přeskočí s důvodem „prázdný text", ne jako sken', async () => {
+describe('processFile: file without text', () => {
+  it('a short .txt (< 40 characters) is skipped with reason "prázdný text", not as a scan', async () => {
     const file = new File(['jen pár slov'], 'prazdny.txt', { type: 'text/plain' })
     const result = await processFile(file, 'prazdny.txt')
     expect(result.status).toBe('skipped')
     expect(result.reason).toBe('prázdný text')
   })
 
-  it('dost dlouhý .txt projde jako obvykle, needsOcr je false', async () => {
+  it('a long enough .txt passes as usual, needsOcr is false', async () => {
     const text = 'Dost dlouhý text, aby soubor nebyl vyhodnocený jako prázdný. '.repeat(3)
     const file = new File([text], 'dost-dlouhy.txt', { type: 'text/plain' })
     const result = await processFile(file, 'dost-dlouhy.txt')

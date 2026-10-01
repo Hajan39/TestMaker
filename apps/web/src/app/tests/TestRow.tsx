@@ -14,13 +14,12 @@ import {
   AlertDialogTitle,
   Badge,
   DropdownMenuItem,
-  pocet,
   toast,
-  type PluralForms,
 } from '@testmaker/ui'
 import { PrintMenuItems } from '@/components/PrintMenu'
 import { RowActions } from '@/components/RowActions'
-import { errorMessage, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+import { errorMessage, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 import type { TestKind } from '@testmaker/core/schema'
 import { testPath } from './paths'
 
@@ -33,32 +32,33 @@ export interface TestRowData {
   questionCount: number
   points: number
   templateName: string
-  /** „Předmět · ročník"; `null` u testu bez třídy. */
+  /** "Subject · grade"; `null` for a test without a grade. */
   gradeLabel: string | null
-  /** Téma pracovního listu; `null` u volného zadání (i když téma mezitím zmizelo). */
+  /** Worksheet topic; `null` for a free-form brief (also when the topic has since disappeared). */
   topicName: string | null
-  /** Všechny položky kromě zalomení strany — u listu se počítají místo otázek. */
+  /** All items except page breaks — counted instead of questions for a worksheet. */
   itemCount: number
-  /** Vlastní písemka; nasdílenou od kolegyně jde jen otevřít, vytisknout a zkopírovat. */
+  /** Own test; one shared by a colleague can only be opened, printed and copied. */
   mine: boolean
   updatedAt: string
 }
 
 /**
- * Akce u jednoho testu: nabídka pod třemi tečkami — týž vzor jako u otázek
- * v bance. Mazání je v ní, červeně a s potvrzením; omylem se na ně kliknout nedá.
+ * Actions for one test: a menu behind three dots — the same pattern as for bank
+ * questions. Delete is in it, in red and with confirmation; it cannot be hit by
+ * accident.
  */
 function TestActions({ row }: { row: TestRowData }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [copying, setCopying] = useState(false)
-  // Co se s testem právě děje. Nabídka se po kliknutí zavře, takže se stav
-  // nemá kde ukázat v ní — ukazuje se místo tlačítka s třemi tečkami.
+  // What is happening to the test right now. The menu closes on click, so the
+  // state cannot show inside it — it replaces the three-dot button instead.
   const [pdfWork, setPdfWork] = useState<string | null>(null)
   const [pdfError, setPdfError] = useState<string | null>(null)
 
-  /** Vykreslení PDF trvá vteřiny; bez tohohle se po kliknutí zdánlivě nic nestalo. */
+  /** Rendering the PDF takes seconds; without this the click seemed to do nothing. */
   async function withPdfWork(label: string, work: () => Promise<void>) {
     setPdfError(null)
     setPdfWork(label)
@@ -72,13 +72,13 @@ function TestActions({ row }: { row: TestRowData }) {
   }
 
   /**
-   * Kopie testu. Loňskou písemku chce učitelka použít znovu, ne přepsat —
-   * kopie si bere i zmrazené znění otázek, takže vypadá přesně jako originál,
-   * i kdyby se otázky v bance mezitím změnily.
+   * Copy of the test. The teacher wants to reuse last year's test, not
+   * overwrite it — the copy takes the frozen question wording too, so it looks
+   * exactly like the original even if the bank questions have changed since.
    */
   async function copy() {
     setCopying(true)
-    const failure = 'Kopii se nepodařilo vytvořit.'
+    const failure = t('tests:row.copyFailed')
     try {
       const data = await requestJson<{ id: string }>(
         `/api/tests?copyOf=${encodeURIComponent(row.id)}`,
@@ -86,11 +86,11 @@ function TestActions({ row }: { row: TestRowData }) {
         failure,
       )
       const id = data.id
-      if (!id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
+      if (!id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
       router.refresh()
-      toast.success(`Kopie „${row.title} (kopie)“ je hotová.`, {
+      toast.success(t('tests:row.copied', { title: row.title }), {
         duration: 10_000,
-        action: { label: 'Otevřít', onClick: () => router.push(testPath(row.kind, id)) },
+        action: { label: t('common:actions.open'), onClick: () => router.push(testPath(row.kind, id)) },
       })
     } catch (error) {
       toast.error(errorMessage(error, failure))
@@ -101,12 +101,13 @@ function TestActions({ row }: { row: TestRowData }) {
 
   async function remove() {
     setDeleting(true)
-    const failure = row.kind === 'pracovni_list' ? 'List se nepodařilo smazat.' : 'Test se nepodařilo smazat.'
+    const failure =
+      row.kind === 'pracovni_list' ? t('worksheets:row.deleteFailed') : t('tests:row.deleteFailed')
     try {
       await requestJson(`/api/tests?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' }, failure)
-      // Dialog se zavírá jen po úspěchu — po chybě zůstane otevřený a jde to zkusit znovu.
+      // The dialog only closes on success — after an error it stays open for a retry.
       setConfirmOpen(false)
-      toast.success(`„${row.title}“ je smazaný.`)
+      toast.success(t('tests:row.deleted', { title: row.title }))
       router.refresh()
     } catch (error) {
       toast.error(errorMessage(error, failure))
@@ -117,22 +118,29 @@ function TestActions({ row }: { row: TestRowData }) {
 
   return (
     <>
-      <RowActions label={`${row.kind === 'pracovni_list' ? 'Akce u listu' : 'Akce u testu'} ${row.title}`} busy={pdfWork ?? (copying ? 'Kopíruji…' : null)}>
+      <RowActions
+        label={
+          row.kind === 'pracovni_list'
+            ? t('worksheets:row.actions', { title: row.title })
+            : t('tests:row.actions', { title: row.title })
+        }
+        busy={pdfWork ?? (copying ? t('tests:row.copying') : null)}
+      >
         <DropdownMenuItem asChild>
-          <Link href={testPath(row.kind, row.id)}>{row.mine ? 'Upravit' : 'Otevřít'}</Link>
+          <Link href={testPath(row.kind, row.id)}>{row.mine ? t('common:actions.edit') : t('common:actions.open')}</Link>
         </DropdownMenuItem>
-        {/* Nabídka se po kliknutí zavře — že se kopíruje, je vidět
-            místo tlačítka s třemi tečkami, stejně jako u tisku. */}
-        <DropdownMenuItem onSelect={() => void copy()}>Vytvořit kopii</DropdownMenuItem>
-        {/* Tisk i stažení berou popisky ze sdílené nabídky — aby se
-            seznam testů a skladač nemohly rozejít v tom, co „Vytisknout"
-            vlastně udělá s klíčem správných odpovědí. */}
+        {/* The menu closes on click — copying shows in place of the
+            three-dot button, just like printing. */}
+        <DropdownMenuItem onSelect={() => void copy()}>{t('tests:row.copy')}</DropdownMenuItem>
+        {/* Print and download take their labels from the shared menu — so the
+            test list and the builder cannot disagree on what "Vytisknout"
+            actually does with the answer key. */}
         <PrintMenuItems
           testId={row.id}
           variants={row.variants}
           onRun={(action) => void withPdfWork(action.busyLabel, action.run)}
         />
-        {/* Smazat smí jen autorka — u nasdílené písemky by server odpověděl „nenašel se“. */}
+        {/* Only the author may delete — for a shared test the server would answer "not found". */}
         {row.mine ? (
           <DropdownMenuItem
             variant="destructive"
@@ -141,7 +149,7 @@ function TestActions({ row }: { row: TestRowData }) {
               setConfirmOpen(true)
             }}
           >
-            Smazat
+            {t('common:actions.delete')}
           </DropdownMenuItem>
         ) : null}
       </RowActions>
@@ -151,17 +159,19 @@ function TestActions({ row }: { row: TestRowData }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {row.kind === 'pracovni_list' ? 'Smazat pracovní list' : 'Smazat test'} „{row.title}“?
+              {row.kind === 'pracovni_list'
+                ? t('worksheets:row.deleteTitle', { title: row.title })
+                : t('tests:row.deleteTitle', { title: row.title })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {row.kind === 'pracovni_list'
-                ? 'List se smaže i se všemi položkami.'
-                : 'Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.'}{' '}
-              Akci nejde vrátit zpět.
+                ? t('worksheets:row.deleteHint')
+                : t('tests:row.deleteHint')}{' '}
+              {t('tests:row.irreversible')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Zrušit</AlertDialogCancel>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={deleting}
@@ -171,7 +181,7 @@ function TestActions({ row }: { row: TestRowData }) {
                 void remove()
               }}
             >
-              {deleting ? 'Mažu…' : 'Smazat'}
+              {deleting ? t('common:actions.deleting') : t('common:actions.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -180,36 +190,31 @@ function TestActions({ row }: { row: TestRowData }) {
   )
 }
 
-/** Skloňování počtu otázek: 1 otázka, 2–4 otázky, 5 a víc otázek. */
-function otazkyWord(count: number): string {
-  if (count === 1) return 'otázka'
-  if (count < 5) return 'otázky'
-  return 'otázek'
-}
-
-const POLOZKY: PluralForms = ['položka', 'položky', 'položek']
-
 /**
- * Odznáčky testu: na známky / bez známek, případně varianty A/B. List se
- * neznámkuje nikdy — u něj odznáček říká, z čeho vznikl.
+ * Test badges: graded / ungraded, optionally variants A/B. A worksheet is never
+ * graded — its badge says what it was made from.
  */
 function TestBadges({ row }: { row: TestRowData }) {
   if (row.kind === 'pracovni_list') {
     return (
       <div className="mt-1 flex flex-wrap gap-1">
-        <Badge variant="secondary">{row.topicName ? `téma: ${row.topicName}` : 'volné zadání'}</Badge>
+        <Badge variant="secondary">{row.topicName ? t('worksheets:row.topic', { topic: row.topicName }) : t('worksheets:row.freeBrief')}</Badge>
       </div>
     )
   }
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {row.graded ? <Badge variant="status">na známky</Badge> : <Badge variant="secondary">bez známek</Badge>}
-      {row.variants === 2 ? <Badge variant="secondary">varianty A/B</Badge> : null}
+      {row.graded ? (
+        <Badge variant="status">{t('tests:row.graded')}</Badge>
+      ) : (
+        <Badge variant="secondary">{t('tests:row.ungraded')}</Badge>
+      )}
+      {row.variants === 2 ? <Badge variant="secondary">{t('tests:row.variantsAB')}</Badge> : null}
     </div>
   )
 }
 
-/** Jeden řádek tabulky testů: přehled a akce (otevřít, stáhnout, smazat). */
+/** One row of the test table: summary and actions (open, download, delete). */
 export function TestRow({ row }: { row: TestRowData }) {
   return (
     <tr>
@@ -240,9 +245,9 @@ export function TestRow({ row }: { row: TestRowData }) {
 }
 
 /**
- * Týž test jako karta — podoba pro telefon. V tabulce by na 390 px zůstaly
- * sloupce s body i celá nabídka akcí za okrajem obrazovky a s testem by nešlo
- * udělat vůbec nic.
+ * The same test as a card — the phone layout. In a table at 390 px the points
+ * column and the whole action menu would sit off screen and nothing could be
+ * done with the test at all.
  */
 export function TestCard({ row }: { row: TestRowData }) {
   return (
@@ -261,14 +266,12 @@ export function TestCard({ row }: { row: TestRowData }) {
       </div>
       <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-fg-soft">
         {row.kind === 'pracovni_list' ? (
-          <span className="ui-numeric">{pocet(row.itemCount, POLOZKY)}</span>
+          <span className="ui-numeric">{t('common:items', { count: row.itemCount })}</span>
         ) : (
           <>
-            <span className="ui-numeric">
-              {row.questionCount} {otazkyWord(row.questionCount)}
-            </span>
+            <span className="ui-numeric">{t('tests:row.questions', { count: row.questionCount })}</span>
             <span aria-hidden="true">·</span>
-            <span className="ui-numeric">{row.points} b.</span>
+            <span className="ui-numeric">{t('tests:row.points', { points: row.points })}</span>
           </>
         )}
         <span aria-hidden="true">·</span>

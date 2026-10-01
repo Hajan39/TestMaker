@@ -2,23 +2,26 @@ import { PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { countJobs, loadJobs } from '@/lib/jobs'
 import { QueueScreen } from './QueueScreen'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Průběh generování – TestMaker' }
+
+export function generateMetadata() {
+  return { title: t('generation:queue.metaTitle') }
+}
 
 /**
- * Přehled generování: co se právě vytváří, co čeká, co je hotové a co se
- * nepovedlo.
+ * Generation overview: what is being created, what waits, what is done and
+ * what failed.
  *
- * Do téhle obrazovky vede ukazatel v horní liště, takže se dá odejít z tématu
- * i zavřít hromadné generování a pořád být v obraze. Data se načtou na serveru,
- * ať je přehled vidět hned; dál si je obrazovka sama obnovuje, dokud se něco
- * děje.
+ * The toolbar indicator leads here, so one can leave the topic or close bulk
+ * generation and still stay informed. Data loads on the server so the overview
+ * shows right away; then the screen refreshes it itself while something is happening.
  */
 export default async function QueuePage() {
-  const ucet = await ucetStranky()
-  const [jobs, counts] = await Promise.all([loadJobs(ucet), countJobs(ucet)])
+  const account = await pageAccount()
+  const [jobs, counts] = await Promise.all([loadJobs(account), countJobs(account)])
 
   return (
     <PageShell>

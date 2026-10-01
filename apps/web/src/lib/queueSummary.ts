@@ -1,47 +1,48 @@
-import { OTAZKY, TEMAT_Z, TEMATA, pocet } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Jak dopadl běh fronty. Počítá se na dvou místech (přehled generování a panel
- * hromadného generování) a obě do téhle chvíle hlásila výsledek jinak — jedno
- * z nich chyby sbíralo, druhé je zahazovalo a po sedmi spadlých tématech
- * svítilo zeleně „Hotovo“. Věta i její vyznění vznikají proto tady, jednou.
+ * How a queue run ended. Computed in two places (generation overview and the
+ * bulk generation panel), which used to report it differently — one collected
+ * errors, the other dropped them and showed a green "Hotovo" after seven failed
+ * topics. So the sentence and its tone are built here, once.
  */
-export interface BehFronty {
-  /** Kolik témat se v běhu opravdu zpracovalo (povedená i nepovedená). */
-  zpracovano: number
-  /** Kolik z nich skončilo chybou. */
-  chyby: number
-  /** Kolik otázek celkem vzniklo. */
-  otazky: number
+export interface QueueRun {
+  /** How many topics the run actually processed (successful and failed). */
+  processed: number
+  /** How many of them ended with an error. */
+  errors: number
+  /** How many questions were created in total. */
+  questions: number
 }
 
 /**
- * Vyznění výsledku. Odpovídá druhu hlášky: povedlo se všechno, něco spadlo,
- * spadlo všechno, nebo se nedělo vůbec nic.
+ * Tone of the result. Matches the kind of message: everything worked, something
+ * failed, everything failed, or nothing happened at all.
  */
-export type TonBehu = 'uspech' | 'varovani' | 'chyba' | 'nic'
+export type RunTone = 'success' | 'warning' | 'error' | 'empty'
 
-export interface ShrnutiBehu {
-  ton: TonBehu
+export interface RunSummary {
+  tone: RunTone
   text: string
 }
 
 /**
- * Věta o výsledku běhu fronty. Počítá se jedním směrem — kolik témat se
- * povedlo a kolik ne; „hotovo × zbývá“ v jedné větě si navzájem odporovalo.
+ * Sentence about a queue run's result. Counted one way — how many topics
+ * succeeded and how many didn't; "done × remaining" in one sentence contradicted itself.
  */
-export function shrnutiBehu({ zpracovano, chyby, otazky }: BehFronty): ShrnutiBehu {
-  if (zpracovano === 0) {
-    return { ton: 'nic', text: 'Fronta byla prázdná, nic se negenerovalo.' }
+export function runSummary({ processed, errors, questions }: QueueRun): RunSummary {
+  if (processed === 0) {
+    return { tone: 'empty', text: t('generation:queueSummary.empty') }
   }
-  const povedena = Math.max(0, zpracovano - chyby)
-  if (povedena === 0) {
-    return {
-      ton: 'chyba',
-      text: `Nepovedlo se ani jedno téma. Nedokončeno: ${pocet(chyby, TEMATA)}.`,
-    }
+  const succeeded = Math.max(0, processed - errors)
+  const unfinished = t('generation:queueSummary.unfinished', { topics: t('library:count.topics', { count: errors }) })
+  if (succeeded === 0) {
+    return { tone: 'error', text: `${t('generation:queueSummary.allFailed')} ${unfinished}` }
   }
-  const hotovo = `Hotovo: ${pocet(otazky, OTAZKY)} z ${pocet(povedena, TEMAT_Z)}.`
-  if (chyby === 0) return { ton: 'uspech', text: hotovo }
-  return { ton: 'varovani', text: `${hotovo} Nedokončeno: ${pocet(chyby, TEMATA)}.` }
+  const done = t('generation:queueSummary.done', {
+    questions: t('library:count.questions', { count: questions }),
+    topics: t('library:count.topicsGenitive', { count: succeeded }),
+  })
+  if (errors === 0) return { tone: 'success', text: done }
+  return { tone: 'warning', text: `${done} ${unfinished}` }
 }

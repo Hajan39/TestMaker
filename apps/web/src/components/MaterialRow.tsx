@@ -14,8 +14,9 @@ import {
   cn,
   toast,
 } from '@testmaker/ui'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 export interface GroupMaterial {
   id: string
@@ -25,15 +26,14 @@ export interface GroupMaterial {
   needsOcr: boolean
   duplicateOfId: string | null
   duplicateScore: number | null
-  /** Ručně vyřazený z generování — materiál v tématu zůstává, jen se nepoužije. */
+  /** Manually excluded from generation — the material stays in the topic, it just isn't used. */
   excluded: boolean
 }
 
 /**
- * Jeden řádek materiálu v pruhu: název, rozsah textu, poznámka o duplicitě,
- * přepínač „Použít pro generování" a smazání. Přesun do jiného tématu se
- * nabízí jen v režimu „Upravit téma" — je to úprava zařazení, ne práce s
- * jedním materiálem samotným.
+ * One material row in the strip: name, text size, duplicate note, the
+ * "Použít pro generování" toggle and delete. Moving to another topic is offered
+ * only in "Upravit téma" mode — it changes the filing, not the material itself.
  */
 export function MaterialRow({
   material,
@@ -45,7 +45,7 @@ export function MaterialRow({
   onMove,
 }: {
   material: GroupMaterial
-  /** Název materiálu, jehož je tenhle duplicitou — pro poznámku „stejný obsah jako …". */
+  /** Name of the material this one duplicates — for the "stejný obsah jako …" note. */
   originalFileName: string | null
   manage: boolean
   siblings: { id: string; name: string }[]
@@ -54,14 +54,14 @@ export function MaterialRow({
   onMove: (topicId: string) => void
 }) {
   const router = useRouter()
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const [excludePending, setExcludePending] = useState(false)
-  // Optimistická změna: zaškrtnutí se projeví hned, ne až po `router.refresh()`.
-  // Když server odmítne, vrátí se zpátky a učitelka se to dozví hláškou —
-  // jinak by checkbox tiše zůstal v poloze, která se neuložila.
+  // Optimistic change: the check shows immediately, not after `router.refresh()`.
+  // When the server refuses, it flips back and the teacher gets a message —
+  // otherwise the checkbox would silently stay in a state that wasn't saved.
   const [excludedOverride, setExcludedOverride] = useState(material.excluded)
-  // Když přijde nová hodnota ze serveru, převezme se hned při vykreslení —
-  // přes efekt by se stránka vykreslila dvakrát a checkbox by na chvíli blikl.
+  // A new value from the server is adopted right during render — an effect
+  // would render twice and the checkbox would flicker.
   const [lastExcluded, setLastExcluded] = useState(material.excluded)
   if (material.excluded !== lastExcluded) {
     setLastExcluded(material.excluded)
@@ -76,12 +76,12 @@ export function MaterialRow({
       await requestJson(
         '/api/materials',
         jsonBody('PATCH', { id: material.id, excluded: next }),
-        'Nepovedlo se to uložit.',
+        t('library:materialRow.saveFailed'),
       )
       router.refresh()
     } catch (saveError) {
       setExcludedOverride(!next)
-      toast.error(errorMessage(saveError, 'Nepovedlo se to uložit, zkus to prosím znovu.'))
+      toast.error(errorMessage(saveError, t('library:materialRow.saveFailedRetry')))
     } finally {
       setExcludePending(false)
     }
@@ -89,7 +89,7 @@ export function MaterialRow({
 
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-material-id={material.id}>
-      {/* Názvy souborů bývají dlouhé a bez mezer, proto se musí zalomit i uprostřed slova. */}
+      {/* File names tend to be long and without spaces, so they must break even mid-word. */}
       <span
         className={cn(
           'min-w-0 break-all',
@@ -100,40 +100,44 @@ export function MaterialRow({
         {material.fileName}
       </span>
       <span className="shrink-0 text-fg-muted">
-        {material.charCount.toLocaleString('cs')} znaků
-        {material.pageCount ? `, ${material.pageCount} str.` : ''}
+        {t('library:materialRow.chars', { chars: material.charCount.toLocaleString('cs') })}
+        {material.pageCount ? t('library:materialRow.pages', { pages: material.pageCount }) : ''}
       </span>
-      {material.needsOcr ? <Badge className="shrink-0 bg-draft-bg text-draft-fg">skoro bez textu</Badge> : null}
+      {material.needsOcr ? (
+        <Badge className="shrink-0 bg-draft-bg text-draft-fg">{t('library:materialRow.needsOcr')}</Badge>
+      ) : null}
       {material.duplicateOfId ? (
         <span className="min-w-0 break-all text-xs text-fg-muted">
-          stejný obsah jako {originalFileName ?? 'jiný materiál'}
-          {material.duplicateScore ? ` (shoda ${Math.round(material.duplicateScore * 100)} %)` : ''}
+          {t('library:materialRow.duplicateOf', { name: originalFileName ?? t('library:materialRow.otherMaterial') })}
+          {material.duplicateScore
+            ? t('library:materialRow.duplicateScore', { percent: Math.round(material.duplicateScore * 100) })
+            : ''}
         </span>
       ) : null}
 
-      {muzeMenit ? (
+      {canEdit ? (
         <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
           <Checkbox
             checked={!material.duplicateOfId && !excludedOverride}
             disabled={excludePending || !!material.duplicateOfId}
-            aria-label={`Použít pro generování: ${material.fileName}`}
+            aria-label={t('library:materialRow.useForGenerationAria', { name: material.fileName })}
             onCheckedChange={() => void toggleExcluded()}
           />
-          Použít pro generování
+          {t('library:materialRow.useForGeneration')}
         </label>
       ) : null}
 
-      {muzeMenit && manage && (!optionsReady || siblings.length > 0) ? (
+      {canEdit && manage && (!optionsReady || siblings.length > 0) ? (
         <Select
-          value="presun"
+          value="move"
           disabled={busy || !optionsReady}
-          onValueChange={(value) => value !== 'presun' && onMove(value)}
+          onValueChange={(value) => value !== 'move' && onMove(value)}
         >
           <SelectTrigger className="w-full shrink-0 sm:w-56" aria-busy={!optionsReady || undefined}>
-            {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám témata…</span>}
+            {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialRow.loadingTopics')}</span>}
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="presun">Přesunout do…</SelectItem>
+            <SelectItem value="move">{t('library:materialRow.moveTo')}</SelectItem>
             {siblings.map((sibling) => (
               <SelectItem key={sibling.id} value={sibling.id}>
                 {sibling.name}
@@ -143,25 +147,25 @@ export function MaterialRow({
         </Select>
       ) : null}
 
-      {muzeMenit ? (
+      {canEdit ? (
         <DeleteButton
-          label="Smazat"
-          title="Smazat materiál?"
-          description={`Materiál „${material.fileName}" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.`}
+          label={t('common:actions.delete')}
+          title={t('library:materialRow.deleteTitle')}
+          description={t('library:materialRow.deleteDescription', { name: material.fileName })}
           onConfirm={async () => {
-            // Chyba se nechává probublat dál — `DeleteButton` pak dialog
-            // nezavře a nepředstírá úspěch, který nenastal.
+            // The error is rethrown — `DeleteButton` then keeps the dialog
+            // open instead of pretending a success that didn't happen.
             try {
               await requestJson(
                 `/api/materials?id=${encodeURIComponent(material.id)}`,
                 { method: 'DELETE' },
-                'Materiál se nepodařilo smazat.',
+                t('library:materialRow.deleteFailed'),
               )
             } catch (deleteError) {
-              toast.error(errorMessage(deleteError, 'Materiál se nepodařilo smazat.'))
+              toast.error(errorMessage(deleteError, t('library:materialRow.deleteFailed')))
               throw deleteError
             }
-            toast.success(`Materiál „${material.fileName}“ smazán.`)
+            toast.success(t('library:materialRow.deleted', { name: material.fileName }))
             router.refresh()
           }}
         />

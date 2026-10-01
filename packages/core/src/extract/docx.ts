@@ -1,27 +1,28 @@
 import JSZip from 'jszip'
+import { t } from '../i18n'
 import { normalizeText, type ExtractionResult } from './types'
 
-/** Styly nadpisů, kterými Word i LibreOffice značí nadpisy v `w:pStyle`. */
+/** Heading styles Word and LibreOffice use to mark headings in `w:pStyle`. */
 const HEADING_STYLE_RE = /^(Heading|Nadpis)/i
 
-/** DOCX — ZIP s `word/document.xml`; čte odstavce, zalomení a buňky tabulek. */
+/** DOCX — a ZIP with `word/document.xml`; reads paragraphs, line breaks and table cells. */
 export async function extractDocx(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {
   const zip = await JSZip.loadAsync(data)
   const docFile = zip.file('word/document.xml')
-  if (!docFile) throw new Error('Soubor neobsahuje word/document.xml')
+  if (!docFile) throw new Error(t('core:extract.missingPart', { part: 'word/document.xml' }))
   const xml = await docFile.async('string')
 
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  if (doc.querySelector('parsererror')) throw new Error('document.xml se nepodařilo načíst')
+  if (doc.querySelector('parsererror')) throw new Error(t('core:extract.unreadablePart', { part: 'document.xml' }))
 
   const body = doc.getElementsByTagName('w:body')[0] ?? doc.documentElement
   const text = normalizeText(collectBody(body))
-  // `needsOcr` značí sken bez textové vrstvy — DOCX je vždy textový formát,
-  // krátký text tu znamená prázdný dokument, ne naskenovaný obrázek.
+  // `needsOcr` marks a scan without a text layer — DOCX is always a text
+  // format, a short text here means an empty document, not a scanned image.
   return { text, pageCount: null, needsOcr: false }
 }
 
-/** Text jednoho odstavce (`w:p`) včetně tabulátorů a ručních zalomení. */
+/** Text of one paragraph (`w:p`) including tabs and manual line breaks. */
 function paragraphText(p: Element): string {
   const parts: string[] = []
   for (const node of Array.from(p.getElementsByTagName('*'))) {
@@ -32,15 +33,16 @@ function paragraphText(p: Element): string {
   return parts.join('')
 }
 
-/** Je odstavec formátovaný jako nadpis? Model tak pozná strukturu materiálu. */
+/** Is the paragraph formatted as a heading? This lets the model see the material's structure. */
 function isHeading(p: Element): boolean {
   const style = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val')
   return !!style && HEADING_STYLE_RE.test(style)
 }
 
 /**
- * Projde tělo dokumentu po odstavcích a tabulkách. Buňky téhož řádku spojuje
- * oddělovačem, aby se nesloučily do jedné věty jako spojitý text.
+ * Walks the document body by paragraphs and tables. Cells of the same row are
+ * joined with a separator so they do not merge into one sentence of
+ * continuous text.
  */
 function collectBody(body: Element): string {
   const lines: string[] = []

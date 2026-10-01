@@ -2,155 +2,155 @@ import { and, eq } from 'drizzle-orm'
 import { db, schools, users } from '@/db'
 import { OAUTH_COOKIE } from '@/lib/session'
 import {
-  bezpecnyNavrat,
-  googleNastaveni,
-  overitIdToken,
-  presmeruj,
-  vymenitKod,
-  type OauthStav,
+  safeReturnPath,
+  googleSettings,
+  verifyIdToken,
+  redirectResponse,
+  exchangeCode,
+  type OauthState,
 } from '@/lib/google'
-import { zalozitRelaci, zapsatAudit } from '@/lib/uzivatel'
+import { createSession, writeAudit } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
-/** Cookie se stavem se čte jednou a hned zahazuje — proti přehrání odpovědi. */
-function precistStav(request: Request): OauthStav | null {
+/** The state cookie is read once and dropped right away — against replaying the response. */
+function readState(request: Request): OauthState | null {
   const cookie = request.headers
     .get('cookie')
     ?.split(';')
-    .map((kus) => kus.trim())
-    .find((kus) => kus.startsWith(`${OAUTH_COOKIE}=`))
+    .map((piece) => piece.trim())
+    .find((piece) => piece.startsWith(`${OAUTH_COOKIE}=`))
   if (!cookie) return null
   try {
-    const stav = JSON.parse(decodeURIComponent(cookie.slice(OAUTH_COOKIE.length + 1))) as OauthStav
-    return stav.state && stav.codeVerifier ? stav : null
+    const state = JSON.parse(decodeURIComponent(cookie.slice(OAUTH_COOKIE.length + 1))) as OauthState
+    return state.state && state.codeVerifier ? state : null
   } catch {
     return null
   }
 }
 
-function smazatStav(): string {
+function clearState(): string {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
   return `${OAUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`
 }
 
-/** Zpět na přihlášení s hláškou; `info` se ukáže neutrálně, ne červeně jako chyba. */
-function zpetSChybou(origin: string, chyba: string, druh: 'chyba' | 'info' = 'chyba'): Response {
+/** Back to sign-in with a message; `info` is shown neutrally, not red like an error. */
+function backWithError(origin: string, error: string, kind: 'chyba' | 'info' = 'chyba'): Response {
   const login = new URL('/login', origin)
-  login.searchParams.set(druh, chyba)
-  return presmeruj(login, [smazatStav()])
+  login.searchParams.set(kind, error)
+  return redirectResponse(login, [clearState()])
 }
 
 /**
- * Návrat od Googlu. Ověří se stav, kód se vymění za `id_token` a z něj se
- * vezme identita. Účet, který v aplikaci není, se podle nastavení školy buď
- * odmítne, nebo založí jako čekající — sám od sebe dovnitř neprojde ani tak.
+ * Return from Google. The state is checked, the code exchanged for an
+ * `id_token` and the identity taken from it. An account unknown to the app is,
+ * depending on the school settings, either rejected or created as pending —
+ * even then it does not get in by itself.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const nastaveni = googleNastaveni()
-  if (!nastaveni) {
-    return zpetSChybou(url.origin, 'Přihlášení přes Google není v této instalaci nastavené.')
+  const settings = googleSettings()
+  if (!settings) {
+    return backWithError(url.origin, t('auth:google.notConfigured'))
   }
 
-  const stav = precistStav(request)
+  const state = readState(request)
   const code = url.searchParams.get('code')
-  if (!stav || !code || url.searchParams.get('state') !== stav.state) {
-    return zpetSChybou(url.origin, 'Přihlášení přes Google vypršelo. Zkuste to prosím znovu.')
+  if (!state || !code || url.searchParams.get('state') !== state.state) {
+    return backWithError(url.origin, t('auth:google.expired'))
   }
 
-  const vymena = await vymenitKod(nastaveni, code, stav.codeVerifier)
-  if ('chyba' in vymena) return zpetSChybou(url.origin, vymena.chyba)
+  const swap = await exchangeCode(settings, code, state.codeVerifier)
+  if ('error' in swap) return backWithError(url.origin, swap.error)
 
-  const overeni = overitIdToken(vymena.idToken, nastaveni)
-  if ('chyba' in overeni) return zpetSChybou(url.origin, overeni.chyba)
-  const { identita } = overeni
+  const verification = verifyIdToken(swap.idToken, settings)
+  if ('error' in verification) return backWithError(url.origin, verification.error)
+  const { identity } = verification
 
-  // Škola se pozná podle domény účtu; bez ní se přihlásit nedá.
-  const [skola] = identita.hd
-    ? await db.select().from(schools).where(eq(schools.googleDomain, identita.hd)).limit(1)
+  // The school is recognised by the account domain; without one sign-in is impossible.
+  const [school] = identity.hd
+    ? await db.select().from(schools).where(eq(schools.googleDomain, identity.hd)).limit(1)
     : []
-  if (!skola) {
-    return zpetSChybou(
+  if (!school) {
+    return backWithError(
       url.origin,
-      `Doména ${identita.hd ?? 'účtu'} není v TestMakeru zavedená. Požádejte správce.`,
+      identity.hd ? t('auth:google.unknownDomain', { domain: identity.hd }) : t('auth:google.noDomain'),
     )
   }
 
-  // Nejdřív podle trvalého identifikátoru, pak podle e-mailu: účet založený
-  // s heslem se tím k Googlu jen připojí, druhý vedle něj nevzniká.
-  const [podleSub] = await db.select().from(users).where(eq(users.googleSub, identita.sub)).limit(1)
-  const [podleEmailu] = podleSub
+  // First by the permanent identifier, then by e-mail: an account created
+  // with a password just gets linked to Google, no second one appears.
+  const [bySub] = await db.select().from(users).where(eq(users.googleSub, identity.sub)).limit(1)
+  const [byEmail] = bySub
     ? []
     : await db
         .select()
         .from(users)
-        .where(and(eq(users.email, identita.email), eq(users.schoolId, skola.id)))
+        .where(and(eq(users.email, identity.email), eq(users.schoolId, school.id)))
         .limit(1)
-  const ucet = podleSub ?? podleEmailu
+  const account = bySub ?? byEmail
 
-  if (!ucet) {
-    if (!skola.googleAutoJoin) {
-      await zapsatAudit({
-        schoolId: skola.id,
+  if (!account) {
+    if (!school.googleAutoJoin) {
+      await writeAudit({
+        schoolId: school.id,
         action: 'google-neznamy-ucet',
-        detail: { email: identita.email },
+        detail: { email: identity.email },
         severity: 'chyba',
       })
-      return zpetSChybou(
+      return backWithError(
         url.origin,
-        `Účet ${identita.email} nemá v TestMakeru přístup. Požádejte správce o založení.`,
+        t('auth:google.noAccess', { email: identity.email }),
       )
     }
 
-    // Čekající účet nemá roli, se kterou by šlo pracovat — dokud ho správce
-    // neschválí, přihlásit se s ním nedá.
+    // A pending account has no role to work with — until a manager approves
+    // it, it cannot sign in.
     await db.insert(users).values({
       id: crypto.randomUUID().replace(/-/g, '').slice(0, 12),
-      schoolId: skola.id,
-      email: identita.email,
-      name: identita.jmeno,
+      schoolId: school.id,
+      email: identity.email,
+      name: identity.name,
       role: 'nahled',
-      googleSub: identita.sub,
+      googleSub: identity.sub,
       status: 'ceka',
     })
-    await zapsatAudit({
-      schoolId: skola.id,
+    await writeAudit({
+      schoolId: school.id,
       action: 'google-cekajici-ucet',
-      detail: { email: identita.email },
+      detail: { email: identity.email },
     })
-    return zpetSChybou(
+    return backWithError(
       url.origin,
-      'Účet jsme zaevidovali. Přihlásit se půjde, jakmile ho správce schválí.',
+      t('auth:google.registered'),
       'info',
     )
   }
 
-  if (ucet.status !== 'aktivni') {
-    return zpetSChybou(
+  if (account.status !== 'aktivni') {
+    return backWithError(
       url.origin,
-      ucet.status === 'ceka'
-        ? 'Účet zatím nemá přidělenou roli. Požádejte správce o schválení.'
-        : 'Účet je zablokovaný. Obraťte se na správce.',
+      account.status === 'ceka' ? t('auth:account.pending') : t('auth:account.blocked'),
     )
   }
 
-  // Spárování při prvním přihlášení Googlem k účtu založenému s heslem.
-  if (!ucet.googleSub) {
-    await db.update(users).set({ googleSub: identita.sub }).where(eq(users.id, ucet.id))
+  // Linking on the first Google sign-in to an account created with a password.
+  if (!account.googleSub) {
+    await db.update(users).set({ googleSub: identity.sub }).where(eq(users.id, account.id))
   }
 
-  const cookie = await zalozitRelaci(ucet.id, {
+  const cookie = await createSession(account.id, {
     ip: request.headers.get('x-forwarded-for'),
     userAgent: request.headers.get('user-agent'),
   })
-  await zapsatAudit({
-    schoolId: ucet.schoolId,
-    userId: ucet.id,
+  await writeAudit({
+    schoolId: account.schoolId,
+    userId: account.id,
     action: 'prihlaseni-google',
     ip: request.headers.get('x-forwarded-for'),
   })
 
-  const cil = new URL(ucet.mustChangePassword ? '/zmena-hesla' : bezpecnyNavrat(stav.dal), url.origin)
-  return presmeruj(cil, [cookie, smazatStav()])
+  const target = new URL(account.mustChangePassword ? '/zmena-hesla' : safeReturnPath(state.dal), url.origin)
+  return redirectResponse(target, [cookie, clearState()])
 }

@@ -1,27 +1,28 @@
-import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from '../../schema/question'
+import { AI_QUESTION_TYPES, questionTypeLabel, type QuestionType } from '../../schema/question'
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from '../../schema/test'
 import { AI_SETTINGS } from '../settings'
 import { describeGradeAudience, QUESTION_TYPE_HINTS } from './questions'
 
 /**
- * Zadání pracovního listu, jak ho skládá web z tématu nebo volného zadání.
- * Na rozdíl od otázek do banky smí list vycházet i z obecných znalostí;
- * model proto musí u každé položky přiznat, jestli vychází z dodaného textu.
+ * Worksheet request as the web assembles it from a topic or a free-form
+ * brief. Unlike bank questions, a worksheet may draw on general knowledge;
+ * the model must therefore state for each item whether it is based on the
+ * supplied text.
  */
 export interface WorksheetRequest {
-  /** Název tématu z knihovny, nebo název listu z volného zadání. */
+  /** Topic name from the library, or the worksheet name from a free-form brief. */
   title: string
   subjectName: string | null
   gradeName: string | null
-  /** Text materiálů tématu (bez duplicit), soubory oddělené `=== název ===`; může být prázdný. */
+  /** Text of the topic's materials (without duplicates), files separated by `=== name ===`; may be empty. */
   materials: string
-  /** Vlastní text, který učitelka vložila do zadání; může být prázdný. */
+  /** Own text the teacher put into the brief; may be empty. */
   ownText: string
-  /** Pokyn učitelky („víc tabulek, jeden fun fact, na 20 minut“); může být prázdný. */
+  /** Teacher's instruction ("víc tabulek, jeden fun fact, na 20 minut"); may be empty. */
   instructions: string
 }
 
-/** Druh kusu, který se přegenerovává; u úlohy i její typ. */
+/** Kind of item being regenerated; for a task also its type. */
 export type WorksheetTarget =
   | { kind: 'heading' | 'instruction' | 'text' | 'fun_fact' | 'table' }
   | { kind: 'question'; questionType: QuestionType }
@@ -37,7 +38,7 @@ const TARGET_LABELS: Record<Exclude<WorksheetTarget['kind'], 'question'>, string
 }
 
 export function buildWorksheetSystemPrompt(gradeName: string | null): string {
-  const types = AI_QUESTION_TYPES.map((type) => `- \`${type}\` (${QUESTION_TYPE_LABELS[type]}): ${QUESTION_TYPE_HINTS[type]}`)
+  const types = AI_QUESTION_TYPES.map((type) => `- \`${type}\` (${questionTypeLabel(type)}): ${QUESTION_TYPE_HINTS[type]}`)
   return [
     'Jsi zkušený učitel na české základní škole a chystáš pracovní list na procvičování v hodině nebo doma.',
     'Nic se na něm neznámkuje: má být pestrý, srozumitelný a má žáka bavit.',
@@ -103,7 +104,7 @@ export function buildWorksheetItemPrompt(
 ): string {
   const wanted =
     target.kind === 'question'
-      ? `úlohu (\`kind: "question"\`) typu \`${target.questionType}\` (${QUESTION_TYPE_LABELS[target.questionType]})`
+      ? `úlohu (\`kind: "question"\`) typu \`${target.questionType}\` (${questionTypeLabel(target.questionType)})`
       : TARGET_LABELS[target.kind]
   const sections = [...sourceSections(request, materials), '', `Napiš jednu novou položku listu: ${wanted}.`]
   sections.push('Vrať ji v poli `item`. Pravidla ze systémového pokynu platí i tady.')

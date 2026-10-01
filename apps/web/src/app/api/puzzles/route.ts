@@ -1,35 +1,30 @@
 import { z } from 'zod'
+import { t } from '@testmaker/core/i18n'
 import { puzzleContentSchema } from '@testmaker/core/schema'
-import {
-  describePuzzleIssues,
-  insertPuzzle,
-  loadPuzzleList,
-  topicExists,
-  TOPIC_NOT_FOUND_MESSAGE,
-} from '@/lib/puzzles'
-import { sRozsahem } from '@/lib/uzivatel'
+import { describePuzzleIssues, insertPuzzle, loadPuzzleList, topicExists } from '@/lib/puzzles'
+import { withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
 const createSchema = z.object({
   topicId: z.string().min(1).nullable().default(null),
   puzzle: puzzleContentSchema,
-  /** Model, který dodal slova; prázdné u ručně psaného hlavolamu. */
+  /** The model that supplied the words; empty for a hand-written puzzle. */
   model: z.string().min(1).nullable().default(null),
 })
 
-/** Seznam hlavolamů; `?topicId=` zúží na jedno téma. */
+/** List of puzzles; `?topicId=` narrows it to one topic. */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     const topicId = new URL(request.url).searchParams.get('topicId') ?? undefined
-    return Response.json({ puzzles: await loadPuzzleList(ucet, { topicId }) })
+    return Response.json({ puzzles: await loadPuzzleList(account, { topicId }) })
   })
 }
 
-/** Uloží nový hlavolam. Mřížka se neukládá — skládá se ze slov a seedu. */
+/** Saves a new puzzle. The grid is not stored — it is built from the words and the seed. */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = createSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
         return Response.json(
@@ -37,18 +32,18 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      // Cizí téma se tváří stejně jako neexistující; bez kontroly by uložení
-      // spadlo na cizím klíči, nebo by se hlavolam navázal na téma jiné školy.
-      if (parsed.data.topicId && !(await topicExists(ucet, parsed.data.topicId))) {
-        return Response.json({ error: TOPIC_NOT_FOUND_MESSAGE }, { status: 404 })
+      // A foreign topic looks the same as a missing one; without the check the
+      // save would fail on a foreign key, or the puzzle would link to another school's topic.
+      if (parsed.data.topicId && !(await topicExists(account, parsed.data.topicId))) {
+        return Response.json({ error: t('puzzles:errors.topicNotFound') }, { status: 404 })
       }
 
-      const puzzle = await insertPuzzle(ucet, parsed.data.puzzle, {
+      const puzzle = await insertPuzzle(account, parsed.data.puzzle, {
         topicId: parsed.data.topicId,
         model: parsed.data.model,
       })
       return Response.json({ puzzle })
     },
-    { zapis: true },
+    { write: true },
   )
 }

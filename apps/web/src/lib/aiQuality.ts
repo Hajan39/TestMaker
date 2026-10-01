@@ -1,80 +1,80 @@
 import 'server-only'
 import { and, eq, gte } from 'drizzle-orm'
+import { t } from '@testmaker/core/i18n'
 import type { RegenerateReason } from '@testmaker/core/schema'
 import { db, grades, questionFeedback, questions, subjects, topics } from '@/db'
-import { skola, type Scope } from './uzivatel'
+import { inSchool, type Scope } from './user'
 
-/** Otázky bez uloženého modelu — starší, z doby před sledováním modelu. */
-export const NEZNAMY_MODEL = 'neznámý model'
+/** Default overview window: what happened lately, not the school's whole history. */
+const WINDOW_DAYS = 90
 
-/** Výchozí okno přehledu: co se dělo naposled, ne celá historie školy. */
-const OKNO_DNI = 90
-
-export interface ModelRadek {
+export interface ModelRow {
   model: string
   generated: number
   regenerated: number
 }
 
-export interface DuvodRadek {
+export interface ReasonRow {
   reason: RegenerateReason | null
   count: number
 }
 
-export interface PredmetRadek {
+export interface SubjectRow {
   subject: string
   regenerated: number
   topReason: RegenerateReason | null
 }
 
 export interface AiQuality {
-  models: ModelRadek[]
-  reasons: DuvodRadek[]
-  bySubject: PredmetRadek[]
+  models: ModelRow[]
+  reasons: ReasonRow[]
+  bySubject: SubjectRow[]
 }
 
-function vychoziOd(): string {
-  return new Date(Date.now() - OKNO_DNI * 24 * 60 * 60 * 1000).toISOString()
+function defaultFrom(): string {
+  return new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
 }
 
 /**
- * Přehled kvality generování pro Správu: kolik otázek který model vygeneroval
- * a kolik jich učitelky nakonec přegenerovaly (i s podílem, i bez důvodu),
- * nejčastější důvody přegenerování a předměty, kde se přegeneruje nejvíc.
- * Výchozí období jsou poslední tři měsíce — starší přegenerování už nikoho
- * nezajímá, model se od nich mohl dávno změnit.
+ * Generation quality overview for Management: how many questions each model
+ * generated and how many of them teachers eventually regenerated (with the
+ * share, also without a reason), the most common regeneration reasons and the
+ * subjects with the most regeneration. The default period is the last three
+ * months — older regenerations interest nobody, the model may have changed.
  *
- * Přijaté zjednodušení: `generated` a `regenerated` mají každé své vlastní
- * devadesátidenní okno — první podle `questions.created_at` (kdy otázka
- * vznikla), druhé podle `question_feedback.created_at` (kdy ji učitelka
- * zavrhla). Otázka vygenerovaná před 89 dny a přegenerovaná dnes se tak
- * počítá v obou oknech, ale otázka vygenerovaná před rokem a přegenerovaná
- * dnes už do „vygenerováno“ nespadá — podíl u takového modelu proto může
- * vyjít přes 100 % (víc přegenerování, než kolik je v okně vidět generování).
- * Rozhraní to řeší zobrazením „—“ místo procenta, kdykoli by šlo o dělení
- * nulou nebo o zavádějící číslo nad 100 %; přesné provázání by vyžadovalo
- * dotahovat `questions.created_at` i pro přegenerované otázky, což pro
- * orientační přehled ve Správě nestojí za složitost navíc.
+ * Accepted simplification: `generated` and `regenerated` each have their own
+ * ninety-day window — the first by `questions.created_at` (when the question
+ * was created), the second by `question_feedback.created_at` (when the teacher
+ * rejected it). A question generated 89 days ago and regenerated today counts
+ * in both windows, but one generated a year ago and regenerated today no
+ * longer falls into "generated" — so the share for such a model can exceed
+ * 100 % (more regenerations than generations visible in the window). The UI
+ * handles that by capping the percentage and showing "—" for division by
+ * zero; exact linking would require fetching `questions.created_at` for
+ * regenerated questions too, which is not worth the extra complexity for an
+ * indicative overview.
  */
 export async function loadAiQuality(scope: Scope, options: { since?: string } = {}): Promise<AiQuality> {
-  const since = options.since ?? vychoziOd()
+  const since = options.since ?? defaultFrom()
+  // Questions without a stored model — older ones, from before the model was tracked.
+  const unknownModel = t('admin:aiQuality.unknownModel')
 
   const generatedRows = await db
     .select({ model: questions.model })
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.source, 'ai'), gte(questions.createdAt, since)))
+    .where(and(inSchool(scope, questions), eq(questions.source, 'ai'), gte(questions.createdAt, since)))
 
-  // Obnovení přegenerované (zamítnuté) otázky zpátky na schválenou nijak
-  // nemaže její řádek tady — přegenerování se stalo a učitelka si to jen
-  // rozmyslela; číslo v přehledu proto zůstává, jako by šlo o přijaté
-  // rozhodnutí.
+  // Restoring a regenerated (rejected) question back to approved does not
+  // delete its row here — the regeneration happened and the teacher merely
+  // changed her mind; the number in the overview therefore stays, as if it
+  // were an accepted decision.
   const feedbackRows = await db
     .select({ model: questionFeedback.model, reason: questionFeedback.reason })
     .from(questionFeedback)
-    .where(and(skola(scope, questionFeedback), gte(questionFeedback.createdAt, since)))
+    .where(and(inSchool(scope, questionFeedback), gte(questionFeedback.createdAt, since)))
 
-  // Předmět zjistíme jen tam, kde zpětná vazba pořád ukazuje na existující
-  // otázku s tématem — jinak by se přegenerování neměl komu přiřadit.
+  // The subject is known only where the feedback still points to an existing
+  // question with a topic — otherwise there is nobody to attribute it to.
   const subjectRows = await db
     .select({ subject: subjects.name, reason: questionFeedback.reason })
     .from(questionFeedback)
@@ -82,21 +82,21 @@ export async function loadAiQuality(scope: Scope, options: { since?: string } = 
     .innerJoin(topics, eq(topics.id, questions.topicId))
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(and(skola(scope, questionFeedback), gte(questionFeedback.createdAt, since)))
+    .where(and(inSchool(scope, questionFeedback), gte(questionFeedback.createdAt, since)))
 
-  const models = new Map<string, ModelRadek>()
-  const modelRadek = (model: string): ModelRadek => {
-    const existujici = models.get(model)
-    if (existujici) return existujici
-    const novy: ModelRadek = { model, generated: 0, regenerated: 0 }
-    models.set(model, novy)
-    return novy
+  const models = new Map<string, ModelRow>()
+  const modelRow = (model: string): ModelRow => {
+    const existing = models.get(model)
+    if (existing) return existing
+    const newItem: ModelRow = { model, generated: 0, regenerated: 0 }
+    models.set(model, newItem)
+    return newItem
   }
   for (const row of generatedRows) {
-    modelRadek(row.model ?? NEZNAMY_MODEL).generated += 1
+    modelRow(row.model ?? unknownModel).generated += 1
   }
   for (const row of feedbackRows) {
-    modelRadek(row.model ?? NEZNAMY_MODEL).regenerated += 1
+    modelRow(row.model ?? unknownModel).regenerated += 1
   }
 
   const reasons = new Map<RegenerateReason | null, number>()
@@ -105,17 +105,17 @@ export async function loadAiQuality(scope: Scope, options: { since?: string } = 
     reasons.set(reason, (reasons.get(reason) ?? 0) + 1)
   }
 
-  interface PredmetAgregace {
+  interface SubjectAggregate {
     regenerated: number
-    duvody: Map<RegenerateReason | null, number>
+    reasons: Map<RegenerateReason | null, number>
   }
-  const subjectMap = new Map<string, PredmetAgregace>()
+  const subjectMap = new Map<string, SubjectAggregate>()
   for (const row of subjectRows) {
-    const agregace = subjectMap.get(row.subject) ?? { regenerated: 0, duvody: new Map() }
-    agregace.regenerated += 1
+    const aggregate = subjectMap.get(row.subject) ?? { regenerated: 0, reasons: new Map() }
+    aggregate.regenerated += 1
     const reason = row.reason ?? null
-    agregace.duvody.set(reason, (agregace.duvody.get(reason) ?? 0) + 1)
-    subjectMap.set(row.subject, agregace)
+    aggregate.reasons.set(reason, (aggregate.reasons.get(reason) ?? 0) + 1)
+    subjectMap.set(row.subject, aggregate)
   }
 
   return {
@@ -126,17 +126,17 @@ export async function loadAiQuality(scope: Scope, options: { since?: string } = 
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count),
     bySubject: [...subjectMap.entries()]
-      .map(([subject, agregace]) => {
-        // Nejčastější důvod v předmětu — při shodě vyhrává ten dřív vidění.
+      .map(([subject, aggregate]) => {
+        // The most common reason in the subject — on a tie the one seen first wins.
         let topReason: RegenerateReason | null = null
         let max = -1
-        for (const [reason, count] of agregace.duvody) {
+        for (const [reason, count] of aggregate.reasons) {
           if (count > max) {
             max = count
             topReason = reason
           }
         }
-        return { subject, regenerated: agregace.regenerated, topReason }
+        return { subject, regenerated: aggregate.regenerated, topReason }
       })
       .sort((a, b) => b.regenerated - a.regenerated),
   }

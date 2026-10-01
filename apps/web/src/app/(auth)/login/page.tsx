@@ -1,18 +1,21 @@
 import { Suspense } from 'react'
-import { googleNastaveni } from '@/lib/google'
+import { googleSettings } from '@/lib/google'
+import { t } from '@testmaker/core/i18n'
 import { LoginForm } from './LoginForm'
 
-export const metadata = { title: 'Přihlášení – TestMaker' }
+export function generateMetadata() {
+  return { title: t('auth:login.metaTitle') }
+}
 
 export default function LoginPage() {
-  // Tlačítko Googlu se nabízí, jen když je nastavené — stejná zásada jako
-  // u generování: co nejde použít, se nezobrazuje.
-  const googleZapnuty = googleNastaveni() !== null
+  // The Google button is offered only when configured — same rule as for
+  // generation: what cannot be used is not shown.
+  const googleEnabled = googleSettings() !== null
 
   return (
-    // `useSearchParams` ve formuláři potřebuje hranici se Suspense.
+    // `useSearchParams` in the form needs a Suspense boundary.
     <Suspense>
-      <LoginForm googleZapnuty={googleZapnuty} />
+      <LoginForm googleEnabled={googleEnabled} />
     </Suspense>
   )
 }

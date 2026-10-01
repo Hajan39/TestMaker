@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { composeRandomTest, randomSeed, type DifficultyChoice } from '@testmaker/core/compose'
-import { QUESTION_TYPE_LABELS, QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
+import { questionTypeLabel, QUESTION_TYPES, type Question, type QuestionType } from '@testmaker/core/schema'
 import {
   Badge,
   Button,
@@ -23,24 +23,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import type { PickerTopic } from '@/lib/questionPicker'
 import { formatPoints } from './types'
 
-/** Co se má stát s osnovou, ve které už něco je. */
+/** What to do with an outline that already has content. */
 export type InsertMode = 'append' | 'replace'
 
 /**
- * Sestavení písemky losem: učitelka zaškrtá témata, řekne kolik a čeho, a
- * aplikace jí test poskládá. Nic se nikam neukládá — výsledek se jen vloží
- * do osnovy, kde jde s položkami dál hýbat, mazat je a přidávat ručně.
+ * Building a test at random: the teacher ticks topics, says how much and of
+ * what, and the app composes the test. Nothing is saved — the result is just
+ * inserted into the outline, where items can still be moved, deleted and added
+ * by hand.
  *
- * Samotný výběr dělá `composeRandomTest` z `@testmaker/core/compose`, tahle
- * komponenta je jen zadání a náhled. Losuje se z týchž otázek, jaké nabízí
- * banka, tedy jen ze schválených.
+ * The picking itself is `composeRandomTest` from `@testmaker/core/compose`;
+ * this component is only the input and preview. It draws from the same
+ * questions the bank offers, i.e. approved ones only.
  */
 export function RandomDialog({
   topics,
-  /** Je v osnově něco rozpracovaného? Podle toho se nabídne přidání nebo nahrazení. */
+  /** Does the outline have work in progress? Decides whether to offer append or replace. */
   hasDraft,
   onInsert,
 }: {
@@ -52,18 +54,18 @@ export function RandomDialog({
   const [selected, setSelected] = useState<string[]>([])
   const [limitKind, setLimitKind] = useState<'count' | 'points'>('count')
   const [amount, setAmount] = useState(10)
-  // `null` = na typu nezáleží; jinak výslovný seznam povolených typů.
+  // `null` = any type; otherwise an explicit list of allowed types.
   const [types, setTypes] = useState<QuestionType[] | null>(null)
   const [difficulty, setDifficulty] = useState<DifficultyChoice>('mix')
   const [mode, setMode] = useState<InsertMode>('append')
-  // Seed drží losování: dokud se nezmění, vyjde tentýž test. „Zamíchat znovu"
-  // není nic jiného než nový seed.
+  // The seed pins the draw: until it changes the same test comes out.
+  // "Zamíchat znovu" (shuffle again) is nothing but a new seed.
   const [seed, setSeed] = useState(() => randomSeed())
 
   const allQuestions = useMemo(() => topics.flatMap((topic) => topic.questions), [topics])
   const topicName = useMemo(() => new Map(topics.map((topic) => [topic.id, topic.label])), [topics])
 
-  /** Předměty → ročníky → témata, aby šlo zaškrtnout i celý ročník naráz. */
+  /** Subjects → grades → topics, so a whole grade can be ticked at once. */
   const tree = useMemo(() => {
     const bySubject = new Map<string, Map<string, PickerTopic[]>>()
     for (const topic of topics) {
@@ -79,7 +81,7 @@ export function RandomDialog({
     }))
   }, [topics])
 
-  /** Typy, které v knihovně vůbec jsou — nabízet prázdné je jen matoucí. */
+  /** Types present in the library at all — offering empty ones only confuses. */
   const availableTypes = useMemo(() => {
     const present = new Set(allQuestions.map((question) => question.type))
     return QUESTION_TYPES.filter((type) => present.has(type))
@@ -94,8 +96,8 @@ export function RandomDialog({
         limit: limitKind === 'count' ? { kind: 'count', count: amount } : { kind: 'points', points: amount },
         types: activeTypes,
         difficulty,
-        // Neschválená otázka se do banky nedostane, tohle je jen pojistka:
-        // kdyby se rozsah načítaných otázek někdy rozšířil, los se přes ni nepřenese.
+        // An unapproved question never reaches the bank; this is just a safeguard
+        // in case the loaded question scope ever widens.
         onlyApproved: true,
         seed,
       }),
@@ -107,11 +109,11 @@ export function RandomDialog({
     setSelected((current) =>
       add ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)),
     )
-  /** Odškrtnout poslední typ nejde — bez jediného typu by nebylo co losovat. */
+  /** The last type cannot be unticked — without any type there is nothing to draw. */
   const toggleType = (type: QuestionType) =>
     setTypes((current) => {
       const list = current ?? availableTypes
-      const next = list.includes(type) ? list.filter((t) => t !== type) : [...list, type]
+      const next = list.includes(type) ? list.filter((item) => item !== type) : [...list, type]
       return next.length > 0 ? next : list
     })
 
@@ -124,24 +126,23 @@ export function RandomDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          Sestavit náhodně
+          {t('tests:random.open')}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] w-full overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Sestavit náhodně</DialogTitle>
+          <DialogTitle>{t('tests:random.open')}</DialogTitle>
           <DialogDescription>
-            Zaškrtni témata a řekni, kolik toho má být. Otázky se rozprostřou mezi vybraná témata
-            i mezi typy. Vložením do osnovy se nic neukládá — dolaď si je a pak test ulož.
+            {t('tests:random.intro')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {/* ------------------------------------------------ zadání */}
+          {/* ------------------------------------------------ input */}
           <div className="space-y-3">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label>Témata ({selected.length})</Label>
+                <Label>{t('tests:random.topics', { count: selected.length })}</Label>
                 <div className="flex gap-1">
                   <Button
                     type="button"
@@ -150,7 +151,7 @@ export function RandomDialog({
                     className="h-6 px-2 text-xs"
                     onClick={() => toggleTopics(topics.map((topic) => topic.id), true)}
                   >
-                    Vybrat vše
+                    {t('tests:random.selectAll')}
                   </Button>
                   <Button
                     type="button"
@@ -159,7 +160,7 @@ export function RandomDialog({
                     className="h-6 px-2 text-xs"
                     onClick={() => setSelected([])}
                   >
-                    Zrušit výběr
+                    {t('tests:random.clearSelection')}
                   </Button>
                 </div>
               </div>
@@ -173,16 +174,16 @@ export function RandomDialog({
                       const some = ids.some((id) => selectedSet.has(id))
                       return (
                         <div key={grade} className="mt-1">
-                          {/* Celý ročník naráz: čtvrtletky a opakování z loňska
-                              se jinak klikají téma po tématu. */}
+                          {/* A whole grade at once: quarterly tests and reviews of
+                              last year would otherwise be clicked topic by topic. */}
                           <label className="flex items-center gap-2 text-sm text-fg-soft">
                             <Checkbox
                               checked={all ? true : some ? 'indeterminate' : false}
                               onCheckedChange={() => toggleTopics(ids, !all)}
-                              aria-label={`Celý ročník ${grade} (${subject})`}
+                              aria-label={t('tests:random.wholeGrade', { grade, subject })}
                             />
                             <span className="font-medium">
-                              {grade} <span className="font-normal text-fg-muted">({list.length} témat)</span>
+                              {grade} <span className="font-normal text-fg-muted">({t('tests:random.topicCount', { count: list.length })})</span>
                             </span>
                           </label>
                           <div className="ml-6">
@@ -210,7 +211,7 @@ export function RandomDialog({
 
             <div className="flex flex-wrap gap-3">
               <div className="w-44">
-                <Label htmlFor="random-limit">Rozsah testu</Label>
+                <Label htmlFor="random-limit">{t('tests:random.limit')}</Label>
                 <Select
                   value={limitKind}
                   onValueChange={(next) => {
@@ -222,13 +223,13 @@ export function RandomDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="count">Počet otázek</SelectItem>
-                    <SelectItem value="points">Celkem bodů</SelectItem>
+                    <SelectItem value="count">{t('tests:random.limitCount')}</SelectItem>
+                    <SelectItem value="points">{t('tests:random.limitPoints')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="w-28">
-                <Label htmlFor="random-amount">{limitKind === 'count' ? 'Otázek' : 'Bodů'}</Label>
+                <Label htmlFor="random-amount">{limitKind === 'count' ? t('tests:random.amountQuestions') : t('tests:random.amountPoints')}</Label>
                 <Input
                   id="random-amount"
                   type="number"
@@ -239,7 +240,7 @@ export function RandomDialog({
                 />
               </div>
               <div className="w-40">
-                <Label htmlFor="random-difficulty">Obtížnost</Label>
+                <Label htmlFor="random-difficulty">{t('tests:random.difficulty')}</Label>
                 <Select
                   value={String(difficulty)}
                   onValueChange={(next) => setDifficulty(next === 'mix' ? 'mix' : (Number(next) as 1 | 2 | 3))}
@@ -248,10 +249,10 @@ export function RandomDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mix">Promíchat</SelectItem>
-                    <SelectItem value="1">Lehká</SelectItem>
-                    <SelectItem value="2">Střední</SelectItem>
-                    <SelectItem value="3">Těžká</SelectItem>
+                    <SelectItem value="mix">{t('tests:random.difficultyMix')}</SelectItem>
+                    <SelectItem value="1">{t('tests:random.difficultyEasy')}</SelectItem>
+                    <SelectItem value="2">{t('tests:random.difficultyMedium')}</SelectItem>
+                    <SelectItem value="3">{t('tests:random.difficultyHard')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -259,9 +260,9 @@ export function RandomDialog({
 
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <Label>Typy otázek</Label>
-                {/* Zpátky na „všechny“ jedním klikem: naklikat devět typů
-                    po jednom je zbytečná práce. */}
+                <Label>{t('tests:random.types')}</Label>
+                {/* Back to "all" in one click: ticking nine types one by one
+                    is wasted effort. */}
                 <Button
                   type="button"
                   size="sm"
@@ -269,7 +270,7 @@ export function RandomDialog({
                   className="h-6 px-2 text-xs"
                   onClick={() => setTypes(null)}
                 >
-                  Všechny
+                  {t('tests:random.allTypes')}
                 </Button>
               </div>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -278,9 +279,9 @@ export function RandomDialog({
                     <Checkbox
                       checked={activeTypes.includes(type)}
                       onCheckedChange={() => toggleType(type)}
-                      aria-label={QUESTION_TYPE_LABELS[type]}
+                      aria-label={questionTypeLabel(type)}
                     />
-                    {QUESTION_TYPE_LABELS[type]}
+                    {questionTypeLabel(type)}
                   </label>
                 ))}
               </div>
@@ -288,37 +289,37 @@ export function RandomDialog({
 
             <div className="flex flex-wrap items-end gap-2">
               <div className="w-36">
-                <Label htmlFor="random-seed">Číslo losování</Label>
+                <Label htmlFor="random-seed">{t('tests:random.seed')}</Label>
                 <Input id="random-seed" value={seed} onChange={(event) => setSeed(event.target.value)} />
               </div>
-              {/* Losování jde zopakovat: se stejným číslem vyjde týž test. */}
+              {/* The draw is repeatable: the same number gives the same test. */}
               <Button type="button" variant="outline" onClick={() => setSeed(randomSeed())}>
-                Zamíchat znovu
+                {t('tests:random.reshuffle')}
               </Button>
             </div>
 
             {hasDraft ? (
               <div>
-                <Label htmlFor="random-mode">V osnově už něco je</Label>
+                <Label htmlFor="random-mode">{t('tests:random.mode')}</Label>
                 <Select value={mode} onValueChange={(next) => setMode(next === 'replace' ? 'replace' : 'append')}>
                   <SelectTrigger id="random-mode" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="append">Přidat vylosované na konec</SelectItem>
-                    <SelectItem value="replace">Nahradit celou osnovu</SelectItem>
+                    <SelectItem value="append">{t('tests:random.modeAppend')}</SelectItem>
+                    <SelectItem value="replace">{t('tests:random.modeReplace')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             ) : null}
           </div>
 
-          {/* ------------------------------------------------ náhled losu */}
+          {/* ------------------------------------------------ draw preview */}
           <div className="flex min-h-0 flex-col">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-fg">Vylosováno</h3>
+              <h3 className="text-sm font-semibold text-fg">{t('tests:random.drawn')}</h3>
               <span className="text-sm text-fg-muted" data-testid="random-summary">
-                {result.questions.length} otázek · {formatPoints(result.totalPoints)} b.
+                {t('tests:random.summary', { count: result.questions.length, points: formatPoints(result.totalPoints) })}
               </span>
             </div>
 
@@ -336,7 +337,7 @@ export function RandomDialog({
                   .filter((share) => share.picked > 0)
                   .map((share) => (
                     <Badge key={share.topicId ?? 'bez-tematu'} variant="secondary">
-                      {(share.topicId ? topicName.get(share.topicId) : null) ?? 'Bez tématu'} ·{' '}
+                      {(share.topicId ? topicName.get(share.topicId) : null) ?? t('tests:random.noTopic')} ·{' '}
                       {share.picked}
                     </Badge>
                   ))}
@@ -352,7 +353,7 @@ export function RandomDialog({
             </ol>
             {selected.length === 0 ? (
               <p className="mt-2 text-sm text-fg-muted">
-                Zatím není vybrané žádné téma — losuje se ze všech otázek v knihovně.
+                {t('tests:random.noTopicSelected')}
               </p>
             ) : null}
           </div>
@@ -360,10 +361,10 @@ export function RandomDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Zrušit
+            {t('common:actions.cancel')}
           </Button>
           <Button disabled={result.questions.length === 0} onClick={insert}>
-            Vložit do osnovy
+            {t('tests:random.insert')}
           </Button>
         </DialogFooter>
       </DialogContent>

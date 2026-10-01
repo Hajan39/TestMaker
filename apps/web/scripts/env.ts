@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 
-/** `.env.local` čte jen Next.js; skript spouštěný přes tsx si ho musí načíst sám. */
+/** Only Next.js reads `.env.local`; a script run via tsx has to load it itself. */
 export function loadEnv(): void {
   if (!existsSync('.env.local')) return
   for (const line of readFileSync('.env.local', 'utf8').split('\n')) {

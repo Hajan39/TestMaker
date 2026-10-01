@@ -1,48 +1,49 @@
 import type { ReactNode } from 'react'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 import { Skeleton } from './ui/skeleton'
 
 /**
- * Kostry obsahu — co se v rozhraní ukáže místo toho, aby plocha na chvíli
- * zmrzla nebo poskočila.
+ * Content skeletons — what the UI shows instead of freezing or jumping for a
+ * moment.
  *
- * Skládají se z jediného dílku `Skeleton` a z tokenů, takže fungují ve světlém
- * i tmavém režimu, aniž by o něm věděly. Tvarem kopírují to, co na jejich místo
- * přijde: kostra seznamu má tolik řádků, kolik jich bývá vidět, kostra tabulky
- * stejně vysoké řádky jako skutečná tabulka. Jde o to, aby obsah nakonec
- * naskočil na totéž místo a nic se nepřesunulo.
+ * They are built from the single `Skeleton` piece and tokens, so they work in
+ * light and dark mode without knowing about it. Their shape copies what will
+ * replace them: a list skeleton has as many rows as are usually visible, a table
+ * skeleton has rows as tall as the real table. The point is that the content
+ * lands in the same place and nothing shifts.
  *
- * Žádná z nich není klientská komponenta: používají se hlavně v `loading.tsx`
- * App Routeru, které se vykresluje na serveru.
+ * None of them is a client component: they are used mainly in App Router
+ * `loading.tsx` files, which render on the server.
  */
 
 /**
- * Obal, který kostru ukáže, teprve když se čekání protáhne přes 400 ms —
- * celé zpoždění drží třída `ui-delayed` v `styles.css`, tady se jen navěsí.
- * Zároveň je to jediné místo, kde se čekání oznamuje odečítači obrazovky.
+ * Wrapper that shows the skeleton only once the wait exceeds 400 ms — the whole
+ * delay lives in the `ui-delayed` class in `styles.css`, it is only attached
+ * here. It is also the only place where waiting is announced to screen readers.
  */
 export function Delayed({
-  label = 'Načítám…',
+  label,
   className,
   children,
 }: {
-  /** Co uslyší odečítač obrazovky. Kostra sama je jen obrázek ničeho. */
+  /** What the screen reader hears. The skeleton itself is a picture of nothing. */
   label?: string
   className?: string
   children: ReactNode
 }) {
   return (
     <div data-slot="loading" role="status" aria-live="polite" className={cn('ui-delayed', className)}>
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{label ?? t('status.loading')}</span>
       {children}
     </div>
   )
 }
 
-/** Šířky řádků se střídají, aby odstavec vypadal jako text, ne jako tabulka. */
+/** Line widths alternate so a paragraph looks like text, not a table. */
 const LINE_WIDTHS = ['100%', '92%', '74%', '86%', '62%']
 
-/** Několik řádků textu. */
+/** A few lines of text. */
 export function LoadingLines({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
     <div className={cn('space-y-2', className)}>
@@ -53,7 +54,7 @@ export function LoadingLines({ lines = 3, className }: { lines?: number; classNa
   )
 }
 
-/** Položky seznamu v postranním sloupci: ročníky, témata. */
+/** Sidebar list items: grades, topics. */
 export function LoadingList({ items = 7, className }: { items?: number; className?: string }) {
   return (
     <div className={cn('space-y-1.5', className)}>
@@ -64,7 +65,7 @@ export function LoadingList({ items = 7, className }: { items?: number; classNam
   )
 }
 
-/** Nadpis obrazovky a řádek s počty pod ním. */
+/** Screen heading and the stats row below it. */
 export function LoadingHeading({ stats = false }: { stats?: boolean }) {
   return (
     <div>
@@ -84,7 +85,7 @@ export function LoadingHeading({ stats = false }: { stats?: boolean }) {
   )
 }
 
-/** Mřížka dlaždic: témata ročníku, karty ročníků. */
+/** Tile grid: a grade's topics, grade cards. */
 export function LoadingTiles({ count = 6, className }: { count?: number; className?: string }) {
   return (
     <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-3', className)}>
@@ -101,7 +102,7 @@ export function LoadingTiles({ count = 6, className }: { count?: number; classNa
   )
 }
 
-/** Tabulka s hlavičkou. Řádky mají stejnou výšku jako ty skutečné. */
+/** Table with a header. Rows are as tall as the real ones. */
 export function LoadingTable({
   rows = 6,
   columns = 5,
@@ -136,7 +137,7 @@ export function LoadingTable({
   )
 }
 
-/** Karty s náhledem stránky: šablony. */
+/** Cards with a page preview: templates. */
 export function LoadingCards({ count = 3, className }: { count?: number; className?: string }) {
   return (
     <div className={cn('grid gap-4 md:grid-cols-2 xl:grid-cols-3', className)}>
@@ -154,8 +155,8 @@ export function LoadingCards({ count = 3, className }: { count?: number; classNa
 }
 
 /**
- * Tištěná stránka, než se vykreslí její PDF. Poměr stran odpovídá A4, takže
- * se okolí po dokreslení náhledu nepřeskládá.
+ * A printed page before its PDF renders. The aspect ratio matches A4, so the
+ * surroundings do not reflow once the preview is drawn.
  */
 export function LoadingPaper({ className }: { className?: string }) {
   return (
@@ -171,7 +172,7 @@ export function LoadingPaper({ className }: { className?: string }) {
   )
 }
 
-/** Karta s nadpisem a několika řádky — běžný blok v obsahu. */
+/** Card with a heading and a few lines — a common content block. */
 export function LoadingCard({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
     <div className={cn('rounded-[var(--radius-outer)] border border-line p-4', className)}>

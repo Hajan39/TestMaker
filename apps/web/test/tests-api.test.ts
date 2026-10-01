@@ -4,33 +4,33 @@ import { DELETE, GET, POST, PUT } from '@/app/api/tests/route'
 import { db, grades, questions, schools, subjects, testItems, users } from '@/db'
 import { newId } from '@/lib/ids'
 import { loadTest, loadTestItems } from '@/lib/tests'
-import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, UCET } from './helpers'
+import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, ACCOUNT } from './helpers'
 
 let templateId: string
 let topicId: string
 let gradeId: string
 
-const CIZI_SKOLA = 'skola-ciziho-mesta-testy'
+const FOREIGN_SCHOOL = 'skola-ciziho-mesta-testy'
 
-/** Ročník z úplně jiné školy — cizí věc se má tvářit jako neexistující. */
-async function ciziRocnik(): Promise<string> {
+/** A grade from a completely different school — a foreign item must look nonexistent. */
+async function foreignGrade(): Promise<string> {
   await db
     .insert(schools)
-    .values({ id: CIZI_SKOLA, name: 'Jiná škola', slug: 'jina-testy' })
+    .values({ id: FOREIGN_SCHOOL, name: 'Jiná škola', slug: 'jina-testy' })
     .onConflictDoNothing()
-  const cizaUcitelka = newId()
+  const foreignTeacher = newId()
   await db.insert(users).values({
-    id: cizaUcitelka,
-    schoolId: CIZI_SKOLA,
-    email: `${cizaUcitelka}@jina.cz`,
+    id: foreignTeacher,
+    schoolId: FOREIGN_SCHOOL,
+    email: `${foreignTeacher}@jina.cz`,
     name: 'Cizí učitelka',
     role: 'spravce',
   })
   const subjectId = newId()
-  const cizGradeId = newId()
-  await db.insert(subjects).values({ id: subjectId, schoolId: CIZI_SKOLA, name: 'Cizí předmět' })
-  await db.insert(grades).values({ id: cizGradeId, schoolId: CIZI_SKOLA, subjectId, name: 'Cizí ročník' })
-  return cizGradeId
+  const foreignGradeId = newId()
+  await db.insert(subjects).values({ id: subjectId, schoolId: FOREIGN_SCHOOL, name: 'Cizí předmět' })
+  await db.insert(grades).values({ id: foreignGradeId, schoolId: FOREIGN_SCHOOL, subjectId, name: 'Cizí ročník' })
+  return foreignGradeId
 }
 
 beforeAll(async () => {
@@ -42,7 +42,7 @@ beforeAll(async () => {
 
 const emptyHeader = { school: '', subject: '', className: '', teacher: '', date: '', note: '' }
 
-/** Uloží nový test a vrátí jeho id. */
+/** Saves a new test and returns its id. */
 async function createTest(items: unknown[], overrides: Record<string, unknown> = {}): Promise<string> {
   const response = await POST(
     jsonReq('/api/tests', 'POST', {
@@ -62,9 +62,9 @@ async function createTest(items: unknown[], overrides: Record<string, unknown> =
   return id
 }
 
-/** Položky testu tak, jak je pošle klient při přeuložení (i s id z databáze). */
+/** Test items as the client sends them on re-save (including database ids). */
 async function itemsForSave(testId: string) {
-  return (await loadTestItems(UCET, testId)).map((item) => ({
+  return (await loadTestItems(ACCOUNT, testId)).map((item) => ({
     id: item.id,
     kind: item.kind,
     questionId: item.questionId,
@@ -74,8 +74,8 @@ async function itemsForSave(testId: string) {
   }))
 }
 
-describe('ukládání testu', () => {
-  it('uloží test i s položkami a zachová jejich pořadí', async () => {
+describe('saving a test', () => {
+  it('saves the test with its items and keeps their order', async () => {
     const first = await seedQuestion(topicId, { prompt: 'První otázka' })
     const second = await seedQuestion(topicId, { prompt: 'Druhá otázka' })
 
@@ -86,34 +86,34 @@ describe('ukládání testu', () => {
       { kind: 'question', questionId: second },
     ])
 
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test?.title).toBe('Písemka')
     expect(test?.templateId).toBe(templateId)
 
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'question', 'page_break', 'question'])
     expect(items.map((item) => item.order)).toEqual([0, 1, 2, 3])
     expect(items[1]?.questionId).toBe(first)
     expect(items[3]?.questionId).toBe(second)
   })
 
-  it('zmrazí obsah otázky při zařazení do testu', async () => {
+  it('freezes the question content when adding it to the test', async () => {
     const questionId = await seedQuestion(topicId, { prompt: 'Původní znění' })
     const id = await createTest([{ kind: 'question', questionId }])
 
-    const [item] = await loadTestItems(UCET, id)
+    const [item] = await loadTestItems(ACCOUNT, id)
     expect(item?.questionSnapshot).toBeTruthy()
     expect(item?.question?.payload).toMatchObject({ prompt: 'Původní znění' })
   })
 
-  it('u nadpisu ani zalomení se nic nezmrazuje', async () => {
+  it('freezes nothing for a heading or page break', async () => {
     const id = await createTest([{ kind: 'heading', text: 'Část A' }, { kind: 'page_break' }])
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items.every((item) => item.questionSnapshot === null)).toBe(true)
     expect(items[0]?.text).toBe('Část A')
   })
 
-  it('odmítne test bez názvu', async () => {
+  it('rejects a test without a title', async () => {
     const response = await POST(
       jsonReq('/api/tests', 'POST', {
         title: '',
@@ -126,7 +126,7 @@ describe('ukládání testu', () => {
     await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('chybí název') })
   })
 
-  it('odmítne nesmyslný počet linek u položky', async () => {
+  it('rejects a nonsensical line count on an item', async () => {
     const response = await POST(
       jsonReq('/api/tests', 'POST', {
         title: 'Písemka',
@@ -138,7 +138,7 @@ describe('ukládání testu', () => {
     expect(response.status).toBe(400)
   })
 
-  it('v seznamu testů je i počet položek', async () => {
+  it('the test list includes the item count', async () => {
     const id = await createTest([{ kind: 'heading', text: 'Část A' }, { kind: 'page_break' }])
     const { tests } = (await (await GET(req('/api/tests'))).json()) as {
       tests: { id: string; itemCount: number; templateName: string }[]
@@ -148,21 +148,21 @@ describe('ukládání testu', () => {
     expect(row?.templateName).toBeTruthy()
   })
 
-  it('gradeId v dotazu zúží seznam jen na testy té třídy', async () => {
-    const jinyTopic = await seedTopic()
-    const idVlastniTridy = await createTest([], { gradeId })
-    const idJineTridy = await createTest([], { gradeId: jinyTopic.gradeId })
+  it('gradeId in the query narrows the list to tests of that class', async () => {
+    const otherTopic = await seedTopic()
+    const ownGradeId = await createTest([], { gradeId })
+    const otherGradeId = await createTest([], { gradeId: otherTopic.gradeId })
 
     const { tests } = (await (await GET(req(`/api/tests?gradeId=${gradeId}`))).json()) as {
       tests: { id: string }[]
     }
-    expect(tests.some((test) => test.id === idVlastniTridy)).toBe(true)
-    expect(tests.some((test) => test.id === idJineTridy)).toBe(false)
+    expect(tests.some((test) => test.id === ownGradeId)).toBe(true)
+    expect(tests.some((test) => test.id === otherGradeId)).toBe(false)
   })
 })
 
-describe('přeuložení testu', () => {
-  /** Přeuloží test se stejnými daty, jen s jiným názvem. */
+describe('re-saving a test', () => {
+  /** Re-saves the test with the same data, only with a different title. */
   async function resave(id: string, items: unknown[], overrides: Record<string, unknown> = {}) {
     const response = await PUT(
       jsonReq('/api/tests', 'PUT', {
@@ -181,11 +181,11 @@ describe('přeuložení testu', () => {
     expect(response.status).toBe(200)
   }
 
-  it('nepřepíše zmrazený obsah, když se otázka v bance mezitím změní', async () => {
+  it('does not overwrite frozen content when the bank question changes meanwhile', async () => {
     const questionId = await seedQuestion(topicId, { prompt: 'Znění při zařazení' })
     const id = await createTest([{ kind: 'question', questionId }])
 
-    // Učitelka otázku v bance přepíše — už vytištěná písemka se tím měnit nesmí.
+    // The teacher rewrites the question in the bank — an already printed test must not change.
     await db
       .update(questions)
       .set({ payload: { prompt: 'Změněné znění', options: ['a', 'b'], correctIndex: 0 } })
@@ -193,13 +193,13 @@ describe('přeuložení testu', () => {
 
     await resave(id, await itemsForSave(id))
 
-    const [item] = await loadTestItems(UCET, id)
+    const [item] = await loadTestItems(ACCOUNT, id)
     expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení' })
-    // Rozhraní má o rozdílu vědět, aby ho mohlo učitelce ukázat.
+    // The UI should know about the difference so it can show it to the teacher.
     expect(item?.questionEdited).toBe(true)
   })
 
-  it('vrátí id položek a s nimi drží zmrazený obsah i při dalším uložení', async () => {
+  it('returns item ids and keeps frozen content with them on the next save', async () => {
     const questionId = await seedQuestion(topicId, { prompt: 'Znění při zařazení' })
     const id = await createTest([{ kind: 'question', questionId }])
     const saved = await itemsForSave(id)
@@ -209,30 +209,30 @@ describe('přeuložení testu', () => {
       .set({ payload: { prompt: 'Změněné znění', options: ['a', 'b'], correctIndex: 0 } })
       .where(eq(questions.id, questionId))
 
-    // Editor po uložení posílá id, která mu vrátilo předchozí uložení.
+    // After saving, the editor sends the ids returned by the previous save.
     const body = { id, title: 'x', description: null, graded: true, templateId, header: emptyHeader, variants: 1, showKey: true }
     const first = await PUT(jsonReq('/api/tests', 'PUT', { ...body, items: saved }))
     const { itemIds } = (await first.json()) as { itemIds: string[] }
     expect(itemIds).toEqual(saved.map((item) => (item as { id: string }).id))
     await PUT(jsonReq('/api/tests', 'PUT', { ...body, items: saved.map((item, i) => ({ ...(item as object), id: itemIds[i] })) }))
 
-    const [item] = await loadTestItems(UCET, id)
+    const [item] = await loadTestItems(ACCOUNT, id)
     expect(item?.question?.payload).toMatchObject({ prompt: 'Znění při zařazení' })
   })
 
-  it('otázka přidaná až při přeuložení se zmrazí v aktuálním znění', async () => {
+  it('a question added on re-save is frozen in its current wording', async () => {
     const first = await seedQuestion(topicId, { prompt: 'První' })
     const id = await createTest([{ kind: 'question', questionId: first }])
 
     const second = await seedQuestion(topicId, { prompt: 'Přidaná až teď' })
     await resave(id, [...(await itemsForSave(id)), { kind: 'question', questionId: second }])
 
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items).toHaveLength(2)
     expect(items[1]?.question?.payload).toMatchObject({ prompt: 'Přidaná až teď' })
   })
 
-  it('změní pořadí položek podle toho, jak přišly', async () => {
+  it('reorders items in the order they arrived', async () => {
     const first = await seedQuestion(topicId, { prompt: 'A' })
     const second = await seedQuestion(topicId, { prompt: 'B' })
     const id = await createTest([
@@ -243,65 +243,65 @@ describe('přeuložení testu', () => {
     const saved = await itemsForSave(id)
     await resave(id, [saved[1], saved[0]])
 
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items.map((item) => item.questionId)).toEqual([second, first])
     expect(items.map((item) => item.order)).toEqual([0, 1])
   })
 
-  it('položka otázky, která z banky zmizela, si obsah udrží i po přeuložení', async () => {
+  it('an item of a question that disappeared from the bank keeps its content after re-save', async () => {
     const questionId = await seedQuestion(topicId, { prompt: 'Otázka, co zmizí' })
     const id = await createTest([{ kind: 'question', questionId }])
 
     await db.delete(questions).where(eq(questions.id, questionId))
 
-    const afterDelete = await loadTestItems(UCET, id)
+    const afterDelete = await loadTestItems(ACCOUNT, id)
     expect(afterDelete[0]?.questionMissing).toBe(true)
     expect(afterDelete[0]?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
 
-    // Cizí klíč je `set null`, takže po smazání otázky zbyde jen snímek.
+    // The foreign key is `set null`, so only the snapshot remains after the question is deleted.
     await resave(id, await itemsForSave(id))
 
-    const items = await loadTestItems(UCET, id)
+    const items = await loadTestItems(ACCOUNT, id)
     expect(items[0]?.question?.payload).toMatchObject({ prompt: 'Otázka, co zmizí' })
   })
 
-  it('bez gradeId v těle třídu zachová (starší klient, který pole vůbec nepošle)', async () => {
+  it('keeps the class without gradeId in the body (older client that omits the field)', async () => {
     const id = await createTest([], { gradeId })
 
-    // `resave` bez `gradeId` v `overrides` pole do těla vůbec nedá — přesně
-    // tak, jak dřív posílal editor. Chybějící pole nesmí třídu vynulovat;
-    // vynulovat ji smí jen ten, kdo pošle `gradeId: null` výslovně.
+    // `resave` without `gradeId` in `overrides` leaves the field out of the body —
+    // exactly as the editor used to send it. A missing field must not clear the
+    // class; only an explicit `gradeId: null` may clear it.
     await resave(id, [])
 
-    expect((await loadTest(UCET, id))?.gradeId).toBe(gradeId)
+    expect((await loadTest(ACCOUNT, id))?.gradeId).toBe(gradeId)
   })
 
-  it('přepíše i hlavičku a název testu', async () => {
+  it('overwrites the header and title of the test too', async () => {
     const id = await createTest([])
     await resave(id, [], { header: { ...emptyHeader, school: 'ZŠ Ukázková', className: '8.A' } })
 
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test?.title).toBe('Přejmenovaná písemka')
     expect(test?.header).toMatchObject({ school: 'ZŠ Ukázková', className: '8.A' })
   })
 })
 
-describe('ročník testu', () => {
-  it('uloží ročník téže školy', async () => {
+describe('test grade', () => {
+  it('saves a grade of the same school', async () => {
     const id = await createTest([], { gradeId })
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test?.gradeId).toBe(gradeId)
   })
 
-  it('cizí ročník uloží jako null a odpověď se neliší', async () => {
-    const cizi = await ciziRocnik()
+  it('saves a foreign grade as null and the response does not differ', async () => {
+    const foreign = await foreignGrade()
     const response = await POST(
       jsonReq('/api/tests', 'POST', {
         title: 'Písemka',
         description: null,
         graded: true,
         templateId,
-        gradeId: cizi,
+        gradeId: foreign,
         header: emptyHeader,
         variants: 1,
         showKey: true,
@@ -310,17 +310,17 @@ describe('ročník testu', () => {
     )
     expect(response.status).toBe(200)
     const { id } = (await response.json()) as { id: string }
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test?.gradeId).toBeNull()
   })
 
-  it('neexistující ročník uloží jako null', async () => {
+  it('saves a nonexistent grade as null', async () => {
     const id = await createTest([], { gradeId: 'rocnik-ktery-neni' })
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test?.gradeId).toBeNull()
   })
 
-  it('přeuložení zachová i změní ročník', async () => {
+  it('re-saving both keeps and changes the grade', async () => {
     const id = await createTest([], { gradeId })
     await PUT(
       jsonReq('/api/tests', 'PUT', {
@@ -336,9 +336,9 @@ describe('ročník testu', () => {
         items: [],
       }),
     )
-    expect((await loadTest(UCET, id))?.gradeId).toBe(gradeId)
+    expect((await loadTest(ACCOUNT, id))?.gradeId).toBe(gradeId)
 
-    const jinyTopic = await seedTopic()
+    const otherTopic = await seedTopic()
     await PUT(
       jsonReq('/api/tests', 'PUT', {
         id,
@@ -346,47 +346,47 @@ describe('ročník testu', () => {
         description: null,
         graded: true,
         templateId,
-        gradeId: jinyTopic.gradeId,
+        gradeId: otherTopic.gradeId,
         header: emptyHeader,
         variants: 1,
         showKey: true,
         items: [],
       }),
     )
-    expect((await loadTest(UCET, id))?.gradeId).toBe(jinyTopic.gradeId)
+    expect((await loadTest(ACCOUNT, id))?.gradeId).toBe(otherTopic.gradeId)
   })
 
-  it('smazání ročníku test nesmaže, jen mu vezme vazbu', async () => {
-    const jinyTopic = await seedTopic()
-    const id = await createTest([], { gradeId: jinyTopic.gradeId })
+  it('deleting a grade does not delete the test, only unlinks it', async () => {
+    const otherTopic = await seedTopic()
+    const id = await createTest([], { gradeId: otherTopic.gradeId })
 
-    await db.delete(grades).where(eq(grades.id, jinyTopic.gradeId))
+    await db.delete(grades).where(eq(grades.id, otherTopic.gradeId))
 
-    const test = await loadTest(UCET, id)
+    const test = await loadTest(ACCOUNT, id)
     expect(test).not.toBeNull()
     expect(test?.gradeId).toBeNull()
   })
 })
 
-describe('mazání testu', () => {
-  it('smaže test i jeho položky', async () => {
+describe('deleting a test', () => {
+  it('deletes the test and its items', async () => {
     const questionId = await seedQuestion(topicId)
     const id = await createTest([{ kind: 'question', questionId }])
 
     const response = await DELETE(req(`/api/tests?id=${encodeURIComponent(id)}`, { method: 'DELETE' }))
     expect(response.status).toBe(200)
 
-    expect(await loadTest(UCET, id)).toBeNull()
+    expect(await loadTest(ACCOUNT, id)).toBeNull()
     const rows = await db.select().from(testItems).where(eq(testItems.testId, id))
     expect(rows).toHaveLength(0)
   })
 
-  it('neexistující test hlásí 404, ne úspěch', async () => {
+  it('a nonexistent test reports 404, not success', async () => {
     const response = await DELETE(req('/api/tests?id=neexistuje', { method: 'DELETE' }))
     expect(response.status).toBe(404)
   })
 
-  it('bez id odmítne mazat', async () => {
+  it('refuses to delete without an id', async () => {
     const response = await DELETE(req('/api/tests', { method: 'DELETE' }))
     expect(response.status).toBe(400)
   })

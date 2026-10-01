@@ -9,8 +9,9 @@ export interface NavItem {
 }
 
 /**
- * Jediná skořápka aplikace: lišta se značkou a přepínačem oblastí, pod ní
- * pracovní plocha. Odkazy vykresluje volající, aby balíček nezávisel na routeru.
+ * The app's single shell: a bar with the logo and the area switcher, the
+ * workspace below. The caller renders the links so the package does not depend
+ * on a router.
  */
 export function AppShell({
   nav,
@@ -23,9 +24,9 @@ export function AppShell({
   activeHref: string
   renderLink: (item: NavItem, active: boolean) => ReactNode
   /**
-   * Tichý ukazatel vpravo v liště, vedle přepínače motivu — třeba to, že se
-   * někde na pozadí generují otázky. Vykresluje ho aplikace, balíček o jeho
-   * obsahu nic neví.
+   * A quiet indicator on the right of the bar, next to the theme toggle — e.g.
+   * that questions are being generated in the background. The app renders it;
+   * the package knows nothing about its content.
    */
   status?: ReactNode
   children: ReactNode

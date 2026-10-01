@@ -8,15 +8,16 @@ import {
   type TextItemVariant,
 } from '@testmaker/core/schema'
 import { Button } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
-/** Rozměr v bodech papíru — stránka ve skladači se kreslí v měřítku PDF. */
+/** Size in paper points — the builder page is drawn at PDF scale. */
 const pt = (value: number) => `calc(${value} * var(--paper-pt, 1.3333px))`
 
-/** Nová tabulka listu: dva sloupce, dva řádky, druhý sloupec k doplnění. */
+/** New worksheet table: two columns, two rows, the second column to fill in. */
 export function emptyTable(): TableItemContent {
   return {
     caption: '',
-    header: ['Pojem', 'Doplň'],
+    header: [t('worksheets:table.defaultTerm'), t('worksheets:table.defaultFill')],
     rows: [
       [
         { value: '', blank: false },
@@ -31,9 +32,9 @@ export function emptyTable(): TableItemContent {
 }
 
 /**
- * Krátký text, nebo fun fact v rámečku — upravuje se rovnou na papíře.
- * Rámeček kreslí tokeny papíru (`paper-line`, `paper-shade`), popisek bere
- * ze šablony, takže vypadá jako v PDF.
+ * A short text or a boxed fun fact — edited right on the paper. The box uses
+ * paper tokens (`paper-line`, `paper-shade`) and takes its label from the
+ * template, so it looks like the PDF.
  */
 export function TextItemEditor({
   text,
@@ -51,8 +52,8 @@ export function TextItemEditor({
       className="block w-full resize-none bg-transparent text-paper-fg outline-none placeholder:opacity-40"
       style={{ fieldSizing: 'content' } as React.CSSProperties}
       rows={Math.max(1, Math.ceil(text.length / 90))}
-      aria-label={variant === 'fun_fact' ? 'Text fun factu' : 'Krátký text'}
-      placeholder={variant === 'fun_fact' ? 'Zajímavost k tématu' : 'Krátký text k tématu'}
+      aria-label={variant === 'fun_fact' ? t('worksheets:text.funFactLabel') : t('worksheets:text.textLabel')}
+      placeholder={variant === 'fun_fact' ? t('worksheets:text.funFactPlaceholder') : t('worksheets:text.textPlaceholder')}
       value={text}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -74,9 +75,9 @@ export function TextItemEditor({
 }
 
 /**
- * Tabulka k doplnění upravovaná na místě: buňky jsou políčka, u každé
- * buňky přepínač „prázdná na vyplnění“ (její text je pak odpověď do klíče),
- * řádky a sloupce se přidávají a ubírají v mezích schématu.
+ * Fill-in table edited in place: cells are inputs, each with a "prázdná na
+ * vyplnění" (blank to fill in) toggle (its text is then the key answer); rows
+ * and columns are added and removed within the schema limits.
  */
 export function TableItemEditor({ table, onChange }: { table: TableItemContent; onChange: (table: TableItemContent) => void }) {
   const columns = table.header.length
@@ -101,7 +102,7 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
   function addColumn() {
     onChange({
       ...table,
-      header: [...table.header, `Sloupec ${columns + 1}`],
+      header: [...table.header, t('worksheets:table.defaultColumn', { number: columns + 1 })],
       rows: table.rows.map((cells) => [...cells, { value: '', blank: true }]),
     })
   }
@@ -116,8 +117,8 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
     <div className="text-paper-fg" style={{ marginTop: pt(10) }}>
       <input
         className={`${input} font-bold`}
-        aria-label="Popisek nad tabulkou"
-        placeholder="Popisek nad tabulkou (nepovinné)"
+        aria-label={t('worksheets:table.caption')}
+        placeholder={t('worksheets:table.captionPlaceholder')}
         value={table.caption ?? ''}
         onChange={(event) => onChange({ ...table, caption: event.target.value })}
       />
@@ -128,7 +129,7 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
               <th key={c} className="border border-paper-line p-1 text-left">
                 <input
                   className={`${input} font-bold`}
-                  aria-label={`Název ${c + 1}. sloupce`}
+                  aria-label={t('worksheets:table.columnName', { column: c + 1 })}
                   value={title}
                   onChange={(event) => setHeader(c, event.target.value)}
                 />
@@ -143,8 +144,8 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
                 <td key={c} className="border border-paper-line p-1 align-top">
                   <input
                     className={`${input} ${cell.blank ? 'italic opacity-60' : ''}`}
-                    aria-label={`Buňka ${r + 1}. řádku, ${c + 1}. sloupce`}
-                    placeholder={cell.blank ? 'odpověď do klíče' : ''}
+                    aria-label={t('worksheets:table.cell', { row: r + 1, column: c + 1 })}
+                    placeholder={cell.blank ? t('worksheets:table.keyAnswer') : ''}
                     value={cell.value}
                     onChange={(event) => setCell(r, c, { value: event.target.value })}
                   />
@@ -154,7 +155,7 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
                       checked={cell.blank}
                       onChange={(event) => setCell(r, c, { blank: event.target.checked })}
                     />
-                    prázdná na vyplnění
+                    {t('worksheets:table.blank')}
                   </label>
                 </td>
               ))}
@@ -164,20 +165,20 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
       </table>
       <div className="mt-1 flex flex-wrap gap-1">
         <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={table.rows.length >= TABLE_MAX_ROWS} onClick={addRow}>
-          + Řádek
+          {t('worksheets:table.addRow')}
         </Button>
         <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={table.rows.length <= 1} onClick={removeRow}>
-          − Řádek
+          {t('worksheets:table.removeRow')}
         </Button>
         <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={columns >= TABLE_MAX_COLUMNS} onClick={addColumn}>
-          + Sloupec
+          {t('worksheets:table.addColumn')}
         </Button>
         <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={columns <= 1} onClick={removeColumn}>
-          − Sloupec
+          {t('worksheets:table.removeColumn')}
         </Button>
       </div>
       {!hasBlank ? (
-        <p className="mt-1 text-xs text-danger">Označ aspoň jednu buňku jako prázdnou — jinak není co doplňovat.</p>
+        <p className="mt-1 text-xs text-danger">{t('worksheets:table.noBlank')}</p>
       ) : null}
     </div>
   )

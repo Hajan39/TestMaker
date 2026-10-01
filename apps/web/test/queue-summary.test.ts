@@ -1,41 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { shrnutiBehu } from '@/lib/queueSummary'
+import { runSummary } from '@/lib/queueSummary'
 
 /**
- * Věta o výsledku běhu fronty. Hlídá se hlavně to, kvůli čemu vznikla:
- * po samých chybách nesmí svítit zelené „Hotovo“ a počty se musí skloňovat.
+ * The queue run result sentence. Guards mainly what it was made for: after only
+ * errors no green "Hotovo" may show, and counts must be declined correctly.
  */
 
-describe('shrnutí běhu fronty', () => {
-  it('prázdná fronta se nehlásí jako úspěch ani jako chyba', () => {
-    expect(shrnutiBehu({ zpracovano: 0, chyby: 0, otazky: 0 })).toEqual({
-      ton: 'nic',
+describe('queue run summary', () => {
+  it('an empty queue is reported as neither success nor error', () => {
+    expect(runSummary({ processed: 0, errors: 0, questions: 0 })).toEqual({
+      tone: 'empty',
       text: 'Fronta byla prázdná, nic se negenerovalo.',
     })
   })
 
-  it('když spadlo všechno, je to chyba a ne „Hotovo“', () => {
-    const shrnuti = shrnutiBehu({ zpracovano: 7, chyby: 7, otazky: 0 })
-    expect(shrnuti.ton).toBe('chyba')
-    expect(shrnuti.text).toBe('Nepovedlo se ani jedno téma. Nedokončeno: 7 témat.')
-    expect(shrnuti.text).not.toContain('Hotovo')
+  it('when everything failed it is an error, not "Hotovo"', () => {
+    const summary = runSummary({ processed: 7, errors: 7, questions: 0 })
+    expect(summary.tone).toBe('error')
+    expect(summary.text).toBe('Nepovedlo se ani jedno téma. Nedokončeno: 7 témat.')
+    expect(summary.text).not.toContain('Hotovo')
   })
 
-  it('částečný úspěch řekne obojí a vyznívá jako varování', () => {
-    expect(shrnutiBehu({ zpracovano: 7, chyby: 2, otazky: 8 })).toEqual({
-      ton: 'varovani',
+  it('a partial success says both and reads as a warning', () => {
+    expect(runSummary({ processed: 7, errors: 2, questions: 8 })).toEqual({
+      tone: 'warning',
       text: 'Hotovo: 8 otázek z 5 témat. Nedokončeno: 2 témata.',
     })
   })
 
-  it('bez chyb hlásí jen, co vzniklo', () => {
-    expect(shrnutiBehu({ zpracovano: 1, chyby: 0, otazky: 1 })).toEqual({
-      ton: 'uspech',
+  it('without errors reports only what was created', () => {
+    expect(runSummary({ processed: 1, errors: 0, questions: 1 })).toEqual({
+      tone: 'success',
       text: 'Hotovo: 1 otázka z 1 tématu.',
     })
   })
 
-  it('počty se skloňují i u dvojky a trojky', () => {
-    expect(shrnutiBehu({ zpracovano: 3, chyby: 0, otazky: 2 }).text).toBe('Hotovo: 2 otázky z 3 témat.')
+  it('counts are declined for two and three as well', () => {
+    expect(runSummary({ processed: 3, errors: 0, questions: 2 }).text).toBe('Hotovo: 2 otázky z 3 témat.')
   })
 })

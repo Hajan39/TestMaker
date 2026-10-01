@@ -1,16 +1,17 @@
 /**
- * Plán vrácení hromadné akce.
+ * Undo plan for a bulk action.
  *
- * Když učitelka schválí nebo zamítne desítky otázek naráz, měly ty otázky
- * předtím různé stavy — něco byl koncept, něco už bylo schválené. „Vzít zpět“
- * proto nemůže poslat jeden stav pro všechny; musí je vrátit po skupinách.
- * Tahle funkce z poznamenaných předchozích stavů takové skupiny sestaví.
+ * When the teacher approves or rejects dozens of questions at once, those
+ * questions previously had different statuses — some were drafts, some already
+ * approved. Undo therefore cannot send one status for all; it must restore them
+ * in groups. This function builds such groups from the recorded previous
+ * statuses.
  *
- * Záměrně je tu čistá funkce bez Reactu a bez fetche: dá se na ni napsat test
- * a volající si zápis na server udělá sám.
+ * Deliberately a pure function without React or fetch: it is testable and the
+ * caller does the server write itself.
  */
 
-/** Stav otázky, jak ho zná schéma otázek. Opsaný sem, aby balíček zůstal bez závislosti. */
+/** Question status as the question schema knows it. Copied here to keep the package dependency-free. */
 export type UndoStatus = 'draft' | 'approved' | 'rejected'
 
 export interface UndoStep<Status extends string = UndoStatus> {
@@ -19,12 +20,12 @@ export interface UndoStep<Status extends string = UndoStatus> {
 }
 
 /**
- * Seskupí id podle stavu, do kterého se mají vrátit. Pořadí skupin i id v nich
- * odpovídá pořadí vstupu, aby se výsledek dal porovnat v testu a aby se zápisy
- * na server odehrály v pořadí, ve kterém učitelka otázky vybrala.
+ * Groups ids by the status they should return to. The order of groups and of
+ * ids within them follows the input, so the result is comparable in a test and
+ * server writes happen in the order the teacher selected the questions.
  *
- * Duplicitní id se započítá jen jednou — rozhoduje první výskyt, protože ten
- * nese stav před akcí; pozdější už by mohl být stav po ní.
+ * A duplicate id counts once — the first occurrence wins, because it carries
+ * the status before the action; a later one might already be the status after.
  */
 export function planUndo<Status extends string = UndoStatus>(
   previous: Iterable<readonly [string, Status]>,

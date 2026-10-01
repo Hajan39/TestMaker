@@ -4,16 +4,17 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Pencil, X } from 'lucide-react'
 import { Button, Input, cn } from '@testmaker/ui'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import type { LibraryKind } from '@/lib/library'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Přejmenování na místě: název se při kliknutí na tužku promění v pole.
+ * In-place rename: clicking the pencil turns the name into a field.
  *
- * Dialog by tu byl zbytečný obřad — jde o jedno slovo a jeho nová podoba
- * patří přesně tam, kde ten název stojí. Ukládá se klávesou Enter, ruší
- * Escapem; chyba ze serveru (třeba dvě témata téhož jména) se ukáže pod polem.
+ * A dialog would be needless ceremony — it's one word and its new form belongs
+ * exactly where the name stands. Enter saves, Escape cancels; a server error
+ * (e.g. two topics with the same name) shows below the field.
  */
 export function InlineName({
   kind,
@@ -28,26 +29,26 @@ export function InlineName({
   id: string
   name: string
   /**
-   * Čím se vykreslí samotný název. Nadpis stránky musí zůstat nadpisem a nesmí
-   * do svého názvu pobrat popisek tlačítka vedle sebe, proto je tlačítko vždy
-   * až za ním, ne uvnitř.
+   * What renders the name itself. A page heading must stay a heading and must
+   * not absorb the neighbouring button's label into its name, so the button
+   * always comes after it, never inside.
    */
   as?: 'span' | 'h1' | 'h2'
-  /** Třídy pro text názvu, aby šlo použít jak v nadpisu, tak v dlaždici. */
+  /** Classes for the name text, so it works both in a heading and in a tile. */
   className?: string
   inputClassName?: string
-  /** Popisek tlačítka pro čtečky obrazovky. */
+  /** Button label for screen readers. */
   label?: string
 }) {
   const router = useRouter()
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Po zapnutí úprav patří pozornost do pole, jinak musí učitelka klikat dvakrát.
+  // Once editing starts, focus belongs in the field, otherwise the teacher has to click twice.
   useEffect(() => {
     if (editing) inputRef.current?.select()
   }, [editing])
@@ -63,19 +64,19 @@ export function InlineName({
     setBusy(true)
     setError(null)
     try {
-      await requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), 'Přejmenování se nepovedlo.')
+      await requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), t('library:inlineName.failed'))
       setEditing(false)
       router.refresh()
     } catch (saveError) {
-      setError(errorMessage(saveError, 'Přejmenování se nepovedlo.'))
+      setError(errorMessage(saveError, t('library:inlineName.failed')))
     } finally {
       setBusy(false)
     }
   }
 
-  // Náhled jen čte — bez tužky, ať z rozhraní hned poznat, že se přejmenovat
-  // nedá, ne až z odmítnutého požadavku.
-  if (!muzeMenit) {
+  // A viewer only reads — no pencil, so the UI shows right away that renaming
+  // isn't possible, not only via a refused request.
+  if (!canEdit) {
     return (
       <span className="flex min-w-0 flex-1 items-center gap-1">
         <NameTag className={cn('min-w-0 flex-1 truncate', className)}>{name}</NameTag>
@@ -91,14 +92,14 @@ export function InlineName({
           size="icon-sm"
           variant="ghost"
           className="shrink-0"
-          aria-label={label ?? `Přejmenovat: ${name}`}
-          title={label ?? 'Přejmenovat'}
+          aria-label={label ?? t('library:inlineName.renameNamed', { name })}
+          title={label ?? t('library:inlineName.rename')}
           onClick={(event) => {
-            // Dlaždice bývá odkaz; tužka nemá nikam odnavigovat.
+            // A tile is often a link; the pencil mustn't navigate anywhere.
             event.preventDefault()
             event.stopPropagation()
-            // Pole se plní až tady, ne v efektu: stav měněný během vykreslení
-            // vede na řetězení překreslení a React na to upozorňuje.
+            // The field is filled here, not in an effect: state changed during
+            // render leads to cascading re-renders and React warns about it.
             setValue(name)
             setEditing(true)
           }}
@@ -122,7 +123,7 @@ export function InlineName({
           ref={inputRef}
           value={value}
           disabled={busy}
-          aria-label={label ?? 'Nový název'}
+          aria-label={label ?? t('library:inlineName.newName')}
           aria-invalid={error ? true : undefined}
           className={cn('h-8 min-w-0 flex-1', inputClassName)}
           onChange={(event) => setValue(event.target.value)}
@@ -139,8 +140,8 @@ export function InlineName({
           size="icon-sm"
           variant="ghost"
           disabled={busy}
-          aria-label="Uložit název"
-          title="Uložit"
+          aria-label={t('library:inlineName.saveName')}
+          title={t('common:actions.save')}
           onClick={() => void save()}
         >
           <Check aria-hidden />
@@ -149,8 +150,8 @@ export function InlineName({
           size="icon-sm"
           variant="ghost"
           disabled={busy}
-          aria-label="Zrušit přejmenování"
-          title="Zrušit"
+          aria-label={t('library:inlineName.cancelRename')}
+          title={t('common:actions.cancel')}
           onClick={() => {
             setEditing(false)
             setValue(name)

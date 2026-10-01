@@ -1,49 +1,50 @@
-import { PUZZLE_KIND_LABELS, type PuzzleKind } from '../../schema/puzzle'
+import { puzzleKindLabel, type PuzzleKind } from '../../schema/puzzle'
 import { describeGradeAudience } from './questions'
 
 export interface PuzzleWordsRequest {
   /**
-   * Text materiálů tématu (celá skupina, ne jeden soubor). Soubory jsou
-   * oddělené záhlavím `=== název ===`; podle něj se rozpočet znaků dělí mezi
-   * materiály (`fitMaterials`).
+   * Text of the topic's materials (the whole group, not one file). Files are
+   * separated by a `=== name ===` header; the character budget is split
+   * among materials by it (`fitMaterials`).
    */
   text: string
   topicName: string
   subjectName: string
-  /** Např. „8. ročník"; ovlivňuje výběr pojmů i jazyk nápověd. */
+  /** E.g. "8. ročník"; affects the choice of terms and the language of clues. */
   gradeName: string | null
-  /** Kolik dvojic se má vrátit. */
+  /** How many pairs to return. */
   count: number
   kind: PuzzleKind
-  /** Slova, která už v hlavolamu jsou — model má dodat jiná. */
+  /** Words already in the puzzle — the model should supply different ones. */
   avoid?: string[]
   /**
-   * Tajená věta (jen tajenka). Bez ní model neví, která písmena mají slova
-   * obsahovat, a z dodaných slov se tajenka často vůbec nesloží.
+   * Hidden sentence (cryptogram only). Without it the model does not know
+   * which letters the words should contain, and the cryptogram often cannot
+   * be built from the supplied words at all.
    */
   phrase?: string
-  /** Velikost mřížky osmisměrky; podle ní se určí nejdelší slovo. */
+  /** Word search grid size; determines the longest word. */
   grid?: { cols: number; rows: number }
 }
 
-/** Meze, které prompt uvádí; počítá je `puzzleWordLimits` podle požadavku. */
+/** Limits stated in the prompt; computed by `puzzleWordLimits` from the request. */
 export interface PuzzleWordsPromptLimits {
   minLetters: number
   maxLetters: number
-  /** Délka nápovědy, o kterou se model žádá. */
+  /** Clue length requested from the model. */
   clueTarget: number
-  /** Tvrdá mez nápovědy ze schématu. */
+  /** Hard clue limit from the schema. */
   clueMax: number
 }
 
-/** Písmena tajenky, pro která ještě chybí slovo, i s počtem (`Ř` → 1). */
+/** Cryptogram letters still lacking a word, with counts (`Ř` → 1). */
 export type MissingLetters = { letter: string; count: number }[]
 
 export function buildPuzzleWordsSystemPrompt(gradeName: string | null, limits: PuzzleWordsPromptLimits): string {
   const audience = describeGradeAudience(gradeName)
-  // Co jde zkontrolovat v kódu (slovo v materiálu, diakritika, prozrazená
-  // nápověda, délky, opakování), se kontroluje v kódu (`filterEntries`).
-  // Prompt to říká taky, ať model zbytečně nevrací slova, která se zahodí.
+  // Whatever can be checked in code (word in the material, diacritics,
+  // revealing clue, lengths, repeats) is checked in code (`filterEntries`).
+  // The prompt says it too, so the model does not return words that get dropped.
   return [
     'Jsi zkušený učitel na české základní škole a chystáš dětem hlavolam z probrané látky.',
     '',
@@ -75,7 +76,7 @@ export function buildPuzzleWordsPrompt(
     `Předmět: ${request.subjectName}`,
     `Ročník: ${request.gradeName ?? 'neurčen'} (luští ${describeGradeAudience(request.gradeName)})`,
     `Téma: ${request.topicName}`,
-    `Hlavolam: ${PUZZLE_KIND_LABELS[request.kind]}`,
+    `Hlavolam: ${puzzleKindLabel(request.kind)}`,
     '',
     `Vyber přesně ${options.count} klíčových pojmů tématu a ke každému napiš nápovědu.`,
   ]

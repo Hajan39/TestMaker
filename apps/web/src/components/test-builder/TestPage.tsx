@@ -35,22 +35,23 @@ import {
   PaperQuestion,
   PaperSheet,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { formatPoints, type DraftItem, type WorksheetControls } from './types'
 import { TableItemEditor, TextItemEditor } from './WorksheetItems'
 
 /**
- * Stránka písemky — náhled a obsah testu v jedné ploše.
+ * The test page — preview and content of the test in one surface.
  *
- * Dřív to bylo dvojí: v jednom sloupci se skládala osnova (seznam řádků)
- * a ve druhém se ukazoval hrubý náhled, ze kterého si učitelka musela
- * domýšlet, jak to dopadne na papíře. Tady se skládá rovnou na listech,
- * které vypadají jako výsledný tisk: otázky se vykreslují komponentou
- * `PaperQuestion` z `packages/ui` (tatáž předloha jako PDF) a stránky se
- * lámou funkcí `paginate`, tedy tam, kde se zlomí ve skutečném PDF.
+ * It used to be two things: one column built the outline (a list of rows) and
+ * the other showed a rough preview the teacher had to extrapolate from to
+ * guess the printed result. Here the test is built right on sheets that look
+ * like the final print: questions are drawn by `PaperQuestion` from
+ * `packages/ui` (the same model as the PDF) and pages break via `paginate`,
+ * i.e. where the real PDF breaks.
  *
- * Papír ukazuje jen to, co dostanou žáci — klíč se do něj nekreslí nikdy.
- * Vzorovou odpověď si jde u jednotlivé otázky vyžádat tlačítkem „Řešení“
- * v ovládání u okraje; ukáže se mimo papír, s poznámkou, že se netiskne.
+ * The paper only shows what pupils get — the key is never drawn on it. A
+ * sample answer can be revealed per question with the "Řešení" button in the
+ * margin controls; it shows off the paper, noting that it is not printed.
  */
 export function TestPage({
   items,
@@ -70,18 +71,18 @@ export function TestPage({
   description: string
   header: TestHeaderConfig
   graded: boolean
-  /** Bez šablony se neví, jak se stránka tiskne — plocha zůstane prázdná. */
+  /** Without a template it is unknown how the page prints — the surface stays empty. */
   template: Template | null
   onReorder: (from: number, to: number) => void
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
-  /** `index` je místo, kam položka přijde (0 = úplně nahoru); bez něj na konec. */
+  /** `index` is where the item goes (0 = very top); without it, at the end. */
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
-  /** Ovládání pracovního listu; u písemky chybí. */
+  /** Worksheet controls; absent for a written test. */
   worksheet?: WorksheetControls
 }) {
-  // Které otázky mají zrovna odkryté řešení. Stav patří sem, ne do položky:
-  // s testem se neukládá a po zavření okna nikomu nechybí.
+  // Which questions have their solution revealed. The state belongs here, not
+  // in the item: it is not saved with the test and nobody misses it later.
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set())
   const questionCount = items.filter((item) => item.kind === 'question').length
   const totalPoints = items.reduce(
@@ -89,7 +90,7 @@ export function TestPage({
     0,
   )
 
-  /** Položky v tom tvaru, ve kterém je čte vykreslení PDF i stránkování. */
+  /** Items in the shape the PDF renderer and pagination read. */
   const resolved = useMemo<ResolvedTestItem[]>(
     () =>
       items.map((item, index) => ({
@@ -102,8 +103,8 @@ export function TestPage({
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
         question: item.question,
-        // Bez obsahu hlavolamu by mu odhad přidělil nulovou výšku a náhled by
-        // měl méně stran než PDF.
+        // Without the puzzle content the estimate would give it zero height and
+        // the preview would have fewer pages than the PDF.
         puzzleId: item.puzzleId,
         puzzle: item.puzzle,
         table: item.table,
@@ -113,14 +114,14 @@ export function TestPage({
   )
 
   /**
-   * Rozdělení na stránky. `paginate` zalomení strany do stránek nevrací
-   * (jen jimi láme), proto se položky rozdělují podle něj, ale prochází se
-   * původní pořadí — jinak by zalomení ze stránky zmizelo a nešlo by ho
-   * odebrat ani přesunout.
+   * Splitting into pages. `paginate` does not return page breaks in the pages
+   * (it only breaks on them), so items are split by its result while walking
+   * the original order — otherwise a page break would vanish from the page and
+   * could not be removed or moved.
    */
   const pages = useMemo(() => {
-    // Nadpis a popis patří do hlavičky na první straně; odhad podle nich
-    // pozná i hlavolam, který svůj nadpis neopakuje.
+    // Title and description belong in the first-page header; the estimate
+    // uses them to recognise a puzzle that does not repeat its own title.
     const broken = template ? paginate(resolved, template.config, { title, description }) : [resolved]
     const pageOfKey = new Map<string, number>()
     broken.forEach((page, index) => page.forEach((item) => pageOfKey.set(item.id, index)))
@@ -129,7 +130,7 @@ export function TestPage({
     let current = 0
     let questionNumber = -1
     items.forEach((item, index) => {
-      // Zalomení patří na konec stránky, kterou ukončuje.
+      // A page break belongs at the end of the page it ends.
       const page = item.kind === 'page_break' ? current : (pageOfKey.get(item.key) ?? current)
       current = page
       if (item.kind === 'question') questionNumber += 1
@@ -139,8 +140,8 @@ export function TestPage({
   }, [items, resolved, template, title, description])
 
   /**
-   * Táž otázka smí být v testu víckrát. Aby se poznalo, který výskyt je
-   * který, dostanou opakované otázky pořadí použití.
+   * The same question may appear in a test several times. To tell the
+   * occurrences apart, repeated questions get a usage number.
    */
   const repeats = useMemo(() => {
     const total = new Map<string, number>()
@@ -153,7 +154,7 @@ export function TestPage({
       if (!item.questionId || (total.get(item.questionId) ?? 0) < 2) continue
       const order = (seen.get(item.questionId) ?? 0) + 1
       seen.set(item.questionId, order)
-      labels.set(item.key, `${order}. použití`)
+      labels.set(item.key, t('tests:page.usage', { order }))
     }
     return labels
   }, [items])
@@ -162,8 +163,8 @@ export function TestPage({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  // dnd-kit si bez `id` čísluje `aria-describedby` počítadlem, které na serveru
-  // a v prohlížeči běží jinak — stránka pak hlásí nesoulad při hydrataci.
+  // Without `id`, dnd-kit numbers `aria-describedby` with a counter that runs
+  // differently on server and client — the page then reports a hydration mismatch.
   const dndId = useId()
 
   function handleDragEnd(event: DragEndEvent) {
@@ -186,30 +187,30 @@ export function TestPage({
   return (
     <Card className="surface-content flex h-full flex-col gap-0 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-fg">Stránka</h2>
+        <h2 className="text-sm font-semibold text-fg">{t('tests:page.title')}</h2>
         <div className="flex flex-wrap gap-1">
           <Button size="sm" variant="outline" onClick={() => onAdd('heading')}>
-            + Nadpis části
+            {t('tests:page.addHeading')}
           </Button>
           <Button size="sm" variant="outline" onClick={() => onAdd('instruction')}>
-            + Pokyn
+            {t('tests:page.addInstruction')}
           </Button>
           <Button size="sm" variant="outline" onClick={() => onAdd('page_break')}>
-            + Nová strana
+            {t('tests:page.addPageBreak')}
           </Button>
           {worksheet ? (
             <>
               <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('text')}>
-                + Text
+                {t('tests:page.addText')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('fun_fact')}>
-                + Fun fact
+                {t('tests:page.addFunFact')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('table')}>
-                + Tabulka
+                {t('tests:page.addTable')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => worksheet.onAdd('question')}>
-                + Úloha
+                {t('tests:page.addTask')}
               </Button>
             </>
           ) : null}
@@ -231,8 +232,8 @@ export function TestPage({
                   <PaperSheet
                     key={pageIndex}
                     config={template.config}
-                    footerLeft={title || 'Nový test'}
-                    footerRight={`strana ${pageIndex + 1} / ${pages.length}`}
+                    footerLeft={title || t('tests:page.untitled')}
+                    footerRight={t('tests:page.footer', { page: pageIndex + 1, pages: pages.length })}
                   >
                     {pageIndex === 0 ? (
                       <PaperHeader
@@ -247,8 +248,8 @@ export function TestPage({
                     {pageIndex === 0 && items.length === 0 ? (
                       <p className="mt-6 text-center text-sm text-paper-fg opacity-60">
                         {worksheet
-                          ? 'Zatím prázdný list. Přidej text, fun fact, tabulku nebo úlohu tlačítky nahoře.'
-                          : 'Zatím prázdná písemka. Zaškrtni otázku v bance a objeví se tady na stránce.'}
+                          ? t('tests:page.emptyWorksheet')
+                          : t('tests:page.emptyTest')}
                       </p>
                     ) : null}
                     <ol>
@@ -281,27 +282,27 @@ export function TestPage({
         </div>
       ) : (
         <p className="mt-3 text-sm text-fg-muted">
-          Bez šablony se neví, jak se písemka vytiskne. Vyber ji v nastavení testu.
+          {t('tests:page.noTemplate')}
         </p>
       )}
 
       {items.length > 0 ? (
         <dl className="mt-3 flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-line-soft pt-2 text-sm text-fg-muted">
           <div>
-            <dt className="inline text-fg-soft">{worksheet ? 'Položek: ' : 'Otázek: '}</dt>
+            <dt className="inline text-fg-soft">{worksheet ? t('tests:page.itemCount') : t('tests:page.questionCount')}</dt>
             <dd className="ui-numeric inline">
               {worksheet ? items.filter((item) => item.kind !== 'page_break').length : questionCount}
             </dd>
           </div>
           {graded ? (
             <div>
-              <dt className="inline text-fg-soft">Body: </dt>
+              <dt className="inline text-fg-soft">{t('tests:page.points')}</dt>
               <dd className="ui-numeric inline">{formatPoints(totalPoints)}</dd>
             </div>
           ) : null}
           {template ? (
             <div>
-              <dt className="inline text-fg-soft">Odhad stran: </dt>
+              <dt className="inline text-fg-soft">{t('tests:page.pageEstimate')}</dt>
               <dd className="ui-numeric inline">{pages.length}</dd>
             </div>
           ) : null}
@@ -312,9 +313,9 @@ export function TestPage({
 }
 
 /**
- * Místo mezi položkami, kam jde vložit nadpis, pokyn nebo zalomení strany.
- * Je to obyčejné tlačítko s nabídkou, takže na něj dosáhne i klávesnice —
- * přetahování myší (dnd-kit) tím zůstává nedotčené.
+ * A slot between items to insert a heading, an instruction or a page break.
+ * It is a plain button with a menu, so the keyboard reaches it too — mouse
+ * dragging (dnd-kit) stays untouched.
  */
 function InsertSlot({
   index,
@@ -327,7 +328,7 @@ function InsertSlot({
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
   worksheet?: WorksheetControls
 }) {
-  const label = index === total ? 'Vložit na konec' : `Vložit před ${index + 1}. položku`
+  const label = index === total ? t('tests:page.insertAtEnd') : t('tests:page.insertBefore', { position: index + 1 })
   return (
     <li className="group/slot flex list-none items-center gap-2 py-0.5">
       <span aria-hidden="true" className="h-px flex-1 bg-paper-line opacity-0 transition-opacity group-hover/slot:opacity-100" />
@@ -338,21 +339,21 @@ function InsertSlot({
             variant="ghost"
             className="h-5 px-2 text-xs text-fg-muted opacity-35 transition-opacity hover:bg-surface hover:opacity-100 focus-visible:opacity-100 group-hover/slot:opacity-100"
             aria-label={label}
-            title={`${label}: nadpis části, pokyn, nebo zalomení strany`}
+            title={t('tests:page.insertTitle', { label })}
           >
             +
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center">
-          <DropdownMenuItem onSelect={() => onAdd('heading', index)}>Nadpis části</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onAdd('instruction', index)}>Pokyn</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onAdd('page_break', index)}>Zalomení strany</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAdd('heading', index)}>{t('tests:page.heading')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAdd('instruction', index)}>{t('tests:page.instruction')}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAdd('page_break', index)}>{t('tests:page.pageBreak')}</DropdownMenuItem>
           {worksheet ? (
             <>
-              <DropdownMenuItem onSelect={() => worksheet.onAdd('text', index)}>Krátký text</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => worksheet.onAdd('fun_fact', index)}>Fun fact</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => worksheet.onAdd('table', index)}>Tabulka k doplnění</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => worksheet.onAdd('question', index)}>Úloha</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('text', index)}>{t('tests:page.text')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('fun_fact', index)}>{t('tests:page.funFact')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('table', index)}>{t('tests:page.table')}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => worksheet.onAdd('question', index)}>{t('tests:page.task')}</DropdownMenuItem>
             </>
           ) : null}
         </DropdownMenuContent>
@@ -363,11 +364,10 @@ function InsertSlot({
 }
 
 /**
- * Jedna položka na stránce. Vykresluje se jako tisk; ovládání (úchyt,
- * body, řádky, řešení, odebrání) se vynoří u okraje, až když je položka pod
- * myší nebo v ní stojí ohnisko — jinak by stránka vypadala jako formulář.
- * Průhledné ovládání zůstává v pořadí tabulátoru, takže je dosažitelné
- * i z klávesnice.
+ * One item on the page. It renders like the print; the controls (handle,
+ * points, lines, solution, remove) appear at the margin only on hover or
+ * focus — otherwise the page would look like a form. The transparent
+ * controls stay in the tab order, so they are reachable from the keyboard.
  */
 function PageRow({
   item,
@@ -383,7 +383,7 @@ function PageRow({
 }: {
   worksheet?: WorksheetControls
   item: DraftItem
-  /** Pořadí otázky v testu (od nuly); u ostatních položek `null`. */
+  /** Question position in the test (zero-based); `null` for other items. */
   number: number | null
   graded: boolean
   template: Template
@@ -409,12 +409,12 @@ function PageRow({
       style={style}
       className="group/row relative list-none rounded-[var(--radius-inner)] outline-offset-4 hover:outline hover:outline-line focus-within:outline focus-within:outline-line"
     >
-      {/* Ovládání u okraje listu. Zůstává v toku klávesnice i když ho není vidět. */}
+      {/* Margin controls. They stay in the keyboard flow even when invisible. */}
       <div className="absolute -top-3 right-0 z-10 flex items-center gap-1 rounded-[var(--radius-inner)] border border-line bg-surface px-1 py-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
         <button
           type="button"
           className="cursor-grab touch-none px-1 text-fg-muted active:cursor-grabbing"
-          aria-label="Přetáhnout pro změnu pořadí"
+          aria-label={t('tests:page.drag')}
           {...attributes}
           {...listeners}
         >
@@ -422,30 +422,30 @@ function PageRow({
         </button>
         {item.kind === 'question' && graded ? (
           <label className="flex items-center gap-1 text-xs text-fg-muted">
-            b.
+            {t('tests:page.pointsShort')}
             <Input
               className="h-6 w-14 px-1 text-xs"
               type="number"
               min={0}
               step={0.5}
-              aria-label="Body za otázku"
+              aria-label={t('tests:page.questionPoints')}
               value={item.pointsOverride ?? question?.points ?? 0}
               onChange={(event) => onPatch(item.key, { pointsOverride: Math.max(0, Number(event.target.value) || 0) })}
             />
           </label>
         ) : null}
-        {/* Kolik místa žák potřebuje, záleží na písemce, ne na otázce —
-            proto se počet linek nastavuje tady, ne u otázky v bance. */}
+        {/* How much room a pupil needs depends on the test, not the question —
+            so the line count is set here, not on the bank question. */}
         {item.kind === 'question' && (question?.type === 'open' || question?.type === 'draw') ? (
           <label className="flex items-center gap-1 text-xs text-fg-muted">
-            řádků
+            {t('tests:page.lines')}
             <Input
               className="h-6 w-14 px-1 text-xs"
               type="number"
               min={1}
               max={30}
               step={1}
-              aria-label="Řádků na odpověď"
+              aria-label={t('tests:page.answerLines')}
               value={item.linesOverride ?? (question.payload as { lines?: number }).lines ?? (question.type === 'draw' ? 8 : 4)}
               onChange={(event) => onPatch(item.key, { linesOverride: Math.max(1, Number(event.target.value) || 1) })}
             />
@@ -459,12 +459,12 @@ function PageRow({
             aria-pressed={revealed}
             onClick={() => onToggleAnswer(item.key)}
           >
-            Řešení
+            {t('tests:page.solution')}
           </Button>
         ) : null}
         {worksheet && item.kind === 'question' ? (
           <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => worksheet.onEditQuestion(item.key)}>
-            Upravit
+            {t('common:actions.edit')}
           </Button>
         ) : null}
         {worksheet?.onRegenerate && item.kind !== 'page_break' ? (
@@ -476,27 +476,27 @@ function PageRow({
             aria-busy={worksheet.regenerating === item.key || undefined}
             onClick={() => worksheet.onRegenerate?.(item.key)}
           >
-            {worksheet.regenerating === item.key ? 'Přegenerovávám…' : 'Přegenerovat'}
+            {worksheet.regenerating === item.key ? t('tests:page.regenerating') : t('tests:page.regenerate')}
           </Button>
         ) : null}
         <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => onRemove(item.key)}>
-          Odebrat
+          {t('tests:page.remove')}
         </Button>
       </div>
 
       {item.needsCheck ? (
-        // Značka „ověř“ se netiskne. Odškrtává se jen kliknutím — úprava textu
-        // ji neodškrtne sama, protože oprava jednoho slova ještě neznamená
-        // ověřený obsah.
+        // The "ověř" flag is not printed. It is cleared only by a click — editing
+        // the text does not clear it, since fixing one word does not mean the
+        // content was verified.
         <div className="pt-2">
           <button
             type="button"
             className="rounded-[var(--radius-tag)] bg-draft-bg px-1.5 py-0.5 text-xs font-medium text-draft-fg hover:underline"
-            title="Obsah nevychází z materiálů. Po kontrole značku odškrtni kliknutím."
-            aria-label="ověř — odškrtnout značku po kontrole"
+            title={t('tests:page.verifyTitle')}
+            aria-label={t('tests:page.verifyLabel')}
             onClick={() => onPatch(item.key, { needsCheck: false })}
           >
-            ověř ✓
+            {t('tests:page.verify')}
           </button>
         </div>
       ) : null}
@@ -504,13 +504,13 @@ function PageRow({
       {repeatLabel || item.questionMissing || item.questionEdited ? (
         <div className="flex flex-wrap items-center gap-1 pt-2">
           {repeatLabel ? <Badge variant="secondary">{repeatLabel}</Badge> : null}
-          {/* Test drží obsah otázky zmrazený k okamžiku zařazení, aby se
-              vytištěná písemka nemohla pozdější úpravou otázky změnit.
-              Když se banka mezitím rozešla, je to vidět tady. */}
+          {/* The test keeps the question content frozen at the moment it was
+              added, so a printed test cannot change through later edits to the
+              question. If the bank has drifted since, it shows here. */}
           {item.questionMissing ? (
-            <Badge className="bg-draft-bg text-draft-fg">otázka už v bance není</Badge>
+            <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionMissing')}</Badge>
           ) : item.questionEdited ? (
-            <Badge className="bg-draft-bg text-draft-fg">otázka byla od zařazení upravena</Badge>
+            <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionEdited')}</Badge>
           ) : null}
         </div>
       ) : null}
@@ -525,29 +525,29 @@ function PageRow({
             style={resolveQuestionStyle(config, question.type)}
           />
           {revealed ? (
-            // Mimo papír, jinou barvou: je to poznámka pro učitelku, ne pro žáky.
+            // Off the paper, in another colour: a note for the teacher, not the pupils.
             <p
               data-slot="reseni"
               className="mt-1 rounded-[var(--radius-inner)] bg-brand-bg px-2 py-1 text-xs text-fg-soft"
             >
-              <span className="font-medium">Vzorová odpověď (netiskne se): </span>
+              <span className="font-medium">{t('tests:page.sampleAnswer')}</span>
               {formatAnswer(question, 'A')}
               {question.explanation ? <span className="text-fg-muted"> — {question.explanation}</span> : null}
             </p>
           ) : null}
         </>
       ) : item.kind === 'puzzle' && item.puzzle ? (
-        // Hlavolam se v osnově jen ukazuje tak, jak se vytiskne; slova
-        // a mřížka se mění na obrazovce Hlavolamy, ne tady.
+        // A puzzle in the outline is only shown as it prints; words and grid are
+        // changed on the Puzzles screen, not here.
         <PaperPuzzle puzzle={item.puzzle} className="text-paper-fg" />
       ) : item.kind === 'question' || item.kind === 'puzzle' ? (
-        // Otázka nebo hlavolam bez obsahu (zmizel z banky i bez snímku) —
-        // dřív propadl až do větve pokynu a ukázal se jako prázdné pole.
+        // A question or puzzle without content (gone from the bank, no snapshot) —
+        // it used to fall through to the instruction branch and show as an empty field.
         <BrokenItem
           message={
             item.kind === 'puzzle'
-              ? 'Hlavolam už není k dispozici — odeber ho z písemky.'
-              : 'Otázka už není k dispozici — odeber ji z písemky.'
+              ? t('tests:page.puzzleGone')
+              : t('tests:page.questionGone')
           }
         />
       ) : item.kind === 'text' ? (
@@ -570,7 +570,7 @@ function PageRow({
       ) : item.kind === 'page_break' ? (
         <p className="my-2 flex items-center gap-2 text-xs text-fg-muted">
           <span aria-hidden="true" className="h-px flex-1 border-b border-dashed border-line" />
-          nová strana
+          {t('tests:page.newPage')}
           <span aria-hidden="true" className="h-px flex-1 border-b border-dashed border-line" />
         </p>
       ) : item.kind === 'heading' ? (
@@ -589,8 +589,8 @@ function PageRow({
               fontSize: pt(config.sectionStyle.fontSize),
               textTransform: config.sectionStyle.uppercase ? 'uppercase' : undefined,
             }}
-            aria-label="Nadpis části"
-            placeholder="Nadpis části"
+            aria-label={t('tests:page.heading')}
+            placeholder={t('tests:page.heading')}
             value={item.text ?? ''}
             onChange={(event) => onPatch(item.key, { text: event.target.value })}
           />
@@ -599,8 +599,8 @@ function PageRow({
         <input
           className="w-full bg-transparent italic text-paper-fg opacity-90 outline-none placeholder:opacity-40"
           style={{ marginTop: pt(8) }}
-          aria-label="Pokyn k vypracování"
-          placeholder="Pokyn k vypracování"
+          aria-label={t('tests:page.instructionField')}
+          placeholder={t('tests:page.instructionField')}
           value={item.text ?? ''}
           onChange={(event) => onPatch(item.key, { text: event.target.value })}
         />
@@ -609,9 +609,9 @@ function PageRow({
   )
 }
 
-/** Položka listu, jejíž uložený obsah neprošel schématem — zbytek listu žije dál. */
+/** A worksheet item whose stored content failed the schema — the rest of the worksheet lives on. */
 function BrokenItem({
-  message = 'Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu.',
+  message = t('tests:page.broken'),
 }: {
   message?: string
 }) {

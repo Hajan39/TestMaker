@@ -1,13 +1,15 @@
 import type { LanguageModel } from 'ai'
+import { t } from '../i18n'
 import { AI_SETTINGS } from './settings'
 
 /**
- * Poskytovatelé, se kterými aplikace mluví. Každý potřebuje jen svůj klíč;
- * který model a v jakém pořadí, říká jediná proměnná `AI_MODELS`.
+ * Providers the app talks to. Each needs only its own key; which model and in
+ * what order is set by the single variable `AI_MODELS`.
  *
- * Anthropic jen s API klíčem z Console: přihlášení předplatným (Claude Max)
- * Anthropic mimo Claude Code odmítá. Otázky přes předplatné se dělají
- * v Claude Code příkazem `/otazky` a nahrávají se do tématu jako soubor.
+ * Anthropic only with an API key from the Console: Anthropic rejects
+ * subscription sign-in (Claude Max) outside Claude Code. Questions via the
+ * subscription are made in Claude Code with the `/otazky` command and
+ * uploaded to the topic as a file.
  */
 export type AiProviderName = 'google' | 'anthropic' | 'openrouter'
 
@@ -31,8 +33,8 @@ function isProviderName(value: string): value is AiProviderName {
 }
 
 /**
- * Položka žebříčku `poskytovatel:model`. Dělí se jen na první dvojtečce —
- * modely zdarma u OpenRouteru končí na `:free`. Bez známé předpony `null`.
+ * Ladder item `provider:model`. Split only at the first colon — free models
+ * on OpenRouter end with `:free`. `null` without a known prefix.
  */
 export function parseModel(item: string): AiConfig | null {
   const trimmed = item.trim()
@@ -48,16 +50,17 @@ function apiKeyOf(provider: AiProviderName, env: Env): string | undefined {
 }
 
 /**
- * Hláška, když generování není nastavené — všude stejná (API i rozhraní),
- * ať majitel dostane jeden návod, ne čtyři různé.
+ * Message when generation is not configured — the same everywhere (API and
+ * UI), so the owner gets one set of instructions, not four different ones.
  */
-export const AI_NOT_CONFIGURED_MESSAGE =
-  'Generování není nastavené. Do .env.local přidej do AI_MODELS položku poskytovatel:model a k ní klíč ' +
-  '(GOOGLE_GENERATIVE_AI_API_KEY, OPENROUTER_API_KEY nebo ANTHROPIC_API_KEY).'
+export function aiNotConfiguredMessage(): string {
+  return t('ai:setup.notConfigured')
+}
 
 /**
- * Proměnné z dřívějšího nastavení (Ollama, `AI_PROVIDER`…). Aplikace je už
- * nečte; kdo je v `.env.local` má, přišel by o generování bez vysvětlení.
+ * Variables from the earlier setup (Ollama, `AI_PROVIDER`…). The app no
+ * longer reads them; whoever has them in `.env.local` would lose generation
+ * without explanation.
  */
 const LEGACY_AI_VARIABLES = [
   'AI_PROVIDER',
@@ -68,19 +71,19 @@ const LEGACY_AI_VARIABLES = [
   'OLLAMA_CONCURRENCY',
 ] as const
 
-/** Poskytovatelé v pořadí pro hlášky: napřed ti se zdarma. */
+/** Providers in the order used in messages: free ones first. */
 const PROVIDER_LIST = (['google', 'openrouter', 'anthropic'] as const satisfies readonly AiProviderName[]).join(', ')
 
-/** Položky žebříčku, jak jsou napsané: `AI_MODELS`, bez něj výchozí modely. */
+/** Ladder items as written: `AI_MODELS`, or the default models without it. */
 function ladderItems(env: Env): string[] {
   const raw = env.AI_MODELS?.trim()
   return (raw ? raw.split(',') : [...AI_SETTINGS.defaultModels]).map((item) => item.trim()).filter(Boolean)
 }
 
 /**
- * Žebříček pro přehled v administraci: v pořadí z `AI_MODELS` i s modely,
- * ke kterým chybí klíč (ty se při generování přeskakují). Položky bez známého
- * poskytovatele a opakování vynechává.
+ * Ladder for the administration overview: in `AI_MODELS` order, including
+ * models without a key (those are skipped during generation). Items without a
+ * known provider and repeats are left out.
  */
 export function listAiModels(env: Env = process.env): { model: string; hasKey: boolean }[] {
   const seen = new Set<string>()
@@ -95,16 +98,16 @@ export function listAiModels(env: Env = process.env): { model: string; hasKey: b
 }
 
 /**
- * Žebříček modelů i to, proč v něm něco chybí. `problems` jsou české věty
- * pro majitele (co v `.env.local` opravit): staré proměnné, položka bez
- * známého poskytovatele, položka bez klíče. Žebříček sám je týž jako
- * z `readAiLadder`.
+ * The model ladder and why something is missing from it. `problems` are
+ * sentences for the owner (what to fix in `.env.local`): legacy variables,
+ * an item without a known provider, an item without a key. The ladder itself
+ * is the same as from `readAiLadder`.
  */
 export function describeAiSetup(env: Env = process.env): { ladder: AiConfig[]; problems: string[] } {
   const problems: string[] = []
   for (const name of LEGACY_AI_VARIABLES) {
     if (env[name]?.trim()) {
-      problems.push(`Proměnná ${name} už se nepoužívá — model nastav v AI_MODELS (viz .env.example).`)
+      problems.push(t('ai:setup.legacyVariable', { name }))
     }
   }
 
@@ -112,43 +115,43 @@ export function describeAiSetup(env: Env = process.env): { ladder: AiConfig[]; p
   for (const item of ladderItems(env)) {
     const config = parseModel(item)
     if (!config) {
-      problems.push(`Položka „${item}" v AI_MODELS nemá známého poskytovatele (${PROVIDER_LIST}).`)
+      problems.push(t('ai:setup.unknownProvider', { item, providers: PROVIDER_LIST }))
       continue
     }
     if (!apiKeyOf(config.provider, env)) {
-      problems.push(`K položce „${item}" chybí klíč ${AI_PROVIDERS[config.provider].keyEnv}.`)
+      problems.push(t('ai:setup.missingKey', { item, keyEnv: AI_PROVIDERS[config.provider].keyEnv }))
       continue
     }
     if (ladder.some((other) => other.provider === config.provider && other.model === config.model)) continue
     ladder.push(config)
   }
-  // Jen oddělovače (`AI_MODELS=,`): nic se nevynechalo, a přesto nic není.
+  // Only separators (`AI_MODELS=,`): nothing was skipped, yet there is nothing.
   if (ladder.length === 0 && problems.length === 0) {
-    problems.push('V AI_MODELS není žádná položka poskytovatel:model.')
+    problems.push(t('ai:setup.emptyLadder'))
   }
   return { ladder, problems }
 }
 
 /**
- * Žebříček modelů: `AI_MODELS`, bez něj `AI_SETTINGS.defaultModels`. Když
- * modelu dojde limit, pokračuje se dalším (viz `startLadder`). Položky bez
- * klíče nebo s překlepem se vynechávají (proč, říká `describeAiSetup`);
- * placený model se tak nikdy nezapne sám — jen tím, že ho majitel do
- * žebříčku napíše a dá k němu klíč.
+ * Model ladder: `AI_MODELS`, or `AI_SETTINGS.defaultModels` without it. When
+ * a model runs out of quota, the next one continues (see `startLadder`).
+ * Items without a key or with a typo are skipped (`describeAiSetup` says
+ * why); a paid model is therefore never enabled on its own — only by the owner
+ * writing it into the ladder and giving it a key.
  */
 export function readAiLadder(env: Env = process.env): AiConfig[] {
   return describeAiSetup(env).ladder
 }
 
-/** Je generování k dispozici? Bez něj ho rozhraní skryje a vysvětlí proč. */
+/** Is generation available? Without it the UI hides it and explains why. */
 export function isAiConfigured(env: Env = process.env): boolean {
   return readAiLadder(env).length > 0
 }
 
 export interface ModelOptions {
-  /** Prostředí, ze kterého se berou klíče; v testech podvržené. */
+  /** Environment the keys are read from; faked in tests. */
   env?: Env
-  /** Podvržený `fetch` pro testy — žádný test nesmí volat skutečnou službu. */
+  /** Fake `fetch` for tests — no test may call the real service. */
   fetch?: typeof globalThis.fetch
 }
 
@@ -178,7 +181,7 @@ export async function getModel(config: AiConfig, options: ModelOptions = {}): Pr
   }
 }
 
-/** Popis modelu do logu a hlášky: `google:gemini-flash-latest`. */
+/** Model description for logs and messages: `google:gemini-flash-latest`. */
 export function describeAiConfig(config: AiConfig): string {
   return `${config.provider}:${config.model}`
 }

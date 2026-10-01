@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 import {
   PUZZLE_CLUE_MAX,
   PUZZLE_WORD_MAX,
@@ -19,59 +20,61 @@ import {
 import { AI_SETTINGS } from './settings'
 
 /**
- * Slovní zásoba do hlavolamu od modelu.
+ * Puzzle vocabulary from the model.
  *
- * Model dodává **jen dvojice slovo + nápověda**, nikdy mřížku — v mřížce se
- * ztratí a vrátí slovo, které v ní neleží. Rozmístění dělá kód
+ * The model supplies **only word + clue pairs**, never a grid — it gets lost
+ * in a grid and returns a word that is not in it. Placement is done by code
  * (`packages/core/src/puzzle`).
  *
- * Jde se toutéž cestou jako u otázek: žebříček modelů (`AI_MODELS`), přepnutí
- * na další model při vyčerpaném limitu a překlad chyb do češtiny
- * (`describeAiError`). `PuzzleWordsRequest` a prompty žijí v `./prompts/puzzleWords`.
+ * Same path as for questions: the model ladder (`AI_MODELS`), switching to
+ * the next model when quota runs out, and translating errors for the teacher
+ * (`describeAiError`). `PuzzleWordsRequest` and the prompts live in
+ * `./prompts/puzzleWords`.
  *
- * Model se na pravidla z promptu spolehlivě nedrží (polovinu slov píše bez
- * diakritiky, občas slovo vymyslí nebo ho prozradí v nápovědě), proto
- * všechno, co jde ověřit, ověřuje `filterEntries` v kódu.
+ * The model does not reliably stick to the prompt rules (it writes half the
+ * words without diacritics, sometimes makes a word up or reveals it in the
+ * clue), so everything that can be verified is verified by `filterEntries`
+ * in code.
  */
 
 const S = AI_SETTINGS.puzzleWords
 
 export interface PuzzleWordsRejection {
   word: string
-  /** Důvod česky, do rozhraní. */
+  /** Reason for the UI, localized. */
   reason: string
 }
 
 export interface PuzzleWordsStats {
-  /** O kolik slov se model žádal (u tajenky i s rezervou na chybějící písmena). */
+  /** How many words were requested from the model (for a cryptogram including a reserve for missing letters). */
   requested: number
-  /** Kolik jich model vrátil. */
+  /** How many the model returned. */
   returned: number
-  /** Kolik jich prošlo kontrolou (= `entries.length`). */
+  /** How many passed the check (= `entries.length`). */
   usable: number
-  /** Kolik se jich zahodilo (= `rejected.length`). */
+  /** How many were dropped (= `rejected.length`). */
   dropped: number
 }
 
 export interface PuzzleWordsResult {
   entries: PuzzleEntry[]
-  /** Slova, která se do hlavolamu nehodí (i s důvodem, česky). */
+  /** Words unfit for the puzzle (with a localized reason). */
   rejected: PuzzleWordsRejection[]
-  /** Slova, která kód opravil (diakritika podle materiálu, zkrácená nápověda). */
+  /** Words fixed by code (diacritics from the material, trimmed clue). */
   adjusted: { word: string; note: string }[]
-  /** Model, který odpověděl (`poskytovatel:model`). */
+  /** Model that answered (`provider:model`). */
   models: string[]
   stats: PuzzleWordsStats
   /**
-   * Písmena tajenky, na která ani po tomhle kole nezbylo slovo (i se slovy
-   * z `avoid`). Jen u tajenky se zadanou větou.
+   * Cryptogram letters still without a word even after this round (including
+   * the words from `avoid`). Only for a cryptogram with a given sentence.
    */
   missingLetters?: string[]
-  /** Česká věta s radou, když výsledek na hlavolam nestačí; jinak chybí. */
+  /** Localized advice when the result is not enough for the puzzle; missing otherwise. */
   warning?: string
 }
 
-/** Jedno volání modelu; v testech se podstrkuje, aby nesahaly na skutečný model. */
+/** One model call; faked in tests so they never touch a real model. */
 export type PuzzleWordsCall = (input: {
   config: AiConfig
   system: string
@@ -91,18 +94,19 @@ const responseSchema = z.object({
     .min(1),
 })
 
-/** Meze slova do hlavolamu: kratší se nedá hledat, delší se nevejde do mřížky. */
+/** Puzzle word limits: shorter cannot be searched for, longer does not fit the grid. */
 export const MIN_LETTERS = S.minLetters
-/** Nejdelší slovo, které schéma hlavolamu vůbec pustí. */
+/** Longest word the puzzle schema accepts at all. */
 const SCHEMA_MAX_LETTERS = PUZZLE_WORD_MAX
-/** Nejdelší nápověda, kterou schéma hlavolamu pustí. */
+/** Longest clue the puzzle schema accepts. */
 export const CLUE_MAX_LENGTH = PUZZLE_CLUE_MAX
-/** Výchozí mřížka osmisměrky — tatáž, kterou doplní schéma. */
+/** Default word search grid — the same one the schema fills in. */
 const DEFAULT_GRID = wordSearchPayloadSchema.parse({})
 
 /**
- * Nejdelší slovo pro daný hlavolam. V osmisměrce se slovo musí vejít aspoň
- * do delší strany mřížky; u tajenky rozhoduje šířka řádku na stránce.
+ * Longest word for the given puzzle. In a word search the word must fit at
+ * least the longer side of the grid; for a cryptogram the row width on the
+ * page decides.
  */
 export function maxLettersFor(kind: PuzzleWordsRequest['kind'], grid?: { cols: number; rows: number }): number {
   if (kind === 'cryptogram') return Math.min(S.cryptogramMaxLetters, SCHEMA_MAX_LETTERS)
@@ -110,7 +114,7 @@ export function maxLettersFor(kind: PuzzleWordsRequest['kind'], grid?: { cols: n
   return Math.min(Math.max(cols, rows), SCHEMA_MAX_LETTERS)
 }
 
-/** Kompatibilita: nejdelší slovo ve výchozí osmisměrce. */
+/** Compatibility: longest word in the default word search. */
 export const MAX_LETTERS = maxLettersFor('wordsearch')
 
 function promptLimits(request: PuzzleWordsRequest): PuzzleWordsPromptLimits {
@@ -123,21 +127,22 @@ function promptLimits(request: PuzzleWordsRequest): PuzzleWordsPromptLimits {
 }
 
 /**
- * Vytáhne z materiálů tématu dvojice slovo + nápověda.
+ * Extracts word + clue pairs from the topic's materials.
  *
- * Co se do hlavolamu nehodí (slovo, které v materiálu není, moc dlouhé slovo,
- * dvě slova, nápověda, která slovo prozradí…), se zahodí a vrátí v `rejected`
- * — tichý úbytek by učitelka poznala až u prázdných řádků tajenky.
+ * Whatever is unfit for the puzzle (a word not in the material, a too long
+ * word, two words, a clue revealing the word…) is dropped and returned in
+ * `rejected` — the teacher would notice a silent loss only at the empty rows
+ * of the cryptogram.
  */
 export async function generatePuzzleWords(
   request: PuzzleWordsRequest,
   options: {
-    /** Žebříček modelů; bez něj se čte z prostředí (`AI_MODELS`). */
+    /** Model ladder; read from the environment (`AI_MODELS`) without it. */
     models?: AiConfig[]
     signal?: AbortSignal
-    /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
+    /** Fake model call for tests; not passed in the app. */
     callModel?: PuzzleWordsCall
-    /** Každý pokus o volání modelu (viz `startLadder`); web z něj zapisuje přehled použití. */
+    /** Every model call attempt (see `startLadder`); the web records the usage overview from it. */
     onCall?: AiCallListener
   } = {},
 ): Promise<PuzzleWordsResult> {
@@ -158,7 +163,7 @@ export async function generatePuzzleWords(
 
   const system = buildPuzzleWordsSystemPrompt(request.gradeName, limits)
   const prompt = buildPuzzleWordsPrompt(request, { count, text, missingLetters: countLetters(missingBefore) })
-  // Slova nejde zachránit po kouscích jako otázky — špatný tvar znamená zkusit další model.
+  // Words cannot be salvaged piece by piece like questions — a bad shape means trying the next model.
   const { value, model } = await ladder.call(
     (config, meter) => callModel({ config, system, prompt, signal: options.signal, meter }),
     { nextOnBadShape: true },
@@ -190,14 +195,14 @@ export async function generatePuzzleWords(
   }
 }
 
-/** Kolik slov chtít po modelu: u tajenky víc, než kolik chybí písmen. */
+/** How many words to ask the model for: for a cryptogram more than letters are missing. */
 export function wordsToRequest(count: number, missingLetters: number): number {
   const reserve = Math.max(S.cryptogramMinExtraWords, Math.ceil(missingLetters * S.cryptogramExtraWordsRatio))
   const wanted = missingLetters > 0 ? Math.max(count, missingLetters + reserve) : count
   return Math.max(1, Math.min(wanted, S.maxWordsPerCall))
 }
 
-/** Hláška s radou, když výsledek na hlavolam nestačí. */
+/** Message with advice when the result is not enough for the puzzle. */
 function warningFor(
   stats: PuzzleWordsStats,
   rejected: PuzzleWordsRejection[],
@@ -206,32 +211,25 @@ function warningFor(
   const parts: string[] = []
   if (stats.usable === 0) {
     const reasons = summarizeReasons(rejected)
+    const words = t('ai:puzzleWords.wordCount', { count: stats.returned })
     parts.push(
       stats.returned === 0
-        ? 'Model nevrátil žádné slovo.'
-        : `Model vrátil ${wordCount(stats.returned)}, ale žádné se do hlavolamu nehodí${reasons ? ` (${reasons})` : ''}.`,
-      'Zkus to znovu, případně zkontroluj, že téma má materiály s textem, nebo slova dopiš ručně.',
+        ? t('ai:puzzleWords.warnings.noWords')
+        : reasons
+          ? t('ai:puzzleWords.warnings.noneUsableWithReasons', { words, reasons })
+          : t('ai:puzzleWords.warnings.noneUsable', { words }),
+      t('ai:puzzleWords.warnings.retryHint'),
     )
   } else if (stats.usable * 2 < stats.requested) {
-    parts.push(
-      `Použitelných slov je jen ${stats.usable} z ${stats.requested}. Když je potřebuješ víc, nech dogenerovat další, nebo je dopiš ručně.`,
-    )
+    parts.push(t('ai:puzzleWords.warnings.fewUsable', { usable: stats.usable, requested: stats.requested }))
   }
   if (missingLetters?.length) {
-    parts.push(
-      `Na písmena tajenky ${[...new Set(missingLetters)].join(', ')} zatím chybí slovo. ` +
-        'Nech dogenerovat další slova, dopiš je ručně, nebo zvol jinou větu.',
-    )
+    parts.push(t('ai:puzzleWords.warnings.missingLetters', { letters: [...new Set(missingLetters)].join(', ') }))
   }
   return parts.length > 0 ? { warning: parts.join(' ') } : {}
 }
 
-/** „1 slovo", „3 slova", „5 slov". */
-function wordCount(n: number): string {
-  return `${n} ${n === 1 ? 'slovo' : n >= 2 && n <= 4 ? 'slova' : 'slov'}`
-}
-
-/** „nenašlo se v materiálu 3×, …" — nejčastější důvody vyřazení. */
+/** "nenašlo se v materiálu 3×, …" — the most frequent rejection reasons. */
 function summarizeReasons(rejected: PuzzleWordsRejection[]): string {
   const counts = new Map<string, number>()
   for (const { reason } of rejected) counts.set(reason, (counts.get(reason) ?? 0) + 1)
@@ -242,16 +240,16 @@ function summarizeReasons(rejected: PuzzleWordsRejection[]): string {
     .join(', ')
 }
 
-// ————————————————————————————————— materiály
+// ————————————————————————————————— materials
 
 const FILE_HEADER = /^=== .+ ===$/
 
 /**
- * Text materiálů zkrácený na `budget` znaků tak, aby dostal prostor každý
- * soubor. Krátké materiály jdou celé, zbytek rozpočtu se dělí rovným dílem
- * mezi dlouhé (vodováha) a z dlouhého materiálu se berou úseky rovnoměrně
- * napříč celým textem — useknutý konec by znamenal, že poslední soubory
- * podle abecedy model vůbec neuvidí.
+ * Material text shortened to `budget` characters so that every file gets
+ * room. Short materials go in whole, the rest of the budget is split equally
+ * among the long ones (water-filling), and chunks are taken from a long
+ * material evenly across the whole text — a cut-off end would mean the model
+ * never sees the alphabetically last files.
  */
 export function fitMaterials(
   text: string,
@@ -275,7 +273,7 @@ export function fitMaterials(
     .join(separator)
 }
 
-/** Materiály podle záhlaví `=== soubor ===`, každý i se svým záhlavím. */
+/** Materials split by `=== file ===` headers, each with its header. */
 function splitMaterials(text: string): string[] {
   const materials: string[] = []
   let current: string[] = []
@@ -306,19 +304,19 @@ function sampleMaterial(material: string, allowance: number, chunkChars: number)
   return header ? `${header}\n${sampled}` : sampled
 }
 
-// ————————————————————————————————— porovnávání slov
+// ————————————————————————————————— word comparison
 
-/** Bez diakritiky; u latinky zůstává počet znaků (kódových bodů) stejný. */
+/** Without diacritics; for Latin script the number of characters (code points) stays the same. */
 function stripDiacritics(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '')
 }
 
-/** Klíč slova pro porovnání: jen písmena, malá, bez diakritiky. */
+/** Word key for comparison: letters only, lower case, without diacritics. */
 function looseKey(word: string): string {
   return stripDiacritics(splitWord(word).letters.join('').toLowerCase())
 }
 
-/** Jsou to tvary téhož slova? (kořen/kořeny, Ústava/ustava) */
+/** Are these forms of the same word? (kořen/kořeny, Ústava/ustava) */
 export function isNearDuplicate(a: string, b: string): boolean {
   const x = looseKey(a)
   const y = looseKey(b)
@@ -332,7 +330,7 @@ export function isNearDuplicate(a: string, b: string): boolean {
   )
 }
 
-/** Slova materiálu (malá, NFC, bez opakování) i jejich podoba bez diakritiky. */
+/** Material words (lower case, NFC, unique) and their form without diacritics. */
 interface MaterialIndex {
   tokens: string[]
   stripped: string[]
@@ -341,7 +339,7 @@ interface MaterialIndex {
 export function indexMaterial(text: string): MaterialIndex {
   const normalized = text
     .normalize('NFC')
-    // Měkký spojovník a slovo rozdělené na konci řádku, stejně jako u citací otázek.
+    // Soft hyphen and a word hyphenated at the end of a line, same as for question quotes.
     .replace(/­/g, '')
     .replace(/-[ \t]*\r?\n\s*(?=\p{L})/gu, '')
     .toLowerCase()
@@ -350,13 +348,14 @@ export function indexMaterial(text: string): MaterialIndex {
 }
 
 /**
- * Najde slovo v materiálu a vrátí ho v podobě z materiálu.
+ * Finds the word in the material and returns it in the material's form.
  *
- * Slovo projde, když ho materiál obsahuje jako slovo nebo začátek tvaru
- * (kořen → kořeny); u delších slov stačí shoda bez posledních dvou písmen,
- * protože 1. pád v textu stát nemusí (žaludek → žaludku). Když slovo sedí jen
- * po odstranění diakritiky (model napsal „zaludek"), vrátí se s diakritikou
- * z materiálu. Slovo, které v materiálu není, vrací `null`.
+ * The word passes when the material contains it as a word or the start of a
+ * form (kořen → kořeny); for longer words a match without the last two
+ * letters is enough, because the nominative need not appear in the text
+ * (žaludek → žaludku). When the word matches only after stripping diacritics
+ * (the model wrote "zaludek"), it is returned with the diacritics from the
+ * material. A word not in the material returns `null`.
  */
 export function matchInMaterial(word: string, index: MaterialIndex): string | null {
   const chars = Array.from(word.normalize('NFC'))
@@ -370,8 +369,8 @@ export function matchInMaterial(word: string, index: MaterialIndex): string | nu
   const stemFound = () => index.tokens.some((token) => token.startsWith(stem))
 
   if (index.tokens.some((token) => token.startsWith(full))) return chars.join('')
-  // Slovo s diakritikou, jehož tvar v materiálu stojí (hříbek → hříbky), se
-  // nepřepisuje podle jiného slova, které se liší jen čárkou.
+  // A word with diacritics whose form is in the material (hříbek → hříbky) is
+  // not rewritten after another word that differs only by an accent.
   if (full !== loose && stemFound()) return chars.join('')
   const fixed = restoreDiacritics(chars, index, loose, lower.length, stemLength)
   if (fixed) return fixed
@@ -380,13 +379,13 @@ export function matchInMaterial(word: string, index: MaterialIndex): string | nu
 }
 
 /**
- * Prvních `length` znaků slova nahradí znaky z nejbližšího slova materiálu,
- * které bez diakritiky začíná na `loosePrefix`. Velikost písmen zůstane podle
- * modelu (Ústava zůstane s velkým Ú).
+ * Replaces the first `length` characters of the word with characters from the
+ * closest material word that starts with `loosePrefix` without diacritics.
+ * Letter case stays as the model wrote it (Ústava keeps its capital Ú).
  *
- * Když v materiálu stojí jen delší tvar, přebírá se diakritika jen z kmene
- * (`stemLength`): z „bankovkách" se nesmí stát „bankovká", koncovka tvaru
- * s 1. pádem nesouvisí.
+ * When only a longer form is in the material, diacritics are taken from the
+ * stem only (`stemLength`): "bankovkách" must not become "bankovká", the
+ * ending of that form has nothing to do with the nominative.
  */
 function restoreDiacritics(
   chars: string[],
@@ -419,7 +418,7 @@ function restoreDiacritics(
     .join('')
 }
 
-/** Prozrazuje nápověda slovo? Hledá se jeho začátek (kořen) mezi slovy nápovědy. */
+/** Does the clue reveal the word? Its start (root) is searched among the clue words. */
 export function clueRevealsWord(word: string, clue: string): boolean {
   const key = looseKey(word)
   if (!key) return false
@@ -429,9 +428,9 @@ export function clueRevealsWord(word: string, clue: string): boolean {
 }
 
 /**
- * Koncovky, které 1. pád jednotného čísla skoro nikdy nemá (bankovkách,
- * lesích, kořeny se svaly…). Gramatiku kód neověří, ale tyhle zjevné tvary
- * z textu materiálu ano; ostatní hlídá prompt.
+ * Endings the nominative singular almost never has (bankovkách, lesích,
+ * kořeny se svaly…). Code cannot verify grammar, but it can catch these
+ * obvious forms from the material text; the prompt guards the rest.
  */
 const NON_NOMINATIVE_ENDINGS = ['ách', 'ích', 'ami', 'ými', 'ých', 'ům']
 
@@ -447,8 +446,9 @@ function clueKey(clue: string): string {
 }
 
 /**
- * Nápověda zkrácená pod `max` znaků: napřed na konci věty, jinak na konci
- * slova s výpustkou. Když by zbylo moc málo, vrací `null` a slovo se zahodí.
+ * Clue shortened below `max` characters: preferably at a sentence end,
+ * otherwise at a word end with an ellipsis. When too little would remain,
+ * returns `null` and the word is dropped.
  */
 export function trimClue(clue: string, max: number = CLUE_MAX_LENGTH): string | null {
   if (clue.length <= max) return clue
@@ -464,13 +464,13 @@ export function trimClue(clue: string, max: number = CLUE_MAX_LENGTH): string | 
   return trimmed.length >= S.clueMinTrimmedLength ? trimmed : null
 }
 
-// ————————————————————————————————— tajenka
+// ————————————————————————————————— cryptogram
 
 /**
- * Písmena věty, na která se mezi `words` nenajde vlastní slovo. Počítá se
- * největší párování písmen se slovy (každé slovo pokryje jedno písmeno),
- * stejně jako při skládání tajenky — hladový odhad by hlásil chybějící
- * písmeno i tam, kde slova stačí.
+ * Sentence letters for which no word of their own is found among `words`.
+ * Computes the maximum matching of letters to words (each word covers one
+ * letter), just like when building the cryptogram — a greedy estimate would
+ * report a missing letter even where the words suffice.
  */
 export function missingPhraseLetters(phrase: string, words: string[]): string[] {
   const letters = phraseWords(phrase).flat()
@@ -496,21 +496,21 @@ function countLetters(letters: string[]): MissingLetters {
   return [...counts.entries()].map(([letter, count]) => ({ letter, count }))
 }
 
-// ————————————————————————————————— kontrola odpovědi
+// ————————————————————————————————— answer check
 
 export interface FilterOptions {
-  /** Text, který model dostal; slovo, které v něm není, se zahodí. Bez něj se nekontroluje. */
+  /** Text the model got; a word not in it is dropped. Without it nothing is checked. */
   source?: string
-  /** Slova, která už v hlavolamu jsou. */
+  /** Words already in the puzzle. */
   avoid?: string[]
-  /** Věta tajenky; slovo bez jediného jejího písmena se zahodí. */
+  /** Cryptogram sentence; a word without any of its letters is dropped. */
   phrase?: string
   minLetters?: number
   maxLetters?: number
   clueMax?: number
 }
 
-/** Projde, co model vrátil, a nechá jen slova použitelná v hlavolamu. */
+/** Goes through what the model returned and keeps only words usable in the puzzle. */
 export function filterEntries(
   words: { word: string; clue: string }[],
   options: FilterOptions = {},
@@ -535,70 +535,70 @@ export function filterEntries(
 
     if (!word) continue
     if (/\s/u.test(word)) {
-      reject('je to víc slov, do hlavolamu patří jedno')
+      reject(t('ai:puzzleWords.rejected.multipleWords'))
       continue
     }
     const { unusable } = splitWord(word)
     if (unusable.length > 0) {
-      reject(`obsahuje znaky, které se do políček nezapíšou (${unusable.join(' ')})`)
+      reject(t('ai:puzzleWords.rejected.unusableChars', { chars: unusable.join(' ') }))
       continue
     }
     if (index) {
       const found = matchInMaterial(word, index)
       if (found === null) {
-        reject('v materiálu se nenašlo')
+        reject(t('ai:puzzleWords.rejected.notInMaterial'))
         continue
       }
       if (found !== word) {
-        notes.push(`opraveno podle materiálu z „${word}"`)
+        notes.push(t('ai:puzzleWords.adjusted.fixedFromMaterial', { word }))
         word = found
       }
     }
     const { letters } = splitWord(word)
     if (letters.length < minLetters) {
-      reject(`je kratší než ${minLetters} písmena`)
+      reject(t('ai:puzzleWords.rejected.tooShort', { count: minLetters }))
       continue
     }
     if (letters.length > maxLetters) {
-      reject(`je delší než ${maxLetters} písmen`)
+      reject(t('ai:puzzleWords.rejected.tooLong', { count: maxLetters }))
       continue
     }
     if (looksNonNominative(word)) {
-      reject('není v 1. pádě jednotného čísla')
+      reject(t('ai:puzzleWords.rejected.notNominative'))
       continue
     }
     if (clue.length < 2) {
-      reject('chybí nápověda')
+      reject(t('ai:puzzleWords.rejected.missingClue'))
       continue
     }
     if (clue.length > clueMax) {
       const trimmed = trimClue(clue, clueMax)
       if (trimmed === null) {
-        reject(`nápověda je delší než ${clueMax} znaků`)
+        reject(t('ai:puzzleWords.rejected.clueTooLong', { count: clueMax }))
         continue
       }
-      notes.push('nápověda zkrácena')
+      notes.push(t('ai:puzzleWords.adjusted.clueTrimmed'))
       clue = trimmed
     }
     if (clueRevealsWord(word, clue)) {
-      reject('nápověda prozrazuje hledané slovo')
+      reject(t('ai:puzzleWords.rejected.clueReveals'))
       continue
     }
     if (avoid.some((existing) => isNearDuplicate(existing, word))) {
-      reject('už v hlavolamu je')
+      reject(t('ai:puzzleWords.rejected.alreadyInPuzzle'))
       continue
     }
     if (entries.some((entry) => isNearDuplicate(entry.word, word))) {
-      reject('je v seznamu podruhé')
+      reject(t('ai:puzzleWords.rejected.duplicate'))
       continue
     }
     const key = clueKey(clue)
     if (clues.has(key)) {
-      reject('má stejnou nápovědu jako jiné slovo')
+      reject(t('ai:puzzleWords.rejected.sameClue'))
       continue
     }
     if (phraseLetters && !letters.some((letter) => phraseLetters.has(letter))) {
-      reject('neobsahuje žádné písmeno tajenky')
+      reject(t('ai:puzzleWords.rejected.noPhraseLetter'))
       continue
     }
     clues.add(key)

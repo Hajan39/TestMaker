@@ -2,12 +2,13 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { t } from '@testmaker/core/i18n'
 import { Button, EmptyState } from '@testmaker/ui'
 
 /**
- * Když se stránka nepodaří načíst (typicky databáze nebo server), ukáže se
- * tohle místo anglické výchozí stránky Next.js. Lišta a navigace zůstávají,
- * takže učitelka může zkusit znovu, nebo odejít jinam.
+ * Shown instead of the English Next.js default when a page fails to load
+ * (typically the database or server). The top bar and navigation stay, so the
+ * teacher can retry or go elsewhere.
  */
 export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
@@ -17,16 +18,13 @@ export default function ErrorPage({ error, retry }: { error: Error & { digest?: 
   return (
     <div className="p-5">
       <EmptyState
-        title="Stránku se nepodařilo načíst"
-        hint={
-          'Zkus to za chvíli znovu. Když to nepomůže, dej vědět správci' +
-          (error.digest ? ` a pošli mu kód ${error.digest}.` : '.')
-        }
+        title={t('errors.pageLoadTitle')}
+        hint={error.digest ? t('errors.loadHintWithCode', { code: error.digest }) : t('errors.loadHint')}
         action={
           <div className="flex gap-2">
-            <Button onClick={() => retry()}>Zkusit znovu</Button>
+            <Button onClick={() => retry()}>{t('actions.retry')}</Button>
             <Link href="/">
-              <Button variant="outline">Domů</Button>
+              <Button variant="outline">{t('actions.home')}</Button>
             </Link>
           </div>
         }

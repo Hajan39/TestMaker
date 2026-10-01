@@ -3,13 +3,14 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { t } from '@testmaker/core/i18n'
 import { BusyButton } from './BusyButton'
 import { printPdf } from './print'
 
-/** Tlačítko, které pošle PDF rovnou do tisku. */
+/** Button that sends a PDF straight to the printer. */
 export function PrintButton({
   href,
-  children = 'Vytisknout',
+  children,
   size = 'sm',
   variant = 'outline',
 }: {
@@ -25,7 +26,7 @@ export function PrintButton({
     try {
       await printPdf(href)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'PDF se nepodařilo připravit.')
+      toast.error(error instanceof Error ? error.message : t('ui:print.failed'))
     } finally {
       setPreparing(false)
     }
@@ -36,10 +37,10 @@ export function PrintButton({
       size={size}
       variant={variant}
       busy={preparing}
-      busyLabel="Připravuji tisk…"
+      busyLabel={t('ui:print.preparing')}
       onClick={() => void handleClick()}
     >
-      {children}
+      {children ?? t('actions.print')}
     </BusyButton>
   )
 }

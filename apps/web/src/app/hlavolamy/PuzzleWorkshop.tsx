@@ -12,7 +12,6 @@ import {
   PUZZLE_CLUE_MAX,
   PUZZLE_ENTRIES_MAX,
   PUZZLE_ENTRIES_MIN,
-  PUZZLE_KIND_LABELS,
   PUZZLE_KINDS,
   PUZZLE_PHRASE_MAX,
   PUZZLE_WORD_MAX,
@@ -46,7 +45,6 @@ import {
   LoadingLines,
   PaperPuzzle,
   PaperSheet,
-  pocet,
   printPdf,
   Select,
   SelectContent,
@@ -55,29 +53,26 @@ import {
   SelectValue,
   Textarea,
   toast,
-  type PluralForms,
 } from '@testmaker/ui'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import { RowActions } from '@/components/RowActions'
 import type { PuzzleListItem, PuzzleTopic } from '@/lib/puzzles'
-import { errorMessage, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+import { errorMessage, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
-/** Hlavolam tak, jak ho vrací API po uložení. */
+/** A puzzle as the API returns it after saving. */
 type PuzzleListRow = PuzzleContent & { id: string; topicId: string | null; updatedAt: string }
 
-/** Slovo tak, jak ho vrací API — u osmisměrky nápověda chybět smí. */
+/** A word as the API returns it — a word search may lack the clue. */
 type ApiEntry = { word: string; clue?: string | null }
 
-const SLOVA: PluralForms = ['slovo', 'slova', 'slov']
-const HLAVOLAMY: PluralForms = ['hlavolam', 'hlavolamy', 'hlavolamů']
-
-/** Kolik slov se od modelu žádá, když si učitelka nezvolí jinak. */
+/** How many words to ask the model for when the teacher does not choose otherwise. */
 const DEFAULT_WORD_COUNT = 12
 
 /**
- * Meze ze schématu hlavolamu (`packages/core/src/schema/puzzle.ts`) a z API
- * slov. Rozhraní je hlídá dřív, než se hlavolam pošle na server, aby
- * učitelka viděla u řádku, co opravit, místo obecného „neplatná data".
+ * Limits from the puzzle schema (`packages/core/src/schema/puzzle.ts`) and the
+ * words API. The UI checks them before the puzzle is sent to the server, so the
+ * teacher sees next to the row what to fix instead of a generic "invalid data".
  */
 const MIN_WORDS = PUZZLE_ENTRIES_MIN
 const MAX_WORDS = PUZZLE_ENTRIES_MAX
@@ -88,9 +83,9 @@ const MAX_INSTRUCTIONS_LENGTH = 500
 const MAX_PHRASE_LENGTH = PUZZLE_PHRASE_MAX
 
 /**
- * Chce schéma u osmisměrky nápovědu? Zjišťuje se ze schématu samého, ne
- * natvrdo: jakmile core nápovědu u osmisměrky pustí, rozhraní ji přestane
- * vyžadovat. Zkouší se vynechaná i prázdná nápověda.
+ * Does the schema require a clue for a word search? Found out from the schema
+ * itself, not hard-coded: once core lets the word search go without a clue,
+ * the UI stops requiring it. Both an omitted and an empty clue are tried.
  */
 const WORDSEARCH_BLANK_CLUE: 'omit' | 'empty' | null = (() => {
   const sample = (clue: Record<string, string>) => ({
@@ -114,14 +109,14 @@ interface DraftEntry {
 }
 
 interface Draft {
-  /** Id uloženého hlavolamu; `null` u rozpracovaného. */
+  /** Id of the saved puzzle; `null` for an unsaved one. */
   id: string | null
   kind: PuzzleKind
   title: string
   instructions: string
   topicId: string | null
   entries: DraftEntry[]
-  /** Rozměry jako text: pole se smí vymazat a přepsat, meze hlídá rozmazání. */
+  /** Dimensions as text: the field may be cleared and retyped, the limits are enforced on blur. */
   cols: string
   rows: string
   phrase: string
@@ -145,17 +140,17 @@ function emptyDraft(): Draft {
   }
 }
 
-/** Otisk rozpracovaného hlavolamu — podle něj se pozná neuložená změna. */
+/** Fingerprint of the draft — tells an unsaved change apart. */
 function draftKey(draft: Draft): string {
   return JSON.stringify(draft)
 }
 
-/** Nový los mřížky — krátký, aby se dal opsat i přečíst. */
+/** A new grid seed — short so it can be copied and read out. */
 function newSeed(): string {
   return Math.random().toString(36).slice(2, 8)
 }
 
-/** Celé číslo z pole; `null`, když tam číslo není. */
+/** A whole number from a field; `null` when there is no number. */
 function parseWhole(text: string): number | null {
   const value = Number(text.trim())
   return text.trim() !== '' && Number.isInteger(value) ? value : null
@@ -169,19 +164,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-/** Potíž jednoho řádku; `muted` jen upozorní, `danger` brání uložení. */
+/** A problem with one row; `muted` only warns, `danger` blocks saving. */
 interface RowProblem {
   level: 'muted' | 'danger'
   message: string
 }
 
 interface DraftCheck {
-  /** Obsah pro náhled — z bezchybných řádků, s náhradním názvem. */
+  /** Content for the preview — from the valid rows, with a fallback title. */
   preview: PuzzleContent | null
-  /** Obsah k uložení; `null`, dokud něco brání uložení. */
+  /** Content to save; `null` while something blocks saving. */
   content: PuzzleContent | null
   rowProblems: (RowProblem | null)[]
-  /** Co ještě chybí k uložení, česky a s radou. */
+  /** What is still missing before saving, with advice. */
   missing: string[]
 }
 
@@ -189,37 +184,37 @@ function checkRow(kind: PuzzleKind, entry: DraftEntry): RowProblem | null {
   const word = entry.word.trim()
   const clue = entry.clue.trim()
   if (!word && !clue) {
-    return { level: 'muted', message: 'Prázdný řádek se nepoužije — napiš slovo, nebo řádek odeber.' }
+    return { level: 'muted', message: t('puzzles:workshop.rows.empty') }
   }
-  if (!word) return { level: 'danger', message: 'Doplň slovo k téhle nápovědě.' }
-  if (word.length < 2) return { level: 'danger', message: 'Slovo musí mít aspoň 2 znaky.' }
+  if (!word) return { level: 'danger', message: t('puzzles:workshop.rows.wordMissing') }
+  if (word.length < 2) return { level: 'danger', message: t('puzzles:workshop.rows.wordTooShort') }
   if (word.length > MAX_WORD_LENGTH) {
     return {
       level: 'danger',
-      message: `Slovo má ${word.length} znaků, do hlavolamu se vejde nejvýš ${MAX_WORD_LENGTH}. Zkrať ho.`,
+      message: t('puzzles:workshop.rows.wordTooLong', { length: word.length, max: MAX_WORD_LENGTH }),
     }
   }
   if (clue.length > MAX_CLUE_LENGTH) {
     return {
       level: 'danger',
-      message: `Nápověda má ${clue.length} znaků, nejvýš jich smí být ${MAX_CLUE_LENGTH}. Zkrať ji.`,
+      message: t('puzzles:workshop.rows.clueTooLong', { length: clue.length, max: MAX_CLUE_LENGTH }),
     }
   }
   if (kind === 'cryptogram' && clue.length < 2) {
-    return { level: 'danger', message: 'Doplň nápovědu — bez ní žák neví, co má do řádku napsat.' }
+    return { level: 'danger', message: t('puzzles:workshop.rows.clueRequired') }
   }
   if (kind === 'wordsearch' && clue.length === 1) {
-    return { level: 'danger', message: 'Nápověda musí mít aspoň 2 znaky, nebo ji nech prázdnou.' }
+    return { level: 'danger', message: t('puzzles:workshop.rows.clueTooShort') }
   }
   if (kind === 'wordsearch' && clue.length === 0 && WORDSEARCH_BLANK_CLUE === null) {
-    return { level: 'danger', message: 'Doplň nápovědu (aspoň 2 znaky).' }
+    return { level: 'danger', message: t('puzzles:workshop.rows.clueMissing') }
   }
   return null
 }
 
 /**
- * Rozpracovaný hlavolam na tvar podle schématu. Žádný řádek se nezahazuje
- * potichu: co se do hlavolamu nedostane, má u sebe napsané proč.
+ * The draft in the schema's shape. No row is dropped silently: whatever does
+ * not make it into the puzzle says why right next to it.
  */
 function checkDraft(draft: Draft): DraftCheck {
   const rowProblems = draft.entries.map((entry) => checkRow(draft.kind, entry))
@@ -229,44 +224,45 @@ function checkDraft(draft: Draft): DraftCheck {
   const filled = draft.entries.filter((_, index) => rowProblems[index]?.level !== 'muted')
   const broken = rowProblems.filter((problem) => problem?.level === 'danger').length
 
-  if (broken > 0) {
-    missing.push(
-      broken === 1 ? 'Oprav řádek označený v seznamu slov.' : `Oprav ${broken} řádky označené v seznamu slov.`,
-    )
-  }
-  if (usable.length < MIN_WORDS) missing.push('Hlavolam potřebuje aspoň dvě slova.')
+  if (broken > 0) missing.push(t('puzzles:workshop.missing.brokenRows', { count: broken }))
+  if (usable.length < MIN_WORDS) missing.push(t('puzzles:workshop.missing.tooFewWords'))
   if (filled.length > MAX_WORDS) {
-    missing.push(`Hlavolam může mít nejvýš ${MAX_WORDS} slov — ${pocet(filled.length - MAX_WORDS, SLOVA)} odeber.`)
+    missing.push(
+      t('puzzles:workshop.missing.tooManyWords', {
+        max: MAX_WORDS,
+        remove: t('puzzles:words', { count: filled.length - MAX_WORDS }),
+      }),
+    )
   }
 
   const cols = parseWhole(draft.cols)
   const rows = parseWhole(draft.rows)
   if (draft.kind === 'wordsearch') {
     if (cols === null || cols < MIN_GRID_SIZE || cols > MAX_GRID_SIZE) {
-      missing.push(`Sloupce: zadej číslo od ${MIN_GRID_SIZE} do ${MAX_GRID_SIZE}.`)
+      missing.push(t('puzzles:workshop.missing.cols', { min: MIN_GRID_SIZE, max: MAX_GRID_SIZE }))
     }
     if (rows === null || rows < MIN_GRID_SIZE || rows > MAX_GRID_SIZE) {
-      missing.push(`Řádky: zadej číslo od ${MIN_GRID_SIZE} do ${MAX_GRID_SIZE}.`)
+      missing.push(t('puzzles:workshop.missing.rows', { min: MIN_GRID_SIZE, max: MAX_GRID_SIZE }))
     }
   } else {
     const phrase = draft.phrase.trim()
-    if (phrase.length < 2) missing.push('Napiš tajenou větu, která se má z políček složit.')
+    if (phrase.length < 2) missing.push(t('puzzles:workshop.missing.phraseMissing'))
     if (phrase.length > MAX_PHRASE_LENGTH) {
-      missing.push(`Tajená věta může mít nejvýš ${MAX_PHRASE_LENGTH} znaků — zkrať ji.`)
+      missing.push(t('puzzles:workshop.missing.phraseTooLong', { max: MAX_PHRASE_LENGTH }))
     }
   }
   if (draft.instructions.length > MAX_INSTRUCTIONS_LENGTH) {
-    missing.push(`Pokyn pro žáky může mít nejvýš ${MAX_INSTRUCTIONS_LENGTH} znaků — zkrať ho.`)
+    missing.push(t('puzzles:workshop.missing.instructionsTooLong', { max: MAX_INSTRUCTIONS_LENGTH }))
   }
 
   const title = draft.title.trim()
-  if (title.length > MAX_TITLE_LENGTH) missing.push(`Název může mít nejvýš ${MAX_TITLE_LENGTH} znaků — zkrať ho.`)
+  if (title.length > MAX_TITLE_LENGTH) missing.push(t('puzzles:workshop.missing.titleTooLong', { max: MAX_TITLE_LENGTH }))
 
   const previewable = missing.length === 0 || (broken > 0 && missing.length === 1 && usable.length >= MIN_WORDS)
   const parsed = previewable
     ? puzzleContentSchema.safeParse({
         kind: draft.kind,
-        title: title || 'Bez názvu',
+        title: title || t('puzzles:workshop.untitled'),
         instructions: draft.instructions,
         entries: usable.map((entry) => {
           const word = entry.word.trim()
@@ -281,17 +277,17 @@ function checkDraft(draft: Draft): DraftCheck {
       })
     : null
   if (parsed && !parsed.success) {
-    // Pojistka: sem by se nemělo dojít, meze výš kopírují schéma.
-    missing.push('Hlavolam se nedá složit. Zkontroluj slova a nastavení mřížky.')
+    // Safety net: this should never be reached, the limits above mirror the schema.
+    missing.push(t('puzzles:workshop.missing.unbuildable'))
   }
   const preview = parsed?.success ? parsed.data : null
 
-  if (!title) missing.push('Doplň název hlavolamu — podle něj ho najdeš v knihovně.')
+  if (!title) missing.push(t('puzzles:workshop.missing.title'))
   const content = preview && missing.length === 0 ? { ...preview, title } : null
   return { preview, content, rowProblems, missing }
 }
 
-/** Číslo z odpovědi — přímo, nebo v objektu `counts`; server je zatím posílat nemusí. */
+/** A number from the response — directly or in a `counts` object; the server need not send it yet. */
 function countFrom(data: Record<string, unknown>, ...names: string[]): number | null {
   const counts = (typeof data.counts === 'object' && data.counts ? data.counts : {}) as Record<string, unknown>
   for (const name of names) {
@@ -303,7 +299,7 @@ function countFrom(data: Record<string, unknown>, ...names: string[]): number | 
   return null
 }
 
-/** Hledání bez ohledu na velikost písmen a diakritiku. */
+/** Search ignoring case and diacritics. */
 function fold(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('cs')
 }
@@ -319,18 +315,18 @@ interface Confirmation {
   title: string
   description: string
   confirmLabel: string
-  /** Co tlačítko říká, dokud akce běží. */
+  /** What the button says while the action runs. */
   busyLabel: string
   destructive?: boolean
   run: () => Promise<void> | void
 }
 
 /**
- * Dílna na hlavolamy: vybrat téma, nechat vytáhnout slova, upravit seznam,
- * zvolit velikost mřížky nebo tajenou větu, vidět náhled a vytisknout.
+ * Puzzle workshop: pick a topic, have words extracted, edit the list, choose
+ * the grid size or the hidden phrase, see the preview and print.
  *
- * Náhled vychází z téhož výpočtu jako papír (`buildPuzzle` v core), takže se
- * obrazovka s tiskem nemůže rozejít.
+ * The preview comes from the same computation as the paper (`buildPuzzle` in
+ * core), so the screen and the print can never drift apart.
  */
 export function PuzzleWorkshop({
   topics,
@@ -344,10 +340,10 @@ export function PuzzleWorkshop({
   aiConfigured: boolean
 }) {
   const router = useRouter()
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const [start] = useState(emptyDraft)
   const [draft, setDraft] = useState<Draft>(start)
-  /** Otisk naposledy uloženého (nebo otevřeného) stavu. */
+  /** Fingerprint of the last saved (or opened) state. */
   const [baseline, setBaseline] = useState(() => draftKey(start))
   const [wordCount, setWordCount] = useState(String(DEFAULT_WORD_COUNT))
   const [fetching, setFetching] = useState(false)
@@ -357,23 +353,23 @@ export function PuzzleWorkshop({
   const [solved, setSolved] = useState(false)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const [confirmBusy, setConfirmBusy] = useState(false)
-  /** Písemky pro zařazení hlavolamu; načtou se, až o ně učitelka stojí. */
-  const [pisemky, setPisemky] = useState<TestOption[] | 'loading' | null>(null)
-  const [pisemkyHledat, setPisemkyHledat] = useState('')
-  const [zarazuji, setZarazuji] = useState<string | null>(null)
+  /** Tests to add the puzzle to; loaded only once the teacher asks for them. */
+  const [tests, setTests] = useState<TestOption[] | 'loading' | null>(null)
+  const [testsSearch, setTestsSearch] = useState('')
+  const [enqueueing, setEnqueueing] = useState<string | null>(null)
   /**
-   * Právě uložené a právě smazané hlavolamy si drží prohlížeč: `router.refresh()`
-   * dorazí se zpožděním a učitelka musí hned vidět, že se uložení povedlo.
-   * Jakmile obnovený seznam ze serveru dorazí, obě soupisky se v něm jen
-   * překryjí — proto se skládá při vykreslení, ne v efektu.
+   * Just saved and just deleted puzzles are kept by the browser: `router.refresh()`
+   * arrives with a delay and the teacher must see right away that saving worked.
+   * Once the refreshed list from the server arrives, both lists simply overlay
+   * it — that is why it is composed during render, not in an effect.
    */
-  const [ulozene, setUlozene] = useState<PuzzleListItem[]>([])
-  const [smazane, setSmazane] = useState<string[]>([])
+  const [saved, setSaved] = useState<PuzzleListItem[]>([])
+  const [deleted, setDeleted] = useState<string[]>([])
   const list = useMemo(() => {
     const byId = new Map<string, PuzzleListItem>()
-    for (const item of [...ulozene, ...puzzles]) if (!byId.has(item.id)) byId.set(item.id, item)
-    return [...byId.values()].filter((item) => !smazane.includes(item.id))
-  }, [puzzles, ulozene, smazane])
+    for (const item of [...saved, ...puzzles]) if (!byId.has(item.id)) byId.set(item.id, item)
+    return [...byId.values()].filter((item) => !deleted.includes(item.id))
+  }, [puzzles, saved, deleted])
 
   const check = useMemo(() => checkDraft(draft), [draft])
   const { content, preview, rowProblems, missing } = check
@@ -381,14 +377,14 @@ export function PuzzleWorkshop({
   const problems = built ? puzzleProblems(built) : []
   const dirty = draftKey(draft) !== baseline
 
-  /** Proč zatím nejde tisknout ani zařazovat; `null` = jde to. */
+  /** Why printing and adding are not possible yet; `null` = they are. */
   const blockedReason = !content
-    ? 'Tisknout a zařadit do písemky půjde, až bude hlavolam hotový (viz výše, co chybí).'
+    ? t('puzzles:workshop.blocked.unfinished')
     : problems.length > 0
-      ? 'Tisknout a zařadit do písemky půjde, až opravíš potíže vypsané výš — jinak by žák hledal, co na papíře není.'
+      ? t('puzzles:workshop.blocked.problems')
       : null
 
-  // Neuložené změny se při zavření záložky neztratí bez varování.
+  // Unsaved changes are not lost without a warning when the tab closes.
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => {
@@ -401,23 +397,23 @@ export function PuzzleWorkshop({
 
   const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }))
 
-  /** Nahradí rozpracovaný hlavolam jiným a vezme ho jako uložený stav. */
+  /** Replaces the draft with another one and takes it as the saved state. */
   function resetTo(next: Draft): void {
     setDraft(next)
     setBaseline(draftKey(next))
   }
 
-  /** Zeptá se, jestli zahodit neuložené změny; bez změn rovnou pokračuje. */
+  /** Asks whether to discard unsaved changes; without changes it proceeds right away. */
   function unlessDirty(action: string, run: () => Promise<void> | void): void {
     if (!dirty) {
       void run()
       return
     }
     setConfirmation({
-      title: 'Zahodit neuložené změny?',
-      description: `Rozpracovaný hlavolam má změny, které nejsou uložené. ${action} je zahodí.`,
-      confirmLabel: 'Zahodit změny',
-      busyLabel: 'Chvilku…',
+      title: t('puzzles:workshop.discard.title'),
+      description: t('puzzles:workshop.discard.description', { action }),
+      confirmLabel: t('puzzles:workshop.discard.confirm'),
+      busyLabel: t('puzzles:workshop.discard.busy'),
       destructive: true,
       run,
     })
@@ -435,18 +431,18 @@ export function PuzzleWorkshop({
   }
 
   const filledCount = draft.entries.filter((entry) => entry.word.trim() || entry.clue.trim()).length
-  /** Kolik slov se ještě vejde — hlavolam má nejvýš 40. */
+  /** How many more words fit — a puzzle has at most 40. */
   const roomLeft = MAX_WORDS - filledCount
   const maxRequest = Math.max(MIN_WORDS, Math.min(MAX_WORDS, roomLeft))
 
-  /** Slova od modelu. Mřížku skládá kód, model dodává jen slovní zásobu. */
+  /** Words from the model. The grid is built by code, the model only supplies vocabulary. */
   async function fetchWords(): Promise<void> {
     if (!draft.topicId) {
-      toast.error('Vyber nejdřív téma, ze kterého se mají slova vzít.')
+      toast.error(t('puzzles:workshop.fetch.noTopic'))
       return
     }
     if (roomLeft < MIN_WORDS) {
-      toast.error(`Seznam je plný — hlavolam může mít nejvýš ${MAX_WORDS} slov.`)
+      toast.error(t('puzzles:workshop.fetch.listFull', { max: MAX_WORDS }))
       return
     }
     const count = clamp(parseWhole(wordCount) ?? DEFAULT_WORD_COUNT, MIN_WORDS, maxRequest)
@@ -466,8 +462,8 @@ export function PuzzleWorkshop({
               .map((entry) => entry.word.trim())
               .filter(Boolean)
               .slice(0, MAX_WORDS),
-            // Tajenka potřebuje slova s písmeny své věty, osmisměrka slova,
-            // která se vejdou do mřížky — obojí server hlídá podle těchto polí.
+            // A cryptogram needs words with the letters of its phrase, a word
+            // search words that fit the grid — the server checks both by these fields.
             ...(draft.kind === 'cryptogram'
               ? draft.phrase.trim()
                 ? { phrase: draft.phrase.trim().slice(0, MAX_PHRASE_LENGTH) }
@@ -478,7 +474,7 @@ export function PuzzleWorkshop({
                 }),
           }),
         },
-        'Slova se nepodařilo vytáhnout.',
+        t('puzzles:workshop.fetch.failed'),
       )) as Record<string, unknown>
 
       const entries = (Array.isArray(data.entries) ? (data.entries as ApiEntry[]) : []).map((entry) => ({
@@ -492,41 +488,43 @@ export function PuzzleWorkshop({
       setDraft((current) => ({ ...current, entries: [...current.entries, ...entries] }))
 
       const rejectedNote = rejected.length
-        ? `Nehodilo se: ${rejected.map((item) => `${item.word} (${item.reason})`).join(', ')}.`
+        ? t('puzzles:workshop.fetch.rejected', {
+            list: rejected.map((item) => `${item.word} (${item.reason})`).join(', '),
+          })
         : dropped > 0
-          ? `${pocet(dropped, SLOVA)} se do hlavolamu nehodilo a vynechalo se.`
+          ? t('puzzles:workshop.fetch.dropped', { count: dropped })
           : ''
+      const added = t('puzzles:words', { count: entries.length })
       if (entries.length === 0) {
-        toast.warning('Model nedodal žádné nové slovo.', {
-          description: `Zkus to znovu, vyber jiné téma, nebo slova napiš ručně. ${rejectedNote}`.trim(),
+        toast.warning(t('puzzles:workshop.fetch.none'), {
+          description: t('puzzles:workshop.fetch.noneHint', { note: rejectedNote }).trim(),
         })
       } else if (entries.length < requested / 2) {
-        toast.warning(`Přibylo jen ${pocet(entries.length, SLOVA)} z ${requested} požadovaných.`, {
-          description:
-            `Materiály tématu jich víc asi nenabízejí. Zkus to znovu, nebo zbytek doplň ručně. ${rejectedNote}`.trim(),
+        toast.warning(t('puzzles:workshop.fetch.fewAdded', { added, requested }), {
+          description: t('puzzles:workshop.fetch.fewAddedHint', { note: rejectedNote }).trim(),
         })
       } else if (typeof data.warning === 'string' && data.warning) {
-        // Server ví víc než počty — třeba že tajence pořád chybí písmena.
-        toast.warning(`Přibylo ${pocet(entries.length, SLOVA)}.`, {
+        // The server knows more than the counts — e.g. that the cryptogram still lacks letters.
+        toast.warning(t('puzzles:workshop.fetch.added', { added }), {
           description: `${data.warning} ${rejectedNote}`.trim(),
         })
       } else {
-        toast.success(`Přibylo ${pocet(entries.length, SLOVA)}.`, { description: rejectedNote || undefined })
+        toast.success(t('puzzles:workshop.fetch.added', { added }), { description: rejectedNote || undefined })
       }
     } catch (error) {
-      toast.error(errorMessage(error, 'Slova se nepodařilo vytáhnout.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.fetch.failed')))
     } finally {
       setFetching(false)
     }
   }
 
   /**
-   * Uloží hlavolam a vrátí jeho id. Rozbitý hlavolam (slovo se nevešlo…)
-   * se uložit smí jako rozpracovaný, jen se to řekne nahlas.
+   * Saves the puzzle and returns its id. A broken puzzle (a word did not fit…)
+   * may be saved as a draft, it is just said out loud.
    */
   async function save(options: { quiet?: boolean } = {}): Promise<string | null> {
     if (!content) {
-      toast.error(missing[0] ?? 'Hlavolam ještě není hotový.')
+      toast.error(missing[0] ?? t('puzzles:workshop.save.unfinished'))
       return null
     }
     const snapshot = draft
@@ -539,9 +537,9 @@ export function PuzzleWorkshop({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ puzzle: content, topicId: snapshot.topicId }),
         },
-        'Hlavolam se nepodařilo uložit.',
+        t('puzzles:workshop.save.failed'),
       )
-      if (!data.puzzle) throw new Error(`Hlavolam se nepodařilo uložit. ${SERVER_TROUBLE}`)
+      if (!data.puzzle) throw new Error(`${t('puzzles:workshop.save.failed')} ${t('common:errors.serverTrouble')}`)
 
       const saved = data.puzzle
       const savedDraft = { ...snapshot, id: saved.id }
@@ -556,31 +554,31 @@ export function PuzzleWorkshop({
         entryCount: saved.entries.length,
         updatedAt: saved.updatedAt,
       }
-      setUlozene((current) => [row, ...current.filter((item) => item.id !== row.id)])
+      setSaved((current) => [row, ...current.filter((item) => item.id !== row.id)])
       router.refresh()
       if (problems.length > 0) {
-        toast.warning('Hlavolam je uložený, ale zatím se nedá vytisknout ani zařadit do písemky.', {
+        toast.warning(t('puzzles:workshop.save.savedUnprintable'), {
           description: problems[0]?.message,
         })
       } else if (!options.quiet) {
-        toast.success(`Hlavolam „${saved.title}" je uložený.`)
+        toast.success(t('puzzles:workshop.save.saved', { title: saved.title }))
       }
       return saved.id
     } catch (error) {
-      toast.error(errorMessage(error, 'Hlavolam se nepodařilo uložit.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.save.failed')))
       return null
     } finally {
       setSaving(false)
     }
   }
 
-  /** Uložené id; neuložené změny se nejdřív uloží. */
+  /** The saved id; unsaved changes are saved first. */
   async function savedId(): Promise<string | null> {
     if (draft.id && !dirty) return draft.id
     return save({ quiet: true })
   }
 
-  /** Tisk jde vždycky z uloženého hlavolamu, ať papír odpovídá knihovně. */
+  /** Printing always goes from the saved puzzle, so the paper matches the library. */
   async function print(withKey: boolean): Promise<void> {
     if (blockedReason) {
       toast.error(blockedReason)
@@ -591,36 +589,36 @@ export function PuzzleWorkshop({
       const wasDirty = dirty || !draft.id
       const id = await savedId()
       if (!id) return
-      if (wasDirty) toast.success('Změny jsou uložené, posílám hlavolam do tisku.')
+      if (wasDirty) toast.success(t('puzzles:workshop.print.savedAndPrinting'))
       await printPdf(`/api/puzzles/${id}/pdf${withKey ? '?key=1' : ''}`)
     } catch (error) {
-      toast.error(errorMessage(error, 'Hlavolam se nepodařilo vytisknout.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.print.failed')))
     } finally {
       setPrinting(null)
     }
   }
 
-  /** Otevře výběr z vlastních písemek; ukládá se až po výběru. */
+  /** Opens the choice of own tests; saving happens only after the choice. */
   async function chooseTest(): Promise<void> {
     if (blockedReason) {
       toast.error(blockedReason)
       return
     }
-    setPisemkyHledat('')
-    setPisemky('loading')
+    setTestsSearch('')
+    setTests('loading')
     try {
-      const data = await requestJson<{ tests: TestOption[] }>('/api/tests', undefined, 'Seznam písemek se nepodařilo načíst.')
-      // Zařadit jde jen do vlastní písemky; nasdílené od kolegyň se jen čtou.
-      setPisemky((data.tests ?? []).filter((test) => test.mine === undefined || Boolean(test.mine)))
+      const data = await requestJson<{ tests: TestOption[] }>('/api/tests', undefined, t('puzzles:workshop.tests.loadFailed'))
+      // Only own tests can be added to; tests shared by colleagues are read-only.
+      setTests((data.tests ?? []).filter((test) => test.mine === undefined || Boolean(test.mine)))
     } catch (error) {
-      setPisemky(null)
-      toast.error(errorMessage(error, 'Seznam písemek se nepodařilo načíst.'))
+      setTests(null)
+      toast.error(errorMessage(error, t('puzzles:workshop.tests.loadFailed')))
     }
   }
 
-  /** Zařadí hlavolam na konec vybrané písemky; neuložené změny se uloží. */
+  /** Adds the puzzle to the end of the chosen test; unsaved changes are saved. */
   async function addToTest(testId: string): Promise<void> {
-    setZarazuji(testId)
+    setEnqueueing(testId)
     try {
       const id = await savedId()
       if (!id) return
@@ -631,14 +629,14 @@ export function PuzzleWorkshop({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ testId }),
         },
-        'Hlavolam se nepodařilo do písemky zařadit.',
+        t('puzzles:workshop.tests.addFailed'),
       )
-      setPisemky(null)
-      toast.success(`Hlavolam je na konci písemky „${data.testTitle ?? ''}".`)
+      setTests(null)
+      toast.success(t('puzzles:workshop.tests.added', { title: data.testTitle ?? '' }))
     } catch (error) {
-      toast.error(errorMessage(error, 'Hlavolam se nepodařilo do písemky zařadit.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.tests.addFailed')))
     } finally {
-      setZarazuji(null)
+      setEnqueueing(null)
     }
   }
 
@@ -647,8 +645,8 @@ export function PuzzleWorkshop({
     try {
       const { puzzle } = await requestJson<{
         puzzle: PuzzleContent & { id: string; topicId: string | null }
-      }>(`/api/puzzles/${id}`, undefined, 'Hlavolam se nepodařilo načíst.')
-      if (!puzzle) throw new Error(`Hlavolam se nepodařilo načíst. ${SERVER_TROUBLE}`)
+      }>(`/api/puzzles/${id}`, undefined, t('puzzles:workshop.open.failed'))
+      if (!puzzle) throw new Error(`${t('puzzles:workshop.open.failed')} ${t('common:errors.serverTrouble')}`)
       resetTo({
         id: puzzle.id,
         kind: puzzle.kind,
@@ -663,7 +661,7 @@ export function PuzzleWorkshop({
         seed: puzzle.payload.seed,
       })
     } catch (error) {
-      toast.error(errorMessage(error, 'Hlavolam se nepodařilo načíst.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.open.failed')))
     } finally {
       setOpening(null)
     }
@@ -671,25 +669,24 @@ export function PuzzleWorkshop({
 
   async function removePuzzle(id: string, title: string): Promise<void> {
     try {
-      await requestJson(`/api/puzzles/${id}`, { method: 'DELETE' }, 'Hlavolam se nepodařilo smazat.')
+      await requestJson(`/api/puzzles/${id}`, { method: 'DELETE' }, t('puzzles:workshop.remove.failed'))
     } catch (error) {
-      toast.error(errorMessage(error, 'Hlavolam se nepodařilo smazat.'))
+      toast.error(errorMessage(error, t('puzzles:workshop.remove.failed')))
       return
     }
     if (draft.id === id) resetTo(emptyDraft())
-    setSmazane((current) => [...current, id])
-    setUlozene((current) => current.filter((item) => item.id !== id))
-    toast.success(`Hlavolam „${title}" je smazaný.`)
+    setDeleted((current) => [...current, id])
+    setSaved((current) => current.filter((item) => item.id !== id))
+    toast.success(t('puzzles:workshop.remove.done', { title }))
     router.refresh()
   }
 
   function askRemove(id: string, title: string): void {
     setConfirmation({
-      title: `Smazat hlavolam „${title}"?`,
-      description:
-        'Hlavolam zmizí z knihovny a vrátit to nepůjde. Písemky, do kterých už je zařazený, si ho ponechají.',
-      confirmLabel: 'Smazat hlavolam',
-      busyLabel: 'Mažu…',
+      title: t('puzzles:workshop.remove.confirmTitle', { title }),
+      description: t('puzzles:workshop.remove.confirmDescription'),
+      confirmLabel: t('puzzles:workshop.remove.confirm'),
+      busyLabel: t('common:actions.deleting'),
       destructive: true,
       run: () => removePuzzle(id, title),
     })
@@ -706,29 +703,26 @@ export function PuzzleWorkshop({
     }
   }
 
-  const hledat = fold(pisemkyHledat.trim())
-  const nalezenePisemky =
-    Array.isArray(pisemky) && hledat ? pisemky.filter((test) => fold(test.title).includes(hledat)) : pisemky
+  const search = fold(testsSearch.trim())
+  const foundTests =
+    Array.isArray(tests) && search ? tests.filter((test) => fold(test.title).includes(search)) : tests
+  const titleMissing = t('puzzles:workshop.missing.title')
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="ui-page-title">Hlavolamy</h1>
-          <p className="mt-1 max-w-3xl text-sm text-fg-soft">
-            Osmisměrka a tajenka z materiálů tématu. Slova dodá model, mřížku skládá aplikace —
-            vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.
-          </p>
-          {muzeMenit ? null : (
+          <h1 className="ui-page-title">{t('puzzles:workshop.title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-fg-soft">{t('puzzles:workshop.intro')}</p>
+          {canEdit ? null : (
             <p className="mt-1 max-w-3xl text-sm text-fg-muted" data-slot="puzzle-read-only">
-              Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani
-              zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitelka.
+              {t('puzzles:workshop.readOnly')}
             </p>
           )}
         </div>
-        {/* Seznam uložených je až pod dílnou; na telefonu by se k němu nikdo neprohrabal. */}
+        {/* The saved list sits below the workshop; on a phone nobody would dig down to it. */}
         <a href="#ulozene-hlavolamy" className="text-sm text-fg-soft underline-offset-2 hover:underline">
-          {pocet(list.length, HLAVOLAMY)} v knihovně
+          {t('puzzles:workshop.inLibrary', { count: list.length })}
         </a>
       </div>
 
@@ -736,15 +730,15 @@ export function PuzzleWorkshop({
         <div className="space-y-4" aria-busy={opening !== null || undefined}>
           {opening ? (
             <p className="text-sm text-fg-muted" role="status" data-slot="puzzle-opening">
-              Otevírám hlavolam…
+              {t('puzzles:workshop.opening')}
             </p>
           ) : null}
-          {/* Náhled si hlavolamy čte a tiskne, ale nemění — pole jsou zamčená celá najednou. */}
-          <fieldset disabled={!muzeMenit} className="contents">
+          {/* Read-only viewers read and print puzzles but never change them — all fields are locked at once. */}
+          <fieldset disabled={!canEdit} className="contents">
           <Card className="space-y-4 p-4">
             <div className="flex flex-wrap gap-3">
               <div className="w-48">
-                <Label htmlFor="puzzle-kind">Druh hlavolamu</Label>
+                <Label htmlFor="puzzle-kind">{t('puzzles:workshop.form.kind')}</Label>
                 <Select value={draft.kind} onValueChange={(value) => update({ kind: value as PuzzleKind })}>
                   <SelectTrigger id="puzzle-kind">
                     <SelectValue />
@@ -752,45 +746,45 @@ export function PuzzleWorkshop({
                   <SelectContent>
                     {PUZZLE_KINDS.map((kind) => (
                       <SelectItem key={kind} value={kind}>
-                        {PUZZLE_KIND_LABELS[kind]}
+                        {t(`puzzles:kinds.${kind}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="min-w-56 flex-1">
-                <Label htmlFor="puzzle-title">Název</Label>
+                <Label htmlFor="puzzle-title">{t('puzzles:workshop.form.title')}</Label>
                 <Input
                   id="puzzle-title"
                   value={draft.title}
                   maxLength={MAX_TITLE_LENGTH}
-                  placeholder="Části rostliny"
+                  placeholder={t('puzzles:workshop.form.titlePlaceholder')}
                   aria-describedby="puzzle-title-hint"
                   onChange={(event) => update({ title: event.target.value })}
                 />
                 <p id="puzzle-title-hint" className="mt-1 text-xs text-fg-muted">
-                  Povinný — tiskne se nad hlavolamem a podle něj ho najdeš v knihovně.
+                  {t('puzzles:workshop.form.titleHint')}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <div className="min-w-56 flex-1">
-                <Label htmlFor="puzzle-topic">Téma</Label>
+                <Label htmlFor="puzzle-topic">{t('puzzles:workshop.form.topic')}</Label>
                 <Select
                   value={draft.topicId ?? 'none'}
                   onValueChange={(value) => {
                     const topicId = value === 'none' ? null : value
                     update({ topicId })
                     if (topicId && draft.entries.length === 0) {
-                      // Naposledy vytažená slova k tématu; když se nenačtou, nic se neděje.
+                      // The words last extracted for the topic; if they fail to load, nothing happens.
                       void fetch(`/api/puzzles/words?topicId=${encodeURIComponent(topicId)}&kind=${draft.kind}`)
                         .then((response) => (response.ok ? response.json() : { entries: [] }))
                         .then((data: { entries?: ApiEntry[] }) => {
                           const loaded = data.entries
                           if (!loaded?.length) return
-                          // Odpověď chodí se zpožděním: mezitím mohla učitelka vybrat
-                          // jiné téma nebo začít psát slova — ta se nepřepisují.
+                          // The response arrives late: meanwhile the teacher may have picked
+                          // another topic or started typing words — those are not overwritten.
                           setDraft((current) =>
                             current.topicId === topicId && current.entries.length === 0
                               ? {
@@ -805,10 +799,10 @@ export function PuzzleWorkshop({
                   }}
                 >
                   <SelectTrigger id="puzzle-topic">
-                    <SelectValue placeholder="Bez tématu" />
+                    <SelectValue placeholder={t('puzzles:workshop.form.noTopic')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Bez tématu</SelectItem>
+                    <SelectItem value="none">{t('puzzles:workshop.form.noTopic')}</SelectItem>
                     {topics.map((topic) => (
                       <SelectItem key={topic.id} value={topic.id}>
                         {topic.label}
@@ -820,7 +814,7 @@ export function PuzzleWorkshop({
               {aiConfigured ? (
                 <>
                   <div className="w-32">
-                    <Label htmlFor="puzzle-word-count">Kolik slov</Label>
+                    <Label htmlFor="puzzle-word-count">{t('puzzles:workshop.form.wordCount')}</Label>
                     <Input
                       id="puzzle-word-count"
                       type="number"
@@ -835,38 +829,37 @@ export function PuzzleWorkshop({
                       }
                     />
                     <p id="puzzle-word-count-hint" className="mt-1 text-xs text-fg-muted">
-                      {roomLeft < MIN_WORDS ? 'Seznam je plný' : `${MIN_WORDS} až ${maxRequest}`}
+                      {roomLeft < MIN_WORDS
+                        ? t('puzzles:workshop.form.listFull')
+                        : t('puzzles:workshop.form.range', { min: MIN_WORDS, max: maxRequest })}
                     </p>
                   </div>
                   <div className="flex items-start pt-5">
                     <BusyButton
                       variant="outline"
                       busy={fetching}
-                      busyLabel="Hledám slova…"
+                      busyLabel={t('puzzles:workshop.form.searching')}
                       disabled={roomLeft < MIN_WORDS}
                       onClick={() => void fetchWords()}
                     >
                       <Sparkles className="size-4" />
-                      Vytáhnout slova z materiálů
+                      {t('puzzles:workshop.form.fetchWords')}
                     </BusyButton>
                   </div>
                 </>
               ) : (
-                <p className="max-w-sm self-end text-sm text-fg-muted">
-                  Vytahování slov z materiálů není v této škole zapnuté. Slova napiš ručně; zapnout ho
-                  může správce aplikace.
-                </p>
+                <p className="max-w-sm self-end text-sm text-fg-muted">{t('puzzles:workshop.form.aiOff')}</p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="puzzle-instructions">Pokyn pro žáky</Label>
+              <Label htmlFor="puzzle-instructions">{t('puzzles:workshop.form.instructions')}</Label>
               <Textarea
                 id="puzzle-instructions"
                 value={draft.instructions}
                 rows={2}
                 maxLength={MAX_INSTRUCTIONS_LENGTH}
-                placeholder="Prázdné = použije se běžné zadání podle druhu hlavolamu."
+                placeholder={t('puzzles:workshop.form.instructionsPlaceholder')}
                 onChange={(event) => update({ instructions: event.target.value })}
               />
             </div>
@@ -875,7 +868,7 @@ export function PuzzleWorkshop({
               <div className="flex flex-wrap items-start gap-3">
                 {(['cols', 'rows'] as const).map((field) => (
                   <div key={field} className="w-24">
-                    <Label htmlFor={`puzzle-${field}`}>{field === 'cols' ? 'Sloupce' : 'Řádky'}</Label>
+                    <Label htmlFor={`puzzle-${field}`}>{t(`puzzles:workshop.form.${field}`)}</Label>
                     <Input
                       id={`puzzle-${field}`}
                       type="number"
@@ -894,11 +887,11 @@ export function PuzzleWorkshop({
                   </div>
                 ))}
                 <p id="puzzle-grid-hint" className="self-center pt-5 text-xs text-fg-muted">
-                  {MIN_GRID_SIZE} až {MAX_GRID_SIZE}
+                  {t('puzzles:workshop.form.range', { min: MIN_GRID_SIZE, max: MAX_GRID_SIZE })}
                 </p>
                 <div className="pt-5">
                   <Button variant="outline" onClick={() => update({ seed: newSeed() })}>
-                    Zamíchat znovu
+                    {t('puzzles:workshop.form.reshuffle')}
                   </Button>
                 </div>
                 <label className="flex items-center gap-2 pt-7 text-sm">
@@ -906,23 +899,23 @@ export function PuzzleWorkshop({
                     checked={draft.showClues}
                     onCheckedChange={(checked) => update({ showClues: checked === true })}
                   />
-                  Vypsat i nápovědy
+                  {t('puzzles:workshop.form.showClues')}
                 </label>
               </div>
             ) : (
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-56 flex-1">
-                  <Label htmlFor="puzzle-phrase">Tajená věta</Label>
+                  <Label htmlFor="puzzle-phrase">{t('puzzles:workshop.form.phrase')}</Label>
                   <Input
                     id="puzzle-phrase"
                     value={draft.phrase}
                     maxLength={MAX_PHRASE_LENGTH}
-                    placeholder="rostliny dýchají"
+                    placeholder={t('puzzles:workshop.form.phrasePlaceholder')}
                     onChange={(event) => update({ phrase: event.target.value })}
                   />
                 </div>
                 <Button variant="outline" onClick={() => update({ seed: newSeed() })}>
-                  Zamíchat znovu
+                  {t('puzzles:workshop.form.reshuffle')}
                 </Button>
               </div>
             )}
@@ -930,29 +923,31 @@ export function PuzzleWorkshop({
           </fieldset>
 
           <Card className="p-4">
-            <fieldset disabled={!muzeMenit} className="contents">
+            <fieldset disabled={!canEdit} className="contents">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-medium text-fg">Slova ({pocet(draft.entries.length, SLOVA)})</h2>
+              <h2 className="font-medium text-fg">
+                {t('puzzles:workshop.entries.heading', { words: t('puzzles:words', { count: draft.entries.length }) })}
+              </h2>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => update({ entries: [...draft.entries, { word: '', clue: '' }] })}
               >
                 <Plus className="size-4" />
-                Přidat slovo
+                {t('puzzles:workshop.entries.add')}
               </Button>
             </div>
             <p className="mt-1 text-xs text-fg-muted">
               {draft.kind === 'wordsearch'
-                ? `Slovo 2 až ${MAX_WORD_LENGTH} znaků. Nápověda se tiskne jen na přání${WORDSEARCH_BLANK_CLUE ? ' a smí zůstat prázdná' : ''}.`
-                : `Slovo 2 až ${MAX_WORD_LENGTH} znaků, nápověda je povinná.`}{' '}
-              Nejvýš {MAX_WORDS} slov.
+                ? WORDSEARCH_BLANK_CLUE
+                  ? t('puzzles:workshop.entries.hintWordsearchOptional', { max: MAX_WORD_LENGTH })
+                  : t('puzzles:workshop.entries.hintWordsearch', { max: MAX_WORD_LENGTH })
+                : t('puzzles:workshop.entries.hintCryptogram', { max: MAX_WORD_LENGTH })}{' '}
+              {t('puzzles:workshop.entries.limit', { max: MAX_WORDS })}
             </p>
 
             {draft.entries.length === 0 ? (
-              <p className="mt-3 text-sm text-fg-muted">
-                Zatím tu nic není. Přidej slova ručně, nebo je nech vytáhnout z materiálů tématu.
-              </p>
+              <p className="mt-3 text-sm text-fg-muted">{t('puzzles:workshop.entries.empty')}</p>
             ) : (
               <ul className="mt-3 space-y-2" data-slot="puzzle-entries">
                 {draft.entries.map((entry, index) => {
@@ -964,7 +959,7 @@ export function PuzzleWorkshop({
                         <Input
                           className="w-40"
                           value={entry.word}
-                          aria-label={`Slovo ${index + 1}`}
+                          aria-label={t('puzzles:workshop.entries.word', { number: index + 1 })}
                           aria-invalid={problem?.level === 'danger' || undefined}
                           aria-describedby={problem ? problemId : undefined}
                           onChange={(event) => updateEntry(index, { word: event.target.value })}
@@ -972,14 +967,14 @@ export function PuzzleWorkshop({
                         <Input
                           className="min-w-48 flex-1"
                           value={entry.clue}
-                          aria-label={`Nápověda ${index + 1}`}
+                          aria-label={t('puzzles:workshop.entries.clue', { number: index + 1 })}
                           aria-invalid={problem?.level === 'danger' || undefined}
                           aria-describedby={problem ? problemId : undefined}
                           onChange={(event) => updateEntry(index, { clue: event.target.value })}
                         />
-                        <RowActions label={`Akce pro slovo ${entry.word || index + 1}`}>
+                        <RowActions label={t('puzzles:workshop.entries.actions', { word: entry.word || index + 1 })}>
                           <DropdownMenuItem variant="destructive" onSelect={() => removeEntry(index)}>
-                            Odebrat slovo
+                            {t('puzzles:workshop.entries.remove')}
                           </DropdownMenuItem>
                         </RowActions>
                       </div>
@@ -1011,7 +1006,7 @@ export function PuzzleWorkshop({
 
             {missing.length > 0 ? (
               <div className="mt-3 text-sm text-fg-soft" data-slot="puzzle-missing">
-                <p className="font-medium">Než půjde hlavolam uložit:</p>
+                <p className="font-medium">{t('puzzles:workshop.missingHeading')}</p>
                 <ul className="mt-1 list-disc space-y-1 pl-5">
                   {missing.map((message) => (
                     <li key={message}>{message}</li>
@@ -1021,48 +1016,48 @@ export function PuzzleWorkshop({
             ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {muzeMenit ? (
-                // Zablokované, i když ukládá tisk nebo zařazení — druhé kliknutí by poslalo druhý POST.
-                <BusyButton busy={saving} busyLabel="Ukládám…" onClick={() => void save()}>
-                  {draft.id ? 'Uložit změny' : 'Uložit hlavolam'}
+              {canEdit ? (
+                // Disabled even while printing or adding saves — a second click would send a second POST.
+                <BusyButton busy={saving} busyLabel={t('common:actions.saving')} onClick={() => void save()}>
+                  {draft.id ? t('puzzles:workshop.save.buttonChanges') : t('puzzles:workshop.save.button')}
                 </BusyButton>
               ) : null}
               <BusyButton
                 variant="outline"
                 busy={printing === 'plain'}
-                busyLabel="Připravuji tisk…"
-                disabled={blockedReason !== null || printing !== null || saving || (!muzeMenit && (!draft.id || dirty))}
+                busyLabel={t('puzzles:workshop.print.preparing')}
+                disabled={blockedReason !== null || printing !== null || saving || (!canEdit && (!draft.id || dirty))}
                 aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(false)}
               >
-                Vytisknout
+                {t('common:actions.print')}
               </BusyButton>
               <BusyButton
                 variant="outline"
                 busy={printing === 'key'}
-                busyLabel="Připravuji tisk…"
-                disabled={blockedReason !== null || printing !== null || saving || (!muzeMenit && (!draft.id || dirty))}
+                busyLabel={t('puzzles:workshop.print.preparing')}
+                disabled={blockedReason !== null || printing !== null || saving || (!canEdit && (!draft.id || dirty))}
                 aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(true)}
               >
-                Vytisknout s řešením
+                {t('puzzles:workshop.print.withKey')}
               </BusyButton>
-              {muzeMenit ? (
+              {canEdit ? (
                 <Button
                   variant="outline"
                   disabled={blockedReason !== null || saving}
                   aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
                   onClick={() => void chooseTest()}
                 >
-                  Zařadit do písemky
+                  {t('puzzles:workshop.tests.button')}
                 </Button>
               ) : null}
               {draft.id || dirty ? (
                 <Button
                   variant="ghost"
-                  onClick={() => unlessDirty('Nový hlavolam', () => resetTo(emptyDraft()))}
+                  onClick={() => unlessDirty(t('puzzles:workshop.discard.actionNew'), () => resetTo(emptyDraft()))}
                 >
-                  Nový hlavolam
+                  {t('puzzles:workshop.newPuzzle')}
                 </Button>
               ) : null}
             </div>
@@ -1071,17 +1066,17 @@ export function PuzzleWorkshop({
                 {blockedReason}
               </p>
             ) : dirty && draft.id ? (
-              <p className="mt-2 text-sm text-fg-muted">Máš neuložené změny.</p>
+              <p className="mt-2 text-sm text-fg-muted">{t('puzzles:workshop.unsaved')}</p>
             ) : null}
           </Card>
         </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-medium text-fg">Náhled</h2>
+            <h2 className="font-medium text-fg">{t('puzzles:workshop.preview.heading')}</h2>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={solved} onCheckedChange={(checked) => setSolved(checked === true)} />
-              Ukázat řešení
+              {t('puzzles:workshop.preview.showSolution')}
             </label>
           </div>
 
@@ -1093,54 +1088,54 @@ export function PuzzleWorkshop({
             </PaperSheet>
           ) : (
             <EmptyState
-              title="Zatím není co ukázat"
+              title={t('puzzles:workshop.preview.emptyTitle')}
               hint={
                 !templateConfig
-                  ? 'Náhled potřebuje šablonu písemky. Škola zatím žádnou nemá — požádej správce, ať ji přidá.'
-                  : (missing.find((message) => !message.startsWith('Doplň název')) ??
-                    'Náhled se objeví, jakmile budou v seznamu aspoň dvě slova.')
+                  ? t('puzzles:workshop.preview.noTemplate')
+                  : (missing.find((message) => message !== titleMissing) ??
+                    t('puzzles:workshop.preview.needWords'))
               }
             />
           )}
         </div>
       </div>
 
-      <Dialog open={pisemky !== null} onOpenChange={(open) => (open ? null : setPisemky(null))}>
+      <Dialog open={tests !== null} onOpenChange={(open) => (open ? null : setTests(null))}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Do které písemky?</DialogTitle>
+            <DialogTitle>{t('puzzles:workshop.tests.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              Hlavolam přibude na konec vybrané písemky.
-              {dirty || !draft.id ? ' Neuložené změny se před zařazením uloží.' : ''}
+              {t('puzzles:workshop.tests.dialogDescription')}
+              {dirty || !draft.id ? ` ${t('puzzles:workshop.tests.dialogUnsaved')}` : ''}
             </DialogDescription>
           </DialogHeader>
-          {pisemky === 'loading' ? (
+          {tests === 'loading' ? (
             <LoadingLines lines={4} />
-          ) : pisemky && pisemky.length > 0 ? (
+          ) : tests && tests.length > 0 ? (
             <>
               <Input
                 type="search"
-                value={pisemkyHledat}
-                placeholder="Hledat písemku podle názvu"
-                aria-label="Hledat písemku"
-                onChange={(event) => setPisemkyHledat(event.target.value)}
+                value={testsSearch}
+                placeholder={t('puzzles:workshop.tests.searchPlaceholder')}
+                aria-label={t('puzzles:workshop.tests.searchLabel')}
+                onChange={(event) => setTestsSearch(event.target.value)}
               />
-              {nalezenePisemky && Array.isArray(nalezenePisemky) && nalezenePisemky.length > 0 ? (
+              {foundTests && Array.isArray(foundTests) && foundTests.length > 0 ? (
                 <ul className="max-h-80 divide-y divide-line overflow-y-auto" data-slot="puzzle-test-list">
-                  {nalezenePisemky.map((pisemka) => (
-                    <li key={pisemka.id}>
+                  {foundTests.map((test) => (
+                    <li key={test.id}>
                       <button
                         type="button"
-                        disabled={zarazuji !== null || saving}
+                        disabled={enqueueing !== null || saving}
                         className="flex w-full items-baseline justify-between gap-3 py-2 text-left text-sm text-fg hover:underline disabled:opacity-60"
-                        onClick={() => void addToTest(pisemka.id)}
+                        onClick={() => void addToTest(test.id)}
                       >
                         <span className="min-w-0 flex-1">
-                          {zarazuji === pisemka.id ? 'Zařazuji…' : pisemka.title}
+                          {enqueueing === test.id ? t('puzzles:workshop.tests.adding') : test.title}
                         </span>
-                        {pisemka.updatedAt ? (
+                        {test.updatedAt ? (
                           <span className="shrink-0 text-xs text-fg-muted">
-                            {new Date(pisemka.updatedAt).toLocaleDateString('cs-CZ')}
+                            {new Date(test.updatedAt).toLocaleDateString('cs-CZ')}
                           </span>
                         ) : null}
                       </button>
@@ -1148,14 +1143,11 @@ export function PuzzleWorkshop({
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-fg-muted">Žádná z tvých písemek se tak nejmenuje.</p>
+                <p className="text-sm text-fg-muted">{t('puzzles:workshop.tests.noMatch')}</p>
               )}
             </>
           ) : (
-            <p className="text-sm text-fg-muted">
-              Zatím nemáš žádnou vlastní písemku — nejdřív si ji v Testech založ. Do písemek od
-              kolegyň se zařazovat nedá; udělej si z nich kopii.
-            </p>
+            <p className="text-sm text-fg-muted">{t('puzzles:workshop.tests.none')}</p>
           )}
         </DialogContent>
       </Dialog>
@@ -1170,12 +1162,12 @@ export function PuzzleWorkshop({
             <AlertDialogDescription>{confirmation?.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={confirmBusy}>Nechat být</AlertDialogCancel>
+            <AlertDialogCancel disabled={confirmBusy}>{t('puzzles:workshop.keepIt')}</AlertDialogCancel>
             <AlertDialogAction
               variant={confirmation?.destructive ? 'destructive' : 'default'}
               disabled={confirmBusy}
               onClick={(event) => {
-                // Dialog se zavře až po doběhnutí akce, ať je vidět, že běží.
+                // The dialog closes only once the action finishes, so it is visible that it runs.
                 event.preventDefault()
                 void runConfirmation()
               }}
@@ -1187,9 +1179,9 @@ export function PuzzleWorkshop({
       </AlertDialog>
 
       <Card className="scroll-mt-4 p-4" id="ulozene-hlavolamy">
-        <h2 className="font-medium text-fg">Uložené hlavolamy</h2>
+        <h2 className="font-medium text-fg">{t('puzzles:workshop.saved.heading')}</h2>
         {list.length === 0 ? (
-          <p className="mt-3 text-sm text-fg-muted">Ještě žádný hlavolam neexistuje.</p>
+          <p className="mt-3 text-sm text-fg-muted">{t('puzzles:workshop.saved.empty')}</p>
         ) : (
           <ul className="mt-3 divide-y divide-line" data-slot="puzzle-list">
             {list.map((puzzle) => (
@@ -1198,23 +1190,24 @@ export function PuzzleWorkshop({
                   type="button"
                   disabled={opening !== null}
                   className="min-w-0 flex-1 text-left text-sm text-fg hover:underline disabled:opacity-60"
-                  onClick={() => unlessDirty('Otevření jiného hlavolamu', () => openPuzzle(puzzle.id))}
+                  onClick={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
                 >
-                  {opening === puzzle.id ? 'Otevírám…' : puzzle.title}
+                  {opening === puzzle.id ? t('puzzles:workshop.openingShort') : puzzle.title}
                 </button>
-                <Badge variant="secondary">{PUZZLE_KIND_LABELS[puzzle.kind]}</Badge>
+                <Badge variant="secondary">{t(`puzzles:kinds.${puzzle.kind}`)}</Badge>
                 <span className="text-sm text-fg-muted">
-                  {puzzle.topicName ?? 'bez tématu'} · {pocet(puzzle.entryCount, SLOVA)}
+                  {puzzle.topicName ?? t('puzzles:workshop.saved.noTopic')} ·{' '}
+                  {t('puzzles:words', { count: puzzle.entryCount })}
                 </span>
-                <RowActions label={`Akce pro hlavolam ${puzzle.title}`}>
+                <RowActions label={t('puzzles:workshop.saved.actions', { title: puzzle.title })}>
                   <DropdownMenuItem
-                    onSelect={() => unlessDirty('Otevření jiného hlavolamu', () => openPuzzle(puzzle.id))}
+                    onSelect={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
                   >
-                    Otevřít
+                    {t('common:actions.open')}
                   </DropdownMenuItem>
-                  {muzeMenit ? (
+                  {canEdit ? (
                     <DropdownMenuItem variant="destructive" onSelect={() => askRemove(puzzle.id, puzzle.title)}>
-                      Smazat
+                      {t('common:actions.delete')}
                     </DropdownMenuItem>
                   ) : null}
                 </RowActions>

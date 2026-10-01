@@ -1,0 +1,197 @@
+{
+  "regenerate": {
+    "failed": "Náhradu se nepodařilo vytvořit.",
+    "done": "Otázka nahrazena novou.",
+    "busy": "Přegeneruji…",
+    "action": "Přegenerovat",
+    "withReason": "Přegenerovat s důvodem",
+    "noteLabel": "Napiš poznámku a pak vyber důvod",
+    "notePlaceholder": "Co konkrétně přepsat…"
+  },
+  "variant": {
+    "easier": "Lehčí verze",
+    "harder": "Těžší verze",
+    "creatingEasier": "Vytvářím lehčí verzi…",
+    "creatingHarder": "Vytvářím těžší verzi…",
+    "failed": "Verzi se nepodařilo vytvořit.",
+    "createdEasier": "Vznikla lehčí verze otázky.",
+    "createdHarder": "Vznikla těžší verze otázky.",
+    "limitEasier": "Otázka je už nejlehčí.",
+    "limitHarder": "Otázka je už nejtěžší.",
+    "questionWithoutTopic": "Otázka nepatří k žádnému tématu, nemá se z čeho generovat verze"
+  },
+  "generation": {
+    "topicNotFound": "Téma nenalezeno",
+    "tooLittleText": "Materiály tématu obsahují příliš málo textu na generování otázek",
+    "topicBusy": "Nad tímhle tématem právě generuje {{who}}. Počkej, než to doběhne, a zkus to znovu.",
+    "questionNotFound": "Otázka nenalezena",
+    "questionWithoutTopic": "Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada",
+    "typeNotGeneratable": "Tenhle typ otázky model generovat neumí, uprav ji prosím ručně",
+    "noReplacement": "Model nevrátil použitelnou náhradu. Zkus to prosím znovu.",
+    "replacementSaveFailed": "Náhradu se nepodařilo uložit",
+    "noVariant": "Model nevrátil použitelnou verzi. Zkus to prosím znovu.",
+    "variantSaveFailed": "Verzi se nepodařilo uložit"
+  },
+  "generateClient": {
+    "startFailed": "Generování se nepodařilo spustit.",
+    "testVariantFailed": "Verzi písemky se nepodařilo vytvořit.",
+    "queueStopped": "Fronta se zastavila."
+  },
+  "queueSummary": {
+    "empty": "Fronta byla prázdná, nic se negenerovalo.",
+    "allFailed": "Nepovedlo se ani jedno téma.",
+    "unfinished": "Nedokončeno: {{topics}}.",
+    "done": "Hotovo: {{questions}} z {{topics}}."
+  },
+  "queue": {
+    "metaTitle": "Průběh generování – TestMaker",
+    "loading": "Načítám přehled generování…",
+    "title": "Průběh generování",
+    "intro": "Témata, ze kterých se právě tvoří otázky, i ta, která na řadu teprve čekají. Generuje se po jednom tématu.",
+    "review": "Zkontrolovat",
+    "runStopped": "Generování fronty se zastavilo.",
+    "retryFailed": "Témata se nepodařilo vrátit do fronty.",
+    "requeued": "Zpátky do fronty: {{topics}}. Spusť generování, ať se dodělají.",
+    "nothingToRequeue": "Nebylo co vracet do fronty.",
+    "clearFailed": "Frontu se nepodařilo vyprázdnit.",
+    "overviewCleared": "Přehled generování je smazaný.",
+    "queueCleared": "Fronta je vyprázdněná.",
+    "stats": {
+      "running": "právě se tvoří",
+      "queued": "čeká na řadu",
+      "error": "nedokončeno",
+      "done": "hotovo"
+    },
+    "stop": "Zastavit",
+    "run": "Generovat čekající témata",
+    "working": "Generuji… průběh se ukládá průběžně.",
+    "requeueing": "Vracím do fronty…",
+    "retryAll": "Zkusit znovu vše",
+    "clearQueue": {
+      "label": "Vyprázdnit frontu",
+      "title": "Vyprázdnit frontu?",
+      "description": "Zmizí všechna čekající i nedokončená témata. Otázky, které už vznikly, zůstávají.",
+      "confirm": "Vyprázdnit"
+    },
+    "clearAll": {
+      "label": "Smazat i výpis hotových",
+      "title": "Smazat celý přehled?",
+      "description": "Zmizí výpis toho, co se kdy generovalo. Otázky v knihovně to nijak nezmění.",
+      "confirm": "Smazat přehled"
+    },
+    "keepOpen": "Běží, dokud je tahle stránka otevřená.",
+    "empty": {
+      "title": "Nic se negeneruje",
+      "hint": "Otázky se sem dostanou z tématu tlačítkem „Vygenerovat otázky“ nebo hromadným generováním ve třídě.",
+      "action": "Do tříd"
+    },
+    "sections": {
+      "running": "Právě se tvoří",
+      "queued": "Čeká na řadu",
+      "error": "Nedokončeno",
+      "done": "Hotové",
+      "doneLast": "Hotové — posledních {{count}}"
+    },
+    "badge": {
+      "running": "tvoří se",
+      "queued": "čeká",
+      "error": "nedokončeno",
+      "done": "hotovo"
+    },
+    "describe": {
+      "runningFor": "běží {{duration}}",
+      "starting": "začíná",
+      "planned": "{{questions}} v plánu",
+      "waiting": "čeká ve frontě",
+      "partlyCreated": "stihlo vzniknout {{questions}}",
+      "noneCreated": "nevznikla žádná otázka"
+    },
+    "since": {
+      "moment": "chvíli",
+      "minutes_one": "{{count}} minutu",
+      "minutes_few": "{{count}} minuty",
+      "minutes_other": "{{count}} minut",
+      "hours_one": "{{count}} hodinu",
+      "hours_few": "{{count}} hodiny",
+      "hours_other": "{{count}} hodin"
+    }
+  },
+  "bulkGenerate": {
+    "preparing": "Připravuji frontu…",
+    "enqueueFailed": "Frontu se nepodařilo sestavit.",
+    "allHaveQuestions": "Není co generovat — v tomhle rozsahu už otázky mají všechna témata. Přeskočeno: {{topics}}.",
+    "noMaterials": "Není co generovat — v tomhle rozsahu není žádné téma s materiály.",
+    "enqueued": "Ve frontě {{topics}}.",
+    "progress": "Zbývá {{topics}} · vytvořeno {{questions}}.",
+    "stopped": "Hromadné generování se zastavilo.",
+    "title": "Hromadné generování",
+    "triggerRunning": "Hromadné generování (běží…)",
+    "intro": "Projde všechna témata ve zvoleném rozsahu. Běží po jednom tématu, průběh se průběžně ukládá, takže se dá kdykoli zastavit a později dokončit.",
+    "overviewBefore": "Co se právě tvoří, co čeká a co se nepovedlo, je vidět v",
+    "overviewLink": "přehledu generování",
+    "overviewAfter": "— i po zavření tohohle panelu.",
+    "skipWithQuestions": "Přeskočit témata, která už otázky mají",
+    "stop": "Zastavit"
+  },
+  "generateDialog": {
+    "settings": "Nastavení generování",
+    "count": "Počet otázek",
+    "countShort": "Počet",
+    "mode": "Počet otázek znamená",
+    "modeAdd": "Přidat nové",
+    "modeTarget": "Doplnit na celkový počet",
+    "difficulty": "Obtížnost",
+    "newDifficulty": "Obtížnost nových otázek",
+    "mix": "Promíchat",
+    "easy": "Lehká",
+    "medium": "Střední",
+    "hard": "Těžká",
+    "easyPlural": "Lehké",
+    "hardPlural": "Těžké",
+    "types": "Typy otázek",
+    "selectAll": "Vybrat vše",
+    "notConfigured": "Generování není nastavené."
+  },
+  "topicGeneration": {
+    "starting": "Spouštím generování…",
+    "interrupted": "Generování se přerušilo — vzniklé otázky jsou uložené, zbytek spusť znovu.",
+    "doneSoFar_one": "Hotovo {{count}} otázka",
+    "doneSoFar_few": "Hotovo {{count}} otázky",
+    "doneSoFar_other": "Hotovo {{count}} otázek",
+    "noneDoneYet": "Zatím žádná otázka není hotová",
+    "workingOnPart": "pracuji na části {{part}} z {{total}}",
+    "doneToast_one": "Hotovo, {{count}} nová otázka.",
+    "doneToast_few": "Hotovo, {{count}} nové otázky.",
+    "doneToast_other": "Hotovo, {{count}} nových otázek.",
+    "doneToastNone": "Hotovo, ale nevznikla ani jedna otázka.",
+    "failed": "Generování se nepodařilo.",
+    "generate": "Vygenerovat otázky",
+    "waitForUpload": "Počkej, až se soubory nahrají.",
+    "noUsableMaterial": "Nejdřív nahraj materiál nebo ho zapni pro generování.",
+    "tooLittleText": "Použitelného textu je zatím míň než 200 znaků — na otázky to nestačí.",
+    "willCreate": "Vznikne {{questions}} z {{materials}}.",
+    "lowContent": "Materiálů je v tomhle tématu málo — otázek vznikne jen pár a budou se opakovat.",
+    "summaryNone": "Nevznikla ani jedna otázka. Zkus to prosím znovu, případně s menším počtem otázek.",
+    "summaryCreated": "Vytvořeno {{questions}}.",
+    "summaryRejected": "Zahozeno: {{questions}} — neúplné nebo si odporovaly.",
+    "summaryFailedCalls": "{{count}}× model odpověděl něčím, co se nedalo použít.",
+    "summaryMixedModels": "Otázky psalo víc různých modelů, kvalita se může lišit."
+  },
+  "generationStatus": {
+    "running": "Generuji otázky",
+    "runningWithQueue": "Generuji otázky, čeká ještě {{topics}}",
+    "queued": "Ve frontě čeká {{topics}}",
+    "unfinished_one": "{{count}} téma se nedokončilo",
+    "unfinished_few": "{{count}} témata se nedokončila",
+    "unfinished_other": "{{count}} témat se nedokončilo",
+    "openTopic": "Otevřít téma",
+    "overview": "Přehled generování"
+  },
+  "generateApi": {
+    "alreadyRunning": "Pro tohle téma už generování běží. Počkej, než doběhne."
+  },
+  "regenerateApi": {
+    "noteNeedsReason": "Poznámka patří k důvodu — nejdřív vyber, proč se otázka nahrazuje.",
+    "questionGone": "Otázka mezitím zmizela, obnov stránku."
+  }
+}

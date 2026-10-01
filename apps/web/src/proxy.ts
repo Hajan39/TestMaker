@@ -1,18 +1,17 @@
+import { t } from '@testmaker/core/i18n'
 import { NextResponse, type NextRequest } from 'next/server'
 import {
-  AUTH_MISCONFIGURED_MESSAGE,
-  NEPRIHLASEN_MESSAGE,
   SESSION_COOKIE,
   authMode,
-  jeVolnaCesta,
-  maPravo,
-  obnovitRelaci,
-  overitRelaci,
-  relaceCookie,
-  smazatStarouCookie,
+  isPublicPath,
+  isAllowed,
+  refreshSession,
+  verifySession,
+  sessionCookie,
+  clearLegacyCookie,
 } from '@/lib/session'
 
-/** Statické soubory a favicon se neřeší, zbytek aplikace ano. */
+/** Static files and the favicon are skipped, the rest of the app is not. */
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
@@ -21,12 +20,12 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const mode = authMode()
 
-  // Špatně nastavené přihlašování (typicky nasazení bez AUTH_SECRET) nesmí
-  // skončit tichým otevřením aplikace komukoli. Platí i pro /login — přihlásit
-  // se stejně nedá, tak ať je aspoň vidět, co chybí.
+  // Misconfigured sign-in (typically a deployment without AUTH_SECRET) must
+  // not silently open the app to anyone. Applies to /login too — signing in
+  // is impossible anyway, so at least show what is missing.
   if (mode === 'chybne-nastaveno') {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: AUTH_MISCONFIGURED_MESSAGE }, { status: 503 })
+      return NextResponse.json({ error: t('api:authMisconfigured') }, { status: 503 })
     }
     return new NextResponse(misconfiguredPage(), {
       status: 503,
@@ -34,14 +33,14 @@ export async function proxy(request: NextRequest) {
     })
   }
 
-  if (jeVolnaCesta(pathname)) return NextResponse.next()
+  if (isPublicPath(pathname)) return NextResponse.next()
   if (mode === 'vypnuto') return NextResponse.next()
 
-  // Plánovač se hlásí sdíleným tajemstvím; Vercel Cron posílá právě tuhle hlavičku.
-  // Na Vercelu Hobby se cron nepoužívá (rozvrh po minutě tam neprojde a `crons`
-  // v `vercel.json` shodí build), větev tu ale zůstává pro self-hosting:
-  // naplánovaný `curl` na Synology se hlásí stejnou hlavičkou. Za koho úloha
-  // generuje, si běh přečte z řádku fronty — relace tu žádná není.
+  // The scheduler authenticates with a shared secret; Vercel Cron sends exactly
+  // this header. Vercel Hobby uses no cron (a per-minute schedule is rejected
+  // and `crons` in `vercel.json` breaks the build), but the branch stays for
+  // self-hosting: a scheduled `curl` on Synology sends the same header. The run
+  // reads whom the job generates for from the queue row — there is no session.
   const cronSecret = process.env.CRON_SECRET
   if (
     pathname === '/api/jobs/run' &&
@@ -52,66 +51,67 @@ export async function proxy(request: NextRequest) {
   }
 
   const secret = process.env.AUTH_SECRET ?? ''
-  const relace = await overitRelaci(request.cookies.get(SESSION_COOKIE)?.value, secret)
-  if (!relace) return odmitnout(request, NEPRIHLASEN_MESSAGE)
+  const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value, secret)
+  if (!session) return reject(request, t('api:notSignedIn'))
 
-  // Hrubé rozhodnutí podle role. Jestli je konkrétní písemka moje, rozhoduje
-  // až server nad databází — proxy je pohodlí, ne bezpečnostní hranice.
-  if (!maPravo(relace, pathname, request.method)) {
-    // Administrace nad školami se jiné roli tváří jako neexistující, stejně
-    // jako v route handlerech — 403 by prozradilo, že tu něco je.
-    if (!relace.zh && pathname.startsWith('/api/administrace/')) {
-      return NextResponse.json({ error: 'Nenalezeno' }, { status: 404 })
+  // Coarse decision by role. Whether a particular test is mine is decided
+  // later by the server over the database — the proxy is a convenience, not a
+  // security boundary.
+  if (!isAllowed(session, pathname, request.method)) {
+    // School administration looks non-existent to other roles, as in the
+    // route handlers — a 403 would reveal that something is here.
+    if (!session.zh && pathname.startsWith('/api/administrace/')) {
+      return NextResponse.json({ error: t('api:notFound') }, { status: 404 })
     }
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Na tuhle akci nemáte oprávnění.' }, { status: 403 })
+      return NextResponse.json({ error: t('api:forbidden') }, { status: 403 })
     }
-    const cil = request.nextUrl.clone()
-    cil.pathname = relace.zh ? '/zmena-hesla' : '/'
-    cil.search = ''
-    return NextResponse.redirect(cil)
+    const target = request.nextUrl.clone()
+    target.pathname = session.zh ? '/zmena-hesla' : '/'
+    target.search = ''
+    return NextResponse.redirect(target)
   }
 
-  // Kdo pracuje, toho po dvanácti hodinách od přihlášení nevyhodí: po
-  // polovině platnosti dostane čerstvou cookie.
-  const odpoved = NextResponse.next()
-  const cerstva = await obnovitRelaci(relace, secret)
-  if (cerstva) odpoved.headers.append('set-cookie', relaceCookie(cerstva))
-  return odpoved
+  // Someone who keeps working is not kicked out twelve hours after signing
+  // in: past half the lifetime they get a fresh cookie.
+  const response = NextResponse.next()
+  const fresh = await refreshSession(session, secret)
+  if (fresh) response.headers.append('set-cookie', sessionCookie(fresh))
+  return response
 }
 
 /**
- * Nepřihlášenému se u stránky nabídne přihlášení a po něm návrat tam, kam
- * mířil — jinak by po každém vypršení relace skončil na úvodní obrazovce
- * a hledal, kde přestal.
+ * A signed-out visitor of a page is offered sign-in and afterwards a return
+ * to where they were heading — otherwise every session expiry would land them
+ * on the home screen looking for where they left off.
  */
-function odmitnout(request: NextRequest, duvod: string) {
+function reject(request: NextRequest, reason: string) {
   const { pathname, search } = request.nextUrl
   if (pathname.startsWith('/api/')) {
-    const odpoved = NextResponse.json({ error: duvod }, { status: 401 })
-    odpoved.headers.append('set-cookie', smazatStarouCookie())
-    return odpoved
+    const response = NextResponse.json({ error: reason }, { status: 401 })
+    response.headers.append('set-cookie', clearLegacyCookie())
+    return response
   }
 
   const login = request.nextUrl.clone()
   login.pathname = '/login'
   login.search = pathname === '/' ? '' : `?dal=${encodeURIComponent(pathname + search)}`
-  const odpoved = NextResponse.redirect(login)
-  odpoved.headers.append('set-cookie', smazatStarouCookie())
-  return odpoved
+  const response = NextResponse.redirect(login)
+  response.headers.append('set-cookie', clearLegacyCookie())
+  return response
 }
 
 /**
- * Stránka se vypisuje ručně, ne přes React: middleware běží dřív než aplikace
- * a v tuhle chvíli nechceme pustit dál vůbec nic.
+ * The page is written by hand, not via React: the middleware runs before the
+ * app and at this point we want to let nothing through at all.
  */
 function misconfiguredPage(): string {
   return `<!doctype html>
 <html lang="cs">
-<head><meta charset="utf-8"><title>Aplikace není nastavená</title></head>
+<head><meta charset="utf-8"><title>${t('api:authMisconfiguredTitle')}</title></head>
 <body style="font-family: system-ui, sans-serif; max-width: 34rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.6">
-<h1 style="font-size: 1.25rem">Aplikace není nastavená</h1>
-<p>${AUTH_MISCONFIGURED_MESSAGE}</p>
+<h1 style="font-size: 1.25rem">${t('api:authMisconfiguredTitle')}</h1>
+<p>${t('api:authMisconfigured')}</p>
 </body>
 </html>`
 }

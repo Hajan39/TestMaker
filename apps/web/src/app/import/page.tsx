@@ -1,18 +1,21 @@
 import { PageShell } from '@testmaker/ui'
 import { loadLibraryTree } from '@/lib/library'
 import { ImportClient } from './ImportClient'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
-export const metadata = { title: 'Import materiálů – TestMaker' }
+export function generateMetadata() {
+  return { title: t('library:import.metaTitle') }
+}
 
-// Našeptávané předměty a ročníky musí odpovídat tomu, co v knihovně právě je.
+// Suggested subjects and grades must match what is currently in the library.
 export const dynamic = 'force-dynamic'
 
 export default async function ImportPage() {
-  const ucet = await ucetStranky()
-  const tree = await loadLibraryTree(ucet)
-  // Předměty i ročníky z knihovny se v náhledu našeptávají, aby vedle
-  // „Přírodopisu“ nevznikl druhý „PŘÍRODOPIS“ jen kvůli velikosti písmen.
+  const account = await pageAccount()
+  const tree = await loadLibraryTree(account)
+  // Library subjects and grades are suggested in the preview so that a second
+  // "PŘÍRODOPIS" doesn't appear next to "Přírodopis" just because of letter case.
   const library = tree.map((subject) => ({
     subject: subject.name,
     grades: subject.grades.map((grade) => grade.name).filter(Boolean),
@@ -22,13 +25,8 @@ export default async function ImportPage() {
     <PageShell>
       <div className="space-y-4">
         <div>
-          <h1 className="ui-page-title">Import materiálů</h1>
-          <p className="mt-1 max-w-3xl text-sm text-fg-soft">
-            Vyber složku, jednotlivé soubory, nebo je sem přetáhni. Text se vytáhne přímo
-            v prohlížeči, na server se posílá jen text, ne soubory. Ze struktury složek se
-            odhadne Předmět → Ročník → Téma — v náhledu si odhad projdeš a opravíš dřív, než
-            se cokoli uloží.
-          </p>
+          <h1 className="ui-page-title">{t('library:import.title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-fg-soft">{t('library:import.intro')}</p>
         </div>
         <ImportClient library={library} />
       </div>

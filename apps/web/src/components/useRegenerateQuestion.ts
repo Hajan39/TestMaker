@@ -5,18 +5,20 @@ import { useRouter } from 'next/navigation'
 import { AI_QUESTION_TYPES, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
-/** Zapamatovaná odpověď na „je model nakonfigurovaný?“ — ptáme se jednou za načtení stránky. */
+/** Cached answer to “is a model configured?” — asked once per page load. */
 let configuredCache: boolean | null = null
 
 /**
- * Náhrada jedné otázky modelem — bez ohledu na to, čím se spouští (tlačítkem
- * v kontrole, položkou nabídky v bance).
+ * Replaces one question via the model — regardless of what triggers it (a
+ * button in review, a menu item in the bank).
  *
- * `available` je `false`, dokud se neví, že je model nakonfigurovaný, a taky
- * u typů, které model neumí (třeba popis obrázku). Volající podle něj akci
- * vůbec nenabídne — jinak by učitelka klikla a dozvěděla se to až z chyby.
- * Původní otázka se zamítá až ve chvíli, kdy náhrada existuje; to hlídá server.
+ * `available` is `false` until we know a model is configured, and also for
+ * types the model cannot produce (e.g. image labelling). Callers do not offer
+ * the action at all then — otherwise the teacher would click and only learn
+ * from an error. The original question is rejected only once the replacement
+ * exists; the server ensures that.
  */
 export function useRegenerateQuestion(
   questionId: string,
@@ -29,21 +31,21 @@ export function useRegenerateQuestion(
 
   useEffect(() => {
     if (configuredCache !== null) return
-    let platne = true
+    let valid = true
     fetch('/api/questions/regenerate')
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { configured?: boolean } | null) => {
         if (typeof data?.configured !== 'boolean') return
         configuredCache = data.configured
-        if (platne) setConfigured(data.configured)
+        if (valid) setConfigured(data.configured)
       })
       .catch(() => {})
     return () => {
-      platne = false
+      valid = false
     }
   }, [])
 
-  const podporovanyTyp = (AI_QUESTION_TYPES as readonly string[]).includes(type)
+  const supportedType = (AI_QUESTION_TYPES as readonly string[]).includes(type)
 
   async function run(reason?: RegenerateReason, note?: string) {
     setBusy(true)
@@ -51,17 +53,17 @@ export function useRegenerateQuestion(
       await requestJson(
         '/api/questions/regenerate',
         jsonBody('POST', { id: questionId, reason, note }),
-        'Náhradu se nepodařilo vytvořit.',
+        t('generation:regenerate.failed'),
       )
-      toast.success('Otázka nahrazena novou.')
+      toast.success(t('generation:regenerate.done'))
       onDone?.()
       router.refresh()
     } catch (error) {
-      toast.error(errorMessage(error, 'Náhradu se nepodařilo vytvořit.'))
+      toast.error(errorMessage(error, t('generation:regenerate.failed')))
     } finally {
       setBusy(false)
     }
   }
 
-  return { available: configured === true && podporovanyTyp, busy, run }
+  return { available: configured === true && supportedType, busy, run }
 }

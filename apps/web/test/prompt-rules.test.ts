@@ -3,29 +3,29 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db, promptRules, schools, users } from '@/db'
 import {
   MAX_ACTIVE_PROMPT_RULES,
-  PrilisMnohoPravidel,
+  TooManyRules,
   createPromptRule,
   loadActivePromptRules,
   loadPromptRules,
   setPromptRuleActive,
 } from '@/lib/promptRules'
 import { newId } from '@/lib/ids'
-import type { Scope } from '@/lib/uzivatel'
-import { UCET } from './helpers'
+import type { Scope } from '@/lib/user'
+import { ACCOUNT } from './helpers'
 
 /**
- * Pravidla promptu školy: aktivní se dostanou do generování, vypnutá ne,
- * cizí školy nikdy — a aktivních smí být nejvýš deset (bod revize 5, úkol 4).
+ * School prompt rules: active ones reach generation, disabled ones do not,
+ * another school's never — and at most ten may be active (review point 5, task 4).
  */
 
-const CIZI_SKOLA = 'skola-jina-pravidla'
+const FOREIGN_SCHOOL = 'skola-jina-pravidla'
 
-/** Účet skutečně jiné školy — pro test, že se pravidla mezi školami nepletou. */
-async function ciziScope(): Promise<Scope> {
-  await db.insert(schools).values({ id: CIZI_SKOLA, name: 'Jiná škola', slug: 'jina-pravidla' }).onConflictDoNothing()
+/** An account of a truly different school — to test that rules do not mix between schools. */
+async function foreignScope(): Promise<Scope> {
+  await db.insert(schools).values({ id: FOREIGN_SCHOOL, name: 'Jiná škola', slug: 'jina-pravidla' }).onConflictDoNothing()
   const id = newId()
-  await db.insert(users).values({ id, schoolId: CIZI_SKOLA, email: `${id}@jina.cz`, name: 'Cizí správce', role: 'spravce' })
-  return { schoolId: CIZI_SKOLA, userId: id, role: 'spravce' }
+  await db.insert(users).values({ id, schoolId: FOREIGN_SCHOOL, email: `${id}@jina.cz`, name: 'Cizí správce', role: 'spravce' })
+  return { schoolId: FOREIGN_SCHOOL, userId: id, role: 'spravce' }
 }
 
 beforeEach(async () => {
@@ -33,98 +33,98 @@ beforeEach(async () => {
 })
 
 describe('createPromptRule', () => {
-  it('založí aktivní pravidlo s ořízlým textem', async () => {
-    const dlouhy = 'x'.repeat(400)
-    const pravidlo = await createPromptRule(UCET, { text: dlouhy })
-    expect(pravidlo.active).toBe(true)
-    expect(pravidlo.text).toHaveLength(300)
+  it('creates an active rule with trimmed text', async () => {
+    const longText = 'x'.repeat(400)
+    const rule = await createPromptRule(ACCOUNT, { text: longText })
+    expect(rule.active).toBe(true)
+    expect(rule.text).toHaveLength(300)
   })
 
-  it('prázdný text (i po ořezu mezer) se odmítne', async () => {
-    await expect(createPromptRule(UCET, { text: '   ' })).rejects.toThrow(/prázdné/)
+  it('rejects empty text (also after trimming spaces)', async () => {
+    await expect(createPromptRule(ACCOUNT, { text: '   ' })).rejects.toThrow(/prázdné/)
   })
 
-  it('vnitřní mezery a odřádkování se sjednotí na jednu mezeru', async () => {
-    // Textarea ve Správě dovolí i víc řádků; jako odrážka v systémovém
-    // promptu (`- ${rule}`) i v hlavičce staženého souboru pro `/otazky` musí
-    // pravidlo zůstat na jednom řádku, jinak by odrážky rozbilo.
-    const pravidlo = await createPromptRule(UCET, { text: '  Piš   krátce\n\na  jasně.  ' })
-    expect(pravidlo.text).toBe('Piš krátce a jasně.')
+  it('collapses inner spaces and line breaks into a single space', async () => {
+    // The Textarea in Management allows several lines; as a bullet in the system
+    // prompt (`- ${rule}`) and in the header of the downloaded file for `/otazky` the
+    // rule must stay on one line, otherwise it would break the bullets.
+    const rule = await createPromptRule(ACCOUNT, { text: '  Piš   krátce\n\na  jasně.  ' })
+    expect(rule.text).toBe('Piš krátce a jasně.')
   })
 
-  it('jedenácté aktivní pravidlo se odmítne českou hláškou', async () => {
+  it('rejects an eleventh active rule with a Czech message', async () => {
     for (let i = 0; i < MAX_ACTIVE_PROMPT_RULES; i++) {
-      await createPromptRule(UCET, { text: `Pravidlo ${i}` })
+      await createPromptRule(ACCOUNT, { text: `Pravidlo ${i}` })
     }
-    await expect(createPromptRule(UCET, { text: 'Jedenácté' })).rejects.toThrow(PrilisMnohoPravidel)
-    await expect(createPromptRule(UCET, { text: 'Jedenácté' })).rejects.toThrow(/nejvýš 10/)
+    await expect(createPromptRule(ACCOUNT, { text: 'Jedenácté' })).rejects.toThrow(TooManyRules)
+    await expect(createPromptRule(ACCOUNT, { text: 'Jedenácté' })).rejects.toThrow(/nejvýš 10/)
   })
 })
 
 describe('setPromptRuleActive', () => {
-  it('vypnuté pravidlo zmizí z aktivních, zapnuté se zase objeví', async () => {
-    const pravidlo = await createPromptRule(UCET, { text: 'Piš krátce.' })
-    expect(await loadActivePromptRules(UCET)).toEqual(['Piš krátce.'])
+  it('a disabled rule disappears from the active ones, an enabled one comes back', async () => {
+    const rule = await createPromptRule(ACCOUNT, { text: 'Piš krátce.' })
+    expect(await loadActivePromptRules(ACCOUNT)).toEqual(['Piš krátce.'])
 
-    await setPromptRuleActive(UCET, pravidlo.id, false)
-    expect(await loadActivePromptRules(UCET)).toEqual([])
+    await setPromptRuleActive(ACCOUNT, rule.id, false)
+    expect(await loadActivePromptRules(ACCOUNT)).toEqual([])
 
-    await setPromptRuleActive(UCET, pravidlo.id, true)
-    expect(await loadActivePromptRules(UCET)).toEqual(['Piš krátce.'])
+    await setPromptRuleActive(ACCOUNT, rule.id, true)
+    expect(await loadActivePromptRules(ACCOUNT)).toEqual(['Piš krátce.'])
   })
 
-  it('cizí pravidlo se tváří jako neexistující', async () => {
-    const pravidlo = await createPromptRule(UCET, { text: 'Moje pravidlo' })
-    const cizi = { ...UCET, schoolId: CIZI_SKOLA }
-    expect(await setPromptRuleActive(cizi, pravidlo.id, false)).toBe(false)
+  it('a foreign rule pretends not to exist', async () => {
+    const rule = await createPromptRule(ACCOUNT, { text: 'Moje pravidlo' })
+    const foreign = { ...ACCOUNT, schoolId: FOREIGN_SCHOOL }
+    expect(await setPromptRuleActive(foreign, rule.id, false)).toBe(false)
 
-    const [radek] = await db.select().from(promptRules).where(eq(promptRules.id, pravidlo.id))
-    expect(radek?.active).toBe(true)
+    const [row] = await db.select().from(promptRules).where(eq(promptRules.id, rule.id))
+    expect(row?.active).toBe(true)
   })
 
-  it('opětovné uložení už aktivního pravidla jako aktivní na hranici deseti neselže', async () => {
-    const prvni = await createPromptRule(UCET, { text: 'První' })
+  it('re-saving an already active rule as active at the limit of ten does not fail', async () => {
+    const first = await createPromptRule(ACCOUNT, { text: 'První' })
     for (let i = 1; i < MAX_ACTIVE_PROMPT_RULES; i++) {
-      await createPromptRule(UCET, { text: `Pravidlo ${i}` })
+      await createPromptRule(ACCOUNT, { text: `Pravidlo ${i}` })
     }
-    // Deset aktivních už je — uložit znovu jako aktivní to první nesmí spadnout.
-    await expect(setPromptRuleActive(UCET, prvni.id, true)).resolves.toBe(true)
+    // Ten are active already — saving the first one as active again must not fail.
+    await expect(setPromptRuleActive(ACCOUNT, first.id, true)).resolves.toBe(true)
   })
 
-  it('zapnutí jedenáctého se odmítne stejně jako založení', async () => {
+  it('enabling an eleventh is rejected just like creating one', async () => {
     for (let i = 0; i < MAX_ACTIVE_PROMPT_RULES; i++) {
-      await createPromptRule(UCET, { text: `Pravidlo ${i}` })
+      await createPromptRule(ACCOUNT, { text: `Pravidlo ${i}` })
     }
-    // Vypnuté pravidlo vzniklo dřív, než se aktivních naplnilo deset —
-    // `createPromptRule` by jedenácté rovnou aktivní vůbec nezaložilo.
+    // The disabled rule was created before ten active ones filled up —
+    // `createPromptRule` would not create an eleventh active one at all.
     const id = 'vypnute-jedenacte'
     await db.insert(promptRules).values({
       id,
-      schoolId: UCET.schoolId,
+      schoolId: ACCOUNT.schoolId,
       text: 'Vypnuté',
       active: false,
-      createdBy: UCET.userId,
+      createdBy: ACCOUNT.userId,
     })
-    await expect(setPromptRuleActive(UCET, id, true)).rejects.toThrow(PrilisMnohoPravidel)
+    await expect(setPromptRuleActive(ACCOUNT, id, true)).rejects.toThrow(TooManyRules)
   })
 })
 
 describe('loadActivePromptRules a loadPromptRules', () => {
-  it('cizí škola nikdy — ani ve výpisu pro Správu, ani v aktivních pro prompt', async () => {
-    const cizi = await ciziScope()
-    await createPromptRule(cizi, { text: 'Cizí pravidlo' })
+  it('never another school — neither in the Management list nor in the active ones for the prompt', async () => {
+    const foreign = await foreignScope()
+    await createPromptRule(foreign, { text: 'Cizí pravidlo' })
 
-    expect(await loadActivePromptRules(UCET)).toEqual([])
-    expect(await loadPromptRules(UCET)).toEqual([])
+    expect(await loadActivePromptRules(ACCOUNT)).toEqual([])
+    expect(await loadPromptRules(ACCOUNT)).toEqual([])
   })
 
-  it('výpis pro Správu ukáže aktivní i vypnutá pravidla', async () => {
-    const aktivni = await createPromptRule(UCET, { text: 'Aktivní' })
-    const vypnute = await createPromptRule(UCET, { text: 'Vypnuté' })
-    await setPromptRuleActive(UCET, vypnute.id, false)
+  it('the Management list shows both active and disabled rules', async () => {
+    const active = await createPromptRule(ACCOUNT, { text: 'Aktivní' })
+    const disabled = await createPromptRule(ACCOUNT, { text: 'Vypnuté' })
+    await setPromptRuleActive(ACCOUNT, disabled.id, false)
 
-    const seznam = await loadPromptRules(UCET)
-    expect(seznam.find((p) => p.id === aktivni.id)?.active).toBe(true)
-    expect(seznam.find((p) => p.id === vypnute.id)?.active).toBe(false)
+    const list = await loadPromptRules(ACCOUNT)
+    expect(list.find((p) => p.id === active.id)?.active).toBe(true)
+    expect(list.find((p) => p.id === disabled.id)?.active).toBe(false)
   })
 })

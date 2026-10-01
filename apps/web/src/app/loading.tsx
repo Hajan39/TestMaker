@@ -1,15 +1,17 @@
 import { Delayed, LoadingHeading, LoadingList, LoadingTiles, ThreePane } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Obecná záložní kostra. Úvod má tři sloupce stejně jako téma — rám se
- * vykreslí hned a kostra vyplní jen jeho obsah, aby sloupce po načtení
- * zůstaly na místě. Jednostránkové obrazovky (import, správa, záloha,
- * administrace) mají vlastní `loading.tsx` s `PageShell`.
+ * Generic fallback skeleton. The home page has three columns like a topic —
+ * the frame renders at once and the skeleton fills only its content, so the
+ * columns stay in place after loading. Single-page screens (import,
+ * management, backup, administration) have their own `loading.tsx` with
+ * `PageShell`.
  */
 export default function FallbackLoading() {
   return (
     <ThreePane first={<LoadingList items={8} />} second={<LoadingList items={10} />}>
-      <Delayed label="Načítám…" className="space-y-5">
+      <Delayed label={t('common:status.loading')} className="space-y-5">
         <LoadingHeading stats />
         <LoadingTiles count={6} />
       </Delayed>

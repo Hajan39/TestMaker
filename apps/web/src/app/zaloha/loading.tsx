@@ -1,10 +1,11 @@
 import { Delayed, LoadingCard, LoadingHeading, PageShell } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
-/** Přechod na zálohu: počítají se všechny tabulky školy, chvíli to trvá. */
-export default function ZalohaLoading() {
+/** Navigating to backup: all the school's tables are counted, it takes a moment. */
+export default function BackupLoading() {
   return (
     <PageShell>
-      <Delayed label="Načítám zálohu…" className="space-y-5">
+      <Delayed label={t('backup:loading')} className="space-y-5">
         <LoadingHeading />
         <LoadingCard lines={4} />
       </Delayed>

@@ -1,6 +1,7 @@
 import type { QuestionType } from '@testmaker/core/schema'
+import { t } from '@testmaker/core/i18n'
 
-/** Prázdný payload pro nově zvolený typ otázky. */
+/** Empty payload for a newly chosen question type. */
 export function emptyPayload(type: QuestionType): Record<string, unknown> {
   switch (type) {
     case 'open':
@@ -15,17 +16,17 @@ export function emptyPayload(type: QuestionType): Record<string, unknown> {
       return { prompt: '', options: ['', '', '', ''], correctIndices: [0] }
     case 'true_false':
       return {
-        prompt: 'Rozhodni, zda jsou tvrzení pravdivá.',
+        prompt: t('library:questionDefaults.trueFalsePrompt'),
         statements: [
           { text: '', isTrue: true },
           { text: '', isTrue: false },
         ],
       }
     case 'fill_blank':
-      return { prompt: 'Doplň chybějící výrazy.', text: '', blanks: [''], wordBank: [] }
+      return { prompt: t('library:questionDefaults.fillBlankPrompt'), text: '', blanks: [''], wordBank: [] }
     case 'matching':
       return {
-        prompt: 'Přiřaď k sobě odpovídající dvojice.',
+        prompt: t('library:questionDefaults.matchingPrompt'),
         left: ['', '', ''],
         right: ['', '', ''],
         pairs: [

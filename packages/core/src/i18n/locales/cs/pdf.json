@@ -1,0 +1,88 @@
+{
+  "yes": "ANO",
+  "no": "NE",
+  "points": "({{points}} b.)",
+  "answerKey": {
+    "orderingLine": "{{line}}. řádek → {{number}}"
+  },
+  "sanitize": {
+    "squareRoot": "odmocnina ",
+    "infinity": "nekonečno",
+    "check": "[ano]",
+    "cross": "[ne]"
+  },
+  "question": {
+    "imageMissing": "[Obrázek se nepodařilo načíst]",
+    "answerLabel": "Odpověď:",
+    "statement": "Tvrzení",
+    "wordBank": "Nabídka: {{words}}",
+    "matchingHint": "Do rámečku napiš písmeno možnosti vpravo, která patří k položce vlevo.",
+    "orderingHint": "Do rámečku napiš pořadové číslo (1, 2, 3, …), v jakém pořadí položky jdou za sebou."
+  },
+  "puzzle": {
+    "notInGrid": "{{word}}: v mřížce není",
+    "phrase": "Tajenka:",
+    "crossword": "Doplňovačka:",
+    "clues": "Otázky:"
+  },
+  "header": {
+    "variantB": "(varianta B)",
+    "points": "Body: ______ / {{total}}",
+    "grade": "Známka: ______",
+    "teacher": "Vyučující: {{name}}",
+    "note": "Poznámka: {{note}}"
+  },
+  "key": {
+    "title": "Klíč – {{title}}",
+    "variant": "(varianta {{variant}})",
+    "totalPoints": "Celkem {{points}} bodů",
+    "solution": "Řešení – {{title}}"
+  },
+  "footer": {
+    "variant": "varianta {{variant}}",
+    "page": "strana {{page}} / {{total}}"
+  },
+  "compose": {
+    "countShortfall": "Vyhovujících otázek je jen {{picked}} z požadovaných {{requested}}. Vloží se, co je — zbytek přidej ručně, nebo povol víc témat a typů.",
+    "pointsShortfall": "Dohromady to dá {{points}} b. místo požadovaných {{requested}} b. Víc vyhovujících otázek ve vybraných tématech není.",
+    "oneEmptyTopic": "Jedno vybrané téma nemá žádnou otázku, která by prošla filtry.",
+    "emptyTopics": "Vybraná témata bez jediné vyhovující otázky: {{n}}.",
+    "nothingMatches": "Filtrům nevyhovuje ani jedna otázka. Zkus povolit víc typů, jinou obtížnost, nebo i neschválené otázky."
+  },
+  "sample": {
+    "title": "Dýchací soustava",
+    "school": "ZŠ Ukázková",
+    "subject": "Přírodopis",
+    "heading": "Část A – Stavba a funkce",
+    "choice": {
+      "prompt": "Kde probíhá výměna dýchacích plynů?",
+      "option1": "V průdušnici",
+      "option2": "V plicních sklípcích",
+      "option3": "V hrtanu",
+      "option4": "V nosohltanu",
+      "explanation": "Sklípky jsou opředeny vlásečnicemi."
+    },
+    "open": {
+      "prompt": "Popiš cestu vzduchu od nosu až k plicním sklípkům.",
+      "answer": "Dutina nosní, nosohltan, hrtan, průdušnice, průdušky, průdušinky, plicní sklípky."
+    },
+    "draw": {
+      "prompt": "Nakresli rostlinnou buňku a popiš její hlavní části.",
+      "answer": "Buněčná stěna, cytoplazmatická membrána, jádro, chloroplasty, vakuola."
+    },
+    "trueFalse": {
+      "prompt": "Rozhodni, zda jsou tvrzení pravdivá.",
+      "statement1": "Hrtan je tvořen chrupavkami.",
+      "statement2": "Plíce jsou sval."
+    },
+    "matching": {
+      "prompt": "Přiřaď orgán k jeho funkci.",
+      "left1": "Hrtan",
+      "left2": "Průdušnice",
+      "left3": "Plicní sklípky",
+      "right1": "Výměna plynů",
+      "right2": "Tvorba hlasu",
+      "right3": "Vedení vzduchu"
+    }
+  }
+}

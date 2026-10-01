@@ -1,10 +1,10 @@
 /**
- * Slučování souborů do jednoho tématu. Jedno téma = skupina materiálů,
- * ze které se generuje dohromady — jediný soubor často na celou písemku nestačí
- * a z několika zvlášť generovaných běhů vznikají duplicitní otázky.
+ * Merging files into one topic. One topic = a group of materials generated
+ * from together — a single file is often not enough for a whole test, and
+ * several separately generated runs produce duplicate questions.
  */
 
-/** Slova, která o obsahu nic neříkají a při porovnání názvů se vynechávají. */
+/** Words that say nothing about the content and are skipped when comparing names. */
 const STOPWORDS = new Set([
   'test',
   'testy',
@@ -36,7 +36,7 @@ const STOPWORDS = new Set([
   'se',
 ])
 
-/** Významová slova názvu tématu bez diakritiky, čísel a balastu. */
+/** Meaningful words of a topic name without diacritics, numbers and filler. */
 export function topicTokens(name: string): string[] {
   return name
     .normalize('NFD')
@@ -48,12 +48,12 @@ export function topicTokens(name: string): string[] {
 }
 
 /**
- * Oddělovače, na kterých se název láme na samostatné úseky (např. „Měkkýši
- * (Mollusca) – PLŽI, MLŽI“ na „Měkkýši“, „Mollusca“, „PLŽI“, „MLŽI“).
+ * Delimiters at which a name breaks into separate segments (e.g. "Měkkýši
+ * (Mollusca) – PLŽI, MLŽI" into "Měkkýši", "Mollusca", "PLŽI", "MLŽI").
  */
 const SEGMENT_DELIMITERS = /[-–—(),:;/_]+/g
 
-/** Významová slova jednotlivých úseků názvu odděleného pomlčkou, závorkou apod. */
+/** Meaningful words of each segment of a name split by a dash, parenthesis etc. */
 function nameSegments(name: string): string[][] {
   return name.split(SEGMENT_DELIMITERS).map(topicTokens)
 }
@@ -63,24 +63,25 @@ function sameTokenSet(a: string[], b: Set<string>): boolean {
 }
 
 /**
- * Patří dva názvy k témuž tématu?
+ * Do two names belong to the same topic?
  *
- * Nestačí, že významová slova kratšího názvu jsou podmnožinou delšího —
- * „Rostliny“ je podmnožinou „Výtrusné rostliny“, a přesto jde o dvě různé
- * lekce (7.11 vs. 7.13), zatímco „Rostliny“ a „7.11 Rostliny prezentace“
- * je tentýž materiál. Rozdíl je v tom, KDE se to shodné slovo v delším
- * názvu nachází: jako celý, oddělovači (pomlčka, závorka, čárka) ohraničený
- * úsek jde o doplněk/apozici k témuž tématu („Měkkýši (Mollusca) – PLŽI…“,
- * „Poznávačka – ryby“); je-li ale přilepené k jinému slovu bez oddělovače
- * („Výtrusné rostliny“, „vyšší rostliny“), jde o přídavné jméno, které dělá
- * z obecného názvu jinou, užší látku, a slučovat se nesmí.
+ * It is not enough that the meaningful words of the shorter name are a subset
+ * of the longer one — "Rostliny" is a subset of "Výtrusné rostliny", and yet
+ * they are two different lessons (7.11 vs. 7.13), whereas "Rostliny" and
+ * "7.11 Rostliny prezentace" are the same material. The difference is WHERE
+ * the shared word sits in the longer name: as a whole segment bounded by
+ * delimiters (dash, parenthesis, comma) it is an addition/apposition to the
+ * same topic ("Měkkýši (Mollusca) – PLŽI…", "Poznávačka – ryby"); but when it
+ * is attached to another word without a delimiter ("Výtrusné rostliny",
+ * "vyšší rostliny"), it is an adjective that turns the general name into a
+ * different, narrower subject, and must not be merged.
  */
 export function sameTopic(a: string, b: string): boolean {
   const left = topicTokens(a)
   const right = topicTokens(b)
   if (left.length === 0 || right.length === 0) return false
 
-  // Stejná slova v jiném pořadí (přeformulovaný název) jsou vždy totéž téma.
+  // The same words in a different order (a rephrased name) are always the same topic.
   const leftSet = new Set(left)
   const rightSet = new Set(right)
   if (sameTokenSet(right, leftSet)) return true
@@ -96,12 +97,12 @@ export function sameTopic(a: string, b: string): boolean {
 }
 
 /**
- * Najde mezi existujícími tématy to, se kterým se nový název slučuje.
+ * Finds among existing topics the one the new name merges with.
  *
- * Když název odpovídá několika tématům, která spolu navzájem nesouvisejí,
- * jde o obecný nadpis („mineralogická třída“ sedí na sulfidy, halogenidy
- * i oxidy) — takový název vlastní skupinu nezakládá ani nespojuje cizí lekce
- * a vrací se `null`.
+ * When the name matches several topics that are not related to each other,
+ * it is a generic heading ("mineralogická třída" fits sulfides, halides and
+ * oxides) — such a name neither founds its own group nor joins unrelated
+ * lessons, and `null` is returned.
  */
 export function findMatchingTopic<T extends { name: string }>(
   candidates: T[],
@@ -127,7 +128,7 @@ export function findMatchingTopic<T extends { name: string }>(
   })
 }
 
-/** Kratší z názvů je srozumitelnější jako název skupiny. */
+/** The shorter of the names is clearer as the group name. */
 export function preferredTopicName(a: string, b: string): string {
   const tokensA = topicTokens(a).length
   const tokensB = topicTokens(b).length
@@ -135,7 +136,7 @@ export function preferredTopicName(a: string, b: string): string {
   return a.length <= b.length ? a : b
 }
 
-/** Zařazení materiálu v knihovně: předmět → ročník → téma. */
+/** Placement of a material in the library: subject → grade → topic. */
 export interface Placement {
   subject: string
   grade: string | null
@@ -143,9 +144,10 @@ export interface Placement {
 }
 
 /**
- * Skupina souborů, které při importu spadnou do jednoho tématu.
- * `grade` je prázdný řetězec, ne null, aby se dal rovnou psát do políčka;
- * prázdný předmět znamená, že z cesty nešlo nic vyčíst a učitelka ho doplní.
+ * Group of files that end up in one topic on import.
+ * `grade` is an empty string, not null, so it can go straight into an input;
+ * an empty subject means nothing could be read from the path and the teacher
+ * fills it in.
  */
 export interface ImportGroup<T> {
   id: string
@@ -155,20 +157,20 @@ export interface ImportGroup<T> {
   files: T[]
 }
 
-/** Název, který `parsePath` použije, když z cesty předmět vyčíst nejde. */
+/** Name `parsePath` uses when no subject can be read from the path (stored data). */
 export const UNPLACED_SUBJECT = 'Nezařazeno'
 
 /**
- * Seskupí odhadnutá zařazení do skupin pro náhled před importem.
+ * Groups the guessed placements for the preview before import.
  *
- * Dělá nanečisto totéž, co pak udělá server: v rámci jednoho předmětu a
- * ročníku spojí soubory, jejichž názvy patří k témuž tématu („Měkkýši“ a
- * „6.22 Měkkýši (Mollusca)“), a skupině nechá ten srozumitelnější název.
- * Díky tomu učitelka v náhledu vidí skutečné skupiny, ne seznam souborů.
+ * Does as a dry run the same thing the server will do: within one subject and
+ * grade it joins files whose names belong to the same topic ("Měkkýši" and
+ * "6.22 Měkkýši (Mollusca)") and keeps the clearer name for the group. The
+ * teacher thus sees real groups in the preview, not a list of files.
  *
- * Předmět „Nezařazeno“ (samostatný soubor bez složky) se převede na prázdný —
- * takové skupiny jdou v seznamu první, protože se bez doplnění neuloží tam,
- * kam učitelka čeká.
+ * The subject "Nezařazeno" (a single file without a folder) becomes empty —
+ * such groups go first in the list, because without being filled in they
+ * would not be saved where the teacher expects.
  */
 export function groupForImport<T extends Placement>(items: T[]): ImportGroup<T>[] {
   const groups: ImportGroup<T>[] = []
@@ -198,7 +200,7 @@ export function groupForImport<T extends Placement>(items: T[]): ImportGroup<T>[
     groups.push({ id: `skupina-${groups.length + 1}`, subject, grade, topic, files: [item] })
   }
 
-  // Nezařazené napřed: právě ty čekají na doplnění.
+  // Unplaced first: those are the ones waiting to be filled in.
   return [...groups].sort((a, b) => {
     if (!a.subject !== !b.subject) return a.subject ? 1 : -1
     return (

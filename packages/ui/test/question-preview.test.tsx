@@ -19,12 +19,12 @@ const question: Question = {
 } as Question
 
 describe('QuestionPreview', () => {
-  it('bez showStatus neukazuje odznak stavu', () => {
+  it('shows no status badge without showStatus', () => {
     render(<QuestionPreview question={question} />)
     expect(screen.queryByText('schváleno')).not.toBeInTheDocument()
   })
 
-  it('se showStatus odznak stavu ukáže', () => {
+  it('shows the status badge with showStatus', () => {
     render(<QuestionPreview question={question} showStatus />)
     expect(screen.getByText('schváleno')).toBeInTheDocument()
   })

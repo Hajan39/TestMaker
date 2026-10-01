@@ -1,8 +1,9 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { DeleteButton, MATERIALY, ROCNIKY, TEMATA, plural, pocet, toast } from '@testmaker/ui'
-import { useMuzeSpravovat } from '@/components/Prava'
+import { DeleteButton, toast } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
+import { useCanManage } from '@/components/Permissions'
 import { errorMessage, requestJson } from '@/lib/requestJson'
 
 type Kind = 'subject' | 'grade' | 'topic'
@@ -16,44 +17,40 @@ interface Impact {
   affectedTests: string[]
 }
 
-const TITLES: Record<Kind, string> = {
-  subject: 'Smazat předmět',
-  grade: 'Smazat ročník',
-  topic: 'Smazat téma',
-}
-
-/** Vypíše dopad lidsky: jen to, čeho se to skutečně týká. */
+/** Describes the impact in plain words: only what is actually affected. */
 function describeImpact(impact: Impact) {
   const parts: string[] = []
-  if (impact.grades > 0) parts.push(pocet(impact.grades, ROCNIKY))
-  if (impact.topics > 0) parts.push(pocet(impact.topics, TEMATA))
-  if (impact.materials > 0) parts.push(pocet(impact.materials, MATERIALY))
-  // Ve větě „smaže se … a s ním 5 otázek“ stojí otázka ve čtvrtém pádě.
-  if (impact.questions > 0)
-    parts.push(`${impact.questions} ${plural(impact.questions, 'otázku', 'otázky', 'otázek')}`)
+  if (impact.grades > 0) parts.push(t('library:count.grades', { count: impact.grades }))
+  if (impact.topics > 0) parts.push(t('library:count.topics', { count: impact.topics }))
+  if (impact.materials > 0) parts.push(t('library:count.materials', { count: impact.materials }))
+  // In the sentence "smaže se … a s ním 5 otázek" the question is in the accusative.
+  if (impact.questions > 0) parts.push(t('library:deleteFromLibrary.questionsAccusative', { count: impact.questions }))
 
   return (
     <>
       <p>
-        Smaže se <strong>{impact.name}</strong>
-        {parts.length > 0 ? <> a s ním {parts.join(', ')}.</> : <> (nic pod tím zatím není).</>}
+        {t('library:deleteFromLibrary.impactLead')} <strong>{impact.name}</strong>
+        {parts.length > 0 ? (
+          <> {t('library:deleteFromLibrary.impactWith', { parts: parts.join(', ') })}</>
+        ) : (
+          <> {t('library:deleteFromLibrary.impactNothing')}</>
+        )}
       </p>
       {impact.affectedTests.length > 0 ? (
         <p className="text-danger">
-          Pozor: otázky z tohoto místa jsou použité v uložených testech ({impact.affectedTests.join(', ')}).
-          Z těch testů zmizí.
+          {t('library:deleteFromLibrary.affectedTests', { tests: impact.affectedTests.join(', ') })}
         </p>
       ) : null}
       {impact.materials > 0 ? (
         <p className="text-fg-muted">
-          Soubory na disku zůstanou. Materiály se dají znovu naimportovat ze složky.
+          {t('library:deleteFromLibrary.filesStay')}
         </p>
       ) : null}
     </>
   )
 }
 
-/** Smazání předmětu, ročníku nebo tématu včetně všeho, co pod nimi leží. */
+/** Deleting a subject, grade or topic including everything below it. */
 export function DeleteFromLibrary({
   kind,
   id,
@@ -64,49 +61,49 @@ export function DeleteFromLibrary({
   kind: Kind
   id: string
   label?: string
-  /** Jen ikona koše; popisek se ukáže při najetí. */
+  /** Only the bin icon; the label shows on hover. */
   iconOnly?: boolean
-  /** Kam odejít po smazání; bez toho se jen obnoví stránka. */
+  /** Where to go after deleting; without it the page just refreshes. */
   redirectTo?: string
 }) {
-  // Mazání v knihovně smí jen správce (`DELETE /api/library`) — tlačítko se
-  // ucitelce ani náhledu vůbec nenabízí. Hlídka je až za hooky, aby se jich
-  // v každém vykreslení volal stejný počet.
-  const muzeSpravovat = useMuzeSpravovat()
+  // Only an admin may delete in the library (`DELETE /api/library`) — the
+  // button isn't offered to a teacher or viewer at all. The guard sits after
+  // the hooks so the same number of them is called on every render.
+  const canManage = useCanManage()
   const router = useRouter()
-  if (!muzeSpravovat) return null
+  if (!canManage) return null
 
   return (
     <DeleteButton
-      label={label ?? TITLES[kind]}
+      label={label ?? t(`library:deleteFromLibrary.title.${kind}`)}
       iconOnly={iconOnly}
-      title={`${TITLES[kind]}?`}
-      confirmLabel="Smazat"
+      title={t('library:deleteFromLibrary.confirmTitle', { title: t(`library:deleteFromLibrary.title.${kind}`) })}
+      confirmLabel={t('common:actions.delete')}
       describe={async () => {
-        // Bez zachycení by síťová chyba nechala místo dopadu prázdné kostry.
+        // Without catching, a network error would leave empty skeletons instead of the impact.
         try {
           const response = await fetch(`/api/library?kind=${kind}&id=${encodeURIComponent(id)}`)
           if (response.ok) return describeImpact((await response.json()) as Impact)
         } catch {
-          // Hláška níž.
+          // Message below.
         }
         return (
           <p className="text-danger">
-            Nepodařilo se zjistit, co se smaže — zavři dialog a otevři ho znovu.
+            {t('library:deleteFromLibrary.impactFailed')}
           </p>
         )
       }}
       onConfirm={async () => {
-        // Chyba se nechává probublat dál — `DeleteButton` na ni čeká, aby
-        // dialog nezavřel a nepředstíral úspěch, který nenastal.
+        // The error is rethrown — `DeleteButton` waits for it so it doesn't
+        // close the dialog and pretend a success that didn't happen.
         try {
           await requestJson(
             `/api/library?kind=${kind}&id=${encodeURIComponent(id)}`,
             { method: 'DELETE' },
-            'Mazání se nepodařilo.',
+            t('library:deleteFromLibrary.failed'),
           )
         } catch (error) {
-          toast.error(errorMessage(error, 'Mazání se nepodařilo.'))
+          toast.error(errorMessage(error, t('library:deleteFromLibrary.failed')))
           throw error
         }
         if (redirectTo) router.push(redirectTo)

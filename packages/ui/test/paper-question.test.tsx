@@ -4,10 +4,10 @@ import type { QuestionContent } from '@testmaker/core/schema'
 import { PaperQuestion } from '../src'
 
 /**
- * Papírové vykreslení otázky. Kontroluje se, že se každý typ ukáže v té
- * podobě, ve které se vytiskne (viz `packages/core/src/pdf/QuestionBody.tsx`)
- * — a hlavně že se na papír nikdy nedostane správná odpověď: stránka
- * ve skladači je pohled na to, co dostanou žáci.
+ * Paper rendering of a question. Checks that each type appears as it will
+ * print (see `packages/core/src/pdf/QuestionBody.tsx`) — and above all that the
+ * correct answer never reaches the paper: the composer page is the view of
+ * what pupils get.
  */
 
 const base = { points: 1, difficulty: 2 as const, blocks: [] }
@@ -16,7 +16,7 @@ const question = (content: Partial<QuestionContent> & Pick<QuestionContent, 'typ
   ({ ...base, ...content }) as QuestionContent
 
 describe('PaperQuestion', () => {
-  it('vykreslí číslo, zadání a body tak, jak se vytisknou', () => {
+  it('renders number, prompt and points as printed', () => {
     render(
       <PaperQuestion
         label="3."
@@ -29,14 +29,14 @@ describe('PaperQuestion', () => {
     )
     expect(screen.getByText('3.')).toBeInTheDocument()
     expect(screen.getByText('Co je fotosyntéza?')).toBeInTheDocument()
-    // Desetinná čárka podle českého úzu, stejně jako v PDF.
+    // Decimal comma per Czech convention, same as in the PDF.
     expect(screen.getByText('(2,5 b.)')).toBeInTheDocument()
     expect(screen.getByText('Odpověď:')).toBeInTheDocument()
-    // Vzorová odpověď na papír nepatří.
+    // The model answer does not belong on paper.
     expect(screen.queryByText(/děj/)).not.toBeInTheDocument()
   })
 
-  it('u testu bez známek body nevypisuje', () => {
+  it('omits points for an ungraded test', () => {
     render(
       <PaperQuestion
         label="1."
@@ -50,7 +50,7 @@ describe('PaperQuestion', () => {
     expect(screen.queryByText(/b\.\)/)).not.toBeInTheDocument()
   })
 
-  it('volná odpověď dostane tolik linek, kolik je nastaveno', () => {
+  it('an open answer gets as many lines as configured', () => {
     const { container, rerender } = render(
       <PaperQuestion
         question={question({
@@ -62,7 +62,7 @@ describe('PaperQuestion', () => {
     expect(container.querySelectorAll('[data-slot="paper-line"]')).toHaveLength(4)
     expect(screen.queryByText(/Cukry a kyslík/)).not.toBeInTheDocument()
 
-    // Přepis v testu má přednost před tím, co má otázka sama.
+    // The test override wins over the question's own value.
     rerender(
       <PaperQuestion
         lines={9}
@@ -75,7 +75,7 @@ describe('PaperQuestion', () => {
     expect(container.querySelectorAll('[data-slot="paper-line"]')).toHaveLength(9)
   })
 
-  it('nakresli a popiš nechá prázdné místo bez linek a neprozradí klíč', () => {
+  it('draw-and-describe leaves blank space without lines and hides the key', () => {
     const { container } = render(
       <PaperQuestion
         question={question({
@@ -89,7 +89,7 @@ describe('PaperQuestion', () => {
     expect(screen.queryByText(/Kalich/)).not.toBeInTheDocument()
   })
 
-  it('výběr jedné možnosti očísluje písmeny a neprozradí správnou', () => {
+  it('single choice is lettered and does not reveal the correct option', () => {
     render(
       <PaperQuestion
         question={question({
@@ -104,15 +104,15 @@ describe('PaperQuestion', () => {
     )
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(3)
-    // Mezeru za písmenem drží odsazení, ne znak — proto volnější porovnání.
+    // The gap after the letter is padding, not a character — hence the loose match.
     expect(items[0]).toHaveTextContent(/A\)\s*V kořenech/)
     expect(items[1]).toHaveTextContent(/B\)\s*V chloroplastech/)
     expect(items[2]).toHaveTextContent(/C\)\s*V květu/)
-    // Správná možnost není nijak odlišená textem (např. hvězdičkou).
+    // The correct option is not marked in the text (e.g. with an asterisk).
     expect(items[1]?.textContent).toBe('B)V chloroplastech')
   })
 
-  it('výběr více možností dá ke každé možnosti čtvereček, ne písmeno', () => {
+  it('multiple choice puts a checkbox, not a letter, next to each option', () => {
     const { container } = render(
       <PaperQuestion
         question={question({
@@ -128,11 +128,11 @@ describe('PaperQuestion', () => {
     const items = screen.getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('Cukry')
     expect(items[0]?.textContent).not.toContain('A)')
-    // Čtvereček na zaškrtnutí je u každé možnosti.
+    // Every option has a checkbox.
     expect(container.querySelectorAll('li > span[aria-hidden="true"]')).toHaveLength(3)
   })
 
-  it('pravda/nepravda je tabulka se sloupci ANO a NE', () => {
+  it('true/false is a table with ANO and NE columns', () => {
     render(
       <PaperQuestion
         question={question({
@@ -151,13 +151,13 @@ describe('PaperQuestion', () => {
     expect(within(table).getByText('Tvrzení')).toBeInTheDocument()
     expect(within(table).getByText('ANO')).toBeInTheDocument()
     expect(within(table).getByText('NE')).toBeInTheDocument()
-    // Tvrzení jsou očíslovaná (čísla používá i klíč) a bez vyplněné odpovědi.
+    // Statements are numbered (the key uses the numbers too) with no answer filled in.
     const rows = within(table).getAllByRole('row')
     expect(rows[1]).toHaveTextContent('1. Fotosyntéza potřebuje světlo.')
     expect(rows[2]).toHaveTextContent('2. Probíhá i v noci.')
   })
 
-  it('doplňování očísluje mezery a vypíše nabídku slov', () => {
+  it('fill-in numbers the blanks and lists the word bank', () => {
     render(
       <PaperQuestion
         question={question({
@@ -176,7 +176,7 @@ describe('PaperQuestion', () => {
     expect(screen.getByText(/Nabídka: dusík • kyslík/)).toBeInTheDocument()
   })
 
-  it('přiřazování má dva sloupce: čísla vlevo, písmena vpravo', () => {
+  it('matching has two columns: numbers left, letters right', () => {
     render(
       <PaperQuestion
         question={question({
@@ -198,11 +198,11 @@ describe('PaperQuestion', () => {
     expect(within(lists[0]!).getByText(/1\. Chloroplast/)).toBeInTheDocument()
     expect(within(lists[1]!).getByText(/A\)\s*příjem vody/)).toBeInTheDocument()
     expect(within(lists[1]!).getByText(/B\)\s*fotosyntéza/)).toBeInTheDocument()
-    // Správné dvojice na papíře nejsou.
+    // The correct pairs are not on paper.
     expect(screen.queryByText(/1 – B/)).not.toBeInTheDocument()
   })
 
-  it('řazení dá ke každé položce rámeček a nevypíše správné pořadí', () => {
+  it('ordering gives each item a box and does not print the correct order', () => {
     const items = ['Klíčení', 'Růst', 'Kvetení', 'Plod']
     const { container } = render(
       <PaperQuestion
@@ -214,7 +214,7 @@ describe('PaperQuestion', () => {
     expect(container.querySelectorAll('li > span[aria-hidden="true"]')).toHaveLength(items.length)
   })
 
-  it('doplňovací tabulka očísluje prázdné buňky', () => {
+  it('table fill numbers the empty cells', () => {
     render(
       <PaperQuestion
         question={question({
@@ -238,7 +238,7 @@ describe('PaperQuestion', () => {
     expect(within(table).queryByText('příjem vody')).not.toBeInTheDocument()
   })
 
-  it('popis obrázku dá pod obrázek očíslované linky', () => {
+  it('label image puts numbered lines below the image', () => {
     const { container } = render(
       <PaperQuestion
         question={question({
@@ -249,12 +249,12 @@ describe('PaperQuestion', () => {
     )
     expect(screen.getByText('1.')).toBeInTheDocument()
     expect(screen.getByText('2.')).toBeInTheDocument()
-    // Popisky samotné jsou odpověď — na papíře být nesmějí.
+    // The labels themselves are the answer — they must not be on paper.
     expect(screen.queryByText('tyčinka')).not.toBeInTheDocument()
     expect(container.querySelectorAll('ol > li')).toHaveLength(2)
   })
 
-  it('přílohovou tabulku vykreslí, obrázek zastoupí rámečkem s popiskem', () => {
+  it('renders an attached table and replaces an image with a captioned frame', () => {
     render(
       <PaperQuestion
         question={question({
@@ -272,7 +272,7 @@ describe('PaperQuestion', () => {
     expect(screen.getByText('Schéma listu')).toBeInTheDocument()
   })
 
-  it('dvousloupcové možnosti ze šablony zúží položky na polovinu', () => {
+  it('two-column options from the template halve the item width', () => {
     render(
       <PaperQuestion
         style={{ optionColumns: 2 }}

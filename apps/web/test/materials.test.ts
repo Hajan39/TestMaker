@@ -4,19 +4,19 @@ import { isUsableMaterial } from '@/lib/materials'
 const base = { duplicateOfId: null, excluded: false, needsOcr: false }
 
 describe('isUsableMaterial', () => {
-  it('běžný materiál je použitelný', () => {
+  it('a regular material is usable', () => {
     expect(isUsableMaterial(base)).toBe(true)
   })
 
-  it('duplicitní materiál použitelný není', () => {
+  it('a duplicate material is not usable', () => {
     expect(isUsableMaterial({ ...base, duplicateOfId: 'jiny-id' })).toBe(false)
   })
 
-  it('ručně vyřazený materiál použitelný není', () => {
+  it('a manually excluded material is not usable', () => {
     expect(isUsableMaterial({ ...base, excluded: true })).toBe(false)
   })
 
-  it('sken bez textové vrstvy (needsOcr) použitelný není', () => {
+  it('a scan without a text layer (needsOcr) is not usable', () => {
     expect(isUsableMaterial({ ...base, needsOcr: true })).toBe(false)
   })
 })

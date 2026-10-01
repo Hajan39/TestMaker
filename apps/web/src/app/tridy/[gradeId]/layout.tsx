@@ -1,10 +1,11 @@
 import { LibraryPanes } from '@/components/LibraryPanes'
 import { loadLibraryTree } from '@/lib/library'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const dynamic = 'force-dynamic'
 
-/** Obaluje stránku třídy stejným rámem jako téma — zvýrazněný ročník je tenhle. */
+/** Wraps the class page in the same frame as a topic — this is the highlighted grade. */
 export default async function ClassLayout({
   children,
   params,
@@ -12,13 +13,13 @@ export default async function ClassLayout({
   children: React.ReactNode
   params: Promise<{ gradeId: string }>
 }) {
-  const ucet = await ucetStranky()
+  const account = await pageAccount()
   const { gradeId } = await params
-  const tree = await loadLibraryTree(ucet)
+  const tree = await loadLibraryTree(account)
   const grade = tree.flatMap((s) => s.grades).find((g) => g.id === gradeId) ?? null
 
   return (
-    <LibraryPanes tree={tree} grade={grade} contentLabel="Obsah třídy">
+    <LibraryPanes tree={tree} grade={grade} contentLabel={t('library:grade.contentLabel')}>
       {children}
     </LibraryPanes>
   )

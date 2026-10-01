@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect } from 'react'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Poslední záchrana, když selže i kořenový layout (načtení účtu nebo škol).
- * Nahrazuje celý dokument bez stylů aplikace, proto styly přímo tady.
+ * Last resort when even the root layout fails (loading the account or
+ * schools). It replaces the whole document without the app's styles, hence
+ * inline styles.
  */
 export default function GlobalError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
@@ -14,14 +16,13 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
   return (
     <html lang="cs">
       <body style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 520, margin: '15vh auto', padding: '0 16px' }}>
-        <title>TestMaker – chyba</title>
-        <h1 style={{ fontSize: 20 }}>Aplikaci se nepodařilo načíst</h1>
+        <title>{t('errors.appErrorTitle')}</title>
+        <h1 style={{ fontSize: 20 }}>{t('errors.appLoadTitle')}</h1>
         <p style={{ lineHeight: 1.5 }}>
-          Zkus to za chvíli znovu. Když to nepomůže, dej vědět správci
-          {error.digest ? ` a pošli mu kód ${error.digest}.` : '.'}
+          {error.digest ? t('errors.loadHintWithCode', { code: error.digest }) : t('errors.loadHint')}
         </p>
         <button type="button" onClick={() => retry()} style={{ padding: '8px 16px', fontSize: 14, cursor: 'pointer' }}>
-          Zkusit znovu
+          {t('actions.retry')}
         </button>
       </body>
     </html>

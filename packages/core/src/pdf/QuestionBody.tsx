@@ -1,4 +1,5 @@
 import { Image, Text, View } from '@react-pdf/renderer'
+import { t } from '../i18n'
 import type { Block } from '../schema/blocks'
 import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
@@ -14,7 +15,7 @@ interface Props {
   config: TemplateConfig
   variant: 'A' | 'B'
   assets: Record<string, string>
-  /** Přepis počtu linek na odpověď z položky testu; prázdné = podle otázky. */
+  /** Answer line count override from the test item; empty = as the question says. */
   linesOverride?: number | null
 }
 
@@ -22,13 +23,13 @@ const BORDER = '1pt solid #444'
 const LIGHT = '0.6pt solid #999'
 
 /**
- * Strop výšky obrázku v bodech (PDF pt). Bez něj by vysoký obrázek (např.
- * naskenovaná fotka na výšku) mohl zabrat celou stránku a vytlačit zbytek
- * otázky na další stranu, aniž by to bylo z dat vidět dopředu.
+ * Image height cap in points (PDF pt). Without it a tall image (e.g. a
+ * portrait scanned photo) could take the whole page and push the rest of the
+ * question onto the next page, with no way to see that from the data upfront.
  */
 const IMAGE_MAX_HEIGHT = 260
 
-/** Tělo otázky — vše pod zadáním: možnosti, linky, tabulky, obrázky. */
+/** Question body — everything below the prompt: options, lines, tables, images. */
 export function QuestionBody({ question, style, config, variant, assets, linesOverride }: Props) {
   return (
     <View>
@@ -55,8 +56,8 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
         {src ? (
           <Image src={src} style={{ maxHeight: IMAGE_MAX_HEIGHT, objectFit: 'contain' }} />
         ) : (
-          // Chybějící příloha se dřív tiše přeskočila — na vytištěné písemce tak
-          // vzniklo nevysvětlené prázdné místo. Radši viditelné upozornění.
+          // A missing attachment used to be skipped silently, leaving an
+          // unexplained gap on the printed test. A visible notice is better.
           <View
             style={{
               border: LIGHT,
@@ -66,7 +67,7 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
               justifyContent: 'center',
             }}
           >
-            <Text style={{ fontSize: 9, color: '#a33' }}>[Obrázek se nepodařilo načíst]</Text>
+            <Text style={{ fontSize: 9, color: '#a33' }}>{t('pdf:question.imageMissing')}</Text>
           </View>
         )}
         {block.caption ? (
@@ -112,7 +113,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       )
 
     case 'draw':
-      // Prázdné místo bez linek — žák do něj kreslí.
+      // Empty space without lines — the pupil draws into it.
       return (
         <View
           style={{ marginTop: 6, height: answerLines(question, linesOverride ?? null) * style.answerLineHeight }}
@@ -122,7 +123,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
     case 'short_answer':
       return (
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 6 }}>
-          <Text>Odpověď:</Text>
+          <Text>{t('pdf:question.answerLabel')}</Text>
           <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, height: 14 }} />
         </View>
       )
@@ -140,13 +141,13 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
         <View style={{ marginTop: 6, border: LIGHT }}>
           <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderBottom: LIGHT }}>
             <View style={{ flex: 1, padding: 4 }}>
-              <Text style={{ fontWeight: 'bold' }}>Tvrzení</Text>
+              <Text style={{ fontWeight: 'bold' }}>{t('pdf:question.statement')}</Text>
             </View>
             <View style={{ width: 44, padding: 4, borderLeft: LIGHT, alignItems: 'center' }}>
-              <Text style={{ fontWeight: 'bold' }}>ANO</Text>
+              <Text style={{ fontWeight: 'bold' }}>{t('pdf:yes')}</Text>
             </View>
             <View style={{ width: 44, padding: 4, borderLeft: LIGHT, alignItems: 'center' }}>
-              <Text style={{ fontWeight: 'bold' }}>NE</Text>
+              <Text style={{ fontWeight: 'bold' }}>{t('pdf:no')}</Text>
             </View>
           </View>
           {question.payload.statements.map((statement, i) => (
@@ -158,7 +159,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
               }}
             >
               <View style={{ flex: 1, padding: 4 }}>
-                {/* Číslo tvrzení je i v klíči — bez něj by učitelka při opravování počítala řádky. */}
+                {/* The statement number is in the key too — without it the teacher would count rows while grading. */}
                 <Text>
                   {i + 1}. {sanitizeText(statement.text)}
                 </Text>
@@ -171,9 +172,9 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       )
 
     case 'fill_blank': {
-      // Každá mezera dostane pořadové číslo v závorce — týmiž značkami se na ni
-      // odkazuje klíč (viz `numberedBlanks`, kterou používá i papírová stránka
-      // ve skladači), takže se odpovědi nemusí dopočítávat podle pořadí v textu.
+      // Every blank gets a sequence number in brackets — the key refers to it by
+      // the same marks (see `numberedBlanks`, also used by the builder's paper
+      // page), so answers need not be matched by their order in the text.
       const text = numberedBlanks(sanitizeText(question.payload.text))
       return (
         <View style={{ marginTop: 6 }}>
@@ -181,7 +182,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
           {question.payload.wordBank.length > 0 ? (
             <View style={{ marginTop: 6, padding: 5, border: LIGHT }}>
               <Text style={{ fontSize: 9 }}>
-                Nabídka: {question.payload.wordBank.map(sanitizeText).join(' • ')}
+                {t('pdf:question.wordBank', { words: question.payload.wordBank.map(sanitizeText).join(' • ') })}
               </Text>
             </View>
           ) : null}
@@ -192,7 +193,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
     case 'matching':
       return (
         <View style={{ marginTop: 6 }}>
-          <AnswerHint text="Do rámečku napiš písmeno možnosti vpravo, která patří k položce vlevo." />
+          <AnswerHint text={t('pdf:question.matchingHint')} />
           <View style={{ flexDirection: 'row' }}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               {question.payload.left.map((item, i) => (
@@ -219,7 +220,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       const order = displayOrder(question, variant)
       return (
         <View style={{ marginTop: 6 }}>
-          <AnswerHint text="Do rámečku napiš pořadové číslo (1, 2, 3, …), v jakém pořadí položky jdou za sebou." />
+          <AnswerHint text={t('pdf:question.orderingHint')} />
           {order.map((sourceIndex, i) => (
             <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
               <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
@@ -231,8 +232,8 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
     }
 
     case 'table_fill': {
-      // Prázdné buňky se očíslují v pořadí, v jakém k nim patří odpovědi
-      // v klíči — jinak by se musely dopočítávat podle pozice v tabulce.
+      // Empty cells are numbered in the order of their answers in the key —
+      // otherwise they would have to be matched by table position.
       const blankNumbers = tableBlankNumbers(question.payload.rows)
       return (
         <View style={{ marginTop: 6, border: LIGHT }}>
@@ -284,7 +285,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ fontSize: 9, color: '#a33' }}>[Obrázek se nepodařilo načíst]</Text>
+              <Text style={{ fontSize: 9, color: '#a33' }}>{t('pdf:question.imageMissing')}</Text>
             </View>
           )}
           {question.payload.labels.map((_, i) => (
@@ -303,10 +304,10 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
 }
 
 /**
- * Krátký pokyn, jak vyplnit odpověď (písmeno, nebo pořadové číslo) —
- * bez něj u přiřazování a řazení žák jen vidí prázdný čtvereček a musí
- * hádat, co se od něj čeká. Patří do vykreslení, ne do dat otázky, protože
- * jde o obecné vysvětlení symbolu čtverečku, ne o obsah konkrétní otázky.
+ * Short hint on how to fill in the answer (a letter or a sequence number) —
+ * without it, in matching and ordering the pupil only sees an empty box and
+ * has to guess what is expected. It belongs to rendering, not to question
+ * data, since it explains the box symbol in general, not a specific question.
  */
 function AnswerHint({ text }: { text: string }) {
   return <Text style={{ fontSize: 8, color: '#555', marginBottom: 4 }}>{text}</Text>

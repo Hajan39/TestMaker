@@ -1,12 +1,12 @@
 import { searchLibrary } from '@/lib/library'
-import { sRozsahem } from '@/lib/uzivatel'
+import { withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
-/** Hledání přes celou knihovnu školy — nad panelem předmětů a ročníků. */
+/** Search across the school's whole library — above the subjects and grades pane. */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     const query = new URL(request.url).searchParams.get('q') ?? ''
-    return Response.json({ results: await searchLibrary(ucet, query) })
+    return Response.json({ results: await searchLibrary(account, query) })
   })
 }

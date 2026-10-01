@@ -2,9 +2,9 @@ import 'server-only'
 import { AI_PROVIDERS, describeAiSetup } from '@testmaker/core/ai'
 
 /**
- * Stav AI pro UI — bez modelu se generování schová místo pádu za běhu.
- * Ukazuje první model žebříčku a `problems`: proč v žebříčku něco chybí
- * (staré proměnné, překlep, chybějící klíč), aby to majitel mohl opravit.
+ * AI status for the UI — without a model, generation is hidden instead of failing at runtime.
+ * Shows the ladder's first model and `problems`: why something is missing from
+ * the ladder (old variables, a typo, a missing key) so the owner can fix it.
  */
 export function aiStatus(): { configured: boolean; provider: string; model: string; problems: string[] } {
   const { ladder, problems } = describeAiSetup()

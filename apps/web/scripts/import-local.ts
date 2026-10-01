@@ -1,6 +1,6 @@
 /**
- * Lokální import složky s materiály (alternativa k importu v prohlížeči).
- * Používá stejné extraktory jako web, jen s jsdom místo DOMParseru prohlížeče.
+ * Local import of a materials folder (an alternative to the in-browser import).
+ * Uses the same extractors as the web, just with jsdom instead of the browser's DOMParser.
  *
  *   pnpm --filter @testmaker/web import:local ../../sources
  */
@@ -20,7 +20,7 @@ import {
   skipReason,
 } from '@testmaker/core/extract'
 
-// Extraktory očekávají prostředí prohlížeče; DOMParser i crypto se čtou až za běhu.
+// The extractors expect a browser environment; DOMParser and crypto are read at runtime.
 const dom = new JSDOM()
 globalThis.DOMParser = dom.window.DOMParser
 if (!globalThis.crypto) globalThis.crypto = webcrypto as Crypto

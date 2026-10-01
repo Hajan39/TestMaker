@@ -1,25 +1,23 @@
+import { t } from '@testmaker/core/i18n'
 import { and, asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, schools, users } from '@/db'
-import { vygenerovatHeslo, zahesovat, zkontrolovatSilu } from '@/lib/heslo'
+import { generatePassword, hashPassword, checkPasswordStrength } from '@/lib/password'
 import { newId } from '@/lib/ids'
-import { ROLE_SPRAVY, ROLES, ROLES_PRIDELITELNE, roleJeAdministrator, type Role } from '@/lib/role'
-import { odvolatVsechnyRelace, sRozsahem, zapsatAudit } from '@/lib/uzivatel'
+import { MANAGEMENT_ROLES, ROLES, ASSIGNABLE_ROLES, isAdministratorRole, type Role } from '@/lib/role'
+import { revokeAllSessions, withScope, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
 const roleSchema = z.enum(ROLES as unknown as [Role, ...Role[]])
 
 /**
- * Administrátora přiděluje jen skript u databáze: uniklý účet správce se tak
- * přes aplikaci na administrátora nepovýší. Schéma roli zná (jinak by se
- * nedala vrátit srozumitelná hláška), odmítá se až tady.
+ * The administrator role is granted only by the script at the database, so a leaked
+ * manager account cannot be promoted to administrator through the app. The schema knows
+ * the role (otherwise no clear message could be returned); it is rejected only here.
  */
-const NEPRIDELITELNA = 'Tuhle roli v aplikaci přidělit nejde.'
-const ADMIN_JEN_SKRIPTEM = 'Administrátorský účet se mění jen skriptem.'
-
-function pridelitelna(role: Role | undefined): boolean {
-  return role === undefined || ROLES_PRIDELITELNE.includes(role)
+function assignable(role: Role | undefined): boolean {
+  return role === undefined || ASSIGNABLE_ROLES.includes(role)
 }
 
 const createSchema = z.object({
@@ -33,16 +31,16 @@ const updateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   role: roleSchema.optional(),
   status: z.enum(['aktivni', 'ceka', 'zablokovany']).optional(),
-  /** `heslo` vygeneruje nové a vrátí ho jednorázově v odpovědi. */
-  heslo: z.literal(true).optional(),
-  /** Odhlásí účet ze všech zařízení. */
+  /** `password` generates a new one and returns it once in the response. */
+  password: z.literal(true).optional(),
+  /** Signs the account out of all devices. */
   odhlasit: z.literal(true).optional(),
 })
 
-/** Seznam účtů školy — jádro správcovské obrazovky. */
+/** The school's account list — the core of the management screen. */
 export async function GET() {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const rows = await db
         .select({
           id: users.id,
@@ -50,196 +48,196 @@ export async function GET() {
           name: users.name,
           role: users.role,
           status: users.status,
-          maHeslo: users.passwordHash,
-          maGoogle: users.googleSub,
+          hasPassword: users.passwordHash,
+          hasGoogle: users.googleSub,
           mustChangePassword: users.mustChangePassword,
           lastLoginAt: users.lastLoginAt,
           createdAt: users.createdAt,
         })
         .from(users)
-        .where(eq(users.schoolId, ucet.schoolId))
+        .where(eq(users.schoolId, account.schoolId))
         .orderBy(asc(users.name))
 
-      const [skola] = await db
+      const [school] = await db
         .select({ name: schools.name, googleDomain: schools.googleDomain })
         .from(schools)
-        .where(eq(schools.id, ucet.schoolId))
+        .where(eq(schools.id, account.schoolId))
         .limit(1)
 
       return Response.json({
-        skola,
-        uzivatele: rows.map((row) => ({
+        school,
+        users: rows.map((row) => ({
           ...row,
-          // Hash ven nikdy nejde; stačí, že je vidět, jestli heslo vůbec má.
-          maHeslo: Boolean(row.maHeslo),
-          maGoogle: Boolean(row.maGoogle),
+          // The hash never goes out; it is enough to see whether there is a password at all.
+          hasPassword: Boolean(row.hasPassword),
+          hasGoogle: Boolean(row.hasGoogle),
         })),
       })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
 
-/** Založí účet. Heslo se vygeneruje a vypíše jednou — správce ho předá osobně. */
+/** Creates an account. The password is generated and shown once — the manager hands it over in person. */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = createSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
-      if (!pridelitelna(parsed.data.role)) {
-        return Response.json({ error: NEPRIDELITELNA }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
+      if (!assignable(parsed.data.role)) {
+        return Response.json({ error: t('admin:errors.roleNotAssignable') }, { status: 400 })
       }
 
       const email = parsed.data.email.trim().toLowerCase()
-      const [existujici] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
-      if (existujici) {
-        return Response.json({ error: `Účet ${email} už existuje.` }, { status: 409 })
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+      if (existing) {
+        return Response.json({ error: t('admin:errors.accountExists', { email }) }, { status: 409 })
       }
 
-      const heslo = vygenerovatHeslo()
+      const password = generatePassword()
       const id = newId()
       await db.insert(users).values({
         id,
-        schoolId: ucet.schoolId,
+        schoolId: account.schoolId,
         email,
         name: parsed.data.name.trim(),
         role: parsed.data.role,
-        passwordHash: await zahesovat(heslo),
-        // První přihlášení skončí u změny hesla: to, co správce nadiktoval,
-        // zná zbytečně někdo druhý.
+        passwordHash: await hashPassword(password),
+        // The first sign-in ends at the password change: what the manager dictated
+        // is needlessly known to someone else.
         mustChangePassword: true,
-        createdBy: ucet.userId,
+        createdBy: account.userId,
       })
-      await zapsatAudit({
-        schoolId: ucet.schoolId,
-        userId: ucet.userId,
+      await writeAudit({
+        schoolId: account.schoolId,
+        userId: account.userId,
         action: 'ucet-zalozen',
         entity: 'user',
         entityId: id,
         detail: { email, role: parsed.data.role },
       })
 
-      return Response.json({ id, heslo })
+      return Response.json({ id, password })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
 
-/** Úprava účtu: jméno, role, stav, reset hesla, odhlášení ze všech zařízení. */
+/** Account edit: name, role, status, password reset, sign-out from all devices. */
 export async function PATCH(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = updateSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
-      if (!pridelitelna(parsed.data.role)) {
-        return Response.json({ error: NEPRIDELITELNA }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
+      if (!assignable(parsed.data.role)) {
+        return Response.json({ error: t('admin:errors.roleNotAssignable') }, { status: 400 })
       }
 
-      const [cil] = await db.select().from(users).where(eq(users.id, parsed.data.id)).limit(1)
-      if (!cil || cil.schoolId !== ucet.schoolId) {
-        return Response.json({ error: 'Účet se nenašel' }, { status: 404 })
+      const [target] = await db.select().from(users).where(eq(users.id, parsed.data.id)).limit(1)
+      if (!target || target.schoolId !== account.schoolId) {
+        return Response.json({ error: t('admin:errors.accountNotFound') }, { status: 404 })
       }
-      if (roleJeAdministrator(cil.role)) {
-        return Response.json({ error: ADMIN_JEN_SKRIPTEM }, { status: 403 })
+      if (isAdministratorRole(target.role)) {
+        return Response.json({ error: t('admin:errors.adminScriptOnly') }, { status: 403 })
       }
 
-      // Poslední správce nesmí zmizet — jinak by se do správy nedostal nikdo
-      // a účty by šlo měnit jedině skriptem u databáze.
-      const rusiSpravce =
-        cil.role === 'spravce' &&
+      // The last manager must not disappear — otherwise nobody would get into management
+      // and accounts could be changed only by the script at the database.
+      const removesManager =
+        target.role === 'spravce' &&
         ((parsed.data.role && parsed.data.role !== 'spravce') ||
           (parsed.data.status && parsed.data.status !== 'aktivni'))
-      if (rusiSpravce) {
-        const spravci = await db
+      if (removesManager) {
+        const managers = await db
           .select({ id: users.id })
           .from(users)
           .where(
             and(
-              eq(users.schoolId, ucet.schoolId),
+              eq(users.schoolId, account.schoolId),
               eq(users.role, 'spravce'),
               eq(users.status, 'aktivni'),
             ),
           )
-        if (spravci.length <= 1) {
+        if (managers.length <= 1) {
           return Response.json(
-            { error: 'Tohle je poslední správce školy. Nejdřív udělej správcem někoho dalšího.' },
+            { error: t('admin:errors.lastManager') },
             { status: 409 },
           )
         }
       }
 
-      const zmeny: Record<string, unknown> = {}
-      if (parsed.data.name) zmeny.name = parsed.data.name.trim()
-      if (parsed.data.role) zmeny.role = parsed.data.role
-      if (parsed.data.status) zmeny.status = parsed.data.status
+      const changes: Record<string, unknown> = {}
+      if (parsed.data.name) changes.name = parsed.data.name.trim()
+      if (parsed.data.role) changes.role = parsed.data.role
+      if (parsed.data.status) changes.status = parsed.data.status
 
-      let heslo: string | null = null
-      if (parsed.data.heslo) {
-        heslo = vygenerovatHeslo()
-        const problem = zkontrolovatSilu(heslo)
+      let password: string | null = null
+      if (parsed.data.password) {
+        password = generatePassword()
+        const problem = checkPasswordStrength(password)
         if (problem) return Response.json({ error: problem }, { status: 500 })
-        zmeny.passwordHash = await zahesovat(heslo)
-        zmeny.mustChangePassword = true
-        zmeny.failedLogins = 0
-        zmeny.lockedUntil = null
+        changes.passwordHash = await hashPassword(password)
+        changes.mustChangePassword = true
+        changes.failedLogins = 0
+        changes.lockedUntil = null
       }
 
-      if (Object.keys(zmeny).length > 0) {
-        await db.update(users).set(zmeny).where(eq(users.id, cil.id))
+      if (Object.keys(changes).length > 0) {
+        await db.update(users).set(changes).where(eq(users.id, target.id))
       }
-      // Reset hesla, zablokování i výslovné odhlášení musí shodit otevřená okna.
-      if (heslo || parsed.data.odhlasit || parsed.data.status === 'zablokovany') {
-        await odvolatVsechnyRelace(cil.id)
+      // A password reset, blocking and an explicit sign-out must all drop open windows.
+      if (password || parsed.data.odhlasit || parsed.data.status === 'zablokovany') {
+        await revokeAllSessions(target.id)
       }
 
-      await zapsatAudit({
-        schoolId: ucet.schoolId,
-        userId: ucet.userId,
+      await writeAudit({
+        schoolId: account.schoolId,
+        userId: account.userId,
         action: 'ucet-upraven',
         entity: 'user',
-        entityId: cil.id,
-        detail: { ...parsed.data, heslo: undefined },
+        entityId: target.id,
+        detail: { ...parsed.data, password: undefined },
       })
 
-      return Response.json({ ok: true, ...(heslo ? { heslo } : {}) })
+      return Response.json({ ok: true, ...(password ? { password } : {}) })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
 
 /**
- * Odebrání přístupu. Účet se nemaže — visí na něm autorství otázek i písemek
- * a záznam událostí; místo toho se zablokuje a odhlásí.
+ * Revoking access. The account is not deleted — authorship of questions and tests
+ * and the event log hang on it; instead it is blocked and signed out.
  */
 export async function DELETE(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const id = new URL(request.url).searchParams.get('id')
-      if (!id) return Response.json({ error: 'Chybí id' }, { status: 400 })
-      if (id === ucet.userId) {
-        return Response.json({ error: 'Sebe zablokovat nemůžeš.' }, { status: 409 })
+      if (!id) return Response.json({ error: t('admin:errors.missingId') }, { status: 400 })
+      if (id === account.userId) {
+        return Response.json({ error: t('admin:errors.cannotBlockSelf') }, { status: 409 })
       }
 
-      const [cil] = await db.select().from(users).where(eq(users.id, id)).limit(1)
-      if (!cil || cil.schoolId !== ucet.schoolId) {
-        return Response.json({ error: 'Účet se nenašel' }, { status: 404 })
+      const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1)
+      if (!target || target.schoolId !== account.schoolId) {
+        return Response.json({ error: t('admin:errors.accountNotFound') }, { status: 404 })
       }
-      if (roleJeAdministrator(cil.role)) {
-        return Response.json({ error: ADMIN_JEN_SKRIPTEM }, { status: 403 })
+      if (isAdministratorRole(target.role)) {
+        return Response.json({ error: t('admin:errors.adminScriptOnly') }, { status: 403 })
       }
 
       await db.update(users).set({ status: 'zablokovany' }).where(eq(users.id, id))
-      await odvolatVsechnyRelace(id)
-      await zapsatAudit({
-        schoolId: ucet.schoolId,
-        userId: ucet.userId,
+      await revokeAllSessions(id)
+      await writeAudit({
+        schoolId: account.schoolId,
+        userId: account.userId,
         action: 'ucet-zablokovan',
         entity: 'user',
         entityId: id,
-        detail: { email: cil.email },
+        detail: { email: target.email },
       })
       return Response.json({ ok: true })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }

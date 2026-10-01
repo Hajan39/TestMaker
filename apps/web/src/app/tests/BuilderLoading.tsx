@@ -1,12 +1,12 @@
 import { Delayed, LoadingCard, PageShell, Skeleton } from '@testmaker/ui'
 
 /**
- * Kostra skládání testu — společná pro nový i otevřený test. Načítá se celá
- * banka otázek napříč tématy, takže je to jeden z nejdelších přechodů.
+ * Test builder skeleton — shared by a new and an opened test. It loads the
+ * whole question bank across topics, so it is one of the longest transitions.
  *
- * Tvar kopíruje rozvržení skládání: lišta s názvem a akcemi, pod ní sloupce
- * (banka a stránka písemky) vysoké jako ty skutečné, aby stránka po načtení
- * nepodskočila.
+ * The shape copies the builder layout: a bar with the title and actions, below
+ * it columns (bank and test page) as tall as the real ones so the page does
+ * not jump after loading.
  */
 export function BuilderLoading({ label }: { label: string }) {
   return (

@@ -6,10 +6,10 @@ import type { RenderableTest } from '../schema/test'
 import { FONT_FILES, registerFonts } from './fonts'
 import { TestDocument } from './TestDocument'
 
-/** Adresář s TTF soubory dodávanými s balíčkem. */
+/** Directory with the TTF files shipped with the package. */
 export const FONT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../assets/fonts')
 
-/** Registrace fontů pro render na serveru (Node runtime) — react-pdf čte cesty ze souborového systému. */
+/** Registers fonts for server rendering (Node runtime) — react-pdf reads paths from the file system. */
 export function registerServerFonts(fontDir = FONT_DIR): void {
   registerFonts(
     (Object.keys(FONT_FILES) as (keyof typeof FONT_FILES)[]).map((family) => ({
@@ -22,8 +22,8 @@ export function registerServerFonts(fontDir = FONT_DIR): void {
 }
 
 /**
- * Vykreslí test do PDF. Registrace fontů i render musí proběhnout nad touž
- * instancí react-pdf, proto je celý render tady a ne u volajícího.
+ * Renders a test to PDF. Font registration and rendering must use the same
+ * react-pdf instance, so the whole render lives here, not in the caller.
  */
 export async function renderTestToBuffer(renderable: RenderableTest): Promise<Buffer> {
   registerServerFonts()

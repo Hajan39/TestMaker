@@ -1,25 +1,25 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Testy přihlášení, rolí a vlastnictví. Mají vlastní konfiguraci, protože
- * potřebují server se zapnutým přihlašováním (`AUTH_SECRET` a účty
- * v databázi), kdežto ostatní testy v prohlížeči běží bez něj — jinak by se
- * každý z nich musel nejdřív přihlašovat.
+ * Sign-in, role and ownership tests. They have their own config because they
+ * need a server with sign-in enabled (`AUTH_SECRET` and accounts in the
+ * database), whereas the other browser tests run without it — otherwise each
+ * of them would have to sign in first.
  *
- * Aby si oba běhy nepřekážely, má tenhle vlastní port (3101), vlastní databázi
- * (`apps/web/e2e-login.db`) i vlastní složku sestavení. Na ostrou `local.db`
- * ani na port 3000 nesahá.
+ * So the two runs don't get in each other's way, this one has its own port
+ * (3101), its own database (`apps/web/e2e-login.db`) and its own build folder.
+ * It touches neither the live `local.db` nor port 3000.
  *
  *   cd apps/web && pnpm exec playwright test -c playwright.login.config.ts
  */
 
 const PORT = Number(process.env.E2E_LOGIN_PORT ?? 3101)
 
-/** Hesla zkušebních účtů; stejná hodnota je v `scripts/seed-e2e.ts`. */
-export const HESLO = 'e2e-tajne-heslo'
+/** Password of the test accounts; the same value is in `scripts/seed-e2e.ts`. */
+export const PASSWORD = 'e2e-tajne-heslo'
 
-/** Účty, které staví `scripts/seed-e2e.ts`. */
-export const UCTY = {
+/** Accounts built by `scripts/seed-e2e.ts`. */
+export const ACCOUNTS = {
   spravce: 'spravce@localhost',
   ucitelkaA: 'ucitelka.a@localhost',
   ucitelkaB: 'ucitelka.b@localhost',
@@ -29,12 +29,12 @@ export const UCTY = {
   ucitelkaC: 'ucitelka.c@localhost',
 } as const
 
-export type Osoba = keyof typeof UCTY
+export type Person = keyof typeof ACCOUNTS
 
 export default defineConfig({
   testDir: './e2e',
   testMatch:
-    /prihlaseni\.(spec|setup)\.ts|role\.spec\.ts|sprava\.spec\.ts|vlastnictvi\.spec\.ts|administrace\.spec\.ts/,
+    /login\.(spec|setup)\.ts|role\.spec\.ts|management\.spec\.ts|ownership\.spec\.ts|administration\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
@@ -44,14 +44,14 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   /*
-   * Nejdřív se jednou přihlásí každá zkušební osoba a uloží si cookie do
-   * `e2e/.auth`; testy pak jen řeknou, za koho jedou. Bez toho by se každý
-   * test proklikával přihlašováním znovu.
+   * First each test person signs in once and stores the cookie in
+   * `e2e/.auth`; tests then just say whom they run as. Without it every test
+   * would click through sign-in again.
    *
-   * Druhý prohlížeč by k tomu nic nepřidal, jen by běh prodloužil.
+   * A second browser would add nothing here, only lengthen the run.
    */
   projects: [
-    { name: 'setup', testMatch: /prihlaseni\.setup\.ts/ },
+    { name: 'setup', testMatch: /login\.setup\.ts/ },
     { name: 'chromium', dependencies: ['setup'], use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {

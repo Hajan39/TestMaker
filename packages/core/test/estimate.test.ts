@@ -6,7 +6,7 @@ import { makeItems, makeQuestion, makeTemplate } from './fixtures'
 const template = makeTemplate()
 
 describe('estimateHeight', () => {
-  it('volná odpověď zabere víc než výběr z možností', () => {
+  it('an open answer takes more space than a multiple choice', () => {
     const items = makeItems()
     const open = items.find((i) => i.question?.type === 'open')!
     const choice = items.find((i) => i.question?.type === 'single_choice')!
@@ -15,7 +15,7 @@ describe('estimateHeight', () => {
     )
   })
 
-  it('nakresli a popiš zabere místo podle počtu řádků, stejně jako volná odpověď', () => {
+  it('draw-and-label takes space by line count, just like an open answer', () => {
     const item = (type: 'open' | 'draw'): ResolvedTestItem => ({
       id: 'i1',
       testId: 't',
@@ -30,12 +30,12 @@ describe('estimateHeight', () => {
     expect(estimateHeight(item('draw'), template.config)).toBe(estimateHeight(item('open'), template.config))
   })
 
-  it('zalomení strany nemá výšku', () => {
+  it('a page break has no height', () => {
     const brk = { id: 'b', testId: 't', order: 0, kind: 'page_break' as const, questionId: null, text: null, pointsOverride: null }
     expect(estimateHeight(brk, template.config)).toBe(0)
   })
 
-  it('přepis počtu linek v testu má přednost před otázkou', () => {
+  it('the line count override in the test wins over the question', () => {
     const question = makeQuestion({
       type: 'open' as const,
       points: 1,
@@ -59,7 +59,7 @@ describe('estimateHeight', () => {
     )
   })
 
-  it('otázka s obrázkovou přílohou zabere víc než tatáž otázka bez ní', () => {
+  it('a question with an image attachment takes more than the same question without it', () => {
     const base = { type: 'open' as const, points: 1, payload: { prompt: 'Popiš obrázek.', lines: 2, answer: 'x' } }
     const withoutImage: ResolvedTestItem = {
       id: 'i1',
@@ -84,18 +84,18 @@ describe('estimateHeight', () => {
 })
 
 describe('paginate', () => {
-  it('krátký test se vejde na jednu stranu', () => {
+  it('a short test fits on one page', () => {
     expect(paginate(makeItems().slice(0, 3), template.config)).toHaveLength(1)
   })
 
-  it('zalomení strany začne novou stranu', () => {
+  it('a page break starts a new page', () => {
     const items = makeItems().slice(0, 3)
     const brk = { id: 'b', testId: 't', order: 99, kind: 'page_break' as const, questionId: null, text: null, pointsOverride: null }
     const pages = paginate([...items, brk, ...items], template.config)
     expect(pages.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('hlavička testu ubere místo jen na první straně, takže se tam vejde méně položek', () => {
+  it('the test header takes space only on the first page, so fewer items fit there', () => {
     const heading = (i: number): ResolvedTestItem => ({
       id: `h${i}`,
       testId: 't',

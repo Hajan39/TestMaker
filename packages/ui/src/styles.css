@@ -1,21 +1,21 @@
-/* Design tokeny sdílené celou aplikací. Importuje se z globals.css webu. */
+/* Design tokens shared by the whole app. Imported from the web's globals.css. */
 
 /*
- * Automatická detekce zdrojů v Tailwindu 4 prochází jen strom apps/web —
- * do node_modules (kam se balíček vtahuje symlinkem) nenahlíží. Cesta je
- * relativní k tomuto souboru, takže funguje i po přesunu balíčku.
+ * Tailwind 4 automatic source detection scans only the apps/web tree — it does
+ * not look into node_modules (where this package is symlinked). The path is
+ * relative to this file, so it keeps working if the package moves.
  */
 @source "./**/*.{ts,tsx}";
 
 /*
- * Tmavý režim se řídí třídou na kořenovém elementu, ne jen nastavením systému —
- * jinak by přepínač v liště neměl jak přebít volbu systému. Komponenty ze
- * shadcn používají variantu `dark:`, proto se musí předefinovat i ta.
+ * Dark mode is driven by a class on the root element, not just the system
+ * setting — otherwise the toggle in the bar could not override the system.
+ * shadcn components use the `dark:` variant, so it must be redefined too.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Plochy */
+  /* Surfaces */
   --color-surface: #ffffff;
   --color-surface-muted: #fafafa;
 
@@ -24,56 +24,55 @@
   --color-fg-soft: #3a4150;
   --color-fg-muted: #8a919f;
 
-  /* Linky */
+  /* Lines */
   --color-line: #e0e2e7;
   --color-line-soft: #eceef1;
 
-  /* Značková barva — jediná barva pro akce, výběr a správné odpovědi.
-     Nejmenuje se accent, protože tak si shadcn říká o tiché podbarvení. */
+  /* Brand colour — the single colour for actions, selection and correct answers.
+     Not named accent, because that is shadcn's name for the quiet hover tint. */
   --color-brand: #0d7355;
   --color-brand-bg: #e4f2ed;
   --color-brand-fg: #ffffff;
 
-  /* Papír: náhled tištěné stránky zůstává světlý i v tmavém režimu, protože
-     ukazuje, jak bude písemka vypadat vytištěná. Vlastní token proto má i
-     barvu textu — se sdíleným `--color-fg` by v tmavém režimu vznikl bílý
-     list s bílým písmem. */
+  /* Paper: the printed page preview stays light in dark mode too, because it
+     shows how the test will look printed. Hence its own text colour token —
+     with the shared `--color-fg` dark mode would give a white sheet with
+     white text. */
   --color-paper: #ffffff;
   --color-paper-fg: #14161a;
   --color-paper-line: #d8dade;
-  /* Podbarvení hlavičkového řádku tabulek na papíře — táž šedá, jakou
-     tiskne PDF (`QuestionBody.tsx`). Do tmavého režimu nepatří, papír
-     zůstává papírem. */
+  /* Header row tint of tables on paper — the same grey the PDF prints
+     (`QuestionBody.tsx`). Not part of dark mode; paper stays paper. */
   --color-paper-shade: #f0f0f0;
 
-  /* Dráha ukazatelů průběhu. Vlastní token, ne zesvětlená značková zelená:
-     při nule schválených by se přes celou šířku svítila zelená dráha a
-     vypadalo by to jako hotovo. */
+  /* Progress bar track. Its own token, not a lightened brand green: with zero
+     approved a green track across the full width would look like done. */
   --color-track: #e4e6eb;
 
-  /* Stav koncept */
+  /* Draft status */
   --color-draft-bg: #fdefd6;
   --color-draft-fg: #8a5a06;
 
-  /* Destruktivní akce */
+  /* Destructive actions */
   --color-danger: #b03a35;
   --color-danger-bg: #fbeceb;
 
-  /* Kostra obsahu při načítání. Vlastní token, ne `surface-muted`: kostra se
-     kreslí i do postranních sloupců, které samy `surface-muted` jsou, a tam
-     by se ztratila. Musí být vidět na obou plochách, ale nesmí křičet. */
+  /* Loading skeleton. Its own token, not `surface-muted`: skeletons are drawn
+     in sidebars that are `surface-muted` themselves and would vanish there.
+     It must be visible on both surfaces without shouting. */
   --color-skeleton: #e7e9ee;
 
-  /* Tvary */
+  /* Shapes */
   --radius-inner: 5px;
   --radius-outer: 8px;
   --radius-tag: 3px;
 }
 
 /*
- * Tmavý režim. Tokeny se jen přepisují — komponenty o režimu nevědí, protože
- * všechny barvy čtou přes proměnné. Platí obojí: třída `dark` na kořenovém
- * elementu (volba učitelky) a nastavení systému, dokud si nevybere sama.
+ * Dark mode. Tokens are only overridden — components do not know about the
+ * mode because they read all colours through variables. Both apply: the
+ * `dark` class on the root element (the teacher's choice) and the system
+ * setting until she picks one.
  */
 @layer base {
   :root.dark {
@@ -87,7 +86,7 @@
     --color-line: #2b2f37;
     --color-line-soft: #23272e;
 
-    /* Sytější zelená — tmavá plocha ji jinak spolkne. */
+    /* A more saturated green — the dark surface would swallow it otherwise. */
     --color-brand: #2f9e79;
     --color-brand-bg: #16302a;
     --color-brand-fg: #08130f;
@@ -105,7 +104,7 @@
 }
 
 :root {
-  /* Výchozí důraz odpovídá obsahu. */
+  /* The default emphasis matches content. */
   --label-weight: 600;
   --label-track: 0.06em;
   --text-strong: var(--color-fg);
@@ -113,8 +112,8 @@
 }
 
 /*
- * Dva důrazy. Navigační plochy čtou ostřejší hodnoty, obsahové mírnější.
- * Komponenty samy o důrazu nevědí a sahají vždy po týchž proměnných.
+ * Two emphases. Navigation surfaces read sharper values, content ones milder.
+ * Components do not know about emphasis and always use the same variables.
  */
 .surface-chrome {
   --label-weight: 700;
@@ -132,7 +131,7 @@
   --radius-inner: 6px;
 }
 
-/* Popisek sekce — jediná definice pro celou aplikaci. */
+/* Section label — the single definition for the whole app. */
 .ui-label {
   font-size: 0.594rem;
   text-transform: uppercase;
@@ -141,24 +140,24 @@
   color: var(--color-fg-muted);
 }
 
-/* Čísla v přehledech nesmějí poskakovat. */
+/* Numbers in overviews must not jitter. */
 .ui-numeric {
   font-variant-numeric: tabular-nums;
 }
 
 /*
- * Odložené objevení kostry — jediná obrana proti blikání pro celou aplikaci.
+ * Delayed skeleton appearance — the single anti-flicker defence for the app.
  *
- * Odpověď do zhruba čtvrt vteřiny vnímá člověk jako okamžitou. Kdyby se na ni
- * stihla naskočit kostra a hned zase zmizet, je to rušivější než klid, ve
- * kterém se prostě objeví hotový obsah. Kostra je proto v DOM hned, ale prvních
- * 400 ms je průhledná a teprve pak se plynule vynoří.
+ * People perceive a response within about a quarter second as instant. If a
+ * skeleton managed to pop in and vanish again, that is more distracting than
+ * the calm in which finished content simply appears. The skeleton is in the
+ * DOM right away, but transparent for the first 400 ms, then fades in.
  *
- * Řeší se to animací, ne časovačem v Reactu: `loading.tsx` v App Routeru je
- * serverová komponenta bez stavu a časovač by si vynutil klientskou obálku a
- * druhé překreslení. Plynulý náběh navíc zmírní i hraniční případ, kdy data
- * dorazí těsně po 400 ms — kostra je v tu chvíli sotva viditelná, takže to
- * nevypadá jako bliknutí, ale jako náznak, který se nedotáhl.
+ * This uses an animation, not a React timer: App Router `loading.tsx` is a
+ * stateless server component and a timer would force a client wrapper and a
+ * second render. The gradual fade also softens the edge case where data
+ * arrives just after 400 ms — the skeleton is barely visible then, so it reads
+ * as a hint that did not complete rather than a flash.
  */
 @keyframes ui-delayed-in {
   to {
@@ -171,7 +170,7 @@
   animation: ui-delayed-in 180ms ease-out 400ms forwards;
 }
 
-/* Kdo si vypnul pohyb, dostane kostru bez prolnutí — ale pořád až se zpožděním. */
+/* With reduced motion the skeleton appears without a fade — but still delayed. */
 @media (prefers-reduced-motion: reduce) {
   .ui-delayed {
     animation-duration: 1ms;
@@ -182,7 +181,7 @@
   }
 }
 
-/* Nadpis obrazovky — jediná definice pro celou aplikaci. */
+/* Screen title — the single definition for the whole app. */
 .ui-page-title {
   font-size: 19px;
   font-weight: 700;
@@ -191,19 +190,19 @@
 }
 
 /*
- * Obrys při ovládání klávesnicí — jediná definice pro celou aplikaci.
- * Odkazy, tlačítka a další interaktivní prvky mimo shadcn (přepínač motivu,
- * položky postranního panelu, výsledky hledání, dlaždice témat…) žádný
- * vlastní obrys nemají, takže bez tohohle pravidla je při procházení
- * tabulátorem vidět jen myš. Komponenty ze shadcn si obrys řeší samy přes
- * `--color-ring` s vyšší specificitou třídy, takže se tady nepřebíjejí.
+ * Keyboard focus outline — the single definition for the whole app.
+ * Links, buttons and other interactive elements outside shadcn (theme toggle,
+ * sidebar items, search results, topic tiles…) have no outline of their own,
+ * so without this rule tabbing through shows nothing. shadcn components handle
+ * their outline via `--color-ring` with higher class specificity, so they are
+ * not overridden here.
  */
 :focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 
-/* Most k pojmenování, které používají komponenty ze shadcn. */
+/* Bridge to the naming used by shadcn components. */
 @theme {
   --color-background: var(--color-surface);
   --color-foreground: var(--color-fg);
@@ -217,7 +216,7 @@
   --color-secondary-foreground: var(--color-fg);
   --color-muted: var(--color-surface-muted);
   --color-muted-foreground: var(--color-fg-muted);
-  /* U shadcn je accent tiché podbarvení při najetí, ne značková barva. */
+  /* In shadcn, accent is the quiet hover tint, not the brand colour. */
   --color-accent: var(--color-surface-muted);
   --color-accent-foreground: var(--color-fg);
   --color-destructive: var(--color-danger);

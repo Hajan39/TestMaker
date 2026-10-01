@@ -1,16 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { t } from '@testmaker/core/i18n'
 import { Delayed, LoadingPaper, cn } from '@testmaker/ui'
 
 /**
- * Náhled šablony jako skutečná stránka PDF. Vykresluje ji tentýž renderer,
- * který vyrábí finální test, takže se náhled nikdy nerozejde s výsledkem.
+ * Template preview as a real PDF page. The same renderer that produces the
+ * final test draws it, so the preview never drifts from the result.
  *
- * Vloženo přes `iframe`, ne `object`: Safari u `object` s PDF událost o načtení
- * nespustí, takže zástupná plocha zůstala navrchu a překrývala hotový náhled.
- * Kromě události je tu i časový strop, aby se plocha uklidila i tehdy, když
- * prohlížeč neohlásí nic.
+ * Embedded via `iframe`, not `object`: Safari never fires the load event for
+ * an `object` with a PDF, so the placeholder stayed on top of the finished
+ * preview. Besides the event there is a timeout so the placeholder goes away
+ * even when the browser reports nothing.
  */
 export function TemplatePreview({
   templateId,
@@ -22,8 +23,8 @@ export function TemplatePreview({
   graded?: boolean
   className?: string
   /**
-   * Náhled uvnitř tlačítka (výběr šablony): iframe by klik spolkl a tlačítko
-   * by nereagovalo, proto se nedá zaměřit ani kliknout a čtečka ho přeskočí.
+   * Preview inside a button (template picker): the iframe would swallow the
+   * click, so it cannot be focused or clicked and screen readers skip it.
    */
   decorative?: boolean
 }) {
@@ -46,18 +47,18 @@ export function TemplatePreview({
       )}
     >
       {/*
-        Než se náhled objeví, drží jeho místo kostra stránky. Blikání hrozit
-        nemůže: kostra je prvních 400 ms průhledná (viz `ui-delayed`), takže
-        u náhledu, který má prohlížeč v mezipaměti, se vůbec neukáže.
+        A page skeleton holds the place until the preview appears. No flicker:
+        the skeleton is transparent for the first 400 ms (see `ui-delayed`), so
+        it never shows for a preview the browser has cached.
       */}
       {!ready ? (
-        <Delayed label="Připravuji náhled šablony…" className="absolute inset-0">
+        <Delayed label={t('tests:templatePreview.loading')} className="absolute inset-0">
           <LoadingPaper />
         </Delayed>
       ) : null}
       <iframe
         src={src}
-        title="Náhled šablony"
+        title={t('tests:templatePreview.title')}
         className={cn('size-full', decorative && 'pointer-events-none')}
         tabIndex={decorative ? -1 : undefined}
         aria-hidden={decorative || undefined}

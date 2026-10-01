@@ -10,6 +10,6 @@ export default async function TestPage({
   searchParams: Promise<{ tema?: string }>
 }) {
   const { id } = await params
-  const { tema } = await searchParams
-  return <TestEditorPage id={id} kind="pisemka" tema={tema} />
+  const { tema: topic } = await searchParams
+  return <TestEditorPage id={id} kind="pisemka" topic={topic} />
 }

@@ -1,0 +1,10 @@
+{
+  "notSignedIn": "Přihlášení vypršelo. Přihlas se znovu v nové záložce — rozdělaná práce v tomhle okně zůstane — a zkus to znovu.",
+  "forbidden": "Na tuhle akci nemáte oprávnění.",
+  "notFound": "Tahle položka už neexistuje — mezitím ji nejspíš někdo smazal. Obnov stránku.",
+  "badRequestBody": "Požadavek nešel přečíst. Obnov stránku a zkus to znovu.",
+  "invalidRequest": "Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.",
+  "serverError": "Na serveru se něco pokazilo. Zkus to za chvíli znovu; když to nepomůže, dej vědět správci.",
+  "authMisconfiguredTitle": "Aplikace není nastavená",
+  "authMisconfigured": "Přihlašování není nastavené. Doplňte proměnnou prostředí AUTH_SECRET (náhodný řetězec, např. z `openssl rand -hex 32`) a nasazení spusťte znovu. Účty se zakládají skriptem `pnpm --filter @testmaker/web uzivatel`. Bez tajemství by byla aplikace veřejně přístupná komukoli, proto zůstává zavřená."
+}

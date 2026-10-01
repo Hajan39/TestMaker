@@ -1,18 +1,20 @@
 import JSZip from 'jszip'
+import { t } from '../i18n'
 import { normalizeText, type ExtractionResult } from './types'
 
 /**
- * ODP / ODT / ODS — ZIP s `content.xml`. U prezentací zachovává hranice slidů
- * a připojuje poznámky přednášejícího, které často nesou souvislý výklad.
+ * ODP / ODT / ODS — a ZIP with `content.xml`. For presentations keeps slide
+ * boundaries and appends the speaker notes, which often carry the continuous
+ * explanation. The slide and notes markers are part of the extracted text.
  */
 export async function extractOdf(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {
   const zip = await JSZip.loadAsync(data)
   const contentFile = zip.file('content.xml')
-  if (!contentFile) throw new Error('Soubor neobsahuje content.xml')
+  if (!contentFile) throw new Error(t('core:extract.missingPart', { part: 'content.xml' }))
   const xml = await contentFile.async('string')
 
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  if (doc.querySelector('parsererror')) throw new Error('content.xml se nepodařilo načíst')
+  if (doc.querySelector('parsererror')) throw new Error(t('core:extract.unreadablePart', { part: 'content.xml' }))
 
   const pages = Array.from(doc.getElementsByTagName('draw:page'))
   if (pages.length > 0) {
@@ -29,15 +31,15 @@ export async function extractOdf(data: ArrayBuffer | Uint8Array): Promise<Extrac
 
   const bodyEl = doc.getElementsByTagName('office:body')[0] ?? doc.documentElement
   const text = normalizeText(collectText(bodyEl))
-  // `needsOcr` značí sken bez textové vrstvy — ODT/ODS jsou vždy textový
-  // formát, krátký text tu znamená prázdný dokument, ne naskenovaný obrázek.
+  // `needsOcr` marks a scan without a text layer — ODT/ODS are always a text
+  // format, a short text here means an empty document, not a scanned image.
   return { text, pageCount: null, needsOcr: false }
 }
 
-/** Buňky, mezi kterými se při čtení tabulky vkládá oddělovač. */
+/** Cells between which a separator is inserted when reading a table. */
 const TABLE_CELL_TAGS = new Set(['table:table-cell', 'table:covered-table-cell'])
 
-/** Posbírá textové uzly a vloží zalomení na hranicích odstavců, s vynecháním daných tagů. */
+/** Collects text nodes and inserts line breaks at paragraph boundaries, skipping the given tag. */
 function collectText(root: Element, skipTag?: string): string {
   const out: string[] = []
   const walk = (node: Element) => {
@@ -59,13 +61,13 @@ function collectText(root: Element, skipTag?: string): string {
           out.push('\n')
           continue
         }
-        // Bez oddělovače by obsah více buněk na řádku splynul do jedné věty
-        // (druhá a další buňka nemá vlastní zalomení, jen text:p uvnitř).
+        // Without a separator the content of several cells in a row would merge
+        // into one sentence (the second and later cells have no break of their own, only text:p inside).
         if (TABLE_CELL_TAGS.has(el.tagName) && previousCellSibling(el)) {
           out.push(' | ')
         }
-        // Nadpis se od běžného textu jinak neliší — bez označení model
-        // nepozná strukturu materiálu (kde končí kapitola, kde je téma).
+        // A heading does not otherwise differ from ordinary text — without a marker
+        // the model cannot see the material's structure (where a chapter ends, where the topic is).
         if (el.tagName === 'text:h') {
           out.push('## ')
         }
@@ -80,7 +82,7 @@ function collectText(root: Element, skipTag?: string): string {
   return out.join('')
 }
 
-/** Je před danou buňkou ve stejném řádku další buňka (i sloučená)? */
+/** Is there another cell (including a merged one) before the given cell in the same row? */
 function previousCellSibling(el: Element): boolean {
   let sibling = el.previousElementSibling
   while (sibling) {

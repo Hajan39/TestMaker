@@ -7,20 +7,21 @@ import { Button, Checkbox, QuestionPreview } from '@testmaker/ui'
 import { QuestionEditorForm } from '@/components/QuestionEditor'
 import { RegenerateButton } from '@/components/RegenerateButton'
 import type { TestUsage } from '@/components/TopicQuestions'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Jedna karta otázky v tématu: náhled se zaškrtávátkem do testu a akcemi
- * (úprava, přegenerování, smazání), nebo rozpracovaná úprava místo nich.
+ * One question card in a topic: a preview with a checkbox for the test and
+ * actions (edit, regenerate, delete), or the editor in their place.
  *
- * Vytažené z `TopicQuestions`, aby soubor se seznamem a filtry nenarostl přes
- * rozumnou délku — stav (výběr, editace, mazání) zůstává o patro výš, karta
- * je jen jeho zobrazení.
+ * Extracted from `TopicQuestions` so the file with the list and filters does
+ * not grow past a reasonable length — state (selection, editing, deleting)
+ * stays one level up, the card only renders it.
  */
 export function QuestionCard({
   topicId,
   question,
   editing,
-  muzeMenit,
+  canEdit,
   selected,
   busy,
   usage,
@@ -40,19 +41,19 @@ export function QuestionCard({
   topicId: string
   question: Question
   editing: boolean
-  muzeMenit: boolean
-  /** Zaškrtnutá do rozpracovaného testu — jen pro `muzeMenit`. */
+  canEdit: boolean
+  /** Checked for the test being built — only for `canEdit`. */
   selected: boolean
-  /** Právě se maže — chrání proti dvojímu kliknutí na „Smazat". */
+  /** Being deleted right now — guards against a double click on „Smazat". */
   busy: boolean
-  /** Testy, ve kterých otázka už je — jen ty viditelné volající. */
+  /** Tests that already contain the question — only those visible to the caller. */
   usage: TestUsage[] | undefined
   /**
-   * Lehčí a těžší verze kořene, ke kterému otázka patří (nebo je jím sama) —
-   * pro řádek „Verze: …". Prázdné pole, když otázka žádné verze nemá.
-   * Vidí ho i `nahled`, jen tvorbu verzí ne.
+   * Easier and harder versions of the root the question belongs to (or is
+   * itself) — for the „Verze: …" row. Empty when the question has no versions.
+   * `nahled` sees it too, just not version creation.
    */
-  versions: { id: string; label: 'lehčí' | 'těžší' }[]
+  versions: { id: string; direction: 'easier' | 'harder' }[]
   onEditStart: () => void
   onEditCancel: () => void
   onEditSaved: () => void
@@ -62,16 +63,17 @@ export function QuestionCard({
   onJumpToVersion: (id: string) => void
   onRemove: () => void
   /**
-   * Karta ze seznamu „Smazané" — tlumená podoba s jediným tlačítkem
-   * „Obnovit" místo úprav, přegenerování a mazání.
+   * A card from the „Smazané" list — a muted look with a single „Obnovit"
+   * button instead of edit, regenerate and delete.
    */
   deleted?: boolean
-  /** Právě probíhá obnovení — chrání proti dvojímu kliknutí na „Obnovit". */
+  /** Restoring right now — guards against a double click on „Obnovit". */
   restoring?: boolean
   onRestore?: () => void
 }) {
-  // Dokud model otázku nahrazuje nebo z ní dělá verzi, úprava ani smazání
-  // nedávají smysl — po náhradě by mířily na otázku, která už je zamítnutá.
+  // While the model replaces the question or makes a version of it, editing
+  // and deleting make no sense — after the replacement they would target a
+  // question that is already rejected.
   const [aiBusy, setAiBusy] = useState(false)
   if (deleted) {
     return (
@@ -81,7 +83,7 @@ export function QuestionCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Button size="sm" variant="ghost" disabled={restoring} onClick={onRestore}>
-            Obnovit
+            {t('library:questionCard.restore')}
           </Button>
         </div>
       </div>
@@ -101,12 +103,12 @@ export function QuestionCard({
 
   return (
     <div className="flex gap-3">
-      {muzeMenit ? (
+      {canEdit ? (
         <Checkbox
           className="mt-0.5 shrink-0"
           checked={selected}
           onCheckedChange={onToggleSelect}
-          aria-label="Vybrat do testu"
+          aria-label={t('library:questionCard.selectForTest')}
         />
       ) : null}
       <div className="min-w-0 flex-1">
@@ -114,10 +116,10 @@ export function QuestionCard({
         <TestUsageLabel usage={usage} />
         <VersionsLabel versions={versions} onJump={onJumpToVersion} />
       </div>
-      {muzeMenit ? (
+      {canEdit ? (
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Button size="sm" variant="ghost" disabled={aiBusy} onClick={onEditStart}>
-            Upravit
+            {t('common:actions.edit')}
           </Button>
           <RegenerateButton
             questionId={question.id}
@@ -134,7 +136,7 @@ export function QuestionCard({
             disabled={busy || aiBusy}
             onClick={onRemove}
           >
-            Smazat
+            {t('common:actions.delete')}
           </Button>
         </div>
       ) : null}
@@ -143,43 +145,44 @@ export function QuestionCard({
 }
 
 /**
- * Drobný štítek „V testu: Název" pod náhledem otázky. Testy, na které
- * volající nevidí (cizí soukromý test kolegyně), sem `usage` vůbec nedostane
- * — štítek proto nikdy neprozradí, že takový test existuje.
+ * Small „V testu: Název" badge below the question preview. Tests the caller
+ * cannot see (a colleague's private test) never reach `usage` — so the badge
+ * never reveals that such a test exists.
  */
 function TestUsageLabel({ usage }: { usage: TestUsage[] | undefined }) {
   if (!usage || usage.length === 0) return null
-  const [prvni, ...zbytek] = usage
+  const [first, ...rest] = usage
   return (
     <p className="mt-1 text-xs text-fg-muted">
-      V testu:{' '}
-      <Link href={`/tests/${prvni!.testId}`} className="hover:text-brand hover:underline">
-        {prvni!.title}
+      {t('library:questionCard.inTest')}{' '}
+      <Link href={`/tests/${first!.testId}`} className="hover:text-brand hover:underline">
+        {first!.title}
       </Link>
-      {zbytek.length > 0 ? ` a další ${zbytek.length}` : ''}
+      {rest.length > 0 ? ` ${t('library:questionCard.andMore', { count: rest.length })}` : ''}
     </p>
   )
 }
 
 /**
- * Drobný řádek „Verze: lehčí · těžší" pod náhledem otázky — na kartě kořene
- * i na kartě kterékoli jeho verze. Odkazy neopouštějí stránku (verze je karta
- * ve stejném seznamu), jen na ni posunou a krátce ji zvýrazní (`onJump`).
+ * Small „Verze: lehčí · těžší" row below the question preview — on the root's
+ * card and on the card of any of its versions. The links do not leave the
+ * page (a version is a card in the same list), they just scroll to it and
+ * briefly highlight it (`onJump`).
  *
- * Viditelný i pro `nahled` — na rozdíl od tlačítek, které verzi vytvářejí,
- * tenhle řádek jen ukazuje, co už existuje.
+ * Visible for `nahled` too — unlike the buttons that create a version, this
+ * row only shows what already exists.
  */
 function VersionsLabel({
   versions,
   onJump,
 }: {
-  versions: { id: string; label: 'lehčí' | 'těžší' }[]
+  versions: { id: string; direction: 'easier' | 'harder' }[]
   onJump: (id: string) => void
 }) {
   if (versions.length === 0) return null
   return (
     <p className="mt-1 text-xs text-fg-muted">
-      Verze:{' '}
+      {t('library:questionCard.versions')}{' '}
       {versions.map((version, index) => (
         <span key={version.id}>
           {index > 0 ? ' · ' : ''}
@@ -188,7 +191,7 @@ function VersionsLabel({
             className="hover:text-brand hover:underline"
             onClick={() => onJump(version.id)}
           >
-            {version.label}
+            {version.direction === 'easier' ? t('library:questionCard.easier') : t('library:questionCard.harder')}
           </button>
         </span>
       ))}

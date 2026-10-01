@@ -1,85 +1,86 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
 import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
-import { skola, sRozsahem } from '@/lib/uzivatel'
+import { inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
 const bodySchema = z.object({
   id: z.string().min(1),
-  /** Proč se otázka nahrazuje — nepovinné, přegenerování jedním kliknutím funguje beze změny. */
+  /** Why the question is replaced — optional, one-click regeneration works unchanged. */
   reason: z.enum(Object.keys(REGENERATE_REASONS) as [string, ...string[]]).optional(),
-  /** Vlastní poznámka učitelky navíc k důvodu. */
+  /** The teacher's own note on top of the reason. */
   note: z.string().max(1000).optional(),
 })
 
 /**
- * Je náhrada modelem vůbec k dispozici? Rozhraní podle toho tlačítko skryje,
- * místo aby ho nabídlo a pak spadlo na chybějícím klíči.
+ * Is model replacement available at all? The UI hides the button accordingly
+ * instead of offering it and then failing on a missing key.
  */
 export function GET() {
   return Response.json({ configured: isAiConfigured() })
 }
 
 /**
- * Náhrada jedné otázky modelem: vygeneruje se nová otázka téhož typu a
- * obtížnosti ze stejných materiálů a teprve pak se původní označí jako
- * zamítnutá. Když model selže, nezmění se v databázi nic a vrátí se česká
- * hláška — pro učitelku to znamená, že se prostě nic nestalo a může to
- * zkusit znovu.
+ * Replaces one question via the model: a new question of the same type and
+ * difficulty is generated from the same materials, and only then is the
+ * original marked rejected. When the model fails, nothing changes in the
+ * database and a user-facing message is returned — for the teacher it means
+ * nothing happened and she can try again.
  */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   if (!isAiConfigured()) {
-    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
+    return Response.json({ error: aiNotConfiguredMessage() }, { status: 503 })
   }
 
   const parsed = bodySchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
-  // Poznámka bez důvodu nemá kam patřit — v promptu visí věta „Proč se otázka
-  // nahrazuje" jen k vybranému důvodu, samotná poznámka bez ní nedává smysl.
+  // A note without a reason has nowhere to go — in the prompt the "why the
+  // question is replaced" sentence only hangs off a chosen reason; a bare note makes no sense.
   if (parsed.data.note && !parsed.data.reason) {
-    return Response.json({ error: 'Poznámka patří k důvodu — nejdřív vyber, proč se otázka nahrazuje.' }, { status: 400 })
+    return Response.json({ error: t('generation:regenerateApi.noteNeedsReason') }, { status: 400 })
   }
 
   const [original] = await db
     .select({ id: questions.id, topicId: questions.topicId })
     .from(questions)
-    .where(and(skola(ucet, questions), eq(questions.id, parsed.data.id)))
+    .where(and(inSchool(account, questions), eq(questions.id, parsed.data.id)))
     .limit(1)
-  if (!original) return Response.json({ error: 'Otázka mezitím zmizela, obnov stránku.' }, { status: 404 })
+  if (!original) return Response.json({ error: t('generation:regenerateApi.questionGone') }, { status: 404 })
   if (!original.topicId) {
     return Response.json(
-      { error: 'Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada' },
+      { error: t('generation:generation.questionWithoutTopic') },
       { status: 409 },
     )
   }
 
-  // Téma se nerezervuje (`claimTopic`) — kvůli jedné otázce by dávka zablokovala
-  // celé téma. Běžící dávkové generování ale přednost má, protože obě volání by
-  // jinak pracovala se stejným seznamem „těmhle otázkám se vyhni".
-  const busy = await isTopicBusy(ucet, original.topicId)
+  // The topic isn't claimed (`claimTopic`) — one question would block the whole
+  // topic. A running batch generation still takes precedence, because both calls
+  // would otherwise work from the same "avoid these questions" list.
+  const busy = await isTopicBusy(account, original.topicId)
   if (busy) {
-    return Response.json({ error: topicBusyMessage(busy.kdo) }, { status: 409 })
+    return Response.json({ error: topicBusyMessage(busy.who) }, { status: 409 })
   }
 
   try {
-    const question = await regenerateQuestion(ucet, parsed.data.id, {
+    const question = await regenerateQuestion(account, parsed.data.id, {
       signal: request.signal,
       reason: parsed.data.reason as RegenerateReason | undefined,
       note: parsed.data.note,
     })
     return Response.json({ question })
   } catch (error) {
-    // Hlášky poskytovatele jsou anglicky a technické; překládáme je.
+    // Provider messages are English and technical; translate them.
     const { message } = describeAiError(error)
     return Response.json({ error: message }, { status: 502 })
   }
-  }, { zapis: true })
+  }, { write: true })
 }

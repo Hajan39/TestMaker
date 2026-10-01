@@ -1,17 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { NextRequest } from 'next/server'
 import { proxy } from '@/proxy'
-import { SESSION_COOKIE, STARA_COOKIE, podepsatRelaci, type Role } from '@/lib/session'
+import { SESSION_COOKIE, LEGACY_COOKIE, signSession, type Role } from '@/lib/session'
 
 /**
- * Chování brány podle nastavení přihlašování a role. Hlavní věc, kterou tu
- * hlídáme: nasazení bez tajemství se nesmí tiše otevřít komukoli a náhled
- * nesmí nic měnit.
+ * Gate behaviour by sign-in setup and role. The main thing guarded here: a
+ * deployment without a secret must not silently open to anyone and preview
+ * must not change anything.
  *
- * Proxy je jen hrubé síto — jestli je konkrétní písemka moje, rozhoduje až
- * server nad databází. Sem se proto chodí pro cesty a metody, ne pro data.
+ * The proxy is only a coarse sieve — whether a particular test is mine is
+ * decided later by the server over the database. So this is about paths and
+ * methods, not data.
  */
-function pozadavek(path: string, init: { headers?: Record<string, string>; method?: string } = {}): NextRequest {
+function request(path: string, init: { headers?: Record<string, string>; method?: string } = {}): NextRequest {
   return new NextRequest(
     new Request(`https://testmaker.example${path}`, {
       headers: init.headers,
@@ -20,14 +21,14 @@ function pozadavek(path: string, init: { headers?: Record<string, string>; metho
   )
 }
 
-const get = (path: string, headers: Record<string, string> = {}) => pozadavek(path, { headers })
+const get = (path: string, headers: Record<string, string> = {}) => request(path, { headers })
 
-/** Požadavek s platnou cookie dané role. */
-async function prihlaseny(
+/** A request with a valid cookie of the given role. */
+async function signedIn(
   path: string,
   options: { role?: Role; method?: string; zh?: boolean } = {},
 ): Promise<NextRequest> {
-  const token = await podepsatRelaci(
+  const token = await signSession(
     {
       uid: 'ucet-1',
       sch: 'skola-1',
@@ -39,23 +40,23 @@ async function prihlaseny(
     },
     process.env.AUTH_SECRET ?? '',
   )
-  return pozadavek(path, {
+  return request(path, {
     method: options.method,
     headers: { cookie: `${SESSION_COOKIE}=${token}` },
   })
 }
 
-const puvodni = { ...process.env }
+const original = { ...process.env }
 
 afterEach(() => {
-  for (const klic of ['APP_PASSWORD', 'AUTH_SECRET', 'VERCEL', 'CRON_SECRET']) {
-    delete process.env[klic]
-    if (puvodni[klic] !== undefined) process.env[klic] = puvodni[klic]
+  for (const key of ['APP_PASSWORD', 'AUTH_SECRET', 'VERCEL', 'CRON_SECRET']) {
+    delete process.env[key]
+    if (original[key] !== undefined) process.env[key] = original[key]
   }
 })
 
-describe('brána aplikace', () => {
-  it('bez tajemství mimo nasazení pustí dovnitř (lokální vývoj)', async () => {
+describe('app gate', () => {
+  it('lets in without a secret outside deployment (local dev)', async () => {
     delete process.env.AUTH_SECRET
     delete process.env.VERCEL
     const response = await proxy(get('/questions'))
@@ -63,21 +64,21 @@ describe('brána aplikace', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
-  it('bez tajemství v nasazení odpoví 503 a vysvětlí, co chybí', async () => {
+  it('answers 503 without a secret in deployment and explains what is missing', async () => {
     delete process.env.AUTH_SECRET
     process.env.VERCEL = '1'
-    const stranka = await proxy(get('/'))
-    expect(stranka.status).toBe(503)
-    expect(await stranka.text()).toContain('AUTH_SECRET')
+    const page = await proxy(get('/'))
+    expect(page.status).toBe(503)
+    expect(await page.text()).toContain('AUTH_SECRET')
 
     const api = await proxy(get('/api/questions'))
     expect(api.status).toBe(503)
 
-    // Ani přihlašovací stránka nemá co nabídnout — přihlásit se nedá.
+    // Not even the login page has anything to offer — signing in is impossible.
     expect((await proxy(get('/login'))).status).toBe(503)
   })
 
-  it('nepřihlášenou uživatelku pošle na /login a zapamatuje si, kam mířila', async () => {
+  it('sends a signed-out user to /login and remembers where she was heading', async () => {
     process.env.AUTH_SECRET = 'secret'
     const response = await proxy(get('/questions?status=draft'))
     expect(response.status).toBe(307)
@@ -86,32 +87,32 @@ describe('brána aplikace', () => {
     expect(decodeURIComponent(location)).toContain('dal=/questions?status=draft')
   })
 
-  it('cestou ven zahodí cookie starého přihlašování jedním heslem', async () => {
+  it('drops the old single-password cookie on the way out', async () => {
     process.env.AUTH_SECRET = 'secret'
     const response = await proxy(get('/questions'))
-    expect(response.headers.get('set-cookie')).toContain(`${STARA_COOKIE}=`)
+    expect(response.headers.get('set-cookie')).toContain(`${LEGACY_COOKIE}=`)
   })
 
-  it('na API vrátí 401, ne přesměrování', async () => {
+  it('returns 401 on the API, not a redirect', async () => {
     process.env.AUTH_SECRET = 'secret'
     expect((await proxy(get('/api/questions'))).status).toBe(401)
   })
 
-  it('s platnou cookie projde dovnitř', async () => {
+  it('lets in with a valid cookie', async () => {
     process.env.AUTH_SECRET = 'secret'
-    const response = await proxy(await prihlaseny('/questions'))
+    const response = await proxy(await signedIn('/questions'))
     expect(response.status).toBe(200)
     expect(response.headers.get('location')).toBeNull()
   })
 
-  it('cookie podepsaná jiným tajemstvím neprojde', async () => {
+  it('rejects a cookie signed with another secret', async () => {
     process.env.AUTH_SECRET = 'jine-tajemstvi'
-    const cizi = await prihlaseny('/questions')
+    const foreign = await signedIn('/questions')
     process.env.AUTH_SECRET = 'secret'
-    expect((await proxy(cizi)).status).toBe(307)
+    expect((await proxy(foreign)).status).toBe(307)
   })
 
-  it('přihlašovací stránka, její API i odhlášení jsou dostupné bez cookie', async () => {
+  it('the login page, its API and sign-out are reachable without a cookie', async () => {
     process.env.AUTH_SECRET = 'secret'
     expect((await proxy(get('/login'))).status).toBe(200)
     expect((await proxy(get('/api/login'))).status).toBe(200)
@@ -120,81 +121,81 @@ describe('brána aplikace', () => {
   })
 })
 
-describe('co která role projde branou', () => {
-  it('do správy pustí jen správce', async () => {
+describe('what each role gets through the gate', () => {
+  it('lets only managers into management', async () => {
     process.env.AUTH_SECRET = 'secret'
-    expect((await proxy(await prihlaseny('/sprava/uzivatele', { role: 'spravce' }))).status).toBe(200)
+    expect((await proxy(await signedIn('/sprava/uzivatele', { role: 'spravce' }))).status).toBe(200)
 
-    const ucitelka = await proxy(await prihlaseny('/sprava/uzivatele'))
-    expect(ucitelka.status).toBe(307)
-    expect(ucitelka.headers.get('location')).toMatch(/\/$/)
+    const teacher = await proxy(await signedIn('/sprava/uzivatele'))
+    expect(teacher.status).toBe(307)
+    expect(teacher.headers.get('location')).toMatch(/\/$/)
 
     const api = await proxy(
-      await prihlaseny('/api/sprava/uzivatele', { method: 'POST' }),
+      await signedIn('/api/sprava/uzivatele', { method: 'POST' }),
     )
     expect(api.status).toBe(403)
   })
 
-  it('API administrace se jiné roli tváří jako neexistující', async () => {
+  it('the administration API looks non-existent to other roles', async () => {
     process.env.AUTH_SECRET = 'secret'
-    expect((await proxy(await prihlaseny('/api/administrace/ai', { role: 'administrator' }))).status).toBe(200)
+    expect((await proxy(await signedIn('/api/administrace/ai', { role: 'administrator' }))).status).toBe(200)
 
-    const ucitelka = await proxy(await prihlaseny('/api/administrace/ai'))
-    expect(ucitelka.status).toBe(404)
-    const spravce = await proxy(await prihlaseny('/api/administrace/skoly', { role: 'spravce', method: 'POST' }))
-    expect(spravce.status).toBe(404)
+    const teacher = await proxy(await signedIn('/api/administrace/ai'))
+    expect(teacher.status).toBe(404)
+    const manager = await proxy(await signedIn('/api/administrace/skoly', { role: 'spravce', method: 'POST' }))
+    expect(manager.status).toBe(404)
   })
 
-  it('náhled si čte a tiskne, ale zapsat nesmí', async () => {
+  it('preview reads and prints but may not write', async () => {
     process.env.AUTH_SECRET = 'secret'
-    expect((await proxy(await prihlaseny('/api/tests/abc/pdf', { role: 'nahled' }))).status).toBe(200)
+    expect((await proxy(await signedIn('/api/tests/abc/pdf', { role: 'nahled' }))).status).toBe(200)
 
-    const zapis = await proxy(
-      await prihlaseny('/api/questions', { role: 'nahled', method: 'POST' }),
+    const write = await proxy(
+      await signedIn('/api/questions', { role: 'nahled', method: 'POST' }),
     )
-    expect(zapis.status).toBe(403)
-    expect(await zapis.json()).toEqual({ error: 'Na tuhle akci nemáte oprávnění.' })
+    expect(write.status).toBe(403)
+    expect(await write.json()).toEqual({ error: 'Na tuhle akci nemáte oprávnění.' })
   })
 
-  it('po resetu hesla se jde jedině měnit heslo', async () => {
+  it('after a password reset the only way is to change the password', async () => {
     process.env.AUTH_SECRET = 'secret'
-    expect((await proxy(await prihlaseny('/zmena-hesla', { zh: true }))).status).toBe(200)
-    const jinam = await proxy(await prihlaseny('/questions', { zh: true }))
-    expect(jinam.status).toBe(307)
-    expect(jinam.headers.get('location')).toContain('/zmena-hesla')
+    expect((await proxy(await signedIn('/zmena-hesla', { zh: true }))).status).toBe(200)
+    const elsewhere = await proxy(await signedIn('/questions', { zh: true }))
+    expect(elsewhere.status).toBe(307)
+    expect(elsewhere.headers.get('location')).toContain('/zmena-hesla')
   })
 })
 
-describe('obejití přihlášení pro plánovač', () => {
-  it('plánovač se sdíleným tajemstvím projde i bez cookie', async () => {
+describe('sign-in bypass for the scheduler', () => {
+  it('the scheduler with the shared secret gets through without a cookie', async () => {
     process.env.AUTH_SECRET = 'secret'
     process.env.CRON_SECRET = 'cron'
     const response = await proxy(get('/api/jobs/run', { authorization: 'Bearer cron' }))
     expect(response.status).toBe(200)
   })
 
-  it('špatné tajemství neprojde', async () => {
+  it('rejects a wrong secret', async () => {
     process.env.AUTH_SECRET = 'secret'
     process.env.CRON_SECRET = 'cron'
     const response = await proxy(get('/api/jobs/run', { authorization: 'Bearer uhodnuto' }))
     expect(response.status).toBe(401)
   })
 
-  it('bez nastaveného CRON_SECRET neprojde ani prázdná hlavička', async () => {
+  it('without CRON_SECRET set not even an empty header gets through', async () => {
     process.env.AUTH_SECRET = 'secret'
     delete process.env.CRON_SECRET
     expect((await proxy(get('/api/jobs/run'))).status).toBe(401)
     expect((await proxy(get('/api/jobs/run', { authorization: 'Bearer ' }))).status).toBe(401)
   })
 
-  it('tajemství platí jen pro plánovač, ne pro zbytek API', async () => {
+  it('the secret applies only to the scheduler, not the rest of the API', async () => {
     process.env.AUTH_SECRET = 'secret'
     process.env.CRON_SECRET = 'cron'
     const response = await proxy(get('/api/questions', { authorization: 'Bearer cron' }))
     expect(response.status).toBe(401)
   })
 
-  it('při chybném nastavení přihlašování neprojde ani plánovač', async () => {
+  it('with misconfigured sign-in not even the scheduler gets through', async () => {
     delete process.env.AUTH_SECRET
     process.env.VERCEL = '1'
     process.env.CRON_SECRET = 'cron'

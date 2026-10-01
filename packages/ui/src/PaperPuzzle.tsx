@@ -9,21 +9,21 @@ import {
   cryptogramPhraseCells,
   placedEntries,
 } from '@testmaker/core/pdf/layout'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
 /**
- * Hlavolam vykreslený tak, jak se vytiskne — mřížka osmisměrky se seznamem
- * slov, nebo řádky tajenky s políčky.
+ * A puzzle rendered as it will print — a word search grid with its word list,
+ * or cryptogram rows with boxes.
  *
- * Vzorem je `PuzzleBody.tsx` z `packages/core/src/pdf`, ale to podstatné je,
- * že obě strany berou hotový hlavolam z jednoho a téhož výpočtu
- * (`buildPuzzle` v `@testmaker/core/puzzle`). Náhled se tak nemůže rozejít
- * s papírem: kde leží slovo na obrazovce, tam leží i na papíře.
+ * Modelled on `PuzzleBody.tsx` in `packages/core/src/pdf`, but the key point
+ * is that both sides take the built puzzle from one and the same computation
+ * (`buildPuzzle` in `@testmaker/core/puzzle`). The preview cannot diverge from
+ * paper: where a word lies on screen, it lies on paper.
  *
- * Rozměry se zapisují v bodech PDF (pt) přes `--paper-pt`, kterou nastavuje
- * `PaperSheet` — stejně jako u `PaperQuestion`. Velikost buněk, políček
- * a počet sloupců seznamu bere z `@testmaker/core/pdf/layout`, odkud je bere
- * i tisk.
+ * Sizes are written in PDF points (pt) via `--paper-pt`, set by `PaperSheet`
+ * — same as `PaperQuestion`. Cell and box sizes and the word list column count
+ * come from `@testmaker/core/pdf/layout`, where printing takes them too.
  */
 
 const pt = (value: number): string => `calc(${value} * var(--paper-pt, 1.3333px))`
@@ -36,9 +36,9 @@ export function PaperPuzzle({
   className,
 }: {
   puzzle: PuzzleContent
-  /** Hotový hlavolam; když se nepředá, spočítá se z obsahu. */
+  /** The built puzzle; computed from the content when not passed. */
   built?: BuiltPuzzle
-  /** Vykreslit řešení pro učitelku místo prázdného zadání. */
+  /** Render the solution for the teacher instead of the blank puzzle. */
   solved?: boolean
   showTitle?: boolean
   className?: string
@@ -94,7 +94,7 @@ function WordSearchView({
         ))}
       </div>
 
-      {/* Jen slova, která v mřížce opravdu jsou — a ve třech sloupcích jako na papíře. */}
+      {/* Only words that really are in the grid — in three columns, as on paper. */}
       <ul
         className="grid gap-x-3"
         style={{
@@ -119,7 +119,7 @@ function WordSearchView({
           ))}
           {result.unplaced.map((word, i) => (
             <li key={`x-${i}`} className="text-danger" data-slot="puzzle-unplaced">
-              {word}: v mřížce není
+              {t('ui:paper.puzzle.notInGrid', { word })}
             </li>
           ))}
         </ul>
@@ -136,7 +136,7 @@ function CryptogramView({
   solved: boolean
 }) {
   const result = built.cryptogram
-  // Odsazení řádků (vyznačená políčka pod sebou) i velikost políčka jako na papíře.
+  // Row offsets (marked boxes aligned) and box size as on paper.
   const { offsets, widthInBoxes, boxSize: box } = cryptogramLayout(result)
   const gridWidth = widthInBoxes * box
   const numberWidth = CRYPTOGRAM_NUMBER_WIDTH
@@ -144,14 +144,14 @@ function CryptogramView({
   return (
     <div style={{ marginTop: pt(6) }} data-slot="puzzle-rows">
       <div style={{ marginBottom: pt(8) }}>
-        <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Tajenka:</div>
+        <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>{t('ui:paper.puzzle.phrase')}</div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           {cryptogramPhraseCells(result).map((word, w) => (
             <span key={w} className="flex">
               {word.map((cell, i) => (
                 <span
                   key={i}
-                  // Písmeno, na které nepřipadl žádný řádek, je předvyplněné — jako v PDF.
+                  // A letter with no row is pre-filled — as in the PDF.
                   className={cn(
                     'flex items-center justify-center border border-paper-line',
                     !cell.row && 'bg-paper-shade',
@@ -166,7 +166,7 @@ function CryptogramView({
         </div>
       </div>
 
-      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Doplňovačka:</div>
+      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>{t('ui:paper.puzzle.rows')}</div>
       <div className="flex flex-col items-center" style={{ marginBottom: pt(8) }}>
         {result.rows.map((row, rowIndex) => (
           <div
@@ -200,7 +200,7 @@ function CryptogramView({
         ))}
       </div>
 
-      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>Otázky:</div>
+      <div style={{ fontSize: pt(9), marginBottom: pt(3) }}>{t('ui:paper.puzzle.clues')}</div>
       {result.rows.map((row) => (
         <div key={row.number} className="flex items-start gap-2" style={{ marginBottom: pt(3) }}>
           <span className="shrink-0" style={{ width: pt(numberWidth), fontSize: pt(9) }}>

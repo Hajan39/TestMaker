@@ -2,43 +2,43 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GET } from '@/app/api/administrace/ai/route'
 import { aiCalls, db, schools, users } from '@/db'
 import {
-  obdobiZ,
-  prehledPouzitiAi,
-  uklidStarychVolani,
-  zapsatVolani,
-  type UlohaAi,
+  periodFrom,
+  aiUsageOverview,
+  cleanupOldCalls,
+  recordCall,
+  type AiTask,
 } from '@/lib/aiUsage'
-import { PORADI } from '@/lib/backup'
+import { TABLE_ORDER } from '@/lib/backup'
 import { generateForTopic } from '@/lib/generation'
 import { newId } from '@/lib/ids'
 import { suggestPuzzleWords } from '@/lib/puzzles'
-import type { Scope } from '@/lib/uzivatel'
-import { req, seedMaterial, seedTopic, UCET } from './helpers'
-import { TEST_SKOLA_ID } from './setup'
+import type { Scope } from '@/lib/user'
+import { req, seedMaterial, seedTopic, ACCOUNT } from './helpers'
+import { TEST_SCHOOL_ID } from './setup'
 
 /**
- * Přehled „Použití AI“ v administraci: záznam každého pokusu o volání modelu
- * a jeho agregace podle modelu, úlohy, školy a dne. Řádky se tu vkládají
- * přímo, aby šlo řídit datum vzniku.
+ * The "AI usage" overview in administration: recording every model call attempt
+ * and aggregating by model, task, school and day. Rows are inserted directly here
+ * so the creation date can be controlled.
  */
 
-const TED = Date.parse('2026-09-30T12:00:00.000Z')
-const DEN = 24 * 60 * 60 * 1000
-const ADMIN: Scope = { schoolId: TEST_SKOLA_ID, userId: UCET.userId, role: 'administrator' }
-const DRUHA_SKOLA = 'skola-druha-ai-pouziti'
+const NOW = Date.parse('2026-09-30T12:00:00.000Z')
+const DAY = 24 * 60 * 60 * 1000
+const ADMIN: Scope = { schoolId: TEST_SCHOOL_ID, userId: ACCOUNT.userId, role: 'administrator' }
+const SECOND_SCHOOL = 'skola-druha-ai-pouziti'
 
-async function volani(options: {
+async function calls(options: {
   model?: string
   outcome?: 'ok' | 'limit' | 'bad_shape' | 'error'
-  task?: UlohaAi
+  task?: AiTask
   schoolId?: string
-  pred?: number
+  before?: number
   input?: number | null
   output?: number | null
 }) {
   await db.insert(aiCalls).values({
     id: newId(),
-    schoolId: options.schoolId ?? TEST_SKOLA_ID,
+    schoolId: options.schoolId ?? TEST_SCHOOL_ID,
     userId: null,
     task: options.task ?? 'otazky',
     model: options.model ?? 'google:a',
@@ -46,126 +46,126 @@ async function volani(options: {
     inputTokens: options.input === undefined ? 100 : options.input,
     outputTokens: options.output === undefined ? 10 : options.output,
     durationMs: 1200,
-    createdAt: new Date(TED - (options.pred ?? 0)).toISOString(),
+    createdAt: new Date(NOW - (options.before ?? 0)).toISOString(),
   })
 }
 
 beforeEach(async () => {
   await db.delete(aiCalls)
-  await db.insert(schools).values({ id: DRUHA_SKOLA, name: 'Druhá škola', slug: 'druha-ai' }).onConflictDoNothing()
+  await db.insert(schools).values({ id: SECOND_SCHOOL, name: 'Druhá škola', slug: 'druha-ai' }).onConflictDoNothing()
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('přehled použití AI', () => {
-  it('jiné role než administrátor nic nedostanou', async () => {
-    await volani({})
-    expect(await prehledPouzitiAi({ ...ADMIN, role: 'ucitelka' }, 30, { now: TED })).toBeNull()
-    expect(await prehledPouzitiAi({ ...ADMIN, role: 'spravce' }, 30, { now: TED })).toBeNull()
+describe('AI usage overview', () => {
+  it('gives nothing to roles other than administrator', async () => {
+    await calls({})
+    expect(await aiUsageOverview({ ...ADMIN, role: 'ucitelka' }, 30, { now: NOW })).toBeNull()
+    expect(await aiUsageOverview({ ...ADMIN, role: 'spravce' }, 30, { now: NOW })).toBeNull()
   })
 
-  it('sčítá podle modelu včetně výsledků a tokenů', async () => {
-    await volani({ model: 'google:a', outcome: 'ok', input: 100, output: 10, pred: 2 * DEN })
-    await volani({ model: 'google:a', outcome: 'limit', input: null, output: null, pred: DEN })
-    await volani({ model: 'google:a', outcome: 'bad_shape' })
-    await volani({ model: 'openrouter:b', outcome: 'error', input: null, output: null })
+  it('sums per model including outcomes and tokens', async () => {
+    await calls({ model: 'google:a', outcome: 'ok', input: 100, output: 10, before: 2 * DAY })
+    await calls({ model: 'google:a', outcome: 'limit', input: null, output: null, before: DAY })
+    await calls({ model: 'google:a', outcome: 'bad_shape' })
+    await calls({ model: 'openrouter:b', outcome: 'error', input: null, output: null })
 
-    const prehled = await prehledPouzitiAi(ADMIN, 30, { now: TED })
-    expect(prehled?.celkem).toBe(4)
-    expect(prehled?.modely).toEqual([
+    const overview = await aiUsageOverview(ADMIN, 30, { now: NOW })
+    expect(overview?.total).toBe(4)
+    expect(overview?.models).toEqual([
       {
         model: 'google:a',
-        volani: 3,
+        calls: 3,
         ok: 1,
         limit: 1,
         badShape: 1,
         error: 0,
-        vstup: 200,
-        vystup: 20,
-        naposledy: new Date(TED).toISOString(),
+        input: 200,
+        output: 20,
+        lastAt: new Date(NOW).toISOString(),
       },
       {
         model: 'openrouter:b',
-        volani: 1,
+        calls: 1,
         ok: 0,
         limit: 0,
         badShape: 0,
         error: 1,
-        vstup: 0,
-        vystup: 0,
-        naposledy: new Date(TED).toISOString(),
+        input: 0,
+        output: 0,
+        lastAt: new Date(NOW).toISOString(),
       },
     ])
   })
 
-  it('úlohy jsou vždy všechny tři, i bez volání', async () => {
-    await volani({ task: 'hlavolam' })
-    await volani({ task: 'hlavolam' })
-    const prehled = await prehledPouzitiAi(ADMIN, 30, { now: TED })
-    expect(prehled?.ulohy).toEqual([
-      { task: 'otazky', volani: 0, vstup: 0, vystup: 0 },
-      { task: 'hlavolam', volani: 2, vstup: 200, vystup: 20 },
-      { task: 'list', volani: 0, vstup: 0, vystup: 0 },
+  it('always lists all three tasks, even without calls', async () => {
+    await calls({ task: 'hlavolam' })
+    await calls({ task: 'hlavolam' })
+    const overview = await aiUsageOverview(ADMIN, 30, { now: NOW })
+    expect(overview?.tasks).toEqual([
+      { task: 'otazky', calls: 0, input: 0, output: 0 },
+      { task: 'hlavolam', calls: 2, input: 200, output: 20 },
+      { task: 'list', calls: 0, input: 0, output: 0 },
     ])
   })
 
-  it('sčítá napříč školami', async () => {
-    await volani({})
-    await volani({ schoolId: DRUHA_SKOLA })
-    await volani({ schoolId: DRUHA_SKOLA })
-    const prehled = await prehledPouzitiAi(ADMIN, 30, { now: TED })
-    expect(prehled?.skoly).toEqual([
-      { schoolId: DRUHA_SKOLA, nazev: 'Druhá škola', volani: 2, vstup: 200, vystup: 20 },
-      { schoolId: TEST_SKOLA_ID, nazev: 'Testovací škola', volani: 1, vstup: 100, vystup: 10 },
+  it('sums across schools', async () => {
+    await calls({})
+    await calls({ schoolId: SECOND_SCHOOL })
+    await calls({ schoolId: SECOND_SCHOOL })
+    const overview = await aiUsageOverview(ADMIN, 30, { now: NOW })
+    expect(overview?.schools).toEqual([
+      { schoolId: SECOND_SCHOOL, name: 'Druhá škola', calls: 2, input: 200, output: 20 },
+      { schoolId: TEST_SCHOOL_ID, name: 'Testovací škola', calls: 1, input: 100, output: 10 },
     ])
   })
 
-  it('denní řada má každý den období, i prázdný', async () => {
-    await volani({ outcome: 'ok' })
-    await volani({ outcome: 'limit' })
-    await volani({ outcome: 'error', pred: 2 * DEN })
-    const prehled = await prehledPouzitiAi(ADMIN, 7, { now: TED })
-    expect(prehled?.dny).toHaveLength(7)
-    expect(prehled?.dny[0]?.den).toBe('2026-09-24')
-    expect(prehled?.dny.at(-1)).toEqual({ den: '2026-09-30', ok: 1, limit: 1, ostatni: 0 })
-    expect(prehled?.dny.at(-3)).toEqual({ den: '2026-09-28', ok: 0, limit: 0, ostatni: 1 })
-    expect(prehled?.dny.at(-2)).toEqual({ den: '2026-09-29', ok: 0, limit: 0, ostatni: 0 })
+  it('the daily series has every day of the period, even empty ones', async () => {
+    await calls({ outcome: 'ok' })
+    await calls({ outcome: 'limit' })
+    await calls({ outcome: 'error', before: 2 * DAY })
+    const overview = await aiUsageOverview(ADMIN, 7, { now: NOW })
+    expect(overview?.dayRows).toHaveLength(7)
+    expect(overview?.dayRows[0]?.day).toBe('2026-09-24')
+    expect(overview?.dayRows.at(-1)).toEqual({ day: '2026-09-30', ok: 1, limit: 1, others: 0 })
+    expect(overview?.dayRows.at(-3)).toEqual({ day: '2026-09-28', ok: 0, limit: 0, others: 1 })
+    expect(overview?.dayRows.at(-2)).toEqual({ day: '2026-09-29', ok: 0, limit: 0, others: 0 })
   })
 
-  it('starší volání do období nepatří', async () => {
-    await volani({ pred: 10 * DEN })
-    const prehled = await prehledPouzitiAi(ADMIN, 7, { now: TED })
-    expect(prehled?.celkem).toBe(0)
-    expect(prehled?.modely).toEqual([])
-    expect(prehled?.skoly).toEqual([])
-    expect(prehled?.dny.every((den) => den.ok + den.limit + den.ostatni === 0)).toBe(true)
+  it('older calls do not belong to the period', async () => {
+    await calls({ before: 10 * DAY })
+    const overview = await aiUsageOverview(ADMIN, 7, { now: NOW })
+    expect(overview?.total).toBe(0)
+    expect(overview?.models).toEqual([])
+    expect(overview?.schools).toEqual([])
+    expect(overview?.dayRows.every((day) => day.ok + day.limit + day.others === 0)).toBe(true)
   })
 
-  it('žebříček ukáže i model bez klíče', async () => {
+  it('the ladder shows a model without a key too', async () => {
     vi.stubEnv('AI_MODELS', 'google:a,openrouter:b')
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'klic')
     vi.stubEnv('OPENROUTER_API_KEY', '')
-    const prehled = await prehledPouzitiAi(ADMIN, 30, { now: TED })
-    expect(prehled?.zebricek).toEqual([
-      { model: 'google:a', maKlic: true },
-      { model: 'openrouter:b', maKlic: false },
+    const overview = await aiUsageOverview(ADMIN, 30, { now: NOW })
+    expect(overview?.ladder).toEqual([
+      { model: 'google:a', hasKey: true },
+      { model: 'openrouter:b', hasKey: false },
     ])
   })
 
-  it('neznámé období spadne na 30 dní', () => {
-    expect(obdobiZ('7')).toBe(7)
-    expect(obdobiZ('90')).toBe(90)
-    expect(obdobiZ('abc')).toBe(30)
-    expect(obdobiZ('365')).toBe(30)
-    expect(obdobiZ(null)).toBe(30)
+  it('an unknown period falls back to 30 days', () => {
+    expect(periodFrom('7')).toBe(7)
+    expect(periodFrom('90')).toBe(90)
+    expect(periodFrom('abc')).toBe(30)
+    expect(periodFrom('365')).toBe(30)
+    expect(periodFrom(null)).toBe(30)
   })
 })
 
-describe('zápis volání', () => {
-  it('uloží pokus o volání', async () => {
-    await zapsatVolani({ schoolId: TEST_SKOLA_ID, userId: UCET.userId }, 'otazky', {
+describe('recording calls', () => {
+  it('stores a call attempt', async () => {
+    await recordCall({ schoolId: TEST_SCHOOL_ID, userId: ACCOUNT.userId }, 'otazky', {
       model: 'google:a',
       outcome: 'ok',
       inputTokens: 5,
@@ -173,14 +173,14 @@ describe('zápis volání', () => {
       durationMs: 12.7,
     })
     expect(await db.select().from(aiCalls)).toMatchObject([
-      { schoolId: TEST_SKOLA_ID, userId: UCET.userId, task: 'otazky', inputTokens: 5, outputTokens: 6, durationMs: 13 },
+      { schoolId: TEST_SCHOOL_ID, userId: ACCOUNT.userId, task: 'otazky', inputTokens: 5, outputTokens: 6, durationMs: 13 },
     ])
   })
 
-  it('chyba zápisu generování neshodí', async () => {
+  it('a write error does not break generation', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     await expect(
-      zapsatVolani({ schoolId: 'neexistujici-skola', userId: null }, 'otazky', {
+      recordCall({ schoolId: 'neexistujici-skola', userId: null }, 'otazky', {
         model: 'google:a',
         outcome: 'ok',
         inputTokens: null,
@@ -191,74 +191,74 @@ describe('zápis volání', () => {
     error.mockRestore()
   })
 
-  it('úklid smaže záznamy starší než 400 dní', async () => {
-    await volani({ model: 'stary', pred: 401 * DEN })
-    await volani({ model: 'mladsi', pred: 399 * DEN })
-    expect(await uklidStarychVolani(TED)).toBe(1)
+  it('cleanup deletes records older than 400 days', async () => {
+    await calls({ model: 'stary', before: 401 * DAY })
+    await calls({ model: 'mladsi', before: 399 * DAY })
+    expect(await cleanupOldCalls(NOW)).toBe(1)
     expect((await db.select().from(aiCalls)).map((row) => row.model)).toEqual(['mladsi'])
   })
 
-  it('záloha školy tabulku nepřenáší', () => {
-    expect(PORADI).not.toContain('ai_calls')
+  it('the school backup does not carry the table', () => {
+    expect(TABLE_ORDER).not.toContain('ai_calls')
   })
 })
 
 describe('GET /api/administrace/ai', () => {
-  async function jako(role: 'administrator' | 'ucitelka') {
+  async function asRole(role: 'administrator' | 'ucitelka') {
     const id = newId()
-    await db.insert(users).values({ id, schoolId: TEST_SKOLA_ID, email: `${id}@localhost`, name: `Účet ${id}`, role })
+    await db.insert(users).values({ id, schoolId: TEST_SCHOOL_ID, email: `${id}@localhost`, name: `Účet ${id}`, role })
     vi.stubEnv('E2E_UZIVATEL', id)
   }
 
-  it('administrátor dostane přehled, neznámé období spadne na 30 dní', async () => {
-    await jako('administrator')
-    await volani({ pred: 0 })
-    const odpoved = await GET(req('/api/administrace/ai?dni=abc'))
-    expect(odpoved.status).toBe(200)
-    const telo = (await odpoved.json()) as { dni: number; dny: unknown[] }
-    expect(telo.dni).toBe(30)
-    expect(telo.dny).toHaveLength(30)
+  it('the administrator gets the overview, an unknown period falls back to 30 days', async () => {
+    await asRole('administrator')
+    await calls({ before: 0 })
+    const response = await GET(req('/api/administrace/ai?dni=abc'))
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { days: number; dayRows: unknown[] }
+    expect(body.days).toBe(30)
+    expect(body.dayRows).toHaveLength(30)
   })
 
-  it('učitelka dostane 404', async () => {
-    await jako('ucitelka')
-    const odpoved = await GET(req('/api/administrace/ai'))
-    expect(odpoved.status).toBe(404)
+  it('a teacher gets 404', async () => {
+    await asRole('ucitelka')
+    const response = await GET(req('/api/administrace/ai'))
+    expect(response.status).toBe(404)
   })
 })
 
-const UDALOST ={ model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 } as const
+const EVENT ={ model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 } as const
 
-describe('zapojení do generování', () => {
-  it('otázky tématu zapíšou volání pod přihlášenou učitelku', async () => {
+describe('wiring into generation', () => {
+  it('topic questions record the call under the signed-in teacher', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: 'Fotosyntéza probíhá v listech rostlin. '.repeat(20) })
-    await generateForTopic(UCET, topicId, { count: 1, types: ['single_choice'], difficulty: 2 }, {
+    await generateForTopic(ACCOUNT, topicId, { count: 1, types: ['single_choice'], difficulty: 2 }, {
       generate: async (_request, options) => {
-        options?.onCall?.(UDALOST)
+        options?.onCall?.(EVENT)
         return { questions: [], rejected: [], chunks: 1, failedCalls: [], models: [] }
       },
     })
     await vi.waitFor(async () => {
       expect(await db.select().from(aiCalls)).toMatchObject([
-        { schoolId: TEST_SKOLA_ID, userId: UCET.userId, task: 'otazky', model: 'google:a' },
+        { schoolId: TEST_SCHOOL_ID, userId: ACCOUNT.userId, task: 'otazky', model: 'google:a' },
       ])
     })
   })
 
-  it('slova do hlavolamu se zapíšou jako hlavolam', async () => {
+  it('puzzle words are recorded as a puzzle', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { text: 'Houba roste v lese a má klobouk. '.repeat(20) })
-    await suggestPuzzleWords(UCET, topicId, {
+    await suggestPuzzleWords(ACCOUNT, topicId, {
       kind: 'wordsearch',
       count: 1,
       generate: async (_request, options) => {
-        options?.onCall?.(UDALOST)
+        options?.onCall?.(EVENT)
         return { entries: [], rejected: [], adjusted: [], models: ['google:a'], stats: { requested: 1, returned: 0, usable: 0, dropped: 0 } }
       },
     })
     await vi.waitFor(async () => {
-      expect(await db.select().from(aiCalls)).toMatchObject([{ userId: UCET.userId, task: 'hlavolam' }])
+      expect(await db.select().from(aiCalls)).toMatchObject([{ userId: ACCOUNT.userId, task: 'hlavolam' }])
     })
   })
 })

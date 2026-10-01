@@ -1,22 +1,22 @@
 import { z } from 'zod'
 
 /**
- * Přílohové bloky otázky — vykreslují se mezi zadáním a prostorem pro odpověď.
- * Obrázky se ve fázi 1 nahrávají ručně učitelem (tabulka `assets`).
+ * Attachment blocks of a question — rendered between the prompt and the answer space.
+ * In phase 1 images are uploaded manually by the teacher (table `assets`).
  */
 
 export const imageBlockSchema = z.object({
   kind: z.literal('image'),
   assetId: z.string().min(1),
   caption: z.string().max(300).optional(),
-  /** Šířka v procentech šířky sloupce (10–100). */
+  /** Width as a percentage of the column width (10–100). */
   widthPercent: z.number().int().min(10).max(100).default(100),
 })
 
 export const tableCellSchema = z.object({
   text: z.string().default(''),
   header: z.boolean().default(false),
-  /** Prázdná buňka k doplnění žákem. */
+  /** Blank cell for the pupil to fill in. */
   blank: z.boolean().default(false),
   colSpan: z.number().int().min(1).max(12).optional(),
 })

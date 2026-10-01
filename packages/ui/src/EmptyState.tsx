@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-/** Prázdný stav: co tu chybí a co s tím. */
+/** Empty state: what is missing here and what to do about it. */
 export function EmptyState({
   title,
   hint,

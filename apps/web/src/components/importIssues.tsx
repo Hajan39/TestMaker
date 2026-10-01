@@ -3,21 +3,34 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Card, Collapsible, CollapsibleContent, CollapsibleTrigger, cn } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Důvody přeskočení souboru (`skipReason` z `@testmaker/core/extract`)
- * přeložené do vět srozumitelných učitelce. Sdílené mezi importem knihovny
- * a nahráváním rovnou do tématu, ať se stejný text nepíše na dvou místech.
+ * File skip reasons (`skipReason` from `@testmaker/core/extract`) translated
+ * into sentences the teacher understands. Shared by the library import and
+ * uploading straight into a topic, so the same text isn't written twice.
+ * Unknown reason → `undefined`.
  */
-export const SKIP_LABELS: Record<string, string> = {
-  skryty: 'skrytý soubor',
-  docasny: 'dočasný soubor',
-  'systemova-slozka': 'systémová složka',
-  obrazek: 'obrázek (zatím nepodporován)',
-  nepodporovany: 'nepodporovaná přípona',
-  'stary-format': 'starý formát – převeď na .docx / .odp',
-  // Extrakce doběhla, ale soubor byl prázdný (`processFile` v `@testmaker/core/extract`).
-  'prázdný text': 'soubor neobsahuje žádný text',
+export function skipLabel(reason: string): string | undefined {
+  switch (reason) {
+    case 'skryty':
+      return t('library:importIssues.skip.hidden')
+    case 'docasny':
+      return t('library:importIssues.skip.temporary')
+    case 'systemova-slozka':
+      return t('library:importIssues.skip.systemFolder')
+    case 'obrazek':
+      return t('library:importIssues.skip.image')
+    case 'nepodporovany':
+      return t('library:importIssues.skip.unsupported')
+    case 'stary-format':
+      return t('library:importIssues.skip.oldFormat')
+    // Extraction finished but the file was empty (`processFile` in `@testmaker/core/extract`).
+    case 'prázdný text':
+      return t('library:importIssues.skip.emptyText')
+    default:
+      return undefined
+  }
 }
 
 export interface IssueItem {
@@ -25,7 +38,7 @@ export interface IssueItem {
   reason: string
 }
 
-/** Sbalený seznam přeskočených nebo nepovedených souborů s důvodem u každého. */
+/** Collapsed list of skipped or failed files, each with its reason. */
 export function IssueList({
   title,
   items,

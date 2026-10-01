@@ -17,13 +17,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { TemplatePreview } from '@/components/TemplatePreview'
 import type { TestSettingsValue } from './types'
 
 /**
- * Nastavení testu — podtitul, hlavička, šablona a varianty. Otevírá se z lišty
- * jako Sheet, ne jako blok nad obsahem. Název písemky sem nepatří: bez něj se
- * test neuloží, takže stojí v hlavičce skladače, kde je vidět bez otevírání.
+ * Test settings — subtitle, header, template and variants. Opens from the bar
+ * as a Sheet, not as a block above the content. The test title does not belong
+ * here: the test cannot be saved without it, so it sits in the builder header
+ * where it is visible without opening anything.
  */
 export function TestSettings({
   value,
@@ -34,24 +36,24 @@ export function TestSettings({
   value: TestSettingsValue
   templates: Template[]
   onChange: (next: TestSettingsValue) => void
-  /** Pracovní list: bez známek a bez variant — na listu se nic nehodnotí ani neopisuje. */
+  /** Worksheet: no grades and no variants — nothing on a worksheet is graded or copied. */
   worksheet?: boolean
 }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button size="sm" variant="outline">
-          {worksheet ? 'Nastavení listu' : 'Nastavení testu'}
+          {worksheet ? t('tests:settings.titleWorksheet') : t('tests:settings.title')}
         </Button>
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{worksheet ? 'Nastavení listu' : 'Nastavení testu'}</SheetTitle>
+          <SheetTitle>{worksheet ? t('tests:settings.titleWorksheet') : t('tests:settings.title')}</SheetTitle>
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-4">
           <div>
-            <Label htmlFor="test-description">Podtitul / úvodní věta (nepovinné)</Label>
+            <Label htmlFor="test-description">{t('tests:settings.description')}</Label>
             <Input
               id="test-description"
               value={value.description}
@@ -61,7 +63,7 @@ export function TestSettings({
           </div>
 
           <div className={worksheet ? 'hidden' : undefined}>
-            <Label htmlFor="test-variants">Varianty</Label>
+            <Label htmlFor="test-variants">{t('tests:settings.variants')}</Label>
             <Select
               value={String(value.variants)}
               onValueChange={(next) => onChange({ ...value, variants: next === '2' ? 2 : 1 })}
@@ -70,15 +72,15 @@ export function TestSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">Jen A</SelectItem>
-                <SelectItem value="2">A i B (přeházené pořadí)</SelectItem>
+                <SelectItem value="1">{t('tests:settings.variantsA')}</SelectItem>
+                <SelectItem value="2">{t('tests:settings.variantsAB')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="test-header-school">Škola</Label>
+              <Label htmlFor="test-header-school">{t('tests:settings.school')}</Label>
               <Input
                 id="test-header-school"
                 value={value.header.school}
@@ -86,7 +88,7 @@ export function TestSettings({
               />
             </div>
             <div>
-              <Label htmlFor="test-header-subject">Předmět</Label>
+              <Label htmlFor="test-header-subject">{t('tests:settings.subject')}</Label>
               <Input
                 id="test-header-subject"
                 value={value.header.subject}
@@ -94,29 +96,29 @@ export function TestSettings({
               />
             </div>
             <div>
-              <Label htmlFor="test-header-class">Třída</Label>
+              <Label htmlFor="test-header-class">{t('tests:settings.className')}</Label>
               <Input
                 id="test-header-class"
                 value={value.header.className}
-                placeholder="prázdné = linka k doplnění"
+                placeholder={t('tests:settings.blankLine')}
                 onChange={(event) =>
                   onChange({ ...value, header: { ...value.header, className: event.target.value } })
                 }
               />
             </div>
             <div>
-              <Label htmlFor="test-header-date">Datum</Label>
+              <Label htmlFor="test-header-date">{t('tests:settings.date')}</Label>
               <Input
                 id="test-header-date"
                 value={value.header.date}
-                placeholder="prázdné = linka k doplnění"
+                placeholder={t('tests:settings.blankLine')}
                 onChange={(event) => onChange({ ...value, header: { ...value.header, date: event.target.value } })}
               />
             </div>
           </div>
 
           <div>
-            <Label>Šablona</Label>
+            <Label>{t('tests:settings.template')}</Label>
             <div className="grid grid-cols-2 gap-3">
               {templates.map((template) => (
                 <button
@@ -138,19 +140,19 @@ export function TestSettings({
             </div>
           </div>
 
-          {/* Klíč správných odpovědí se tu nenastavuje: volí se až při tisku,
-              kde se vybírá mezi „Zadání pro žáky" a „Klíč pro mě". */}
+          {/* The answer key is not set here: it is chosen at print time,
+              between "Zadání pro žáky" and "Klíč pro mě". */}
           <div className="flex flex-wrap gap-5">
             <label className={worksheet ? 'hidden' : 'flex items-center gap-2 text-sm text-fg-soft'}>
               <Checkbox
                 checked={value.graded}
                 onCheckedChange={() => onChange({ ...value, graded: !value.graded })}
               />
-              Test na známky (tiskne body a políčko na známku)
+              {t('tests:settings.graded')}
             </label>
-            {/* Písemka je jinak vidět jen své autorce. Sdílení se hodí, když
-                někdo onemocní a kolegyně za něj jde učit — pak si ji aspoň
-                vytiskne, místo aby ji skládala znovu. */}
+            {/* Otherwise a test is visible only to its author. Sharing helps when
+                someone is ill and a colleague covers the class — she can at
+                least print it instead of building it again. */}
             <label className="flex items-center gap-2 text-sm text-fg-soft">
               <Checkbox
                 checked={value.visibility === 'skola'}
@@ -161,7 +163,7 @@ export function TestSettings({
                   })
                 }
               />
-              Sdílet s kolegyněmi ze školy (uvidí ji a vytisknou, měnit ji nemohou)
+              {t('tests:settings.share')}
             </label>
           </div>
         </div>

@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { AI_NOT_CONFIGURED_MESSAGE, AI_SETTINGS, describeAiError, isAiConfigured } from '@testmaker/core/ai'
-import { createGeneratedWorksheet, WORKSHEET_TOPIC_GONE_MESSAGE } from '@/lib/tests'
-import { sRozsahem } from '@/lib/uzivatel'
+import { aiNotConfiguredMessage, AI_SETTINGS, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
+import { createGeneratedWorksheet } from '@/lib/tests'
+import { withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -9,9 +10,9 @@ export const maxDuration = 120
 const S = AI_SETTINGS.worksheet
 
 const brief = {
-  /** Přání učitelky („víc tabulek, na 20 minut“). */
+  /** The teacher's wishes ("více tabulek, na 20 minut"). */
   instructions: z.string().max(S.instructionsMax).default(''),
-  /** Vlastní text vložený do zadání — jen text, soubory se na server neposílají. */
+  /** Own text pasted into the brief — text only, files are never sent to the server. */
   ownText: z.string().max(S.ownTextMax).default(''),
 }
 
@@ -26,15 +27,15 @@ const bodySchema = z.discriminatedUnion('source', [
 ])
 
 /**
- * Vygeneruje pracovní list jedním voláním modelu a uloží ho i s položkami.
- * Vrací id listu a kolik položek model nevrátil v pořádku.
+ * Generates a worksheet with a single model call and saves it with its items.
+ * Returns the worksheet id and how many items the model did not return intact.
  */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       if (!isAiConfigured()) {
         return Response.json(
-          { error: `${AI_NOT_CONFIGURED_MESSAGE} Můžeš ale založit prázdný list a vyplnit ho ručně.` },
+          { error: `${aiNotConfiguredMessage()} ${t('worksheets:api.createEmptyInstead')}` },
           { status: 503 },
         )
       }
@@ -42,8 +43,7 @@ export async function POST(request: Request) {
       if (!parsed.success) {
         return Response.json(
           {
-            error:
-              'Zadání listu není úplné — vyber téma, nebo napiš, o čem má list být (nejvýš 200 znaků), a zkus to znovu.',
+            error: t('worksheets:api.briefIncomplete'),
             detail: parsed.error.issues,
           },
           { status: 400 },
@@ -53,21 +53,21 @@ export async function POST(request: Request) {
       const source = body.source === 'topic' ? { topicId: body.topicId } : { title: body.title, gradeId: body.gradeId }
 
       try {
-        // Záměrně bez `request.signal`: když učitelka zavře stránku, list se
-        // stejně dogeneruje a uloží a najde ho v přehledu listů.
-        const result = await createGeneratedWorksheet(ucet, {
+        // Deliberately without `request.signal`: if the teacher closes the page,
+        // the worksheet still finishes, is saved and shows up in the overview.
+        const result = await createGeneratedWorksheet(account, {
           source,
           instructions: body.instructions.trim(),
           ownText: body.ownText.trim(),
         })
-        if (!result) return Response.json({ error: WORKSHEET_TOPIC_GONE_MESSAGE }, { status: 404 })
+        if (!result) return Response.json({ error: t('worksheets:api.topicGone') }, { status: 404 })
         return Response.json(result)
       } catch (error) {
-        // Surové znění chyby zůstane v logu serveru; učitelka dostane českou radu.
-        console.error('Pracovní list se nepodařilo vygenerovat:', error)
+        // The raw error stays in the server log; the teacher gets advice in Czech.
+        console.error('Failed to generate worksheet:', error)
         return Response.json({ error: describeAiError(error).message }, { status: 502 })
       }
     },
-    { zapis: true },
+    { write: true },
   )
 }

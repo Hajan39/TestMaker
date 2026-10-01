@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { DELETE, GET, POST } from '@/app/api/jobs/route'
 import { db, generationJobs, materials, type GenerationJobParams } from '@/db'
 import { newId } from '@/lib/ids'
-import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, UCET } from './helpers'
+import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, ACCOUNT } from './helpers'
 
 /**
- * Fronta hromadného generování. Zařazuje se z celé knihovny naráz, takže se tu
- * nejsnáz stane, že se téma zařadí dvakrát nebo se naopak nezařadí vůbec.
+ * The bulk generation queue. Enqueuing happens over the whole library at once,
+ * so this is where a topic most easily gets enqueued twice or not at all.
  */
 
 interface EnqueueResult {
@@ -25,15 +25,15 @@ async function jobsOf(topicId: string) {
   return db.select().from(generationJobs).where(eq(generationJobs.topicId, topicId))
 }
 
-/** Téma s materiálem — bez textu se do fronty nezařazuje. */
+/** A topic with a material — without text it isn't enqueued. */
 async function topicWithMaterial(): Promise<string> {
   const { topicId } = await seedTopic()
   await seedMaterial(topicId)
   return topicId
 }
 
-describe('zařazení do fronty', () => {
-  it('zařadí téma s materiálem a uloží k němu zadání', async () => {
+describe('enqueuing', () => {
+  it('enqueues a topic with a material and stores its parameters', async () => {
     const topicId = await topicWithMaterial()
 
     const result = await enqueue({ topicIds: [topicId], count: 8, difficulty: 3, types: ['single_choice'] })
@@ -49,25 +49,25 @@ describe('zařazení do fronty', () => {
     })
   })
 
-  it('téma bez materiálů se nezařadí — není z čeho generovat', async () => {
+  it('a topic without materials is not enqueued — nothing to generate from', async () => {
     const { topicId } = await seedTopic()
     const result = await enqueue({ topicIds: [topicId] })
     expect(result.enqueued).toBe(0)
     expect(await jobsOf(topicId)).toHaveLength(0)
   })
 
-  it('téma, kde jsou jen duplicitní materiály, se nezařadí', async () => {
+  it('a topic with only duplicate materials is not enqueued', async () => {
     const { topicId } = await seedTopic()
-    const jinde = await seedTopic()
-    const originalId = await seedMaterial(jinde.topicId, { fileName: 'Originál.docx' })
-    const kopieId = await seedMaterial(topicId, { fileName: 'Kopie.pdf' })
-    await db.update(materials).set({ duplicateOfId: originalId }).where(eq(materials.id, kopieId))
+    const elsewhere = await seedTopic()
+    const originalId = await seedMaterial(elsewhere.topicId, { fileName: 'Originál.docx' })
+    const copyId = await seedMaterial(topicId, { fileName: 'Kopie.pdf' })
+    await db.update(materials).set({ duplicateOfId: originalId }).where(eq(materials.id, copyId))
 
     const result = await enqueue({ topicIds: [topicId] })
     expect(result.enqueued).toBe(0)
   })
 
-  it('téma, kde je jediný materiál ručně vyřazený, se nezařadí', async () => {
+  it('a topic whose only material is manually excluded is not enqueued', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'Vyřazený.docx', excluded: true })
 
@@ -75,7 +75,7 @@ describe('zařazení do fronty', () => {
     expect(result.enqueued).toBe(0)
   })
 
-  it('téma, které už otázky má, se přeskočí', async () => {
+  it('a topic that already has questions is skipped', async () => {
     const topicId = await topicWithMaterial()
     await seedQuestion(topicId)
 
@@ -83,7 +83,7 @@ describe('zařazení do fronty', () => {
     expect(result).toMatchObject({ enqueued: 0, skipped: 1 })
   })
 
-  it('u doplňování se téma s otázkami nepřeskakuje — právě o něj jde', async () => {
+  it('when topping up a topic with questions is not skipped — it is the point', async () => {
     const topicId = await topicWithMaterial()
     await seedQuestion(topicId)
 
@@ -92,7 +92,7 @@ describe('zařazení do fronty', () => {
     expect((await jobsOf(topicId))[0]?.params as GenerationJobParams).toMatchObject({ mode: 'target' })
   })
 
-  it('téma, které už ve frontě čeká, se nezařadí podruhé', async () => {
+  it('a topic already waiting in the queue is not enqueued twice', async () => {
     const topicId = await topicWithMaterial()
     await enqueue({ topicIds: [topicId] })
 
@@ -101,7 +101,7 @@ describe('zařazení do fronty', () => {
     expect(await jobsOf(topicId)).toHaveLength(1)
   })
 
-  it('rozsahem může být celý ročník i celý předmět', async () => {
+  it('the range can be a whole grade or a whole subject', async () => {
     const { subjectId, gradeId, topicId } = await seedTopic()
     await seedMaterial(topicId)
 
@@ -110,45 +110,45 @@ describe('zařazení do fronty', () => {
     expect(await enqueue({ subjectId })).toMatchObject({ enqueued: 1 })
   })
 
-  it('bez rozsahu se nezařadí nic', async () => {
+  it('without a range nothing is enqueued', async () => {
     expect(await enqueue({})).toMatchObject({ enqueued: 0, skipped: 0 })
   })
 
-  it('nesmyslné zadání je 400', async () => {
+  it('nonsensical parameters return 400', async () => {
     const response = await POST(jsonReq('/api/jobs', 'POST', { count: 999 }))
     expect(response.status).toBe(400)
   })
 })
 
-describe('stav a vyprázdnění fronty', () => {
-  it('spočítá úlohy podle stavu', async () => {
+describe('queue status and clearing', () => {
+  it('counts jobs per state', async () => {
     const { topicId } = await seedTopic()
-    // Soubor testů sdílí jednu databázi — počítá se to, co je ve frontě teď.
+    // The test file shares one database — count what is in the queue now.
     await db.delete(generationJobs)
     await db.insert(generationJobs).values([
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
 
     const body = (await (await GET(req('/api/jobs'))).json()) as Record<string, number>
     expect(body).toMatchObject({ queued: 1, running: 1, done: 1, error: 1 })
   })
 
-  it('vyprázdnění smaže i zaseknuté běžící úlohy, hotové nechá', async () => {
+  it('clearing also deletes stuck running jobs, keeps finished ones', async () => {
     const { topicId } = await seedTopic()
     await db.delete(generationJobs)
     await db.insert(generationJobs).values([
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
     ])
 
     const body = (await (await DELETE(req('/api/jobs'))).json()) as { removed: number }
     expect(body.removed).toBe(3)
-    const zbytek = await db.select().from(generationJobs)
-    expect(zbytek.map((row) => row.status)).toEqual(['done'])
+    const rest = await db.select().from(generationJobs)
+    expect(rest.map((row) => row.status)).toEqual(['done'])
   })
 })

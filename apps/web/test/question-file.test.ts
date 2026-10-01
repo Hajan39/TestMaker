@@ -4,7 +4,7 @@ import { QuestionFileError, schoolRulesFromSource } from '@testmaker/core/ai'
 import { db, promptRules, questions } from '@/db'
 import { importQuestionFile, topicSourceFile } from '@/lib/questionFile'
 import { newId } from '@/lib/ids'
-import { seedMaterial, seedTopic, UCET } from './helpers'
+import { seedMaterial, seedTopic, ACCOUNT } from './helpers'
 
 const TEXT = 'Houby nemají chlorofyl, a proto si potravu nevyrábějí samy. '.repeat(8)
 
@@ -12,17 +12,17 @@ beforeEach(async () => {
   await db.delete(promptRules)
 })
 
-describe('otázky z Claude Code', () => {
-  it('stáhne text tématu s hlavičkou a nahraje zpátky jen platné otázky', async () => {
+describe('questions from Claude Code', () => {
+  it('downloads the topic text with a header and imports back only valid questions', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
 
-    const zdroj = await topicSourceFile(UCET, topicId)
-    expect(zdroj?.text).toContain('=== houby.pdf ===')
-    expect(zdroj?.text).toMatch(/^# Předmět: /)
+    const source = await topicSourceFile(ACCOUNT, topicId)
+    expect(source?.text).toContain('=== houby.pdf ===')
+    expect(source?.text).toMatch(/^# Předmět: /)
 
-    const vysledek = await importQuestionFile(
-      UCET,
+    const result = await importQuestionFile(
+      ACCOUNT,
       topicId,
       JSON.stringify({
         questions: [
@@ -39,46 +39,46 @@ describe('otázky z Claude Code', () => {
         ],
       }),
     )
-    expect(vysledek?.created).toBe(1)
-    expect(vysledek?.rejected).toHaveLength(1)
+    expect(result?.created).toBe(1)
+    expect(result?.rejected).toHaveLength(1)
 
-    const ulozene = await db.select().from(questions).where(eq(questions.topicId, topicId))
-    expect(ulozene.map((q) => q.model)).toEqual(['claude-code'])
-    expect(ulozene.map((q) => q.status)).toEqual(['approved'])
+    const saved = await db.select().from(questions).where(eq(questions.topicId, topicId))
+    expect(saved.map((q) => q.model)).toEqual(['claude-code'])
+    expect(saved.map((q) => q.status)).toEqual(['approved'])
   })
 
-  it('stažený soubor nese i aktivní pravidla školy, aby je Claude Code dodržel taky', async () => {
+  it('the downloaded file carries the active school rules so Claude Code follows them too', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
     await db.insert(promptRules).values({
       id: newId(),
-      schoolId: UCET.schoolId,
+      schoolId: ACCOUNT.schoolId,
       text: 'Nepoužívej otázky ano/ne.',
       active: true,
-      createdBy: UCET.userId,
+      createdBy: ACCOUNT.userId,
     })
     await db.insert(promptRules).values({
       id: newId(),
-      schoolId: UCET.schoolId,
+      schoolId: ACCOUNT.schoolId,
       text: 'Vypnuté pravidlo, tohle se do souboru nedostane.',
       active: false,
-      createdBy: UCET.userId,
+      createdBy: ACCOUNT.userId,
     })
 
-    const zdroj = await topicSourceFile(UCET, topicId)
-    expect(schoolRulesFromSource(zdroj!.text)).toEqual(['Nepoužívej otázky ano/ne.'])
+    const source = await topicSourceFile(ACCOUNT, topicId)
+    expect(schoolRulesFromSource(source!.text)).toEqual(['Nepoužívej otázky ano/ne.'])
   })
 
-  it('cizí téma se tváří jako neexistující', async () => {
+  it('a foreign topic looks nonexistent', async () => {
     const { topicId } = await seedTopic()
-    const cizi = { ...UCET, schoolId: 'jina-skola' }
-    expect(await topicSourceFile(cizi, topicId)).toBeNull()
-    expect(await importQuestionFile(cizi, topicId, '[]')).toBeNull()
+    const foreign = { ...ACCOUNT, schoolId: 'jina-skola' }
+    expect(await topicSourceFile(foreign, topicId)).toBeNull()
+    expect(await importQuestionFile(foreign, topicId, '[]')).toBeNull()
   })
 
-  it('nevalidní JSON v souboru se pozná jako chyba souboru, ne obecná chyba', async () => {
+  it('invalid JSON in the file is recognised as a file error, not a generic error', async () => {
     const { topicId } = await seedTopic()
     await seedMaterial(topicId, { fileName: 'houby.pdf', text: TEXT })
-    await expect(importQuestionFile(UCET, topicId, '{nejde')).rejects.toBeInstanceOf(QuestionFileError)
+    await expect(importQuestionFile(ACCOUNT, topicId, '{nejde')).rejects.toBeInstanceOf(QuestionFileError)
   })
 })

@@ -10,15 +10,15 @@ import {
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
 /**
- * Hlášky (toasty). Oproti výchozí podobě ze shadcn tu není `next-themes`:
- * tmavý režim u nás řídí třída `dark` na kořenovém elementu a barvy se berou
- * z designových tokenů, takže se hláška přebarví sama a žádný `theme` prop
- * není potřeba. Sonner by si s `theme="system"` navíc přebil volbu učitelky
- * z přepínače v liště.
+ * Toasts. Unlike the shadcn default there is no `next-themes` here: dark mode
+ * is driven by the `dark` class on the root element and colours come from the
+ * design tokens, so the toast recolours itself and no `theme` prop is needed.
+ * With `theme="system"` Sonner would also override the teacher's choice from
+ * the toggle in the bar.
  *
- * Proměnné se jmenují `--color-*`: Tailwind 4 vypouští tokeny z `@theme`
- * pod tímhle jménem, kdežto shadcn generuje `var(--popover)`, což by se tu
- * nerozřešilo a hláška by zůstala průhledná.
+ * The variables are named `--color-*`: Tailwind 4 emits `@theme` tokens under
+ * that name, whereas shadcn generates `var(--popover)`, which would not resolve
+ * here and the toast would stay transparent.
  */
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
@@ -41,8 +41,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          // Tlačítko v hlášce („Vzít zpět“) musí být vidět na obou režimech,
-          // proto značková barva z tokenů, ne výchozí inverzní podbarvení.
+          // The toast button ("Vzít zpět") must be visible in both modes,
+          // hence the brand colour from tokens, not the default inverted tint.
           actionButton: '!bg-brand !text-brand-fg',
           cancelButton: '!bg-surface-muted !text-fg-soft',
         },

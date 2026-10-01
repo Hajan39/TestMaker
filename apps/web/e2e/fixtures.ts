@@ -1,21 +1,21 @@
 import { expect, type APIRequestContext } from '@playwright/test'
 
 /**
- * Data, na kterých testy pracují, si testy zakládají samy — dřív tu byla
- * natvrdo id z autorova disku a na čerstvě naimportované databázi testy
- * spadly. Fixtura je idempotentní: co už existuje, znovu nevzniká, takže
- * opakované běhy knihovnu nezanášejí.
+ * Tests create the data they work on themselves — ids from the author's disk
+ * used to be hard-coded here and tests failed on a freshly imported database.
+ * The fixture is idempotent: what exists is not created again, so repeated
+ * runs do not clutter the library.
  */
 
-// Název předmětu schválně nezačíná na „ZKOUŠKA“ — test mazání hledá předmět
-// podle části názvu a druhá zkušební položka by mu ho rozdvojila.
+// The subject name deliberately does not start with "ZKOUŠKA" — the deletion
+// test looks the subject up by part of its name and a second test item would split it.
 const SUBJECT = 'E2E KONTROLA'
-// Vlastní název ročníku: testy v podklady.spec.ts sahají po prvním odkazu
-// „9. ročník“ a zkušební ročník by se jim pletl do cesty.
+// Own grade name: tests in thin-topics.spec.ts grab the first "9. ročník"
+// link and a test grade would get in their way.
 const GRADE = 'E2E ročník'
 const TOPIC = 'Zkušební téma'
 
-/** Text materiálu musí být dost dlouhý, aby téma nebylo označené jako „málo obsahu“. */
+/** The material text must be long enough for the topic not to be flagged as "low content". */
 const TEXT =
   'Fotosyntéza je děj, při kterém zelené rostliny z oxidu uhličitého a vody za přítomnosti světla vytvářejí cukry a kyslík. '.repeat(
     12,
@@ -26,14 +26,14 @@ interface SearchResult {
   topicName: string
 }
 
-/** Téma s materiálem i schválenými otázkami. Vrací cestu `/topics/<id>`. */
+/** A topic with a material and approved questions. Returns the `/topics/<id>` path. */
 export async function testTopicPath(request: APIRequestContext): Promise<string> {
   const topicId = await ensureTopic(request)
   await ensureQuestions(request, topicId)
   return `/topics/${topicId}`
 }
 
-/** Třída (ročník), ve které zkušební téma leží. Vrací cestu `/tridy/<id>`. */
+/** The class (grade) the test topic lives in. Returns the `/tridy/<id>` path. */
 export async function testGradeQuery(request: APIRequestContext): Promise<string> {
   const topicId = await ensureTopic(request)
   const response = await request.get(`/api/topics?gradesOf=${encodeURIComponent(topicId)}`)
@@ -44,11 +44,11 @@ export async function testGradeQuery(request: APIRequestContext): Promise<string
     currentGrade: string
   }
   const grade = grades.find((row) => row.name === currentGrade) ?? grades[0]
-  expect(grade, 'zkušební ročník se nenašel').toBeTruthy()
+  expect(grade, 'test grade not found').toBeTruthy()
   return `/tridy/${grade!.id}`
 }
 
-/** Importuje zkušební materiál (opakovaně tentýž) a vrátí id jeho tématu. */
+/** Imports the test material (the same one every time) and returns its topic id. */
 async function ensureTopic(request: APIRequestContext): Promise<string> {
   const imported = await request.post('/api/materials', {
     data: {
@@ -64,25 +64,25 @@ async function ensureTopic(request: APIRequestContext): Promise<string> {
           text: TEXT,
           pageCount: null,
           needsOcr: false,
-          // Pevný otisk obsahu: při dalším běhu se materiál pozná jako už známý.
+          // Fixed content hash: on the next run the material is recognised as known.
           contentHash: 'e2e-zkusebni-tema-v1',
         },
       ],
     },
   })
-  expect(imported.ok(), 'zkušební materiál se nepodařilo naimportovat').toBe(true)
+  expect(imported.ok(), 'failed to import the test material').toBe(true)
 
   const found = await request.get(`/api/library/search?q=${encodeURIComponent(TOPIC)}`)
   expect(found.ok()).toBe(true)
   const { results } = (await found.json()) as { results: SearchResult[] }
   const topic = results.find((result) => result.topicName.includes(TOPIC)) ?? results[0]
-  expect(topic, `zkušební téma „${TOPIC}“ se v knihovně nenašlo`).toBeTruthy()
+  expect(topic, `test topic "${TOPIC}" not found in the library`).toBeTruthy()
   return topic!.topicId
 }
 
 /**
- * Doplní otázky do počtu, se kterým se dá pracovat (hromadný výběr, filtry).
- * Každá má jinou obtížnost, aby filtr obtížnosti měl co vybírat.
+ * Tops up questions to a workable count (bulk selection, filters). Each has a
+ * different difficulty so the difficulty filter has something to pick.
  */
 async function ensureQuestions(request: APIRequestContext, topicId: string): Promise<void> {
   const impact = await request.get(`/api/library?kind=topic&id=${encodeURIComponent(topicId)}`)
@@ -130,6 +130,6 @@ async function ensureQuestions(request: APIRequestContext, topicId: string): Pro
 
   for (const question of prepared.slice(questions)) {
     const created = await request.post('/api/questions', { data: { topicId, question } })
-    expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
+    expect(created.ok(), 'failed to create the test question').toBe(true)
   }
 }

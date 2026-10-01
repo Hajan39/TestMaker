@@ -16,25 +16,26 @@ import {
 } from '@testmaker/ui'
 import { useRegenerateQuestion } from '@/components/useRegenerateQuestion'
 import { useQuestionVariant } from '@/components/useQuestionVariant'
+import { t } from '@testmaker/core/i18n'
 
-const DUVODY = Object.entries(REGENERATE_REASONS) as [
+const REASONS = Object.entries(REGENERATE_REASONS) as [
   RegenerateReason,
   (typeof REGENERATE_REASONS)[RegenerateReason],
 ][]
 
 /**
- * Nechá model vyrobit náhradu jedné otázky — rozdělené tlačítko do kontroly
- * otázek, kde je na akce místo v celé ploše.
+ * Lets the model produce a replacement for one question — a split button for
+ * question review, where there is room for actions across the whole area.
  *
- * Hlavní část přegeneruje hned, beze změny dosavadního chování (jedno
- * kliknutí, žádný důvod). Šipka vedle ní otevře nabídku sedmi důvodů
- * s nepovinnou poznámkou — výběr štítku rovnou přegeneruje s tím důvodem
- * (poznámka jde vyplnit ještě předtím).
+ * The main part regenerates right away, keeping the existing behaviour (one
+ * click, no reason). The arrow next to it opens a menu of seven reasons with
+ * an optional note — picking a label regenerates with that reason straight
+ * away (the note can be filled in beforehand).
  *
- * Bez nakonfigurovaného modelu se tlačítko vůbec nenabídne (jinak by
- * učitelka klikla a dozvěděla se to až z chyby). Rozhodování o tom i
- * samotná náhrada jsou v `useRegenerateQuestion`, aby se tatáž akce dala
- * nabídnout i jinde.
+ * Without a configured model the button is not offered at all (otherwise the
+ * teacher would click and only learn from an error). That decision and the
+ * replacement itself live in `useRegenerateQuestion`, so the same action can
+ * be offered elsewhere too.
  */
 export function RegenerateButton({
   questionId,
@@ -47,11 +48,11 @@ export function RegenerateButton({
   questionId: string
   type: QuestionType
   difficulty: 1 | 2 | 3
-  /** Zavolá se po úspěšné náhradě; bez něj se jen obnoví stránka. */
+  /** Called after a successful replacement; without it the page just refreshes. */
   onDone?: () => void
-  /** Zavolá se po vzniku lehčí nebo těžší verze — nová karta se má hned objevit a posunout do zorného pole. */
+  /** Called once an easier or harder version exists — the new card should appear right away and scroll into view. */
   onVariantCreated?: (question: Question) => void
-  /** Karta podle toho zakáže úpravu a smazání, dokud model na otázce pracuje. */
+  /** The card uses it to disable editing and deleting while the model works on the question. */
   onBusyChange?: (busy: boolean) => void
 }) {
   const { available, busy, run } = useRegenerateQuestion(questionId, type, onDone)
@@ -64,11 +65,11 @@ export function RegenerateButton({
   }, [anyBusy, onBusyChange])
   if (!available) return null
 
-  function vybratDuvod(reason: RegenerateReason) {
+  function pickReason(reason: RegenerateReason) {
     setOpen(false)
-    const poznamka = note.trim() || undefined
+    const noteText = note.trim() || undefined
     setNote('')
-    void run(reason, poznamka)
+    void run(reason, noteText)
   }
 
   return (
@@ -78,11 +79,11 @@ export function RegenerateButton({
         variant="ghost"
         className="rounded-r-none"
         busy={busy}
-        busyLabel="Přegeneruji…"
+        busyLabel={t('generation:regenerate.busy')}
         disabled={variant.busyDirection !== null}
         onClick={() => void run()}
       >
-        Přegenerovat
+        {t('generation:regenerate.action')}
       </BusyButton>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
@@ -91,7 +92,7 @@ export function RegenerateButton({
             variant="ghost"
             className="rounded-l-none border-l"
             disabled={busy || variant.busyDirection !== null}
-            aria-label="Přegenerovat s důvodem"
+            aria-label={t('generation:regenerate.withReason')}
           >
             <ChevronDown className="size-4" />
           </Button>
@@ -99,49 +100,49 @@ export function RegenerateButton({
         <DropdownMenuContent align="end" className="w-72">
           <div className="px-2 py-1.5">
             <label htmlFor={`regen-poznamka-${questionId}`} className="text-xs text-fg-muted">
-              Napiš poznámku a pak vyber důvod
+              {t('generation:regenerate.noteLabel')}
             </label>
             <Textarea
               id={`regen-poznamka-${questionId}`}
               value={note}
               onChange={(event) => setNote(event.target.value)}
               onKeyDown={(event) => event.stopPropagation()}
-              placeholder="Co konkrétně přepsat…"
+              placeholder={t('generation:regenerate.notePlaceholder')}
               className="mt-1 min-h-14 text-sm"
               maxLength={300}
             />
           </div>
           <DropdownMenuSeparator />
-          {DUVODY.map(([reason, { label }]) => (
-            <DropdownMenuItem key={reason} onSelect={() => vybratDuvod(reason)}>
+          {REASONS.map(([reason, { label }]) => (
+            <DropdownMenuItem key={reason} onSelect={() => pickReason(reason)}>
               {label}
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
           {(['easier', 'harder'] as const).map((direction) => {
-            const label = direction === 'easier' ? 'Lehčí verze' : 'Těžší verze'
-            const busyLabel = direction === 'easier' ? 'Vytvářím lehčí verzi…' : 'Vytvářím těžší verzi…'
-            const duvod = variant.disabledReason(direction)
+            const label = direction === 'easier' ? t('generation:variant.easier') : t('generation:variant.harder')
+            const busyLabel = direction === 'easier' ? t('generation:variant.creatingEasier') : t('generation:variant.creatingHarder')
+            const reason = variant.disabledReason(direction)
             const isBusy = variant.busyDirection === direction
             const hintId = `verze-hint-${direction}-${questionId}`
             return (
               <DropdownMenuItem
                 key={direction}
-                aria-describedby={duvod ? hintId : undefined}
-                disabled={duvod !== null || variant.busyDirection !== null}
+                aria-describedby={reason ? hintId : undefined}
+                disabled={reason !== null || variant.busyDirection !== null}
                 onSelect={(event) => {
-                  // Menu zůstává otevřené, dokud verze nevznikne (nebo
-                  // neselže) — jinak by byl text „Vytvářím…" i disabled
-                  // druhé položky vidět jen bleskově, než se menu zavře.
+                  // The menu stays open until the version exists (or fails) —
+                  // otherwise the „Vytvářím…" text and the disabled second
+                  // item would only flash before the menu closes.
                   event.preventDefault()
                   void variant.create(direction).then(() => setOpen(false))
                 }}
               >
                 <div className="flex flex-col">
                   <span>{isBusy ? busyLabel : label}</span>
-                  {duvod ? (
+                  {reason ? (
                     <span id={hintId} className="text-xs text-fg-muted">
-                      {duvod}
+                      {reason}
                     </span>
                   ) : null}
                 </div>

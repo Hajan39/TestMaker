@@ -4,12 +4,12 @@ import type { ComponentProps } from 'react'
 import { Button } from './ui/button'
 
 /**
- * Tlačítko akce, která chvíli trvá. Po dobu běhu je zablokované a říká, co
- * dělá („Ukládám…“, „Mažu…“) — jinak není poznat, jestli se kliknutí vůbec
- * chytlo, a učitelka klikne podruhé.
+ * Button for an action that takes a while. While running it is disabled and
+ * says what it is doing ("Ukládám…", "Mažu…") — otherwise there is no telling
+ * whether the click registered, and the teacher clicks again.
  *
- * Bez kolečka schválně: popisek řekne víc a tlačítko nezmění výšku. Kostra se
- * sem nehodí — nečeká se na obsah, který by se měl objevit, ale na akci.
+ * No spinner on purpose: the label says more and the button keeps its height.
+ * A skeleton does not fit here — we are waiting for an action, not for content.
  */
 export function BusyButton({
   busy = false,
@@ -19,7 +19,7 @@ export function BusyButton({
   ...props
 }: ComponentProps<typeof Button> & {
   busy?: boolean
-  /** Co tlačítko říká, dokud akce běží. */
+  /** What the button says while the action runs. */
   busyLabel: string
 }) {
   return (

@@ -1,32 +1,33 @@
 import { OAUTH_COOKIE } from '@/lib/session'
 import {
-  bezpecnyNavrat,
-  googleNastaveni,
-  novyOauthStav,
-  presmeruj,
-  prihlasovaciAdresa,
+  safeReturnPath,
+  googleSettings,
+  newOauthState,
+  redirectResponse,
+  authorizationUrl,
 } from '@/lib/google'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
 /**
- * Začátek přihlášení přes Google. Stav i tajemství PKCE se ukládají do krátké
- * cookie, ne do databáze: na serverless nemá další požadavek s čím sdílet
- * paměť a zakládat kvůli deseti minutám tabulku nemá smysl.
+ * Start of Google sign-in. The state and PKCE secret are stored in a short
+ * cookie, not the database: on serverless the next request shares no memory
+ * and a table for ten minutes makes no sense.
  */
 export function GET(request: Request) {
-  const nastaveni = googleNastaveni()
+  const settings = googleSettings()
   const url = new URL(request.url)
-  if (!nastaveni) {
-    // Tlačítko se bez nastavení nezobrazuje; kdo sem trefí ručně, ať ví proč.
+  if (!settings) {
+    // Without settings the button is not shown; whoever gets here by hand should know why.
     const login = new URL('/login', url.origin)
-    login.searchParams.set('chyba', 'Přihlášení přes Google není v této instalaci nastavené.')
-    return presmeruj(login)
+    login.searchParams.set('chyba', t('auth:google.notConfigured'))
+    return redirectResponse(login)
   }
 
-  const stav = novyOauthStav(bezpecnyNavrat(url.searchParams.get('dal')))
+  const state = newOauthState(safeReturnPath(url.searchParams.get('dal')))
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  return presmeruj(prihlasovaciAdresa(nastaveni, stav), [
-    `${OAUTH_COOKIE}=${encodeURIComponent(JSON.stringify(stav))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure}`,
+  return redirectResponse(authorizationUrl(settings, state), [
+    `${OAUTH_COOKIE}=${encodeURIComponent(JSON.stringify(state))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure}`,
   ])
 }

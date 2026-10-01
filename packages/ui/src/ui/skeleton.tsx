@@ -4,8 +4,8 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      // Barva jde z vlastního tokenu, ne z `accent`: kostra se kreslí i do
-      // postranních sloupců, které `accent` (tiché podbarvení) samy mají.
+      // The colour comes from its own token, not `accent`: skeletons are drawn
+      // in sidebars too, which themselves use `accent` (the quiet tint).
       className={cn("animate-pulse rounded-md bg-skeleton", className)}
       {...props}
     />

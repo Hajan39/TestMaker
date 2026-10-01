@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 
 /**
- * Obal obsahu stránek mimo knihovnu: rolování, odsazení a rozumná maximální šířka.
- * `ThreePane` si rolování řídí samo ve svých sloupcích — tahle komponenta je jediná
- * cesta pro všechno ostatní, aby nevznikly dvě různá řešení téhož.
+ * Content wrapper for pages outside the library: scrolling, padding and a
+ * sensible max width. `ThreePane` handles scrolling in its own columns — this
+ * component is the only path for everything else, so there are not two
+ * solutions to the same thing.
  */
 export function PageShell({ children }: { children: ReactNode }) {
   return (

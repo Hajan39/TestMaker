@@ -1,28 +1,28 @@
 import { expect, test } from '@playwright/test'
 
 /**
- * Náhledy šablon. V Safari se u vloženého PDF nespustí událost o načtení,
- * takže zástupná plocha zůstávala navrchu a překrývala hotový náhled.
+ * Template previews. Safari does not fire the load event for an embedded PDF,
+ * so the placeholder stayed on top and covered the finished preview.
  */
-test.describe('náhledy šablon', () => {
-  test('zástupná plocha zmizí a náhled zůstane vidět', async ({ page }) => {
+test.describe('template previews', () => {
+  test('the placeholder disappears and the preview stays visible', async ({ page }) => {
     await page.goto('/templates')
 
     const frames = page.locator('iframe[title="Náhled šablony"]')
     await expect(frames.first()).toBeVisible()
     expect(await frames.count()).toBeGreaterThanOrEqual(3)
 
-    // Plocha se musí uklidit i tam, kde prohlížeč načtení neohlásí.
+    // The placeholder must go away even where the browser does not report the load.
     await expect(page.locator('div[aria-hidden="true"].absolute.inset-0')).toHaveCount(0, {
       timeout: 6000,
     })
 
-    // A nesmí se vrátit — dřív to působilo jako blikání dokola.
+    // And it must not come back — that used to look like endless flickering.
     await page.waitForTimeout(1500)
     await expect(page.locator('div[aria-hidden="true"].absolute.inset-0')).toHaveCount(0)
   })
 
-  test('náhled se skutečně načte z API', async ({ page }) => {
+  test('the preview is actually loaded from the API', async ({ page }) => {
     const responses: number[] = []
     page.on('response', (response) => {
       if (response.url().includes('/preview')) responses.push(response.status())

@@ -1,24 +1,25 @@
+import type { Metadata } from 'next'
+import { t } from '@testmaker/core/i18n'
 import { EmptyState, PageShell } from '@testmaker/ui'
 import { loadPickerTopics } from '@/lib/questionPicker'
 import { loadTemplates } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
 import { aiStatus } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Nový test – TestMaker' }
+export function generateMetadata(): Metadata {
+  return { title: t('tests:meta.new') }
+}
 
 export default async function NewTestPage() {
-  const ucet = await ucetStranky()
-  const [topics, templates] = await Promise.all([loadPickerTopics(ucet), loadTemplates(ucet)])
-  // Bez šablony by uložení skončilo odmítnutím — řekne se to rovnou.
+  const account = await pageAccount()
+  const [topics, templates] = await Promise.all([loadPickerTopics(account), loadTemplates(account)])
+  // Without a template saving would be rejected — say so up front.
   if (templates.length === 0) {
     return (
       <PageShell>
-        <EmptyState
-          title="Nejdřív je potřeba šablona"
-          hint="Ve škole zatím není žádná šablona pro tisk, takže nejde nic založit. Dej vědět správci, ať ji přidá."
-        />
+        <EmptyState title={t('tests:noTemplate.title')} hint={t('tests:noTemplate.hint')} />
       </PageShell>
     )
   }
@@ -29,7 +30,7 @@ export default async function NewTestPage() {
         templates={templates}
         test={null}
         items={[]}
-        role={ucet.role}
+        role={account.role}
         ai={aiStatus()}
       />
     </PageShell>

@@ -1,17 +1,21 @@
-import { aktualniUzivatel } from '@/lib/uzivatel'
-import { ZmenaHeslaForm } from './ZmenaHeslaForm'
+import { currentUser } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
+import { ChangePasswordForm } from './ChangePasswordForm'
 
-export const metadata = { title: 'Změna hesla – TestMaker' }
+export function generateMetadata() {
+  return { title: t('auth:changePassword.metaTitle') }
+}
 
-// Stav relace se čte při každém požadavku; předvykreslená stránka by ho neznala.
+// Session state is read on every request; a prerendered page would not know it.
 export const dynamic = 'force-dynamic'
 
 /**
- * Změna vlastního hesla. Po resetu správcem sem brána pustí a nikam jinam —
- * heslo, které zná ještě někdo další, nemá zůstat v provozu. Jestli jde
- * o takovou vynucenou změnu, ví jen server; podle toho se nabídne cesta zpět.
+ * Changing one's own password. After a reset by a manager the gate lets the
+ * user only here — a password someone else knows must not stay in use. Only
+ * the server knows whether this is such a forced change; the way back is
+ * offered accordingly.
  */
-export default async function ZmenaHeslaPage() {
-  const uzivatel = await aktualniUzivatel()
-  return <ZmenaHeslaForm vynucena={uzivatel?.mustChangePassword ?? false} />
+export default async function ChangePasswordPage() {
+  const user = await currentUser()
+  return <ChangePasswordForm forced={user?.mustChangePassword ?? false} />
 }

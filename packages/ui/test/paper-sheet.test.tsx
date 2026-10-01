@@ -4,16 +4,16 @@ import { BUILT_IN_TEMPLATES, templateConfigSchema } from '@testmaker/core/schema
 import { PaperHeader, PaperSheet } from '../src'
 
 /**
- * List papíru a hlavička testu. Kontroluje se, že list vede rozměry v bodech
- * PDF (`--paper-pt`) a že hlavička vykreslí totéž co `Header` v PDF: název,
- * políčko na známku, linky k vyplnění.
+ * The paper sheet and test header. Checks that the sheet sizes things in PDF
+ * points (`--paper-pt`) and that the header renders the same as `Header` in
+ * the PDF: title, grade box, lines to fill in.
  */
 
 const config = BUILT_IN_TEMPLATES[0]!.config
 const header = { school: '', subject: '', className: '', teacher: '', date: '', note: '' }
 
 describe('PaperSheet', () => {
-  it('je list ve tvaru A4 s vlastní jednotkou v bodech PDF', () => {
+  it('is an A4 sheet with its own PDF point unit', () => {
     const { container } = render(
       <PaperSheet config={config}>
         <p>obsah</p>
@@ -21,12 +21,12 @@ describe('PaperSheet', () => {
     )
     const sheet = container.querySelector('[data-slot="paper-sheet"]') as HTMLElement
     expect(sheet.style.getPropertyValue('--paper-pt')).toContain('cqw')
-    // Výška je poměr A4 k šířce listu (297/210 = 141,43 %).
+    // The height is the A4 ratio to the sheet width (297/210 = 141.43 %).
     expect(sheet.style.minHeight).toContain('141.4')
     expect(screen.getByText('obsah')).toBeInTheDocument()
   })
 
-  it('vykreslí zápatí, jen když ho šablona tiskne', () => {
+  it('renders the footer only when the template prints it', () => {
     const { container, rerender } = render(
       <PaperSheet config={config} footerLeft="Písemka · varianta A" footerRight="strana 1 / 2">
         <p>obsah</p>
@@ -48,7 +48,7 @@ describe('PaperSheet', () => {
 })
 
 describe('PaperHeader', () => {
-  it('ukáže název, políčko na body a linky k vyplnění', () => {
+  it('shows the title, points box and lines to fill in', () => {
     render(
       <PaperHeader
         title="Čtvrtletní písemka"
@@ -66,19 +66,19 @@ describe('PaperHeader', () => {
     expect(screen.getByText('Jméno a příjmení:')).toBeInTheDocument()
   })
 
-  it('u testu bez známek políčko na známku nekreslí', () => {
+  it('omits the grade box for an ungraded test', () => {
     render(
       <PaperHeader title="Opakování" header={header} config={config} graded={false} totalPoints={0} />,
     )
     expect(screen.queryByText(/Body: ______/)).not.toBeInTheDocument()
   })
 
-  it('bez názvu drží místo zástupný text, aby list nevypadal rozbitě', () => {
+  it('holds the place with placeholder text when untitled, so the sheet does not look broken', () => {
     render(<PaperHeader title="" header={header} config={config} graded totalPoints={0} />)
     expect(screen.getByText('Název písemky')).toBeInTheDocument()
   })
 
-  it('schovaná hlavička se nevykreslí vůbec', () => {
+  it('a hidden header is not rendered at all', () => {
     const { container } = render(
       <PaperHeader
         title="Opakování"

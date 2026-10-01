@@ -4,33 +4,24 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
-import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Hlášky na hranici obtížnosti — musí souhlasit s `variantDifficultyLimitMessage`
- * na serveru (`apps/web/src/lib/generation.ts`). Ten soubor je `server-only`,
- * proto se stejný text drží tady zvlášť místo importu.
- */
-const LIMIT_MESSAGE: Record<'easier' | 'harder', string> = {
-  easier: 'Otázka je už nejlehčí.',
-  harder: 'Otázka je už nejtěžší.',
-}
-
-/**
- * Vytvoření lehčí nebo těžší verze otázky na stejnou látku — tlačítko v menu
- * u „Přegenerovat" na kartě otázky.
+ * Creates an easier or harder version of a question on the same material — a
+ * menu item next to „Přegenerovat" on the question card.
  *
- * Na rozdíl od přegenerování originál zůstává beze změny; verze je nová
- * karta navíc. Jestli se akce vůbec nabídne (model nastavený, typ, který AI
- * generuje), rozhoduje `useRegenerateQuestion` v `RegenerateButton` — verze
- * sedí v témže menu a bez něj se neukáže.
+ * Unlike regeneration, the original stays unchanged; the version is an extra
+ * card. Whether the action is offered at all (model configured, a type the AI
+ * generates) is decided by `useRegenerateQuestion` in `RegenerateButton` —
+ * the version sits in the same menu and does not show without it.
  */
 export function useQuestionVariant(
   question: { id: string; type: QuestionType; difficulty: 1 | 2 | 3 },
   onCreated?: (question: Question) => void,
 ): {
   busyDirection: 'easier' | 'harder' | null
-  /** Proč v tomhle směru verze nejde vytvořit — `null`, když jde. */
+  /** Why a version cannot be created in this direction — `null` when it can. */
   disabledReason: (direction: 'easier' | 'harder') => string | null
   create: (direction: 'easier' | 'harder') => Promise<void>
 } {
@@ -38,15 +29,15 @@ export function useQuestionVariant(
   const [busyDirection, setBusyDirection] = useState<'easier' | 'harder' | null>(null)
 
   function disabledReason(direction: 'easier' | 'harder'): string | null {
-    const cilova = question.difficulty + (direction === 'easier' ? -1 : 1)
-    if (cilova < 1 || cilova > 3) return LIMIT_MESSAGE[direction]
+    const targetDifficulty = question.difficulty + (direction === 'easier' ? -1 : 1)
+    if (targetDifficulty < 1 || targetDifficulty > 3) return t(direction === 'easier' ? 'generation:variant.limitEasier' : 'generation:variant.limitHarder')
     return null
   }
 
   async function create(direction: 'easier' | 'harder') {
-    // Dvojí kliknutí (nebo kliknutí na druhý směr, dokud první ještě běží)
-    // by poslalo dva požadavky najednou — než první doběhne, druhý se
-    // vůbec nezakládá.
+    // A double click (or a click on the other direction while the first still
+    // runs) would send two requests at once — until the first finishes, the
+    // second is not started at all.
     if (busyDirection !== null) return
     if (disabledReason(direction)) return
     setBusyDirection(direction)
@@ -54,17 +45,17 @@ export function useQuestionVariant(
       const data = await requestJson<{ question: Question }>(
         '/api/questions/variant',
         jsonBody('POST', { id: question.id, direction }),
-        'Verzi se nepodařilo vytvořit.',
+        t('generation:variant.failed'),
       )
       if (!data.question) {
-        toast.error(`Verzi se nepodařilo vytvořit. ${SERVER_TROUBLE}`)
+        toast.error(`${t('generation:variant.failed')} ${t('common:errors.serverTrouble')}`)
         return
       }
-      toast.success(direction === 'easier' ? 'Vznikla lehčí verze otázky.' : 'Vznikla těžší verze otázky.')
+      toast.success(direction === 'easier' ? t('generation:variant.createdEasier') : t('generation:variant.createdHarder'))
       onCreated?.(data.question)
       router.refresh()
     } catch (error) {
-      toast.error(errorMessage(error, 'Verzi se nepodařilo vytvořit.'))
+      toast.error(errorMessage(error, t('generation:variant.failed')))
     } finally {
       setBusyDirection(null)
     }

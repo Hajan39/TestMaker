@@ -2,14 +2,15 @@
 
 import type { TestKind } from '@testmaker/core/schema'
 import { useMatchesMedia } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { TestCard, TestRow, type TestRowData } from './TestRow'
 
 /**
- * Seznam testů ve dvou podobách: tabulka na notebooku, karty na telefonu.
+ * The test list in two shapes: a table on a laptop, cards on a phone.
  *
- * Vykresluje se vždy jen jedna — obě naráz (jedna schovaná přes `hidden`)
- * znamenají zdvojené odkazy i zdvojená tlačítka pro všechno, co stránku
- * prochází, od čtečky obrazovky po testy.
+ * Only one is ever rendered — both at once (one hidden via `hidden`) would mean
+ * duplicated links and buttons for everything that walks the page, from
+ * screen readers to tests.
  */
 export function TestsTable({ kind, rows }: { kind: TestKind; rows: TestRowData[] }) {
   const phone = useMatchesMedia('(max-width: 639.98px)')
@@ -29,19 +30,19 @@ export function TestsTable({ kind, rows }: { kind: TestKind; rows: TestRowData[]
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line-soft text-fg-muted">
-            <th className="py-2 pr-4 font-medium">Název</th>
+            <th className="py-2 pr-4 font-medium">{t('tests:table.name')}</th>
             {kind === 'pracovni_list' ? (
-              <th className="py-2 pr-4 font-medium">Položky</th>
+              <th className="py-2 pr-4 font-medium">{t('tests:table.items')}</th>
             ) : (
               <>
-                <th className="py-2 pr-4 font-medium">Otázky</th>
-                <th className="py-2 pr-4 font-medium">Body</th>
+                <th className="py-2 pr-4 font-medium">{t('tests:table.questions')}</th>
+                <th className="py-2 pr-4 font-medium">{t('tests:table.points')}</th>
               </>
             )}
-            <th className="py-2 pr-4 font-medium">Šablona</th>
-            <th className="py-2 pr-4 font-medium">Třída</th>
-            <th className="py-2 pr-4 font-medium">Změněno</th>
-            <th className="py-2 pr-0 font-medium text-right">Akce</th>
+            <th className="py-2 pr-4 font-medium">{t('tests:table.template')}</th>
+            <th className="py-2 pr-4 font-medium">{t('tests:table.grade')}</th>
+            <th className="py-2 pr-4 font-medium">{t('tests:table.changed')}</th>
+            <th className="py-2 pr-0 font-medium text-right">{t('tests:table.actions')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line-soft">

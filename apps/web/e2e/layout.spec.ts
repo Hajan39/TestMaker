@@ -2,33 +2,34 @@ import { expect, test, type Page } from '@playwright/test'
 import { testGradeQuery, testTopicPath } from './fixtures'
 
 /**
- * Rozvržení a přetékání. Přesně tyhle vady prošly všemi kontrolami kódu,
- * protože se poznají jedině vykreslením.
+ * Layout and overflow. Exactly these defects passed every code check, because
+ * they only show when rendered.
  */
 
-/** Stránky, které má učitelka běžně pod rukama. */
+/** Pages the teacher uses all the time. */
 const PAGES = [
-  { path: '/', name: 'knihovna' },
-  { path: '/import', name: 'import materiálů' },
-  { path: '/tests', name: 'testy' },
-  { path: '/tests/new', name: 'nový test' },
-  { path: '/templates', name: 'šablony' },
+  { path: '/', name: 'library' },
+  { path: '/import', name: 'material import' },
+  { path: '/tests', name: 'tests' },
+  { path: '/tests/new', name: 'new test' },
+  { path: '/templates', name: 'templates' },
 ]
 
 const WIDTHS = [
-  { width: 1440, height: 900, label: 'široká obrazovka' },
-  { width: 1200, height: 800, label: 'užší notebook' },
-  { width: 900, height: 800, label: 'úzké okno' },
+  { width: 1440, height: 900, label: 'wide screen' },
+  { width: 1200, height: 800, label: 'narrower laptop' },
+  { width: 900, height: 800, label: 'narrow window' },
 ]
 
-/** Vodorovné přetečení celého dokumentu. */
+/** Horizontal overflow of the whole document. */
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
 }
 
 /**
- * Prvky, jejichž obsah přetéká vlastní rámec. Měřit jen proti oknu nestačí —
- * text může vylézt z karty uvnitř sloupce, aniž by se rozbila celá stránka.
+ * Elements whose content overflows their own box. Measuring against the window
+ * is not enough — text can stick out of a card inside a column without
+ * breaking the whole page.
  */
 async function overflowingElements(page: Page): Promise<string[]> {
   return page.evaluate(() => {
@@ -37,8 +38,8 @@ async function overflowingElements(page: Page): Promise<string[]> {
       const box = element.getBoundingClientRect()
       if (box.width === 0 || box.height === 0) continue
 
-      // Obsah je širší než prvek a přetéká ven. Ořezaný text (`overflow: hidden`,
-      // tři tečky) ani rolovatelná plocha chyba nejsou — přetéká jen `visible`.
+      // The content is wider than the element and spills out. Truncated text
+      // (`overflow: hidden`, ellipsis) and scrollable areas are fine — only `visible` overflows.
       const style = getComputedStyle(element)
       if (style.overflowX !== 'visible') continue
       if (element.scrollWidth > element.clientWidth + 1 && element.clientWidth > 0) {
@@ -46,7 +47,7 @@ async function overflowingElements(page: Page): Promise<string[]> {
         const cls = (element.getAttribute('class') ?? '').slice(0, 70)
         const text = (element.textContent ?? '').trim().slice(0, 40)
         offenders.push(
-          `${tag}.${cls} — obsah ${element.scrollWidth} px v rámci ${element.clientWidth} px — „${text}“`,
+          `${tag}.${cls} — content ${element.scrollWidth} px in a ${element.clientWidth} px box — "${text}"`,
         )
       }
     }
@@ -59,27 +60,27 @@ for (const size of WIDTHS) {
     test.use({ viewport: { width: size.width, height: size.height } })
 
     for (const target of PAGES) {
-      test(`${target.name} se vejde do okna`, async ({ page }) => {
+      test(`${target.name} fits the window`, async ({ page }) => {
         await page.goto(target.path)
         await page.waitForLoadState('networkidle')
 
         const overflow = await horizontalOverflow(page)
-        expect(overflow, `${target.name} přetéká vodorovně přes celé okno`).toBeLessThanOrEqual(0)
+        expect(overflow, `${target.name} overflows the whole window horizontally`).toBeLessThanOrEqual(0)
 
         const offenders = await overflowingElements(page)
         if (offenders.length > 0) console.log(`${target.name} @ ${size.width}:\n${offenders.join('\n')}`)
-        expect(offenders, `${target.name}: obsah přetéká ze svého rámce`).toEqual([])
+        expect(offenders, `${target.name}: content overflows its box`).toEqual([])
       })
     }
   })
 }
 
-test.describe('sloupce knihovny', () => {
-  // Tři sloupce (předměty a ročníky · témata ročníku · obsah) jsou teď na
-  // úvodu, na stránce třídy i na stránce tématu — ne jen na tématu jako
-  // dřív. Test na úvodu jede přes `?vse=1`, aby ho zapamatovaná třída
-  // nepředběhla přesměrováním.
-  test('nad 1280 px jsou tři sloupce', async ({ page }) => {
+test.describe('library columns', () => {
+  // Three columns (subjects and grades · grade topics · content) are now on the
+  // home page, the class page and the topic page — not only on the topic as
+  // before. The home page test uses `?vse=1` so a remembered class does not
+  // pre-empt it with a redirect.
+  test('above 1280 px there are three columns', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
 
     await page.goto('/?vse=1')
@@ -92,7 +93,7 @@ test.describe('sloupce knihovny', () => {
     await expect(page.getByRole('link', { name: '6. ročník' }).first()).toBeVisible()
   })
 
-  test('pod 1024 px se přepíná záložkami a navigace je dostupná', async ({ page }) => {
+  test('below 1024 px tabs switch the panes and navigation stays reachable', async ({ page }) => {
     await page.setViewportSize({ width: 900, height: 800 })
 
     for (const goto of [
@@ -109,15 +110,15 @@ test.describe('sloupce knihovny', () => {
   })
 })
 
-test.describe('rolování', () => {
-  test('dlouhý seznam témat jde doscrollovat', async ({ page }) => {
+test.describe('scrolling', () => {
+  test('a long topic list can be scrolled to the end', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 700 })
-    // Třída s nejvíc tématy (přes čtyřicet) — obsah je spolehlivě delší než okno.
+    // The class with the most topics (over forty) — the content is reliably longer than the window.
     await page.goto('/')
     await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
     await page.waitForLoadState('networkidle')
 
-    // Najdeme plochu, která se roluje, a ověříme, že se v ní dá pohnout dolů.
+    // Find the area that scrolls and check it can move down.
     const scrolled = await page.evaluate(() => {
       const candidates = Array.from(document.querySelectorAll('main, main *')) as HTMLElement[]
       const area = candidates.find((el) => el.scrollHeight > el.clientHeight + 20)
@@ -126,99 +127,99 @@ test.describe('rolování', () => {
       return { found: true, moved: area.scrollTop }
     })
 
-    expect(scrolled.found, 'obsah se nikde neroluje, i když je delší než okno').toBe(true)
-    expect(scrolled.moved, 'plochu nejde posunout').toBeGreaterThan(0)
+    expect(scrolled.found, 'content scrolls nowhere even though it is longer than the window').toBe(true)
+    expect(scrolled.moved, 'the area cannot be scrolled').toBeGreaterThan(0)
   })
 })
 
-test.describe('dlaždice témat', () => {
-  test('dlouhé názvy bez mezer se vejdou do dlaždice', async ({ page }) => {
+test.describe('topic tiles', () => {
+  test('long names without spaces fit in the tile', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    // Dlouhý bezmezerový název je v seedu jen v „6. ročník" u PŘÍRODOPISU.
+    // The seed has a long space-free name only in "6. ročník" of PŘÍRODOPIS.
     await page.goto('/')
     await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
-    // Navigace je na klientu: síť je v klidu dřív, než se stránka vymění
-    // (ve WebKitu spolehlivě), proto se čeká na adresu třídy.
+    // Navigation is client-side: the network goes idle before the page swaps
+    // (reliably in WebKit), so wait for the class URL.
     await page.waitForURL(/\/tridy\//)
     await page.waitForLoadState('networkidle')
 
-    // V knihovně jsou názvy jako `prirodopis-6_pl-bezobratli-vztahy._test_2018`.
+    // The library has names like `prirodopis-6_pl-bezobratli-vztahy._test_2018`.
     const offenders = await page.evaluate(() => {
       const bad: string[] = []
       const grid = Array.from(document.querySelectorAll('ul.grid')).find(
         (candidate) => candidate.getBoundingClientRect().width > 300,
       )
-      if (!grid) return ['mřížka dlaždic nenalezena']
+      if (!grid) return ['tile grid not found']
 
-      // Dlaždice je celá karta, ne jen odkaz uvnitř ní: název s tužkou
-      // k přejmenování odkaz není, ale z karty čouhat taky nesmí.
+      // The tile is the whole card, not just the link inside it: the name with
+      // the rename pencil is not a link, but must not stick out of the card either.
       for (const tile of Array.from(grid.querySelectorAll('[data-slot="card"]'))) {
         const limit = tile.getBoundingClientRect().right
         for (const child of Array.from(tile.querySelectorAll('*'))) {
-          // Ořezaný text tři tečky mít smí; chyba je až text čouhající ven z dlaždice.
+          // Truncated text may have an ellipsis; only text sticking out of the tile is a bug.
           if (getComputedStyle(child).overflowX !== 'visible') continue
           if (child.getBoundingClientRect().right > limit + 1) {
-            bad.push(`${(child.textContent ?? '').slice(0, 45)} vyčnívá z dlaždice`)
+            bad.push(`${(child.textContent ?? '').slice(0, 45)} sticks out of the tile`)
           }
         }
       }
       return bad.slice(0, 5)
     })
 
-    expect(offenders, 'název tématu přetéká z dlaždice').toEqual([])
+    expect(offenders, 'topic name overflows the tile').toEqual([])
   })
 })
 
 /**
- * Telefon. Banka i seznam testů byly tabulky s vodorovným rolováním bez
- * jakéhokoli náznaku, že se dá rolovat — na 390 px zůstal stav i celá nabídka
- * akcí za okrajem obrazovky a s testem nešlo udělat nic. Místo tabulky jsou
- * proto karty: jedna karta = jeden řádek, akce v ní.
+ * Phone. The bank and the test list used to be tables with horizontal
+ * scrolling and no hint that they scroll — at 390 px the status and the whole
+ * action menu stayed past the screen edge and nothing could be done with a
+ * test. So they are cards instead of a table: one card = one row, actions inside.
  */
-test.describe('telefon (390 px)', () => {
+test.describe('phone (390 px)', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  for (const target of [{ path: '/tests', name: 'testy', akce: /^Akce u testu/ }]) {
-    test(`${target.name}: u každé položky jde otevřít nabídka akcí`, async ({ page }) => {
-      if (target.path === '/tests') await zajistiTest(page)
+  for (const target of [{ path: '/tests', name: 'tests', actions: /^Akce u testu/ }]) {
+    test(`${target.name}: every item can open its action menu`, async ({ page }) => {
+      if (target.path === '/tests') await ensureTest(page)
       await page.goto(target.path)
       await page.waitForLoadState('networkidle')
 
-      // Žádná tabulka, a tedy ani vodorovné rolování, ve kterém se dá ztratit.
+      // No table, hence no horizontal scrolling to get lost in.
       await expect(page.locator('main table')).toHaveCount(0)
-      expect(await horizontalOverflow(page), `${target.name} přetéká vodorovně`).toBeLessThanOrEqual(0)
+      expect(await horizontalOverflow(page), `${target.name} overflows horizontally`).toBeLessThanOrEqual(0)
 
-      const akce = page.getByRole('button', { name: target.akce })
-      const kolik = await akce.count()
-      expect(kolik, `${target.name}: na telefonu není u položek nabídka akcí`).toBeGreaterThan(0)
+      const actions = page.getByRole('button', { name: target.actions })
+      const count = await actions.count()
+      expect(count, `${target.name}: items have no action menu on a phone`).toBeGreaterThan(0)
 
-      // Tlačítko musí být celé v okně, jinak se na ně nedá klepnout.
-      const box = await akce.first().boundingBox()
-      expect(box, 'nabídka akcí není vidět').not.toBeNull()
+      // The button must be fully inside the window, otherwise it cannot be tapped.
+      const box = await actions.first().boundingBox()
+      expect(box, 'action menu is not visible').not.toBeNull()
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390)
 
-      // V nabídce je i mazání položky — na telefonu tak jde s položkou udělat
-      // všechno, ne jen si ji přečíst.
-      await akce.first().click()
+      // The menu includes deleting the item — so on a phone everything can be
+      // done with an item, not just reading it.
+      await actions.first().click()
       await expect(page.getByRole('menuitem', { name: 'Smazat' })).toBeVisible()
     })
   }
 })
 
 /**
- * Aspoň jeden test v seznamu. Databáze e2e se testy neseeduje — zakládají si je
- * jednotlivé zkoušky, a ta o seznamu testů běží až po téhle.
+ * At least one test in the list. The e2e database is not seeded with tests —
+ * individual specs create them, and the test list spec runs after this one.
  */
-async function zajistiTest(page: Page): Promise<void> {
-  const seznam = await page.request.get('/api/tests')
-  if (seznam.ok()) {
-    const { tests: existujici } = (await seznam.json()) as { tests?: unknown[] }
-    if (existujici && existujici.length > 0) return
+async function ensureTest(page: Page): Promise<void> {
+  const list = await page.request.get('/api/tests')
+  if (list.ok()) {
+    const { tests: existing } = (await list.json()) as { tests?: unknown[] }
+    if (existing && existing.length > 0) return
   }
   const bank = await page.request.get('/api/questions?status=approved&limit=1')
   expect(bank.ok()).toBe(true)
   const { items } = (await bank.json()) as { items: { id: string }[] }
-  expect(items.length, 'v knihovně nejsou schválené otázky').toBeGreaterThan(0)
+  expect(items.length, 'the library has no approved questions').toBeGreaterThan(0)
 
   const created = await page.request.post('/api/tests', {
     data: {
@@ -232,5 +233,5 @@ async function zajistiTest(page: Page): Promise<void> {
       items: [{ kind: 'question', questionId: items[0]!.id }],
     },
   })
-  expect(created.ok(), 'zkušební test se nepodařilo založit').toBe(true)
+  expect(created.ok(), 'could not create the sample test').toBe(true)
 }

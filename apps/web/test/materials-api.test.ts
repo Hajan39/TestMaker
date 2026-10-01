@@ -4,14 +4,14 @@ import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { POST, DELETE, PATCH } from '@/app/api/materials/route'
 import { db, materials, schools, topics, users } from '@/db'
 import { newId } from '@/lib/ids'
-import { jsonReq, req, seedTopic, seedMaterial, seedUcet } from './helpers'
+import { jsonReq, req, seedTopic, seedMaterial, seedAccount } from './helpers'
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-/** Učitelka z jiné školy — cizí materiál pro ni nesmí existovat. */
-async function ucitelkaJineSkoly(): Promise<string> {
+/** A teacher from another school — a foreign material must not exist for her. */
+async function otherSchoolTeacher(): Promise<string> {
   const schoolId = newId()
   await db.insert(schools).values({ id: schoolId, name: 'Jiná škola', slug: `jina-materialy-${schoolId}` })
   const userId = newId()
@@ -26,17 +26,17 @@ async function ucitelkaJineSkoly(): Promise<string> {
 }
 
 /**
- * Import materiálů. Tady se do knihovny dostávají data, takže chyba v téhle
- * cestě se projeví až tím, že učitelka nenajde soubor, který nahrála, nebo ho
- * najde dvakrát.
+ * Materials import. This is where data enters the library, so a bug on this
+ * path only shows when the teacher can't find a file she uploaded, or finds
+ * it twice.
  */
 
-/** Text dost dlouhý na to, aby téma nebylo označené jako „málo obsahu“. */
+/** Text long enough that the topic isn't flagged as "low content". */
 const TEXT = 'Krevní oběh rozvádí kyslík a živiny do celého těla. '.repeat(40)
 
 let counter = 0
 
-/** Materiál po extrakci textu — přesně to, co pošle prohlížeč. */
+/** A material after text extraction — exactly what the browser sends. */
 function extracted(options: Partial<ExtractedMaterial> = {}): ExtractedMaterial {
   counter += 1
   const fileName = options.fileName ?? `Soubor ${counter}.docx`
@@ -65,7 +65,7 @@ interface ImportResult {
   replaced: number
 }
 
-/** Import bez seskupování podobných témat — testy chtějí téma přesně podle názvu. */
+/** Import without grouping similar topics — tests want the topic exactly by name. */
 async function importMaterials(items: ExtractedMaterial[], topicId?: string): Promise<ImportResult> {
   const response = await POST(
     jsonReq('/api/materials?group=0', 'POST', { materials: items, ...(topicId ? { topicId } : {}) }),
@@ -80,8 +80,8 @@ async function rows(topicName: string) {
   return db.select().from(materials).where(eq(materials.topicId, topic.id))
 }
 
-describe('import materiálů', () => {
-  it('založí celou cestu knihovnou a uloží text', async () => {
+describe('materials import', () => {
+  it('creates the whole library path and stores the text', async () => {
     const result = await importMaterials([extracted({ topic: 'Dýchací soustava' })])
 
     expect(result).toMatchObject({ imported: 1, duplicates: 0, replaced: 0 })
@@ -90,13 +90,13 @@ describe('import materiálů', () => {
     expect(list[0]!.text).toBe(TEXT)
     expect(list[0]!.charCount).toBe(TEXT.length)
 
-    // Použitelný objem textu se udržuje při importu, ať ho seznam témat nemusí počítat.
+    // Usable text volume is maintained on import so the topic list needn't compute it.
     const [topic] = await db.select().from(topics).where(eq(topics.id, list[0]!.topicId)).limit(1)
     expect(topic!.usableCharCount).toBe(TEXT.length)
     expect(topic!.lowContent).toBe(false)
   })
 
-  it('tentýž soubor podruhé se nenaimportuje znovu', async () => {
+  it('does not import the same file a second time', async () => {
     const material = extracted({ topic: 'Trávicí soustava' })
     await importMaterials([material])
     const result = await importMaterials([material])
@@ -105,7 +105,7 @@ describe('import materiálů', () => {
     expect(await rows('Trávicí soustava')).toHaveLength(1)
   })
 
-  it('tentýž obsah pod jiným názvem je v jednom tématu taky duplicita', async () => {
+  it('the same content under another name is also a duplicate within one topic', async () => {
     const hash = 'hash-stejny-obsah'
     await importMaterials([extracted({ topic: 'Kostra', contentHash: hash, fileName: 'Kostra.docx' })])
     const result = await importMaterials([
@@ -116,7 +116,7 @@ describe('import materiálů', () => {
     expect(await rows('Kostra')).toHaveLength(1)
   })
 
-  it('tentýž obsah v jiném tématu duplicita není — pracovní list patří do obou', async () => {
+  it('the same content in another topic is not a duplicate — a worksheet belongs to both', async () => {
     const hash = 'hash-pracovni-list'
     await importMaterials([
       extracted({ topic: 'Savci', grade: '7. ročník', contentHash: hash, fileName: 'List.docx' }),
@@ -130,37 +130,37 @@ describe('import materiálů', () => {
     expect(await rows('Savci opakování')).toHaveLength(1)
   })
 
-  it('změněný soubor na téže cestě starou verzi nahradí, ne přidá', async () => {
+  it('a changed file at the same path replaces the old version instead of adding one', async () => {
     const path = 'Přírodopis/8. ročník/Buňka/Buňka.docx'
     await importMaterials([
       extracted({ topic: 'Buňka', relativePath: path, fileName: 'Buňka.docx', contentHash: 'hash-bunka-v1' }),
     ])
-    const novyText = `${TEXT} Nově doplněná kapitola o jádru.`
+    const newText = `${TEXT} Nově doplněná kapitola o jádru.`
     const result = await importMaterials([
       extracted({
         topic: 'Buňka',
         relativePath: path,
         fileName: 'Buňka.docx',
         contentHash: 'hash-bunka-v2',
-        text: novyText,
+        text: newText,
       }),
     ])
 
     expect(result).toMatchObject({ imported: 1, replaced: 1, duplicates: 0 })
     const list = await rows('Buňka')
     expect(list).toHaveLength(1)
-    expect(list[0]!.text).toBe(novyText)
+    expect(list[0]!.text).toBe(newText)
     expect(list[0]!.contentHash).toBe('hash-bunka-v2')
   })
 
-  it('re-nahrání změněné verze ručně vyřazeného souboru zachová vyřazení', async () => {
+  it('re-uploading a changed version of a manually excluded file keeps the exclusion', async () => {
     const path = 'Přírodopis/8. ročník/List/List.docx'
     await importMaterials([
       extracted({ topic: 'List', relativePath: path, fileName: 'List.docx', contentHash: 'hash-list-v1' }),
     ])
-    const puvodni = (await rows('List'))[0]!
-    const vyrazeni = await PATCH(jsonReq('/api/materials', 'PATCH', { id: puvodni.id, excluded: true }))
-    expect(vyrazeni.status).toBe(200)
+    const original = (await rows('List'))[0]!
+    const exclusion = await PATCH(jsonReq('/api/materials', 'PATCH', { id: original.id, excluded: true }))
+    expect(exclusion.status).toBe(200)
 
     const result = await importMaterials([
       extracted({
@@ -179,7 +179,7 @@ describe('import materiálů', () => {
     expect(list[0]!.excluded).toBe(true)
   })
 
-  it('stejný obsah v jiném formátu odloží jako duplicitní a do generování ho nepustí', async () => {
+  it('sets aside the same content in another format as a duplicate and keeps it out of generation', async () => {
     const result = await importMaterials([
       extracted({ topic: 'Houby', fileName: 'Houby.docx', contentHash: 'hash-houby-docx' }),
       extracted({ topic: 'Houby', fileName: 'Houby.pdf', contentHash: 'hash-houby-pdf' }),
@@ -191,24 +191,24 @@ describe('import materiálů', () => {
     const list = await rows('Houby')
     const pdf = list.find((row) => row.fileName === 'Houby.pdf')!
     const docx = list.find((row) => row.fileName === 'Houby.docx')!
-    // PDF vytištěné z dokumentu je ten horší z dvojice.
+    // A PDF printed from the document is the worse of the pair.
     expect(pdf.duplicateOfId).toBe(docx.id)
     expect(docx.duplicateOfId).toBeNull()
 
-    // Do použitelného objemu se duplicita nepočítá.
+    // A duplicate doesn't count toward the usable volume.
     const [topic] = await db.select().from(topics).where(eq(topics.id, docx.topicId)).limit(1)
     expect(topic!.usableCharCount).toBe(TEXT.length)
   })
 
-  it('nesmyslná data jsou 400, ne pád serveru', async () => {
+  it('nonsense data is a 400, not a server crash', async () => {
     const response = await POST(jsonReq('/api/materials', 'POST', { materials: [] }))
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' })
   })
 })
 
-describe('smazání materiálu', () => {
-  it('materiál zmizí a objem textu tématu klesne', async () => {
+describe('material deletion', () => {
+  it('removes the material and lowers the topic text volume', async () => {
     await importMaterials([extracted({ topic: 'Ptáci', fileName: 'Ptáci.docx' })])
     const [material] = await rows('Ptáci')
 
@@ -227,8 +227,8 @@ describe('smazání materiálu', () => {
   })
 })
 
-describe('nahrání do zadaného tématu', () => {
-  it('jde do tématu podle id, i když se mezitím přejmenovalo, a pole subject/grade/topic se ignorují', async () => {
+describe('upload into a given topic', () => {
+  it('goes into the topic by id even after a rename, ignoring the subject/grade/topic fields', async () => {
     const { topicId } = await seedTopic({ topic: 'Původní název' })
     await db.update(topics).set({ name: 'Nový název' }).where(eq(topics.id, topicId))
 
@@ -240,11 +240,11 @@ describe('nahrání do zadaného tématu', () => {
     expect(result).toMatchObject({ imported: 1, duplicates: 0 })
     const list = await db.select().from(materials).where(eq(materials.topicId, topicId))
     expect(list).toHaveLength(1)
-    // Nemělo vzniknout žádné nové téma podle jmen z materiálu.
+    // No new topic should have been created from the material's names.
     expect(await rows('Úplně jiné téma')).toHaveLength(0)
   })
 
-  it('cizí nebo neexistující téma je 404', async () => {
+  it('a foreign or nonexistent topic is a 404', async () => {
     const response = await POST(
       jsonReq('/api/materials?group=0', 'POST', {
         materials: [extracted()],
@@ -255,7 +255,7 @@ describe('nahrání do zadaného tématu', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Téma se nenašlo' })
   })
 
-  it('stejný hash podruhé do téhož zadaného tématu nevznikne dvakrát', async () => {
+  it('the same hash into the same given topic is not created twice', async () => {
     const { topicId } = await seedTopic()
     const material = extracted({ contentHash: 'hash-do-tematu' })
 
@@ -268,19 +268,19 @@ describe('nahrání do zadaného tématu', () => {
     expect(list).toHaveLength(1)
   })
 
-  it('bez topicId chování zůstává jako dřív — téma se hledá/zakládá podle jmen', async () => {
+  it('without topicId the behaviour is unchanged — the topic is found or created by names', async () => {
     const result = await importMaterials([extracted({ topic: 'Beze změny' })])
     expect(result).toMatchObject({ imported: 1, duplicates: 0 })
     expect(await rows('Beze změny')).toHaveLength(1)
   })
 
-  it('stejný název souboru se stejným obsahem do dvou různých témat je v obou', async () => {
-    const soubor = extracted({ relativePath: 'Pracovní list.docx', fileName: 'Pracovní list.docx' })
+  it('the same file name with the same content in two different topics ends up in both', async () => {
+    const file = extracted({ relativePath: 'Pracovní list.docx', fileName: 'Pracovní list.docx' })
     const { topicId: topicA } = await seedTopic({ topic: 'Téma A' })
     const { topicId: topicB } = await seedTopic({ topic: 'Téma B' })
 
-    const first = await importMaterials([soubor], topicA)
-    const second = await importMaterials([soubor], topicB)
+    const first = await importMaterials([file], topicA)
+    const second = await importMaterials([file], topicB)
 
     expect(first).toMatchObject({ imported: 1, duplicates: 0 })
     expect(second).toMatchObject({ imported: 1, duplicates: 0 })
@@ -288,7 +288,7 @@ describe('nahrání do zadaného tématu', () => {
     expect(await db.select().from(materials).where(eq(materials.topicId, topicB))).toHaveLength(1)
   })
 
-  it('stejný název souboru s jiným obsahem do jiného tématu nenahradí materiál v prvním tématu', async () => {
+  it('the same file name with different content in another topic does not replace the material in the first', async () => {
     const relativePath = 'Pracovní list.docx'
     const { topicId: topicA } = await seedTopic({ topic: 'Téma A2' })
     const { topicId: topicB } = await seedTopic({ topic: 'Téma B2' })
@@ -311,7 +311,7 @@ describe('nahrání do zadaného tématu', () => {
     expect(inB[0]!.contentHash).toBe('hash-b-dlouhy')
   })
 
-  it('opětovné nahrání do téhož tématu s jiným obsahem pořád nahradí v tomtéž tématu', async () => {
+  it('re-uploading into the same topic with different content still replaces within that topic', async () => {
     const relativePath = 'Pracovní list.docx'
     const { topicId } = await seedTopic({ topic: 'Téma C' })
 
@@ -331,8 +331,8 @@ describe('nahrání do zadaného tématu', () => {
   })
 })
 
-describe('vynechání materiálu z generování', () => {
-  it('PATCH nastaví excluded a přepočte použitelný objem textu tématu', async () => {
+describe('excluding a material from generation', () => {
+  it('PATCH sets excluded and recomputes the topic usable text volume', async () => {
     const { topicId } = await seedTopic()
     const materialId = await seedMaterial(topicId, { text: TEXT })
 
@@ -348,19 +348,19 @@ describe('vynechání materiálu z generování', () => {
     expect(topic!.lowContent).toBe(true)
   })
 
-  it('cizí materiál se tváří jako neexistující — 404', async () => {
+  it('a foreign material looks nonexistent — 404', async () => {
     const { topicId } = await seedTopic()
     const materialId = await seedMaterial(topicId)
-    vi.stubEnv('E2E_UZIVATEL', await ucitelkaJineSkoly())
+    vi.stubEnv('E2E_UZIVATEL', await otherSchoolTeacher())
 
     const response = await PATCH(jsonReq('/api/materials', 'PATCH', { id: materialId, excluded: true }))
     expect(response.status).toBe(404)
   })
 
-  it('náhled vynechávat nesmí — 403', async () => {
+  it('a viewer may not exclude — 403', async () => {
     const { topicId } = await seedTopic()
     const materialId = await seedMaterial(topicId)
-    vi.stubEnv('E2E_UZIVATEL', (await seedUcet({ role: 'nahled' })).userId)
+    vi.stubEnv('E2E_UZIVATEL', (await seedAccount({ role: 'nahled' })).userId)
 
     const response = await PATCH(jsonReq('/api/materials', 'PATCH', { id: materialId, excluded: true }))
     expect(response.status).toBe(403)

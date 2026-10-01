@@ -8,7 +8,7 @@ import {
 } from '../src/extract/grouping'
 
 describe('topicTokens', () => {
-  it('zahodí čísla, diakritiku a balast', () => {
+  it('drops numbers, diacritics and filler', () => {
     expect(topicTokens('6.22 Měkkýši (Mollusca)')).toEqual(['mekkysi', 'mollusca'])
     expect(topicTokens('test- hlísti')).toEqual(['hlisti'])
     expect(topicTokens('prirodopis-6_pl-bezobratli-viry._test_2018')).toContain('viry')
@@ -16,39 +16,39 @@ describe('topicTokens', () => {
 })
 
 describe('sameTopic', () => {
-  it('sloučí zkrácený a rozepsaný název', () => {
+  it('merges a shortened and a spelled-out name', () => {
     expect(sameTopic('Měkkýši', '6.22 Měkkýši (Mollusca) - PLŽI, MLŽI, HLAVONOŽCI 6.23')).toBe(true)
     expect(sameTopic('6.21 Hlísti', 'test- hlísti')).toBe(true)
     expect(sameTopic('Savci', '7.9 Savci')).toBe(true)
     expect(sameTopic('Poznávačka - ryby', '7.5 Ryby')).toBe(true)
   })
 
-  it('nesloučí různá témata', () => {
+  it('does not merge different topics', () => {
     expect(sameTopic('Buňka', 'Buňky a tkáně')).toBe(false)
     expect(sameTopic('Dýchací soustava', 'Trávicí soustava')).toBe(false)
     expect(sameTopic('Vyvřelé magmatické horniny', 'Usazené sedimentární horniny')).toBe(false)
   })
 
-  it('přídavné jméno bez oddělovače dělá z obecného tématu jinou látku', () => {
-    // Reálný případ přesloučení z knihovny: téma "Rostliny" spojilo obecný
-    // úvod (7.11) se samostatnou lekcí o výtrusných rostlinách (7.13) a
-    // s materiály o kapraďorostech/mechorostech, protože všechny obsahují
-    // slovo "rostliny". Jde ale o čtyři různé lekce.
+  it('an adjective without a delimiter turns a general topic into a different subject', () => {
+    // Real over-merge from the library: the topic "Rostliny" joined the general
+    // introduction (7.11) with a separate lesson on spore plants (7.13) and with
+    // materials on ferns/mosses, because all of them contain the word
+    // "rostliny". They are four different lessons, though.
     expect(sameTopic('Rostliny', 'Výtrusné rostliny')).toBe(false)
     expect(sameTopic('Rostliny', 'vyšší rostliny - kapraďorosty')).toBe(false)
     expect(sameTopic('Rostliny', 'vyšší rostliny - ryniofyty a mechorosty')).toBe(false)
   })
 
-  it('doplněk oddělený pomlčkou/závorkou/čárkou patří k témuž tématu', () => {
-    // Skutečné názvy z knihovny: "Měkkýši" a jeho rozepsaná verze, "Viry" a
-    // jeho pracovní listy — tady se sloučit MAJÍ, protože přídavná slova
-    // jsou oddělená (apozice), ne přilepený přívlastek.
+  it('an addition separated by a dash/parenthesis/comma belongs to the same topic', () => {
+    // Real names from the library: "Měkkýši" and its spelled-out version, "Viry"
+    // and its worksheets — these SHOULD merge, because the extra words are
+    // separated (apposition), not an attached attribute.
     expect(sameTopic('Měkkýši', '6.22 Měkkýši (Mollusca) - PLŽI, MLŽI, HLAVONOŽCI 6.23')).toBe(true)
     expect(sameTopic('Viry', 'viry-poznávačka')).toBe(true)
     expect(sameTopic('Viry', 'prirodopis-6_pl-bezobratli-viry_test_2018')).toBe(true)
   })
 
-  it('název bez významových slov nesloučí nic', () => {
+  it('a name without meaningful words merges nothing', () => {
     expect(sameTopic('test', 'Hlísti')).toBe(false)
   })
 })
@@ -56,67 +56,67 @@ describe('sameTopic', () => {
 describe('findMatchingTopic', () => {
   const existing = [{ name: 'Oběhová soustava' }, { name: 'Dýchací soustava' }, { name: 'Trávicí soustava' }]
 
-  it('najde odpovídající téma', () => {
+  it('finds the matching topic', () => {
     expect(findMatchingTopic(existing, 'Oběhová soustava- krevní oběh')?.name).toBe('Oběhová soustava')
     expect(findMatchingTopic(existing, '11. Dýchací soustava')?.name).toBe('Dýchací soustava')
   })
 
-  it('vrátí null, když nic nesedí', () => {
+  it('returns null when nothing fits', () => {
     expect(findMatchingTopic(existing, 'Genetika')).toBeNull()
   })
 })
 
 describe('preferredTopicName', () => {
-  it('stručnější název vyhrává', () => {
+  it('the more concise name wins', () => {
     expect(preferredTopicName('Měkkýši', 'Měkkýši (Mollusca) - PLŽI, MLŽI')).toBe('Měkkýši')
   })
 })
 
-describe('obecný název nespojuje nesouvisející lekce', () => {
-  const mineraly = [
+describe('a generic name does not join unrelated lessons', () => {
+  const minerals = [
     { name: '2. mineralogická třída sulfidy' },
     { name: '3. mineralogická třída - halogenidy' },
     { name: '4. mineralogická třída - oxidy' },
   ]
 
-  it('název bez rozlišujícího slova zůstane samostatný', () => {
-    expect(findMatchingTopic(mineraly, '6. mineralogická třída')).toBeNull()
+  it('a name without a distinguishing word stays separate', () => {
+    expect(findMatchingTopic(minerals, '6. mineralogická třída')).toBeNull()
   })
 
-  it('název s rozlišujícím slovem se připojí ke své lekci', () => {
-    expect(findMatchingTopic(mineraly, 'mineralogická třída - oxidy zápis')?.name).toBe(
+  it('a name with a distinguishing word joins its lesson', () => {
+    expect(findMatchingTopic(minerals, 'mineralogická třída - oxidy zápis')?.name).toBe(
       '4. mineralogická třída - oxidy',
     )
   })
 
-  it('několik souvisejících souborů se spojí do jedné skupiny', () => {
-    const viry = [{ name: '6.11 Viry' }, { name: 'Viry' }]
-    expect(findMatchingTopic(viry, 'prirodopis-6_pl-bezobratli-viry test')?.name).toBeTruthy()
+  it('several related files join into one group', () => {
+    const viruses = [{ name: '6.11 Viry' }, { name: 'Viry' }]
+    expect(findMatchingTopic(viruses, 'prirodopis-6_pl-bezobratli-viry test')?.name).toBeTruthy()
   })
 })
 
-describe('reálný případ z knihovny: "Rostliny" (7. ročník)', () => {
-  // Toto téma v knihovně dosud spojovalo obecný úvod (7.11) se samostatnou
-  // lekcí o výtrusných rostlinách (7.13) a s materiály o vyšších rostlinách —
-  // čtyři různé lekce jen proto, že název obsahuje slovo "rostliny".
+describe('real library case: "Rostliny" (7. ročník)', () => {
+  // This topic in the library used to join the general introduction (7.11)
+  // with a separate lesson on spore plants (7.13) and with materials on
+  // higher plants — four different lessons just because the name contains "rostliny".
   const existing = [{ name: 'Rostliny' }]
 
-  it('samostatná lekce o výtrusných rostlinách se nepřipojí k obecnému úvodu', () => {
+  it('a separate lesson on spore plants does not join the general introduction', () => {
     expect(findMatchingTopic(existing, '7.13 Výtrusné rostliny')).toBeNull()
   })
 
-  it('export prezentace stejné lekce se připojí', () => {
+  it('a presentation export of the same lesson joins', () => {
     expect(findMatchingTopic(existing, '7.11 Rostliny prezentace')?.name).toBe('Rostliny')
   })
 })
 
 describe('groupForImport', () => {
-  /** Zkratka: zařazení tak, jak ho z cesty odhadne `parsePath`. */
+  /** Shortcut: a placement as `parsePath` guesses it from the path. */
   function place(subject: string, grade: string | null, topic: string) {
     return { subject, grade, topic }
   }
 
-  it('spojí soubory téhož tématu a nechá skupině srozumitelnější název', () => {
+  it('joins files of the same topic and keeps the clearer name for the group', () => {
     const groups = groupForImport([
       place('PŘÍRODOPIS', '6. ročník', '6.22 Měkkýši (Mollusca)'),
       place('PŘÍRODOPIS', '6. ročník', 'Měkkýši'),
@@ -124,12 +124,12 @@ describe('groupForImport', () => {
     ])
 
     expect(groups).toHaveLength(2)
-    const mekkysi = groups.find((group) => group.topic === 'Měkkýši')
-    expect(mekkysi?.files).toHaveLength(2)
+    const molluscs = groups.find((group) => group.topic === 'Měkkýši')
+    expect(molluscs?.files).toHaveLength(2)
     expect(groups.find((group) => group.topic === 'Hlísti')?.files).toHaveLength(1)
   })
 
-  it('stejné téma ve dvou ročnících zůstane dvěma skupinami', () => {
+  it('the same topic in two grades stays two groups', () => {
     const groups = groupForImport([
       place('PŘÍRODOPIS', '7. ročník', 'Savci'),
       place('PŘÍRODOPIS', '8. ročník', 'Savci'),
@@ -139,14 +139,14 @@ describe('groupForImport', () => {
     expect(groups.map((group) => group.grade)).toEqual(['7. ročník', '8. ročník'])
   })
 
-  it('samostatný soubor bez složky skončí bez zařazení, ale s názvem tématu', () => {
+  it('a single file without a folder ends up unplaced, but with a topic name', () => {
     const groups = groupForImport([place('Nezařazeno', null, 'Opakování - zlomky')])
 
     expect(groups).toHaveLength(1)
     expect(groups[0]).toMatchObject({ subject: '', grade: '', topic: 'Opakování - zlomky' })
   })
 
-  it('nezařazené skupiny jdou první, zbytek abecedně', () => {
+  it('unplaced groups go first, the rest alphabetically', () => {
     const groups = groupForImport([
       place('ZEMĚPIS', '9. ročník', 'Afrika'),
       place('Nezařazeno', null, 'Pracovní list'),
@@ -156,7 +156,7 @@ describe('groupForImport', () => {
     expect(groups.map((group) => group.subject)).toEqual(['', 'PŘÍRODOPIS', 'ZEMĚPIS'])
   })
 
-  it('zachová i data navíc, aby šel z náhledu poslat celý materiál', () => {
+  it('keeps extra data too, so the whole material can be sent from the preview', () => {
     const groups = groupForImport([
       { ...place('PŘÍRODOPIS', '6. ročník', 'Viry'), fileName: 'Viry.pdf', charCount: 4200 },
     ])
@@ -164,7 +164,7 @@ describe('groupForImport', () => {
     expect(groups[0]?.files[0]?.fileName).toBe('Viry.pdf')
   })
 
-  it('prázdný vstup dá prázdný seznam skupin', () => {
+  it('empty input gives an empty list of groups', () => {
     expect(groupForImport([])).toEqual([])
   })
 })

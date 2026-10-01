@@ -2,8 +2,8 @@ import './uint8array-polyfill'
 import { normalizeText, type ExtractionResult } from './types'
 
 /**
- * PDF přes pdf.js. Import je dynamický, aby balíček šel načíst i na serveru,
- * kde se extrakce nepoužívá.
+ * PDF via pdf.js. The import is dynamic so the package can also be loaded on
+ * the server, where extraction is not used.
  */
 export async function extractPdf(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {
   const pdfjs = await import('pdfjs-dist')

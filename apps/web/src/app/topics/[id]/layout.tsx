@@ -1,10 +1,10 @@
 import { LibraryPanes } from '@/components/LibraryPanes'
 import { loadLibraryTree } from '@/lib/library'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
 
 export const dynamic = 'force-dynamic'
 
-/** Obaluje detail tématu stejným rámem jako knihovnu, aby sloupce při přechodu zůstaly. */
+/** Wraps the topic detail in the same frame as the library so the columns stay put on navigation. */
 export default async function TopicLayout({
   children,
   params,
@@ -12,9 +12,9 @@ export default async function TopicLayout({
   children: React.ReactNode
   params: Promise<{ id: string }>
 }) {
-  const ucet = await ucetStranky()
+  const account = await pageAccount()
   const { id } = await params
-  const tree = await loadLibraryTree(ucet)
+  const tree = await loadLibraryTree(account)
   const grade = tree.flatMap((s) => s.grades).find((g) => g.topics.some((t) => t.id === id)) ?? null
 
   return (

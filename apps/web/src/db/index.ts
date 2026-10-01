@@ -3,8 +3,8 @@ import { drizzle } from 'drizzle-orm/libsql'
 import * as schema from './schema'
 
 /**
- * Lokálně soubor (`file:./local.db`), na Vercelu Turso (`libsql://…` + auth token).
- * Klient se v dev režimu drží na globálu, aby ho hot reload nevytvářel znovu.
+ * Locally a file (`file:./local.db`), on Vercel Turso (`libsql://…` + auth token).
+ * In dev mode the client is kept on a global so hot reload does not recreate it.
  */
 const globalForDb = globalThis as unknown as { __testmakerDb?: ReturnType<typeof create> }
 

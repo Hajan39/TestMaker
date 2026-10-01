@@ -5,15 +5,15 @@ import {
   checkWorksheetItems,
   generateWorksheet,
   regenerateWorksheetItem,
-  WORKSHEET_TOO_FEW_MESSAGE,
+  worksheetTooFewMessage,
   type AiCallEvent,
   type WorksheetCall,
   type WorksheetRequest,
 } from '../src/ai'
 
-const MODELY = [{ provider: 'google', model: 'a' } as const]
+const MODELS = [{ provider: 'google', model: 'a' } as const]
 
-const ZADANI: WorksheetRequest = {
+const REQUEST: WorksheetRequest = {
   title: 'Dýchací soustava',
   subjectName: 'Přírodopis',
   gradeName: '8. ročník',
@@ -22,7 +22,7 @@ const ZADANI: WorksheetRequest = {
   instructions: 'víc tabulek, na 20 minut',
 }
 
-const otazka = (correctIndex = 1) => ({
+const question = (correctIndex = 1) => ({
   kind: 'question',
   fromMaterials: true,
   question: {
@@ -38,12 +38,12 @@ const text = (value = 'Plíce jsou párový orgán.', fromMaterials = true) => (
   fromMaterials,
 })
 const funFact = { kind: 'text', variant: 'fun_fact', text: 'Plíce mají plochu tenisového kurtu.', fromMaterials: false }
-const tabulka = (rows = [[{ value: 'Plíce', blank: false }, { value: 'výměna plynů', blank: true }]]) => ({
+const table = (rows = [[{ value: 'Plíce', blank: false }, { value: 'výměna plynů', blank: true }]]) => ({
   kind: 'table',
   fromMaterials: true,
   table: { header: ['Orgán', 'Funkce'], rows },
 })
-const nadpis = { kind: 'heading', text: 'Dýchání', fromMaterials: false }
+const heading = { kind: 'heading', text: 'Dýchání', fromMaterials: false }
 
 function fake(answer: unknown, seen: { system?: string; prompt?: string } = {}): WorksheetCall {
   return async ({ system, prompt }) => {
@@ -53,36 +53,36 @@ function fake(answer: unknown, seen: { system?: string; prompt?: string } = {}):
   }
 }
 
-describe('ověření položek od modelu', () => {
-  it('vadnou úlohu, tabulku i dlouhý text vyřadí a zbytek nechá', () => {
-    const dlouhy = text('x'.repeat(AI_SETTINGS.worksheet.textMax + 1))
-    const spatnaTabulka = tabulka([[{ value: 'Plíce', blank: true }]])
+describe('verifying items from the model', () => {
+  it('drops a broken task, table and long text and keeps the rest', () => {
+    const longText = text('x'.repeat(AI_SETTINGS.worksheet.textMax + 1))
+    const badTable = table([[{ value: 'Plíce', blank: true }]])
     const { items, dropped } = checkWorksheetItems(
-      [nadpis, text(), otazka(7), spatnaTabulka, dlouhy, tabulka(), otazka()],
+      [heading, text(), question(7), badTable, longText, table(), question()],
       { hasSource: true },
     )
     expect(dropped).toBe(3)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'table', 'question'])
   })
 
-  it('tabulku bez prázdné buňky vyřadí — nebylo by co doplňovat', () => {
-    const plna = tabulka([[{ value: 'Plíce', blank: false }, { value: 'x', blank: false }]])
-    expect(checkWorksheetItems([plna], { hasSource: true }).dropped).toBe(1)
+  it('drops a table without a blank cell — there would be nothing to fill in', () => {
+    const filled = table([[{ value: 'Plíce', blank: false }, { value: 'x', blank: false }]])
+    expect(checkWorksheetItems([filled], { hasSource: true }).dropped).toBe(1)
   })
 
-  it('co nevychází z materiálů, dostane značku ověř; nadpis nikdy', () => {
-    const { items } = checkWorksheetItems([nadpis, text('Obecná znalost.', false), text()], { hasSource: true })
+  it('what is not based on the materials gets the check flag; a heading never', () => {
+    const { items } = checkWorksheetItems([heading, text('Obecná znalost.', false), text()], { hasSource: true })
     expect(items.map((item) => item.needsCheck)).toEqual([false, true, false])
   })
 
-  it('bez materiálů i vlastního textu dostane značku všechno kromě nadpisů a pokynů', () => {
-    const pokyn = { kind: 'instruction', text: 'Doplň.', fromMaterials: true }
-    const { items } = checkWorksheetItems([nadpis, pokyn, text(), tabulka(), otazka()], { hasSource: false })
+  it('without materials and own text everything except headings and instructions gets the flag', () => {
+    const instruction = { kind: 'instruction', text: 'Doplň.', fromMaterials: true }
+    const { items } = checkWorksheetItems([heading, instruction, text(), table(), question()], { hasSource: false })
     expect(items.map((item) => item.needsCheck)).toEqual([false, false, true, true, true])
   })
 
-  it('uspořádání úlohy na řazení srovná podle správného pořadí', () => {
-    const razeni = {
+  it('reorders an ordering task by the correct order', () => {
+    const sorting = {
       kind: 'question',
       fromMaterials: true,
       question: {
@@ -91,17 +91,17 @@ describe('ověření položek od modelu', () => {
         payload: { prompt: 'Seřaď.', items: ['b', 'a', 'c'], correctOrder: [1, 0, 2] },
       },
     }
-    const [item] = checkWorksheetItems([razeni], { hasSource: true }).items
+    const [item] = checkWorksheetItems([sorting], { hasSource: true }).items
     expect(item?.kind === 'question' && item.question.payload).toMatchObject({ items: ['a', 'b', 'c'] })
   })
 })
 
-describe('generování listu', () => {
-  it('vrátí list, spočítá vyřazené a zahodí přebytek nad maxItems', async () => {
+describe('generating a worksheet', () => {
+  it('returns the worksheet, counts dropped items and discards the excess over maxItems', async () => {
     const many = Array.from({ length: AI_SETTINGS.worksheet.maxItems + 3 }, (_, i) => text(`Věta ${i}.`))
-    const result = await generateWorksheet(ZADANI, {
-      models: MODELY,
-      callModel: fake({ title: 'Dýchání', items: [otazka(9), ...many] }),
+    const result = await generateWorksheet(REQUEST, {
+      models: MODELS,
+      callModel: fake({ title: 'Dýchání', items: [question(9), ...many] }),
     })
     expect(result.title).toBe('Dýchání')
     expect(result.items).toHaveLength(AI_SETTINGS.worksheet.maxItems)
@@ -109,43 +109,43 @@ describe('generování listu', () => {
     expect(result.models).toEqual(['google:a'])
   })
 
-  it('nadpis a pokyn na konci listu (i po ořezu) vynechá', async () => {
-    const pokyn = { kind: 'instruction', text: 'Doplň.', fromMaterials: false }
-    const result = await generateWorksheet(ZADANI, {
-      models: MODELY,
-      callModel: fake({ title: 't', items: [text(), funFact, tabulka(), nadpis, pokyn] }),
+  it('skips a heading and an instruction at the end of the worksheet (also after trimming)', async () => {
+    const instruction = { kind: 'instruction', text: 'Doplň.', fromMaterials: false }
+    const result = await generateWorksheet(REQUEST, {
+      models: MODELS,
+      callModel: fake({ title: 't', items: [text(), funFact, table(), heading, instruction] }),
     })
     expect(result.items.map((item) => item.kind)).toEqual(['text', 'text', 'table'])
   })
 
-  it('chyba o málo položkách řekne, kolik jich model zkazil', async () => {
-    const call = fake({ title: 'x', items: [text(), otazka(9), otazka(9)] })
-    await expect(generateWorksheet(ZADANI, { models: MODELY, callModel: call })).rejects.toThrow(
+  it('the too-few-items error says how many the model broke', async () => {
+    const call = fake({ title: 'x', items: [text(), question(9), question(9)] })
+    await expect(generateWorksheet(REQUEST, { models: MODELS, callModel: call })).rejects.toThrow(
       '2 položky byly vadné',
     )
   })
 
-  it('pokus o volání i s tokeny předá posluchači onCall', async () => {
+  it('passes the call attempt with tokens to the onCall listener', async () => {
     const events: AiCallEvent[] = []
     const call: WorksheetCall = async ({ meter }) => {
       meter?.usage(1200, 300)
-      return { title: 't', items: [text(), funFact, tabulka()] }
+      return { title: 't', items: [text(), funFact, table()] }
     }
-    await generateWorksheet(ZADANI, { models: MODELY, callModel: call, onCall: (event) => events.push(event) })
+    await generateWorksheet(REQUEST, { models: MODELS, callModel: call, onCall: (event) => events.push(event) })
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ model: 'google:a', outcome: 'ok', inputTokens: 1200, outputTokens: 300 })
   })
 
-  it('při méně než minItems obsahových položkách skončí českou chybou s radou', async () => {
-    const call = fake({ title: 'x', items: [nadpis, nadpis, nadpis, text(), otazka(9)] })
-    await expect(generateWorksheet(ZADANI, { models: MODELY, callModel: call })).rejects.toThrow(
-      WORKSHEET_TOO_FEW_MESSAGE,
+  it('with fewer than minItems content items it ends with a Czech error with advice', async () => {
+    const call = fake({ title: 'x', items: [heading, heading, heading, text(), question(9)] })
+    await expect(generateWorksheet(REQUEST, { models: MODELS, callModel: call })).rejects.toThrow(
+      worksheetTooFewMessage(),
     )
-    expect(WORKSHEET_TOO_FEW_MESSAGE).toMatch(/znovu/)
+    expect(worksheetTooFewMessage()).toMatch(/znovu/)
   })
 
-  it('odpověď v jiném tvaru zachrání po položkách', async () => {
-    const raw = JSON.stringify({ title: 'Zachráněno', items: [text(), funFact, tabulka(), { kind: 'nesmysl' }] })
+  it('salvages an answer in another shape item by item', async () => {
+    const raw = JSON.stringify({ title: 'Zachráněno', items: [text(), funFact, table(), { kind: 'nesmysl' }] })
     const call: WorksheetCall = async () => {
       throw new NoObjectGeneratedError({
         message: 'No object generated: response did not match schema.',
@@ -155,17 +155,17 @@ describe('generování listu', () => {
         finishReason: 'stop',
       })
     }
-    const result = await generateWorksheet(ZADANI, { models: MODELY, callModel: call })
+    const result = await generateWorksheet(REQUEST, { models: MODELS, callModel: call })
     expect(result.title).toBe('Zachráněno')
     expect(result.items).toHaveLength(3)
     expect(result.dropped).toBe(1)
   })
 
-  it('prompt nese název, ročník, pokyn, vlastní text a pravidlo o přiznání zdroje', async () => {
+  it('the prompt carries the title, grade, instruction, own text and the source disclosure rule', async () => {
     const seen: { system?: string; prompt?: string } = {}
     await generateWorksheet(
-      { ...ZADANI, ownText: 'Vlastní text učitelky o bránici.' },
-      { models: MODELY, callModel: fake({ title: 't', items: [text(), funFact, tabulka()] }, seen) },
+      { ...REQUEST, ownText: 'Vlastní text učitelky o bránici.' },
+      { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, seen) },
     )
     expect(seen.prompt).toContain('Dýchací soustava')
     expect(seen.prompt).toContain('8. ročník')
@@ -175,32 +175,32 @@ describe('generování listu', () => {
     expect(`${seen.system}`).toContain('fromMaterials')
   })
 
-  it('dlouhé materiály zkrátí do rozpočtu', async () => {
+  it('trims long materials to the budget', async () => {
     const seen: { prompt?: string } = {}
-    const dlouhe = `=== a.txt ===\n${'Věta o plicích. '.repeat(10_000)}`
+    const longText = `=== a.txt ===\n${'Věta o plicích. '.repeat(10_000)}`
     await generateWorksheet(
-      { ...ZADANI, materials: dlouhe },
-      { models: MODELY, callModel: fake({ title: 't', items: [text(), funFact, tabulka()] }, seen) },
+      { ...REQUEST, materials: longText },
+      { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, seen) },
     )
     expect(seen.prompt!.length).toBeLessThan(AI_SETTINGS.worksheet.materialChars + 5_000)
   })
 
-  it('bez materiálů i textu řekne modelu, že pracuje jen z názvu a ročníku', async () => {
+  it('without materials and text it tells the model it works only from the title and grade', async () => {
     const seen: { prompt?: string } = {}
     const result = await generateWorksheet(
-      { ...ZADANI, materials: '', ownText: '' },
-      { models: MODELY, callModel: fake({ title: 't', items: [text(), funFact, tabulka()] }, seen) },
+      { ...REQUEST, materials: '', ownText: '' },
+      { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, seen) },
     )
     expect(seen.prompt).toMatch(/žádný text/i)
     expect(result.items.every((item) => item.needsCheck)).toBe(true)
   })
 })
 
-describe('přegenerování jednoho kusu', () => {
-  it('vrátí jednu položku požadovaného druhu a pošle modelu stávající položky', async () => {
+describe('regenerating a single item', () => {
+  it('returns one item of the requested kind and sends the existing items to the model', async () => {
     const seen: { prompt?: string } = {}
-    const item = await regenerateWorksheetItem(ZADANI, { kind: 'fun_fact' }, ['Plíce jsou párový orgán.'], {
-      models: MODELY,
+    const item = await regenerateWorksheetItem(REQUEST, { kind: 'fun_fact' }, ['Plíce jsou párový orgán.'], {
+      models: MODELS,
       callModel: fake({ item: funFact }, seen),
     })
     expect(item).toMatchObject({ kind: 'text', content: { variant: 'fun_fact' }, needsCheck: true })
@@ -208,21 +208,21 @@ describe('přegenerování jednoho kusu', () => {
     expect(seen.prompt).toMatch(/fun fact/i)
   })
 
-  it('úloha musí mít požadovaný typ', async () => {
-    const call = fake({ item: otazka() })
+  it('a task must have the requested type', async () => {
+    const call = fake({ item: question() })
     await expect(
-      regenerateWorksheetItem(ZADANI, { kind: 'question', questionType: 'true_false' }, [], { models: MODELY, callModel: call }),
+      regenerateWorksheetItem(REQUEST, { kind: 'question', questionType: 'true_false' }, [], { models: MODELS, callModel: call }),
     ).rejects.toThrow(/znovu/)
-    const ok = await regenerateWorksheetItem(ZADANI, { kind: 'question', questionType: 'single_choice' }, [], {
-      models: MODELY,
+    const ok = await regenerateWorksheetItem(REQUEST, { kind: 'question', questionType: 'single_choice' }, [], {
+      models: MODELS,
       callModel: call,
     })
     expect(ok.kind).toBe('question')
   })
 
-  it('položka jiného druhu nebo vadná skončí českou chybou', async () => {
+  it('an item of another kind or a broken one ends with a Czech error', async () => {
     await expect(
-      regenerateWorksheetItem(ZADANI, { kind: 'table' }, [], { models: MODELY, callModel: fake({ item: text() }) }),
+      regenerateWorksheetItem(REQUEST, { kind: 'table' }, [], { models: MODELS, callModel: fake({ item: text() }) }),
     ).rejects.toThrow(/znovu/)
   })
 })

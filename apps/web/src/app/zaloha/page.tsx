@@ -1,34 +1,37 @@
 import { PageShell } from '@testmaker/ui'
 import { db } from '@/db'
-import { spocitej } from '@/lib/backup'
-import { roleMuzeSpravovat } from '@/lib/role'
-import { ucetStranky } from '@/lib/uzivatel'
-import { ZalohaScreen } from './ZalohaScreen'
+import { countRows } from '@/lib/backup'
+import { roleCanManage } from '@/lib/role'
+import { pageAccount } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
+import { BackupScreen } from './BackupScreen'
 
-export const metadata = { title: 'Záloha – TestMaker' }
+export function generateMetadata() {
+  return { title: t('backup:metaTitle') }
+}
 
-// Počty se musí shodovat s tím, co je v knihovně právě teď — jinak by po
-// obnově stránka ukazovala čísla z doby před ní.
+// The counts must match what is in the library right now — otherwise after a
+// restore the page would show numbers from before it.
 export const dynamic = 'force-dynamic'
 
-export default async function ZalohaPage() {
-  // Záloha je celá škola včetně cizích písemek — proto ji vidí jen správce.
-  const ucet = await ucetStranky()
-  if (!roleMuzeSpravovat(ucet.role)) {
+export default async function BackupPage() {
+  // The backup is the whole school including other people's tests — so only a manager sees it.
+  const account = await pageAccount()
+  if (!roleCanManage(account.role)) {
     return (
       <PageShell>
         <p className="text-sm text-fg-soft">
-          Zálohu školy stahuje a obnovuje správce. Vlastní písemky si vytiskneš v Testech.
+          {t('backup:managerOnly')}
         </p>
       </PageShell>
     )
   }
 
-  const pocty = await spocitej(db, { schoolId: ucet.schoolId })
+  const counts = await countRows(db, { schoolId: account.schoolId })
 
   return (
     <PageShell>
-      <ZalohaScreen pocty={pocty} />
+      <BackupScreen counts={counts} />
     </PageShell>
   )
 }

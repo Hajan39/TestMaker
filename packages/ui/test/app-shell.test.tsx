@@ -9,7 +9,7 @@ const nav = [
 ]
 
 describe('AppShell', () => {
-  it('vykreslí značku, navigaci a obsah', () => {
+  it('renders the logo, navigation and content', () => {
     render(
       <AppShell
         nav={nav}
@@ -28,7 +28,7 @@ describe('AppShell', () => {
     expect(screen.getByText('Obsah')).toBeInTheDocument()
   })
 
-  it('označí aktivní položku pro čtečky obrazovky', () => {
+  it('marks the active item for screen readers', () => {
     render(
       <AppShell
         nav={nav}
@@ -45,7 +45,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: 'Testy' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('lišta nese ostřejší důraz, plocha mírnější', () => {
+  it('the bar has the sharper emphasis, the workspace the milder one', () => {
     const { container } = render(
       <AppShell
         nav={nav}

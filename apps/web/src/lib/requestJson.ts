@@ -1,16 +1,12 @@
+import { t } from '@testmaker/core/i18n'
+
 /**
- * Požadavky na vlastní API z prohlížeče s českou chybou pro učitelku.
- * Prohlížeč a platforma hlásí potíže anglicky („Failed to fetch“,
- * „Unexpected end of JSON input“) — ty se učitelce nikdy neukazují.
+ * Browser requests to our own API with a translated, actionable error for
+ * the teacher. Browsers and the platform report trouble in English
+ * ("Failed to fetch", "Unexpected end of JSON input") — never shown as is.
  */
 
-/** Hláška, když server odpoví chybou bez vysvětlení (spadl, vypršel čas…). */
-export const SERVER_TROUBLE = 'Server teď neodpověděl, jak měl. Zkus to za chvíli znovu; když to nepomůže, obnov stránku.'
-export const OFFLINE = 'Nepodařilo se spojit se serverem. Zkontroluj připojení k internetu a zkus to znovu.'
-export const SESSION_EXPIRED =
-  'Přihlášení vypršelo. Přihlas se znovu v nové záložce — rozdělaná práce v tomhle okně zůstane — a zkus to znovu.'
-
-/** Chyba s českou hláškou; `status` je 0, když se na server vůbec nedošlo. */
+/** Error carrying a user-facing message; `status` is 0 when the server was never reached. */
 export class RequestError extends Error {
   constructor(
     message: string,
@@ -20,7 +16,7 @@ export class RequestError extends Error {
   }
 }
 
-/** Tělo odpovědi jako JSON; prázdné nebo rozbité tělo (pád serveru) = `{}`. */
+/** Response body as JSON; an empty or broken body (server crash) becomes `{}`. */
 export async function readJson<T>(response: Response): Promise<Partial<T> & { error?: string }> {
   try {
     return ((await response.json()) ?? {}) as Partial<T> & { error?: string }
@@ -29,26 +25,26 @@ export async function readJson<T>(response: Response): Promise<Partial<T> & { er
   }
 }
 
-/** Česká hláška k neúspěšné odpovědi: vlastní text serveru, nebo obecná rada. */
+/** Message for a failed response: the server's own text, or generic advice. */
 export function responseError(response: Response, data: { error?: unknown }, failure: string): RequestError {
-  if (response.status === 401) return new RequestError(`${failure} ${SESSION_EXPIRED}`, 401)
+  if (response.status === 401) return new RequestError(`${failure} ${t('common:errors.sessionExpired')}`, 401)
   const own = typeof data.error === 'string' && data.error.trim() ? data.error : null
-  return new RequestError(own ?? `${failure} ${SERVER_TROUBLE}`, response.status)
+  return new RequestError(own ?? `${failure} ${t('common:errors.serverTrouble')}`, response.status)
 }
 
-/** `fetch`, který místo síťové chyby prohlížeče hází českou `RequestError`. */
+/** `fetch` that throws a translated `RequestError` instead of the browser's network error. */
 export async function fetchOrOffline(url: string, init: RequestInit | undefined, failure: string): Promise<Response> {
   try {
     return await fetch(url, init)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new RequestError(`${failure} ${OFFLINE}`, 0)
+    throw new RequestError(`${failure} ${t('common:errors.offline')}`, 0)
   }
 }
 
 /**
- * Požadavek na API. Když server vrátí vlastní hlášku, použije se ta; jinak
- * obecná rada, co dělat. `failure` je první věta chyby („Test se nepodařilo smazat.“).
+ * Request to the API. The server's own message wins; otherwise generic
+ * advice. `failure` is the first sentence of the error ("The test could not be deleted.").
  */
 export async function requestJson<T>(url: string, init: RequestInit | undefined, failure: string): Promise<Partial<T>> {
   const response = await fetchOrOffline(url, init, failure)
@@ -57,17 +53,17 @@ export async function requestJson<T>(url: string, init: RequestInit | undefined,
   return data
 }
 
-/** JSON tělo pro `requestJson`. */
+/** JSON body for `requestJson`. */
 export function jsonBody(method: string, body: unknown): RequestInit {
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
 }
 
 /**
- * Text chyby k zobrazení. Hlášky z `RequestError` a vlastní české chyby
- * projdou; technické chyby prohlížeče (TypeError, SyntaxError) se nahradí radou.
+ * Error text to display. Messages from `RequestError` and our own errors pass
+ * through; technical browser errors (TypeError, SyntaxError) become advice.
  */
 export function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof RequestError) return error.message
-  if (error instanceof TypeError || error instanceof SyntaxError) return `${fallback} ${SERVER_TROUBLE}`
+  if (error instanceof TypeError || error instanceof SyntaxError) return `${fallback} ${t('common:errors.serverTrouble')}`
   return error instanceof Error && error.message ? error.message : fallback
 }

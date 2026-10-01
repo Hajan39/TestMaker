@@ -8,12 +8,12 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 import { afterEach, describe, expect, it } from 'vitest'
 
 /**
- * Migrace 0014 dorovnává zbylé koncepty (`draft`) na schválené, teď když
- * schvalování zmizelo úplně. Testuje se stejně jako 0006: vlastní databáze
- * postavená migracemi po `0013_puzzle-word-drafts`, do ní vložené otázky ve
- * všech třech stavech, a teprve pak plná sada migrací.
+ * Migration 0014 flips the remaining drafts (`draft`) to approved, now that
+ * approval is gone entirely. Tested like 0006: its own database built with
+ * migrations up to `0013_puzzle-word-drafts`, questions in all three states
+ * inserted, and only then the full set of migrations.
  */
-// Datové migrace ze staré řady; čistá databáze dnes vzniká jediným základem.
+// Data migrations from the old series; a clean database is now created by the single baseline.
 const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle-historie')
 const cleanups: (() => void)[] = []
 
@@ -25,7 +25,7 @@ afterEach(() => {
   }
 })
 
-/** Kopie složky migrací, ve které rejstřík končí u zadané migrace. */
+/** A copy of the migrations folder whose journal ends at the given migration. */
 function migrationsUpTo(tag: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'testmaker-drizzle-'))
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
@@ -64,14 +64,14 @@ async function countsByStatus(client: Client): Promise<Record<string, number>> {
   return Object.fromEntries(result.rows.map((row) => [String(row.status), Number(row.pocet)]))
 }
 
-/** Hash migrace tak, jak ho počítá `drizzle-orm/migrator.js` — sha256 celého souboru. */
+/** Migration hash as computed by `drizzle-orm/migrator.js` — sha256 of the whole file. */
 function migrationHash(tag: string): string {
   const contents = readFileSync(join(drizzleFolder, `${tag}.sql`), 'utf8')
   return createHash('sha256').update(contents).digest('hex')
 }
 
-describe('migrace 0014 — zbylé koncepty na schválené', () => {
-  it('překlopí zbylé koncepty a jen je poznamená do vlastní pomocné tabulky', async () => {
+describe('migration 0014 — remaining drafts to approved', () => {
+  it('flips the remaining drafts and records only them in its own helper table', async () => {
     const { client } = freshDb()
     await migrate(drizzle(client), { migrationsFolder: migrationsUpTo('0013_puzzle-word-drafts') })
 
@@ -84,17 +84,17 @@ describe('migrace 0014 — zbylé koncepty na schválené', () => {
 
     await migrate(drizzle(client), { migrationsFolder: drizzleFolder })
 
-    // Koncepty zmizely, schválených je o ně víc, zamítnutá zůstala zamítnutá.
+    // Drafts are gone, approved ones grew by them, the rejected one stayed rejected.
     expect(await countsByStatus(client)).toEqual({ approved: 3, rejected: 1 })
 
-    // Pomocná tabulka obsahuje přesně otázky, kterých se to týkalo.
+    // The helper table holds exactly the affected questions.
     const noted = await client.execute(
       'SELECT question_id FROM migration_0014_approved_drafts ORDER BY question_id',
     )
     expect(noted.rows.map((row) => String(row.question_id))).toEqual(['koncept-1', 'koncept-2'])
   })
 
-  it('jde vrátit zpět postupem z komentáře v migraci a zamítnutou mezitím otázku nechá být', async () => {
+  it('can be rolled back with the migration comment procedure and leaves a meanwhile rejected question alone', async () => {
     const { client } = freshDb()
     await migrate(drizzle(client), { migrationsFolder: migrationsUpTo('0013_puzzle-word-drafts') })
 
@@ -104,10 +104,10 @@ describe('migrace 0014 — zbylé koncepty na schválené', () => {
 
     await migrate(drizzle(client), { migrationsFolder: drizzleFolder })
 
-    // Mezitím učitelka jednu z překlopených otázek zamítne.
+    // Meanwhile the teacher rejects one of the flipped questions.
     await client.execute("UPDATE questions SET status = 'rejected' WHERE id = 'koncept-pozdeji-zamitnuty'")
 
-    // Návrat zpět podle postupu v `docs/migrace-0014-zbyle-koncepty.md`.
+    // Rollback per the procedure in `docs/migrace-0014-zbyle-koncepty.md`.
     await client.execute(`UPDATE questions SET status = 'draft'
        WHERE status = 'approved'
          AND id IN (SELECT question_id FROM migration_0014_approved_drafts)`)
@@ -119,23 +119,23 @@ describe('migrace 0014 — zbylé koncepty na schválené', () => {
 
     expect(await countsByStatus(client)).toEqual({ draft: 1, approved: 1, rejected: 1 })
 
-    const stavy = await client.execute('SELECT id, status FROM questions ORDER BY id')
-    expect(Object.fromEntries(stavy.rows.map((row) => [String(row.id), String(row.status)]))).toEqual({
+    const states = await client.execute('SELECT id, status FROM questions ORDER BY id')
+    expect(Object.fromEntries(states.rows.map((row) => [String(row.id), String(row.status)]))).toEqual({
       koncept: 'draft',
       'koncept-pozdeji-zamitnuty': 'rejected',
       'schvalena-rucne': 'approved',
     })
 
-    // Záznam o migraci zmizel z evidence drizzle — příští `pnpm db:migrate`
-    // ji spustí znovu, místo aby ji považoval za hotovou.
-    const zbyvajici = await client.execute({
+    // The migration record is gone from drizzle's journal — the next
+    // `pnpm db:migrate` runs it again instead of treating it as done.
+    const remaining = await client.execute({
       sql: 'SELECT hash FROM __drizzle_migrations WHERE hash = ?',
       args: [migrationHash('0014_approve-remaining-drafts')],
     })
-    expect(zbyvajici.rows).toHaveLength(0)
+    expect(remaining.rows).toHaveLength(0)
   })
 
-  it('nad databází bez konceptů proběhne bez chyby a nic nezmění', async () => {
+  it('runs without error over a database without drafts and changes nothing', async () => {
     const { client } = freshDb()
     await migrate(drizzle(client), { migrationsFolder: migrationsUpTo('0013_puzzle-word-drafts') })
 

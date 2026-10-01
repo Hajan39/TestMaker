@@ -1,6 +1,6 @@
 /**
- * Náhrada za balíček `server-only` v testech. Ten existuje jen proto, aby
- * bundler Next.js zakázal import serverového modulu do prohlížeče; mimo
- * bundler se načíst nedá, a tak ho vitest nahrazuje tímhle prázdným modulem.
+ * Replacement for the `server-only` package in tests. It exists only so the
+ * Next.js bundler forbids importing a server module into the browser; outside
+ * the bundler it cannot be loaded, so vitest replaces it with this empty module.
  */
 export {}

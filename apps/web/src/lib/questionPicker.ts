@@ -2,7 +2,7 @@ import 'server-only'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { Question, QuestionStatus } from '@testmaker/core/schema'
 import { db, grades, questions, subjects, topics } from '@/db'
-import { skola, type Scope } from './uzivatel'
+import { inSchool, type Scope } from './user'
 import { toQuestion } from './questions'
 
 export interface PickerTopic {
@@ -10,30 +10,30 @@ export interface PickerTopic {
   label: string
   subject: string
   grade: string
-  /** Ročník tématu — editor testu podle něj předfiltruje banku na třídu testu. */
+  /** The topic's grade — the test editor pre-filters the bank to the test's class by it. */
   gradeId: string
   name: string
   questions: Question[]
 }
 
 /**
- * Otázky seskupené podle tématu pro výběr do testu.
+ * Questions grouped by topic for picking into a test.
  *
- * Ve výchozím stavu jen schválené: co učitelka zamítla nebo zatím
- * nezkontrolovala, nemá do písemky kudy proklouznout. Kdyby se sem posílalo
- * všechno a odfiltrovávalo se to až v prohlížeči, bylo by schvalování jen
- * ozdoba — stačilo by odškrtnout zaškrtávátko.
+ * By default only approved ones: what the teacher rejected or hasn't checked
+ * yet has no way to slip into a test. If everything were sent here and
+ * filtered only in the browser, approval would be decoration — unticking a
+ * checkbox would be enough.
  *
- * `statuses` je tu pro přehled banky (`/questions`), který naopak má ukazovat
- * i koncepty a zamítnuté, ať je vidět, co kde leží.
+ * `statuses` serves the bank overview (`/questions`), which on the contrary
+ * should show drafts and rejected ones too, so it's visible what is where.
  *
- * Test se skládá napříč předměty i ročníky, proto se načítá celá knihovna.
+ * A test is composed across subjects and grades, so the whole library is loaded.
  *
- * Poznámka k rozsahu dat: `blocks` ani `explanation` se nevynechávají, i když
- * to na první pohled vypadá jako zbytečná zátěž. `blocks` vykresluje
- * `PaperQuestion` (obrázky u zadání) a `explanation` se ukazuje v náhledu
- * u vzorové odpovědi — obojí přímo ve skladači testu, takže bez nich by se
- * v písemce tiše ztratily obrázky a poznámky do klíče.
+ * Note on data size: `blocks` and `explanation` are not left out, even though
+ * at first sight they look like needless weight. `blocks` is rendered by
+ * `PaperQuestion` (images in the prompt) and `explanation` is shown in the
+ * preview next to the sample answer — both right in the test builder, so
+ * without them images and answer-key notes would silently vanish from the test.
  */
 export async function loadPickerTopics(
   scope: Scope,
@@ -54,7 +54,7 @@ export async function loadPickerTopics(
     .innerJoin(topics, eq(topics.id, questions.topicId))
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(and(skola(scope, questions), inArray(questions.status, statuses)))
+    .where(and(inSchool(scope, questions), inArray(questions.status, statuses)))
     .orderBy(asc(subjects.name), asc(grades.position), asc(topics.name), asc(questions.createdAt))
 
   const byTopic = new Map<string, PickerTopic>()

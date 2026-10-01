@@ -1,18 +1,22 @@
+import type { Metadata } from 'next'
+import { t } from '@testmaker/core/i18n'
 import { AI_SETTINGS } from '@testmaker/core/ai'
 import { EmptyState, PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
 import { loadTemplates } from '@/lib/tests'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
 import { NewWorksheetForm, type WorksheetSubject } from './NewWorksheetForm'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Nový pracovní list – TestMaker' }
+export function generateMetadata(): Metadata {
+  return { title: t('worksheets:meta.new') }
+}
 
 export default async function NewWorksheetPage() {
-  const ucet = await ucetStranky()
-  const [tree, templates] = await Promise.all([loadLibraryTree(ucet), loadTemplates(ucet)])
-  // Do prohlížeče jen to, co formulář potřebuje: názvy a id pater knihovny.
+  const account = await pageAccount()
+  const [tree, templates] = await Promise.all([loadLibraryTree(account), loadTemplates(account)])
+  // Send the browser only what the form needs: names and ids of the library levels.
   const subjects: WorksheetSubject[] = tree.map((subject) => ({
     id: subject.id,
     name: subject.name,
@@ -23,14 +27,11 @@ export default async function NewWorksheetPage() {
     })),
   }))
   const { configured, problems } = aiStatus()
-  // Bez šablony by uložení skončilo odmítnutím — řekne se to rovnou.
+  // Without a template saving would be rejected — say so up front.
   if (templates.length === 0) {
     return (
       <PageShell>
-        <EmptyState
-          title="Nejdřív je potřeba šablona"
-          hint="Ve škole zatím není žádná šablona pro tisk, takže nejde nic založit. Dej vědět správci, ať ji přidá."
-        />
+        <EmptyState title={t('tests:noTemplate.title')} hint={t('tests:noTemplate.hint')} />
       </PageShell>
     )
   }

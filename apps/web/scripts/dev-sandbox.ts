@@ -1,12 +1,12 @@
 /**
- * Vývojový server nad zahoditelnou databází `dev.db` se zapnutým přihlašováním.
+ * Development server over the throwaway `dev.db` database with sign-in enabled.
  *
  *   pnpm dev:sandbox            # http://localhost:3200
- *   pnpm dev:sandbox --reset    # databázi postaví znovu od nuly
+ *   pnpm dev:sandbox --reset    # rebuilds the database from scratch
  *
- * Na nových věcech se pracuje tady, ne na `pnpm dev` — ten běží nad ostrou
- * `local.db` se skutečnými materiály. Data i účty staví `seed-e2e.ts`
- * (vymyšlený obsah); všechny účty mají heslo `e2e-tajne-heslo`:
+ * New work happens here, not on `pnpm dev` — that runs over the live
+ * `local.db` with real materials. Data and accounts are built by `seed-e2e.ts`
+ * (made-up content); all accounts have the password `e2e-tajne-heslo`:
  *
  *   admin@localhost        administrator
  *   spravce@localhost      spravce
@@ -22,9 +22,9 @@ const env = {
   DATABASE_URL: 'file:./dev.db',
   DATABASE_AUTH_TOKEN: '',
   E2E_DATABASE_FILE: 'dev.db',
-  // Vlastní složka sestavení, aby server běžel vedle `pnpm dev`.
+  // Own build folder so the server can run next to `pnpm dev`.
   NEXT_DIST_DIR: '.next-dev',
-  // Pevné tajemství stačí: databáze i účty jsou jen na zkoušku.
+  // A fixed secret is enough: the database and accounts are only for trying things out.
   AUTH_SECRET: 'dev-sandbox-tajemstvi-na-podpis-cookie',
 }
 

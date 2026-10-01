@@ -1,26 +1,26 @@
 /**
- * Jediné pravidlo pro to, jestli materiál jde do generování otázek. Dřív si
- * ho každé místo (hlavička tématu, karta generování, pruh materiálů) psalo
- * po svém a lišila se v tom, jestli počítá i duplicity nebo vynechané —
- * odsud sahá po témž pravidle celá aplikace.
+ * The single rule for whether a material feeds question generation. Each place
+ * (topic header, generation card, materials strip) used to write its own and
+ * they disagreed on counting duplicates or excluded ones — the whole app now
+ * uses this one.
  */
 export interface MaterialUsability {
-  /** Duplicitní kopie jiného materiálu — generování by z ní vytáhlo tentýž text podruhé. */
+  /** Duplicate copy of another material — generation would pull the same text twice. */
   duplicateOfId: string | null
-  /** Ručně vyřazený z generování učitelkou; v tématu zůstává. */
+  /** Manually excluded from generation by the teacher; stays in the topic. */
   excluded: boolean
-  /** Text je podezřele krátký vůči počtu stran — nejspíš sken bez textové vrstvy. */
+  /** Text is suspiciously short for the page count — most likely a scan without a text layer. */
   needsOcr: boolean
 }
 
-/** Použije se materiál při generování otázek z tématu? */
+/** Is the material used when generating questions from the topic? */
 export function isUsableMaterial(material: MaterialUsability): boolean {
   return !material.duplicateOfId && !material.excluded && !material.needsOcr
 }
 
 /**
- * Pod tímhle počtem znaků použitelného textu generování na serveru odmítne
- * (`generateForTopic`) — karta v tématu tlačítko zakáže se stejným důvodem
- * ještě dřív, než by učitelka čekala na chybu z generování.
+ * Below this many characters of usable text the server refuses to generate
+ * (`generateForTopic`) — the topic card disables the button for the same reason
+ * before the teacher would wait for a generation error.
  */
 export const MIN_GENERATE_CHARS = 200

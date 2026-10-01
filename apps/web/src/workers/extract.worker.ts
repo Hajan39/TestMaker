@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
- * Extrakce textu běží ve web workeru, aby velké PDF a prezentace neblokovaly UI.
- * Na server se posílá jen text — originály (až 180 MB) nikam neputují.
+ * Text extraction runs in a web worker so large PDFs and presentations don't
+ * block the UI. Only the text goes to the server — originals (up to 180 MB) never leave.
  */
 import { processFile, type ProcessedFile } from '@testmaker/core/extract'
 

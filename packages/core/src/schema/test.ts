@@ -1,51 +1,55 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 import { questionContentSchema, type Question, type QuestionContent } from './question'
 import { parsePuzzleSnapshot, toPuzzleSnapshot, type Puzzle, type PuzzleContent } from './puzzle'
 import type { Template } from './template'
 
 /**
- * Položka testu — struktura testu není omezená na pouhý seznam otázek.
- * Pátý druh, `puzzle`, je hotový hlavolam (osmisměrka, tajenka): není to
- * otázka a v bance nemá co dělat, ale do písemky se zařadit má. `text`
- * (krátký text, fun fact) a `table` (tabulka k doplnění) patří pracovním listům.
+ * Test item — a test is not limited to a plain list of questions. The fifth
+ * kind, `puzzle`, is a finished puzzle (word search, cryptogram): it is not a
+ * question and has no place in the bank, but it can be put into a test.
+ * `text` (short text, fun fact) and `table` (table to fill in) belong to
+ * worksheets.
  */
 export const TEST_ITEM_KINDS = ['question', 'heading', 'instruction', 'page_break', 'puzzle', 'text', 'table'] as const
 export type TestItemKind = (typeof TEST_ITEM_KINDS)[number]
 
 /**
- * Písemka, nebo pracovní list. List sdílí s písemkou editor, šablony i tisk,
- * ale nic se na něm nehodnotí a jeho úlohy do banky nejdou.
+ * Test or worksheet. A worksheet shares the editor, templates and printing
+ * with a test, but nothing on it is graded and its tasks do not go into the
+ * bank.
  */
 export const testKindSchema = z.enum(['pisemka', 'pracovni_list'])
 export type TestKind = z.infer<typeof testKindSchema>
 
-/* ------------------------------------------------- položky pracovního listu */
+/* ------------------------------------------------- worksheet items */
 
-/** Krátký text, nebo fun fact v rámečku. Samotný text je ve sloupci `text`. */
+/** Short text, or a boxed fun fact. The text itself is in the `text` column. */
 export const TEXT_ITEM_VARIANTS = ['text', 'fun_fact'] as const
 export type TextItemVariant = (typeof TEXT_ITEM_VARIANTS)[number]
 
 export const textItemContentSchema = z.object({ variant: z.enum(TEXT_ITEM_VARIANTS) })
 export type TextItemContent = z.infer<typeof textItemContentSchema>
 
-/** Víc sloupců se na šířku A4 nevejde, víc řádků už není tabulka k doplnění, ale opisování. */
+/** More columns do not fit an A4 width; more rows are no longer a fill-in table but copying. */
 export const TABLE_MAX_COLUMNS = 6
 export const TABLE_MAX_ROWS = 12
 
 export const worksheetTableCellSchema = z.object({
   value: z.string(),
-  /** Prázdná buňka na vyplnění; `value` je pak správná odpověď do klíče. */
+  /** Blank cell to fill in; `value` is then the correct answer for the key. */
   blank: z.boolean(),
 })
 export type WorksheetTableCell = z.infer<typeof worksheetTableCellSchema>
 
 /**
- * Tvar tabulky bez vzájemných kontrol — tak ho dostává model. Kontroly napříč
- * poli (počet buněk v řádku, aspoň jedna prázdná) se do JSON schématu pro model
- * nepřenesou, proto se ověřují až v kódu přes `tableItemContentSchema`.
+ * Table shape without cross-field checks — this is what the model gets.
+ * Cross-field checks (cells per row, at least one blank) do not carry over
+ * into the JSON schema for the model, so they are verified in code via
+ * `tableItemContentSchema`.
  */
 export const tableItemShapeSchema = z.object({
-  /** Nepovinný popisek nad tabulkou. */
+  /** Optional caption above the table. */
   caption: z.string().optional(),
   header: z.array(z.string()).min(1).max(TABLE_MAX_COLUMNS),
   rows: z.array(z.array(worksheetTableCellSchema)).min(1).max(TABLE_MAX_ROWS),
@@ -53,18 +57,18 @@ export const tableItemShapeSchema = z.object({
 
 export const tableItemContentSchema = tableItemShapeSchema.superRefine((table, ctx) => {
   if (table.rows.some((row) => row.length !== table.header.length)) {
-    ctx.addIssue({ code: 'custom', message: 'Každý řádek tabulky musí mít tolik buněk, kolik je sloupců.' })
+    ctx.addIssue({ code: 'custom', message: t('core:worksheetTable.rowLength') })
   }
   if (!table.rows.some((row) => row.some((cell) => cell.blank))) {
-    ctx.addIssue({ code: 'custom', message: 'Tabulka potřebuje aspoň jednu prázdnou buňku k doplnění.' })
+    ctx.addIssue({ code: 'custom', message: t('core:worksheetTable.needsBlank') })
   }
 })
 export type TableItemContent = z.infer<typeof tableItemContentSchema>
 
 /**
- * Obsah položky z databáze. Poškozený obsah vrací `null` — položka se pak
- * v náhledu ukáže jako chybná, místo aby spadl celý list (vzor:
- * `parseQuestionSnapshot`).
+ * Item content from the database. Corrupted content returns `null` — the
+ * item then shows as broken in the preview instead of the whole worksheet
+ * crashing (pattern: `parseQuestionSnapshot`).
  */
 export function parseItemContent(kind: 'text', raw: unknown): TextItemContent | null
 export function parseItemContent(kind: 'table', raw: unknown): TableItemContent | null
@@ -74,25 +78,26 @@ export function parseItemContent(kind: 'text' | 'table', raw: unknown): TextItem
 }
 
 /**
- * Zadání listu, jak ho učitelka napsala. Ukládá se k listu (`tests.brief`)
- * jako JSON, aby přegenerování jednotlivých kusů vycházelo z téhož zadání.
+ * Worksheet brief as the teacher wrote it. Stored with the worksheet
+ * (`tests.brief`) as JSON so that regenerating single items starts from the
+ * same brief.
  */
 export const worksheetBriefSchema = z.object({
-  /** Název tématu nebo volného zadání v okamžiku založení. */
+  /** Name of the topic or free-form brief at creation time. */
   title: z.string(),
   instructions: z.string().default(''),
   ownText: z.string().default(''),
 })
 export type WorksheetBrief = z.infer<typeof worksheetBriefSchema>
 
-/** Zadání z databáze; text, který není naším JSON, se bere jako pokyn. */
+/** Brief from the database; text that is not our JSON is taken as the instruction. */
 export function parseWorksheetBrief(raw: string | null | undefined): WorksheetBrief | null {
   if (!raw) return null
   try {
     const parsed = worksheetBriefSchema.safeParse(JSON.parse(raw))
     if (parsed.success) return parsed.data
   } catch {
-    // Není to JSON — níž se vezme jako prostý pokyn.
+    // Not JSON — taken as a plain instruction below.
   }
   return { title: '', instructions: raw, ownText: '' }
 }
@@ -102,7 +107,7 @@ export const testHeaderConfigSchema = z.object({
   subject: z.string().default(''),
   className: z.string().default(''),
   teacher: z.string().default(''),
-  /** Datum jako text; prázdné = linka k doplnění. */
+  /** Date as text; empty = a line to fill in. */
   date: z.string().default(''),
   note: z.string().default(''),
 })
@@ -114,42 +119,42 @@ export interface TestItem {
   testId: string
   order: number
   kind: TestItemKind
-  /** Vyplněno u `kind === 'question'`. */
+  /** Set for `kind === 'question'`. */
   questionId: string | null
-  /** Vyplněno u `kind === 'puzzle'`. */
+  /** Set for `kind === 'puzzle'`. */
   puzzleId?: string | null
-  /** Text nadpisu nebo instrukce. */
+  /** Heading or instruction text. */
   text: string | null
-  /** Přepis bodů pro tuto otázku v tomto testu. */
+  /** Points override for this question in this test. */
   pointsOverride: number | null
   /**
-   * Přepis počtu linek na odpověď pro tuto otázku v tomto testu.
-   * Prázdné (nebo chybějící u starších dat) = platí, co má otázka sama.
+   * Answer line count override for this question in this test.
+   * Empty (or missing in older data) = the question's own value applies.
    */
   linesOverride?: number | null
   /**
-   * Zmrazený obsah otázky jako JSON, tak jak vypadala při uložení testu.
-   * Chybí jen u testů založených dřív, než se snímky zavedly.
+   * Frozen question content as JSON, as it was when the test was saved.
+   * Missing only for tests created before snapshots were introduced.
    */
   questionSnapshot?: string | null
   /**
-   * Zmrazený obsah hlavolamu jako JSON — ze stejného důvodu jako u otázky:
-   * pozdější úprava hlavolamu nesmí změnit už vytištěnou písemku ani klíč.
+   * Frozen puzzle content as JSON — for the same reason as for questions: a
+   * later edit of the puzzle must not change an already printed test or key.
    */
   puzzleSnapshot?: string | null
   /**
-   * Obsah položky `text` (varianta) nebo `table` (mřížka), jak leží
-   * v databázi. Číst přes `parseItemContent`, ne přímo.
+   * Content of a `text` (variant) or `table` (grid) item as stored in the
+   * database. Read via `parseItemContent`, not directly.
    */
   content?: unknown
-  /** Značka „ověř“: obsah nevychází z materiálů. Netiskne se. */
+  /** "Check" flag: the content is not based on the materials. Not printed. */
   needsCheck?: boolean
 }
 
 /**
- * Kolik linek na odpověď se má vytisknout. Přepis v testu má přednost před
- * tím, co si u otázky uložil model — místo na odpověď patří k písemce, ne
- * k otázce.
+ * How many answer lines to print. The override in the test takes precedence
+ * over what the model stored with the question — answer space belongs to the
+ * test, not to the question.
  */
 export function answerLines(
   question: { type: string; payload: unknown },
@@ -160,30 +165,32 @@ export function answerLines(
   return typeof payload.lines === 'number' ? payload.lines : 1
 }
 
-/* ------------------------------------------------- snímek otázky v testu */
+/* ------------------------------------------------- question snapshot in a test */
 
 /**
- * Snímek otázky zmrazený v okamžiku zařazení do testu. Je to týž tvar jako
- * obsah otázky (`questionContentSchema`) — druhá definice téhož by se dřív
- * nebo později rozešla. Metadata otázky (id, téma, stav) do snímku nepatří:
- * zajímá nás, co má žák na papíře, ne odkud to přišlo.
+ * Question snapshot frozen when the question is added to a test. Same shape
+ * as the question content (`questionContentSchema`) — a second definition of
+ * the same thing would diverge sooner or later. Question metadata (id, topic,
+ * status) does not belong in the snapshot: what matters is what the pupil has
+ * on paper, not where it came from.
  *
- * Proč vůbec: bez snímku se hotová písemka tiše mění pokaždé, když učitelka
- * otázku v bance upraví — a klíč k odpovědím pak neodpovídá vytištěnému
- * zadání.
+ * Why at all: without a snapshot a finished test silently changes every time
+ * the teacher edits the question in the bank — and the answer key then no
+ * longer matches the printed test.
  */
 export const questionSnapshotSchema = questionContentSchema
 
 export type QuestionSnapshot = QuestionContent
 
-/** Obsah otázky na snímek — zod zahodí metadata i cokoli navíc. */
+/** Question content for a snapshot — zod drops metadata and anything extra. */
 export function toQuestionSnapshot(question: QuestionContent): QuestionSnapshot {
   return questionSnapshotSchema.parse(question)
 }
 
 /**
- * Snímek z uloženého JSON. Poškozený nebo neplatný snímek vrací `null` —
- * volající pak sáhne po živé otázce, místo aby se celý test rozsypal.
+ * Snapshot from stored JSON. A corrupted or invalid snapshot returns `null` —
+ * the caller then uses the live question instead of the whole test falling
+ * apart.
  */
 export function parseQuestionSnapshot(raw: string | null | undefined): QuestionSnapshot | null {
   if (!raw) return null
@@ -197,12 +204,12 @@ export function parseQuestionSnapshot(raw: string | null | undefined): QuestionS
   return parsed.success ? parsed.data : null
 }
 
-/** Snímek k uložení do databáze. */
+/** Snapshot to store in the database. */
 export function serializeQuestionSnapshot(question: QuestionContent): string {
   return JSON.stringify(toQuestionSnapshot(question))
 }
 
-/** Stabilní podoba pro porovnání — na pořadí klíčů v JSON nezáleží. */
+/** Stable form for comparison — key order in JSON does not matter. */
 function stableKey(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableKey).join(',')}]`
   if (value && typeof value === 'object') {
@@ -215,8 +222,8 @@ function stableKey(value: unknown): string {
 }
 
 /**
- * Liší se živá otázka od snímku? Rozhraní podle toho umí u položky testu
- * klidně poznamenat, že otázka byla od zařazení upravena.
+ * Does the live question differ from the snapshot? The UI uses this to note
+ * on a test item that the question was edited since it was added.
  */
 export function snapshotDiffersFromQuestion(
   snapshot: QuestionSnapshot,
@@ -227,55 +234,55 @@ export function snapshotDiffersFromQuestion(
 
 export interface Test {
   id: string
-  /** Kdo písemku složil. Cizí se v aplikaci nezobrazí ani nevytiskne. */
+  /** Who composed the test. Other people's tests are neither shown nor printed. */
   ownerId: string
-  /** `soukrome` vidí jen autorka, `skola` i kolegyně ze sborovny. */
+  /** `soukrome` is visible only to the author, `skola` also to colleagues. */
   visibility: 'soukrome' | 'skola'
   kind: TestKind
-  /** Téma, ze kterého list vznikl; u písemek a volného zadání `null`. */
+  /** Topic the worksheet was made from; `null` for tests and free-form briefs. */
   topicId: string | null
-  /** Zadání listu (JSON podle `worksheetBriefSchema`); u písemek `null`. */
+  /** Worksheet brief (JSON per `worksheetBriefSchema`); `null` for tests. */
   brief: string | null
   title: string
   description: string | null
-  /** Test na známky — bez toho se nevykreslují body ani políčko na známku. */
+  /** Graded test — without it neither points nor the grade box are rendered. */
   graded: boolean
   templateId: string
-  /** Třída, ze které test vznikl. `null` u starších testů i testů bez třídy. */
+  /** Class the test was made for. `null` for older tests and tests without a class. */
   gradeId: string | null
   header: TestHeaderConfig
-  /** 1 = jen varianta A, 2 = A i B. */
+  /** 1 = variant A only, 2 = A and B. */
   variants: 1 | 2
   showKey: boolean
   createdAt: string
   updatedAt: string
 }
 
-/** Test připravený k vykreslení: položky mají navázané otázky. */
+/** Test ready for rendering: items have their questions attached. */
 export interface ResolvedTestItem extends TestItem {
   /**
-   * Vyplněno u `kind === 'question'`. Pochází ze snímku; živá otázka se
-   * použije jen tam, kde snímek chybí nebo je poškozený.
+   * Set for `kind === 'question'`. Comes from the snapshot; the live question
+   * is used only where the snapshot is missing or corrupted.
    */
   question?: Question | null
-  /** Živá otázka v bance se od snímku liší — test tiskne, co je ve snímku. */
+  /** The live question in the bank differs from the snapshot — the test prints the snapshot. */
   questionEdited?: boolean
-  /** Otázka už v bance není; test žije dál ze snímku. */
+  /** The question is no longer in the bank; the test lives on from the snapshot. */
   questionMissing?: boolean
-  /** Vyplněno u `kind === 'puzzle'`; pochází ze snímku. */
+  /** Set for `kind === 'puzzle'`; comes from the snapshot. */
   puzzle?: PuzzleContent | null
-  /** Hlavolam už v knihovně není; test žije dál ze snímku. */
+  /** The puzzle is no longer in the library; the test lives on from the snapshot. */
   puzzleMissing?: boolean
-  /** Vyplněno u `kind === 'table'`; `null`, když je uložený obsah poškozený. */
+  /** Set for `kind === 'table'`; `null` when the stored content is corrupted. */
   table?: TableItemContent | null
-  /** Vyplněno u `kind === 'text'`; `null`, když je uložený obsah poškozený. */
+  /** Set for `kind === 'text'`; `null` when the stored content is corrupted. */
   textContent?: TextItemContent | null
 }
 
 /**
- * Hlavolam položky testu: přednost má snímek, živý hlavolam slouží jako
- * záloha, když se snímek nepořídil nebo je poškozený. Stejné pravidlo jako
- * u otázky — na papíře má zůstat to, co se do písemky zařadilo.
+ * Puzzle of a test item: the snapshot takes precedence, the live puzzle is a
+ * fallback when no snapshot was taken or it is corrupted. Same rule as for
+ * questions — the paper should keep what was put into the test.
  */
 export function resolveTestItemPuzzle(
   rawSnapshot: string | null | undefined,
@@ -284,15 +291,16 @@ export function resolveTestItemPuzzle(
   const snapshot = parsePuzzleSnapshot(rawSnapshot)
   if (snapshot) return { puzzle: snapshot, puzzleMissing: !live }
   if (!live) return { puzzle: null, puzzleMissing: true }
-  // Metadata (id, téma, časy) do obsahu položky nepatří; schéma je zahodí.
+  // Metadata (id, topic, timestamps) does not belong to the item content; the schema drops it.
   return { puzzle: toPuzzleSnapshot(live), puzzleMissing: false }
 }
 
 /**
- * Otázka položky testu: přednost má snímek, živá otázka z banky slouží jen
- * jako záloha pro starší data a poškozené snímky. Metadata (id, téma, stav)
- * doplní živá otázka, pokud ještě existuje — ve snímku nejsou, protože
- * o vytištěné písemce nic nevypovídají.
+ * Question of a test item: the snapshot takes precedence, the live question
+ * from the bank is only a fallback for older data and corrupted snapshots.
+ * Metadata (id, topic, status) comes from the live question if it still
+ * exists — it is not in the snapshot because it says nothing about the
+ * printed test.
  */
 export function resolveTestItemQuestion(
   rawSnapshot: string | null | undefined,
@@ -301,8 +309,8 @@ export function resolveTestItemQuestion(
 ): Pick<ResolvedTestItem, 'question' | 'questionEdited' | 'questionMissing'> {
   const snapshot = parseQuestionSnapshot(rawSnapshot)
   if (!snapshot) {
-    // Bez použitelného snímku zbývá živá otázka — nic se nerozbíjí, jen se
-    // taková položka může s úpravou otázky změnit.
+    // Without a usable snapshot the live question remains — nothing breaks,
+    // such an item may just change when the question is edited.
     return { question: live, questionEdited: false, questionMissing: false }
   }
   const question = {
@@ -326,15 +334,15 @@ export interface RenderableTest {
   test: Test
   template: Template
   items: ResolvedTestItem[]
-  /** 'A' | 'B' — varianta B má přeházené pořadí. */
+  /** 'A' | 'B' — variant B has a shuffled order. */
   variant: 'A' | 'B'
-  /** Vykreslit klíč místo/za testem. */
+  /** Render the answer key instead of/after the test. */
   withKey: boolean
-  /** Data obrázků použitých v testu (assetId → data URL). */
+  /** Data of images used in the test (assetId → data URL). */
   assets: Record<string, string>
 }
 
-/** Celkový počet bodů testu. */
+/** Total points of the test. */
 export function totalPoints(items: ResolvedTestItem[]): number {
   return items.reduce((sum, item) => {
     if (item.kind !== 'question' || !item.question) return sum

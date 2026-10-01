@@ -1,8 +1,8 @@
 import { Font } from '@react-pdf/renderer'
 
 /**
- * Registrace fontů s českou diakritikou. Volá se jednou před prvním renderem.
- * Na serveru se čtou soubory z `assets/fonts`, v prohlížeči se stahují z `/fonts`.
+ * Registers fonts with Czech diacritics. Called once before the first render.
+ * On the server files are read from `assets/fonts`, in the browser they are fetched from `/fonts`.
  */
 let registered = false
 
@@ -25,7 +25,7 @@ export function registerFonts(sources: FontSource[]): void {
       ],
     })
   }
-  // Dělení slov vypnuto — čeština se v react-pdf dělí špatně.
+  // Hyphenation disabled — react-pdf hyphenates Czech badly.
   Font.registerHyphenationCallback((word) => [word])
   registered = true
 }

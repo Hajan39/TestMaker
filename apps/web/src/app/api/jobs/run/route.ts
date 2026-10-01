@@ -1,21 +1,21 @@
 import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
-import { AI_NOT_CONFIGURED_MESSAGE, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
-import { zapisovatVolani } from '@/lib/aiUsage'
+import { callRecorder } from '@/lib/aiUsage'
 import { generateForTopic } from '@/lib/generation'
-import { scopeFromJob, zapsatAudit } from '@/lib/uzivatel'
+import { scopeFromJob, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 /**
- * Jak dlouho smí úloha běžet, než ji považujeme za opuštěnou. Generování jednoho
- * tématu trvá desítky vteřin; když se zavře okno, které frontu pohání, zůstane
- * úloha viset a bez tohohle limitu by téma zablokovala natrvalo.
+ * How long a job may run before we consider it abandoned. Generating one topic
+ * takes tens of seconds; when the window driving the queue closes, the job stays
+ * hanging and without this limit would block the topic forever.
  */
 const ABANDONED_AFTER_MS = 15 * 60 * 1000
 
-/** Vrátí opuštěné běžící úlohy zpět mezi čekající. */
+/** Puts abandoned running jobs back into the queue. */
 async function reviveAbandoned(): Promise<number> {
   const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString()
   const revived = await db
@@ -32,46 +32,45 @@ async function reviveAbandoned(): Promise<number> {
 }
 
 /**
- * Zpracuje jednu úlohu z fronty. UI volá endpoint ve smyčce, dokud vrací
- * `remaining > 0` — díky tomu se vejdeme do časového limitu funkce i na Vercelu.
+ * Processes one job from the queue. The UI calls the endpoint in a loop while it
+ * returns `remaining > 0` — that keeps us within the function time limit on Vercel too.
  */
 export async function POST() {
   return runOne()
 }
 
-/** Totéž pro plánovač (Vercel Cron, cron na Synology). Middleware ho pouští podle CRON_SECRET. */
+/** The same for a scheduler (Vercel Cron, cron on Synology). The middleware lets it in via CRON_SECRET. */
 export async function GET() {
   return runOne()
 }
 
 async function runOne() {
   if (!isAiConfigured()) {
-    return Response.json({ error: AI_NOT_CONFIGURED_MESSAGE }, { status: 503 })
+    return Response.json({ error: aiNotConfiguredMessage() }, { status: 503 })
   }
 
-  // Nejdřív posbíráme, co po sobě nechal přerušený běh.
+  // First collect what an interrupted run left behind.
   const revived = await reviveAbandoned()
 
   /*
-   * Která úloha je na řadě. Nebere se prostě nejstarší z celé fronty: kdo
-   * zařadí celý ročník, měl by ostatní zdržet o jednu úlohu, ne o hodinu.
-   * Přednost má proto zadavatelka, které zrovna nic neběží, a teprve mezi
-   * nimi rozhoduje stáří úlohy.
+   * Which job is next. Not simply the oldest in the whole queue: whoever
+   * enqueues a whole grade should delay others by one job, not by an hour.
+   * So a requester with nothing running goes first, and only then does job age decide.
    */
   const [job] = await db
     .select()
     .from(generationJobs)
     .where(eq(generationJobs.status, 'queued'))
     .orderBy(
-      sql`(select count(*) from ${generationJobs} bezi
-            where bezi.requested_by = ${generationJobs.requestedBy} and bezi.status = 'running')`,
+      sql`(select count(*) from ${generationJobs} active
+            where active.requested_by = ${generationJobs.requestedBy} and active.status = 'running')`,
       asc(generationJobs.createdAt),
     )
     .limit(1)
 
   if (!job) return Response.json({ processed: false, remaining: 0, revived })
 
-  // Označíme jako běžící; pokud to nevyjde, úlohu si vzal jiný běh.
+  // Mark as running; if that fails, another run took the job.
   const claimed = await db
     .update(generationJobs)
     .set({ status: 'running', startedAt: new Date().toISOString() })
@@ -82,8 +81,8 @@ async function runOne() {
 
   try {
     const outcome = await generateForTopic(scopeFromJob(job), job.topicId, job.params, {
-      // Fronta běží bez přihlášené osoby — v přehledu použití AI bez uživatele.
-      onCall: zapisovatVolani({ schoolId: job.schoolId, userId: null }, 'otazky'),
+      // The queue runs without a signed-in person — no user in the AI usage overview.
+      onCall: callRecorder({ schoolId: job.schoolId, userId: null }, 'otazky'),
     })
     await db
       .update(generationJobs)
@@ -100,13 +99,13 @@ async function runOne() {
       remaining: await remaining(),
     })
   } catch (error) {
-    // Do fronty se ukládá česká hláška — učitelka ji uvidí u zastavené úlohy.
+    // The queue stores the user-facing message — the teacher sees it on the stopped job.
     const { message } = describeAiError(error)
     await db
       .update(generationJobs)
       .set({ status: 'error', error: message, finishedAt: new Date().toISOString() })
       .where(eq(generationJobs.id, job.id))
-    await zapsatAudit({
+    await writeAudit({
       schoolId: job.schoolId,
       userId: job.requestedBy,
       action: 'fronta-chyba',

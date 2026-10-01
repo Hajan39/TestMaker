@@ -1,25 +1,25 @@
 /**
- * Hromadné generování otázek z příkazové řádky.
+ * Bulk question generation from the command line.
  *
- * Fronta v aplikaci potřebuje otevřené okno; přes tenhle skript jde nechat
- * projet celý ročník nebo celou knihovnu na pozadí, třeba přes noc.
+ * The in-app queue needs an open window; this script can run a whole grade or
+ * the whole library in the background, e.g. overnight.
  *
- * Příklady:
+ * Examples:
  *   pnpm --filter @testmaker/web generate:bulk -- --grade <id> --count 10
  *   pnpm --filter @testmaker/web generate:bulk -- --subject <id> --target 12
  *   pnpm --filter @testmaker/web generate:bulk -- --all --models google:gemini-flash-latest,google:gemini-flash-lite-latest
  *
- * `--count` vytvoří tolik nových otázek, `--target` doplní téma na tenhle
- * celkový počet. Bez `--force` se přeskakují témata, která už otázky mají
- * (u `--target` se přeskočí jen ta, kde je počet naplněný).
+ * `--count` creates that many new questions, `--target` tops the topic up to
+ * that total. Without `--force` topics that already have questions are skipped
+ * (with `--target` only those whose count is already reached).
  *
- * `--models` je žebříček (totéž co proměnná `AI_MODELS`): když prvnímu modelu
- * dojde denní limit, běh pokračuje dalším a nespadne celý ročník. Placený
- * model se do žebříčku dostane jen tím, že ho tam napíšeš.
+ * `--models` is the ladder (same as the `AI_MODELS` variable): when the first
+ * model hits its daily quota, the run continues with the next one instead of
+ * failing the whole grade. A paid model enters the ladder only if you write it there.
  *
- * `--ucet <e-mail>` říká, za koho se generuje: otázky dostanou jeho školu
- * a jeho jako autora. Bez něj se vezme první správce v databázi — na
- * jednoškolní instalaci je to právě ten, kdo skript spouští.
+ * `--ucet <e-mail>` says on whose behalf to generate: questions get that
+ * account's school and author. Without it the first admin in the database is
+ * used — on a single-school install that's the person running the script.
  */
 import { loadEnv } from './env'
 
@@ -31,8 +31,8 @@ interface Options {
   mode: 'add' | 'target'
   models?: string
   force: boolean
-  /** E-mail účtu, za který se generuje. */
-  ucet?: string
+  /** E-mail of the account to generate for. */
+  account?: string
 }
 
 function parseArgs(argv: string[]): Options {
@@ -40,7 +40,7 @@ function parseArgs(argv: string[]): Options {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     const next = argv[i + 1]
-    if (arg === '--ucet') options.ucet = next
+    if (arg === '--ucet') options.account = next
     else if (arg === '--grade') options.gradeId = next
     else if (arg === '--subject') options.subjectId = next
     else if (arg === '--all') options.all = true
@@ -73,21 +73,21 @@ async function main(): Promise<void> {
   const { describeAiConfig, isAiConfigured, readAiLadder } = await import('@testmaker/core/ai')
   const { asc } = await import('drizzle-orm')
 
-  // Za koho se generuje. Bez identity by otázky neměly školu ani autora —
-  // a sloupce jsou povinné, takže by zápis rovnou spadl.
-  const [ucet] = options.ucet
-    ? await db.select().from(users).where(eq(users.email, options.ucet.toLowerCase())).limit(1)
+  // On whose behalf to generate. Without an identity questions would have no
+  // school or author — and the columns are required, so the insert would fail.
+  const [account] = options.account
+    ? await db.select().from(users).where(eq(users.email, options.account.toLowerCase())).limit(1)
     : await db.select().from(users).where(eq(users.role, 'spravce')).orderBy(asc(users.createdAt)).limit(1)
-  if (!ucet) {
+  if (!account) {
     console.error(
-      options.ucet
-        ? `Účet ${options.ucet} v databázi není.`
+      options.account
+        ? `Účet ${options.account} v databázi není.`
         : 'V databázi není žádný správce — založ ho skriptem `pnpm --filter @testmaker/web uzivatel`.',
     )
     process.exit(1)
   }
-  const scopeUcet = { schoolId: ucet.schoolId, userId: ucet.id, role: ucet.role }
-  console.log(`generuje se za účet ${ucet.email} (${ucet.name})`)
+  const scopeAccount = { schoolId: account.schoolId, userId: account.id, role: account.role }
+  console.log(`generuje se za účet ${account.email} (${account.name})`)
 
   if (!isAiConfigured()) {
     console.error('Chybí klíč k modelu — doplň ho do apps/web/.env.local.')
@@ -104,8 +104,8 @@ async function main(): Promise<void> {
     .select({ id: topics.id, name: topics.name, grade: grades.name })
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
-    // Téma bez použitelného textu by jen spadlo na chybu.
-    .where(and(eq(topics.schoolId, ucet.schoolId), scope, eq(topics.lowContent, false)))
+    // A topic without usable text would just fail.
+    .where(and(eq(topics.schoolId, account.schoolId), scope, eq(topics.lowContent, false)))
     .orderBy(topics.name)
 
   const ladder = readAiLadder()
@@ -118,12 +118,12 @@ async function main(): Promise<void> {
 
   let created = 0
   let failed = 0
-  /** Co se za celý běh použilo — na konci je vidět, jestli se přepínalo. */
+  /** What the whole run used — at the end it shows whether models were switched. */
   const usedModels = new Set<string>()
   async function runTopic(topic: (typeof rows)[number], index: number): Promise<void> {
     const label = `${index + 1}/${rows.length} ${topic.grade ? `${topic.grade} · ` : ''}${topic.name}`
 
-    const wanted = await resolveCount(scopeUcet, topic.id, {
+    const wanted = await resolveCount(scopeAccount, topic.id, {
       ...DEFAULT_GENERATE_PARAMS,
       count: options.count,
       mode: options.mode,
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
         .from(questions)
         .where(
           and(
-            eq(questions.schoolId, ucet.schoolId),
+            eq(questions.schoolId, account.schoolId),
             eq(questions.topicId, topic.id),
             ne(questions.status, 'rejected'),
           ),
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
     const started = Date.now()
     try {
-      const outcome = await generateForTopic(scopeUcet, topic.id, {
+      const outcome = await generateForTopic(scopeAccount, topic.id, {
         ...DEFAULT_GENERATE_PARAMS,
         count: options.count,
         mode: options.mode,
@@ -162,8 +162,8 @@ async function main(): Promise<void> {
         `${label}: ${outcome.created} otázek za ${Math.round((Date.now() - started) / 1000)} s` +
           (outcome.rejected > 0 ? `, ${outcome.rejected} zahozeno` : '') +
           (outcome.failedCalls > 0 ? `, ${outcome.failedCalls}× model neodpověděl použitelně` : '') +
-          // Kvalita se mezi modely liší — u tématu, kde se v půlce přepnulo,
-          // to musí být z výpisu poznat.
+          // Quality differs between models — for a topic that switched midway
+          // the output must make it visible.
           (outcome.models.length > 1
             ? `, míchané modely: ${outcome.models.join(' → ')}`
             : outcome.models.length === 1 && ladder.length > 1

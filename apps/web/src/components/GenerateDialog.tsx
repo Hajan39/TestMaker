@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
-import { AI_QUESTION_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from '@testmaker/core/schema'
+import { AI_QUESTION_TYPES, questionTypeLabel, type QuestionType } from '@testmaker/core/schema'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import {
   Button,
@@ -18,12 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 export interface GenerateSettings {
   count: number
   types: QuestionType[]
   difficulty: 1 | 2 | 3 | 'mix'
-  /** `add` = tolik nových otázek, `target` = doplnit téma na tenhle počet. */
+  /** `add` = this many new questions, `target` = top the topic up to this count. */
   mode: 'add' | 'target'
 }
 
@@ -34,7 +35,7 @@ export const DEFAULT_SETTINGS: GenerateSettings = {
   mode: 'add',
 }
 
-/** Společné nastavení generování — používá se u jednoho materiálu i u fronty. */
+/** Shared generation settings — used for a single material and for the queue. */
 export function GenerateSettingsForm({
   value,
   onChange,
@@ -44,19 +45,19 @@ export function GenerateSettingsForm({
   value: GenerateSettings
   onChange: (next: GenerateSettings) => void
   disabled?: boolean
-  /** Podrobnost k vysvětlení až tady dole — nahoře na obrazovce by zdržovala. */
+  /** Detail to explain down here — at the top of the screen it would get in the way. */
   note?: ReactNode
 }) {
-  // Vlastní id na komponentu — natvrdo zapsané `generate-count`/`generate-mode`/
-  // `generate-difficulty` kolidovaly s `SimpleGenerateSettingsForm` níž, kdyby
-  // se obě formy někdy ocitly na téže stránce.
+  // Own ids per component — hard-coded `generate-count`/`generate-mode`/
+  // `generate-difficulty` collided with `SimpleGenerateSettingsForm` below
+  // whenever both forms ended up on the same page.
   const countId = useId()
   const modeId = useId()
   const difficultyId = useId()
 
   const toggleType = (type: QuestionType) => {
     const types = value.types.includes(type)
-      ? value.types.filter((t) => t !== type)
+      ? value.types.filter((item) => item !== type)
       : [...value.types, type]
     if (types.length > 0) onChange({ ...value, types })
   }
@@ -66,13 +67,13 @@ export function GenerateSettingsForm({
       <CollapsibleTrigger asChild>
         <Button type="button" size="sm" variant="ghost" className="group -ml-2.5 gap-1.5">
           <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-          Nastavení generování
+          {t('generation:generateDialog.settings')}
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 pt-3">
         <div className="flex flex-wrap gap-3">
           <div className="w-28">
-            <Label htmlFor={countId}>Počet otázek</Label>
+            <Label htmlFor={countId}>{t('generation:generateDialog.count')}</Label>
             <Input
               id={countId}
               type="number"
@@ -84,7 +85,7 @@ export function GenerateSettingsForm({
             />
           </div>
           <div className="w-56">
-            <Label htmlFor={modeId}>Počet otázek znamená</Label>
+            <Label htmlFor={modeId}>{t('generation:generateDialog.mode')}</Label>
             <Select
               value={value.mode}
               disabled={disabled}
@@ -94,13 +95,13 @@ export function GenerateSettingsForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="add">Přidat nové</SelectItem>
-                <SelectItem value="target">Doplnit na celkový počet</SelectItem>
+                <SelectItem value="add">{t('generation:generateDialog.modeAdd')}</SelectItem>
+                <SelectItem value="target">{t('generation:generateDialog.modeTarget')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="w-40">
-            <Label htmlFor={difficultyId}>Obtížnost</Label>
+            <Label htmlFor={difficultyId}>{t('generation:generateDialog.difficulty')}</Label>
             <Select
               value={String(value.difficulty)}
               disabled={disabled}
@@ -115,10 +116,10 @@ export function GenerateSettingsForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="mix">Promíchat</SelectItem>
-                <SelectItem value="1">Lehká</SelectItem>
-                <SelectItem value="2">Střední</SelectItem>
-                <SelectItem value="3">Těžká</SelectItem>
+                <SelectItem value="mix">{t('generation:generateDialog.mix')}</SelectItem>
+                <SelectItem value="1">{t('generation:generateDialog.easy')}</SelectItem>
+                <SelectItem value="2">{t('generation:generateDialog.medium')}</SelectItem>
+                <SelectItem value="3">{t('generation:generateDialog.hard')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -126,10 +127,10 @@ export function GenerateSettingsForm({
 
         <div>
           <div className="flex items-center gap-3">
-            <Label>Typy otázek</Label>
-            {/* Typů je devět; naklikat je zpátky po jednom je zbytečná práce.
-                Opačné tlačítko tu není schválně — generování bez jediného
-                typu nedává smysl. */}
+            <Label>{t('generation:generateDialog.types')}</Label>
+            {/* There are nine types; clicking them back one by one is needless work.
+                The opposite button is missing on purpose — generating with
+                no type makes no sense. */}
             <Button
               type="button"
               size="sm"
@@ -138,7 +139,7 @@ export function GenerateSettingsForm({
               className="h-6 px-1.5 text-xs"
               onClick={() => onChange({ ...value, types: [...AI_QUESTION_TYPES] })}
             >
-              Vybrat vše
+              {t('generation:generateDialog.selectAll')}
             </Button>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
@@ -149,7 +150,7 @@ export function GenerateSettingsForm({
                   disabled={disabled}
                   onCheckedChange={() => toggleType(type)}
                 />
-                {QUESTION_TYPE_LABELS[type]}
+                {questionTypeLabel(type)}
               </label>
             ))}
           </div>
@@ -161,13 +162,13 @@ export function GenerateSettingsForm({
 }
 
 /**
- * Proč generování nejde. Učitelce stačí první věta; seznam pod ní je pro
- * majitele, který nastavení v `.env.local` opravuje (`describeAiSetup`).
+ * Why generation is unavailable. The first sentence is enough for the teacher;
+ * the list below is for the owner who fixes the settings in `.env.local` (`describeAiSetup`).
  */
 export function AiUnavailable({ problems }: { problems: string[] }) {
   return (
     <Card className="gap-1 border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
-      <p>Generování není nastavené.</p>
+      <p>{t('generation:generateDialog.notConfigured')}</p>
       {problems.length > 0 ? (
         <ul className="list-disc space-y-0.5 pl-5 text-xs">
           {problems.map((problem) => (
@@ -193,11 +194,11 @@ export function useGenerateSettings(initial: GenerateSettings = DEFAULT_SETTINGS
 }
 
 /**
- * Nastavení generování přímo v tématu: jen počet a obtížnost. Výběr typů a
- * režim „Doplnit na celkový počet" tu schválně chybí — v tématu se generuje
- * vždycky ze všech typů, o které se model umí pokusit, a vždycky přidává
- * nové otázky. To se hodí pro hromadné generování (`GenerateSettingsForm`
- * výš), ne pro jedno téma, kde by to jen zdržovalo.
+ * Generation settings right in the topic: just count and difficulty. Type
+ * selection and the "Doplnit na celkový počet" mode are deliberately missing —
+ * in a topic it always generates all types the model can attempt and always
+ * adds new questions. Those options suit bulk generation (`GenerateSettingsForm`
+ * above), not a single topic where they'd only slow things down.
  */
 export interface SimpleGenerateSettings {
   count: number
@@ -209,7 +210,7 @@ export const DEFAULT_SIMPLE_SETTINGS: SimpleGenerateSettings = {
   difficulty: 'mix',
 }
 
-/** Ořízne zadaný počet na celé číslo 1–60 — server stejný rozsah vynucuje sám (`enqueueSchema`). */
+/** Clamps the entered count to an integer 1–60 — the server enforces the same range itself (`enqueueSchema`). */
 function clampCount(raw: string): number {
   const parsed = Math.round(Number(raw))
   if (!Number.isFinite(parsed)) return 1
@@ -228,7 +229,7 @@ export function SimpleGenerateSettingsForm({
   return (
     <div className="flex flex-wrap gap-3">
       <div className="w-24">
-        <Label htmlFor="generate-count">Počet</Label>
+        <Label htmlFor="generate-count">{t('generation:generateDialog.countShort')}</Label>
         <Input
           id="generate-count"
           type="number"
@@ -240,9 +241,9 @@ export function SimpleGenerateSettingsForm({
         />
       </div>
       <div className="w-36">
-        {/* Vlastní jméno, ne obecné „Obtížnost" — filtr otázek pod tím se
-            jmenuje stejně a `getByLabel('Obtížnost')` by jinak trefil obě. */}
-        <Label htmlFor="generate-difficulty">Obtížnost nových otázek</Label>
+        {/* Its own name, not a generic "Obtížnost" — the question filter below has
+            the same name and `getByLabel('Obtížnost')` would otherwise match both. */}
+        <Label htmlFor="generate-difficulty">{t('generation:generateDialog.newDifficulty')}</Label>
         <Select
           value={String(value.difficulty)}
           disabled={disabled}
@@ -257,10 +258,10 @@ export function SimpleGenerateSettingsForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="mix">Promíchat</SelectItem>
-            <SelectItem value="1">Lehké</SelectItem>
-            <SelectItem value="2">Střední</SelectItem>
-            <SelectItem value="3">Těžké</SelectItem>
+            <SelectItem value="mix">{t('generation:generateDialog.mix')}</SelectItem>
+            <SelectItem value="1">{t('generation:generateDialog.easyPlural')}</SelectItem>
+            <SelectItem value="2">{t('generation:generateDialog.medium')}</SelectItem>
+            <SelectItem value="3">{t('generation:generateDialog.hardPlural')}</SelectItem>
           </SelectContent>
         </Select>
       </div>

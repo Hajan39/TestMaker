@@ -1,23 +1,24 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { t } from '@testmaker/core/i18n'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { useMatchesMedia } from './useMatchesMedia'
 
 /**
- * Tři sloupce podle specifikace. Pod 1280 px odpadá druhý sloupec,
- * pod 1024 px zůstává jeden sloupec a mezi sloupci se přepíná záložkami.
+ * Three columns per the spec. Below 1280 px the second column drops out,
+ * below 1024 px a single column remains and tabs switch between columns.
  *
- * Obsah se vykresluje jen jednou. Dřívější podoba měla obě varianty v stránce
- * současně a jednu skrývala, čímž vznikala zdvojená `id` a popisky polí mířily
- * na neviditelnou kopii.
+ * Content is rendered only once. An earlier version had both variants on the
+ * page at once and hid one, which duplicated `id`s and field labels pointed at
+ * the invisible copy.
  */
 export function ThreePane({
   first,
   second,
-  firstLabel = 'Předměty a ročníky',
-  secondLabel = 'Témata ročníku',
-  contentLabel = 'Obsah tématu',
+  firstLabel = t('ui:threePane.first'),
+  secondLabel = t('ui:threePane.second'),
+  contentLabel = t('ui:threePane.content'),
   children,
 }: {
   first: ReactNode

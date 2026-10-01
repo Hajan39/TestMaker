@@ -1,11 +1,11 @@
 /**
- * Ukázková PDF do `test/tmp` pro vizuální kontrolu — spouští se výslovně:
+ * Sample PDFs into `test/tmp` for visual inspection — run explicitly:
  *
  *     RENDER_SAMPLES=1 pnpm exec vitest run test/render-samples.test.ts
  *
- * Ukázky jsou hlavní účel, ale každá se zároveň ověří: soubor musí vzniknout,
- * být to skutečné PDF a obsahovat text, kvůli kterému se ukázka dělá. Bez
- * toho by si prázdné nebo rozsypané ukázky nikdo nevšiml dřív než u tiskárny.
+ * The samples are the main purpose, but each is also checked: the file must
+ * exist, be a real PDF and contain the text the sample is made for. Otherwise
+ * nobody would notice an empty or broken sample before reaching the printer.
  */
 import { mkdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -23,13 +23,13 @@ registerServerFonts()
 const OUT = resolve(import.meta.dirname, 'tmp')
 
 /**
- * Červený čtverec 1 × 1 px jako zástupce skutečného obrázku — otázka typu
- * `label_image` bez přílohy nemá co vykreslit.
+ * A red 1 × 1 px square standing in for a real image — a `label_image`
+ * question without an attachment has nothing to render.
  */
 const TINY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
-/** Ověří, že soubor vznikl, je to PDF a je v něm očekávaný text. */
+/** Checks that the file exists, is a PDF and contains the expected text. */
 async function checkSample(path: string, expectedText: string[]): Promise<void> {
   const buffer = readFileSync(path)
   expect(buffer.subarray(0, 5).toString(), path).toBe('%PDF-')
@@ -39,7 +39,7 @@ async function checkSample(path: string, expectedText: string[]): Promise<void> 
   for (const needle of expectedText) expect(text, path).toContain(needle)
 }
 
-it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázky všech šablon', async () => {
+it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async () => {
   mkdirSync(OUT, { recursive: true })
   for (const slug of ['klasicka', 'kompaktni', 'pracovni-list']) {
     for (const variant of ['A', 'B'] as const) {
@@ -61,10 +61,10 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázky všech šablon', async 
 })
 
 /**
- * Ukázka pro vizuální kontrolu hlavičky (vyučující, poznámka) a obrázků
- * v otázce (chybějící příloha, obrázek s extrémním poměrem stran).
+ * Sample for visually checking the header (teacher, note) and question images
+ * (missing attachment, image with an extreme aspect ratio).
  */
-it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku hlavičky a obrázků', async () => {
+it.runIf(process.env.RENDER_SAMPLES)('generates a header and images sample', async () => {
   mkdirSync(OUT, { recursive: true })
 
   const testWithHeader = makeTest({
@@ -89,7 +89,7 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku hlavičky a obrázků',
     }) as never,
     headerPath,
   )
-  // Kvůli tomu ukázka vzniká: vyučující, třída i poznámka se musí vytisknout.
+  // This is why the sample exists: teacher, class and note must be printed.
   await checkSample(headerPath, ['Mgr. Nováková', '8.A', 'Bez kalkulačky'])
 
   const missingImageQuestion = makeQuestion({
@@ -114,16 +114,15 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku hlavičky a obrázků',
     }) as never,
     imagePath,
   )
-  // Chybějící příloha nesmí otázku shodit ani ji vynechat ze zadání.
+  // A missing attachment must neither crash the question nor drop it from the test.
   await checkSample(imagePath, ['příloha schválně chybí', 'velmi vysoký poměr stran'])
 })
 
 /**
- * Ukázka s popisem obrázku, instrukcí a ručním zalomením strany — dohromady
- * to jsou prvky, které v ukázkách výš nejsou a v písemce se přitom běžně
- * potkají.
+ * Sample with an image caption, an instruction and a manual page break —
+ * elements missing from the samples above that commonly meet in a test.
  */
-it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s obrázkovou otázkou a zalomením', async () => {
+it.runIf(process.env.RENDER_SAMPLES)('generates a sample with an image question and a page break', async () => {
   mkdirSync(OUT, { recursive: true })
 
   const labelImage = makeQuestion({
@@ -164,11 +163,11 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s obrázkovou otázkou 
 })
 
 /**
- * Ukázka s hlavolamy — osmisměrka a tajenka v jedné písemce, s klíčem.
- * Mřížka je přesně ten obsah, který se láme přes stránku, takže se na
- * vygenerovaném PDF musí zkontrolovat okem, ne jen podle typů.
+ * Sample with puzzles — a word search and a cryptogram in one test, with a key.
+ * The grid is exactly the content that breaks across pages, so it must be
+ * checked by eye on the generated PDF, not just by types.
  */
-it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s hlavolamy', async () => {
+it.runIf(process.env.RENDER_SAMPLES)('generates a puzzles sample', async () => {
   mkdirSync(OUT, { recursive: true })
 
   const wordsearch = puzzleContentSchema.parse({
@@ -222,18 +221,19 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku s hlavolamy', async () 
     path,
   )
   await checkSample(path, ['Osmisměrka: části rostliny', 'CHLOROPLAST', 'Tajenka', 'Řešení'])
-  // Klíč musí mít vyplněná políčka: řádkování šablony dřív písmena z buněk
-  // úplně vymazalo a prázdná mřížka v klíči by se poznala až u tiskárny.
+  // The key must have filled boxes: the template line height used to wipe
+  // letters from the cells entirely and an empty key grid would only be
+  // noticed at the printer.
   const { text } = await extractPdf(new Uint8Array(readFileSync(path)))
   expect(text).toContain('P O D L I S T')
 })
 
 /**
- * Pracovní list: text, fun fact v rámečku, úloha a dvě tabulky, z nichž druhá
- * se nevejde na stranu — musí se zlomit po řádcích a na další straně
- * zopakovat záhlaví. To jde poznat jen okem na vygenerovaném PDF.
+ * Worksheet: text, a boxed fun fact, a task and two tables, the second of which
+ * does not fit a page — it must break by rows and repeat the header on the
+ * next page. That can only be judged by eye on the generated PDF.
  */
-it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku pracovního listu', async () => {
+it.runIf(process.env.RENDER_SAMPLES)('generates a worksheet sample', async () => {
   mkdirSync(OUT, { recursive: true })
   const [first, ...rest] = makeWorksheetItems(4)
   const question = makeItems().find((item) => item.kind === 'question')!
@@ -242,7 +242,7 @@ it.runIf(process.env.RENDER_SAMPLES)('vygeneruje ukázku pracovního listu', asy
     ...rest,
     { ...question, id: 'w-q', questionId: null },
     ...makeWorksheetItems(12, true).slice(3).map((item) => ({ ...item, id: 'w-tab-2' })),
-    // Za tabulkou další strana: záhlaví tabulky se na ni opakovat nesmí.
+    // A further page after the table: the table header must not repeat on it.
     { ...first!, id: 'w-pb', kind: 'page_break', text: null },
     { ...first!, id: 'w-h2', text: 'Za tabulkou' },
   ]

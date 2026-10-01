@@ -2,32 +2,33 @@ import type { Block } from '@testmaker/core/schema'
 import type { Question, QuestionContent, QuestionStyle } from '@testmaker/core/schema'
 import { answerLines } from '@testmaker/core/schema'
 import { displayOrder, formatPoints, LETTERS, numberedBlanks, tableBlankNumbers } from '@testmaker/core/pdf/layout'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
 /**
- * Otázka vykreslená tak, jak se vytiskne — číslo, zadání, body a pod tím
- * skutečná odpověďová plocha: linky, možnosti A) B) C), tabulka ANO/NE,
- * dva sloupce u přiřazování, očíslované rámečky u řazení.
+ * A question rendered as it will print — number, prompt, points and below them
+ * the real answer area: lines, options A) B) C), a true/false table, two
+ * columns for matching, numbered boxes for ordering.
  *
- * Vzorem je `QuestionBody.tsx` z `packages/core/src/pdf`: co tam vykresluje
- * `@react-pdf/renderer`, to tady vykresluje prohlížeč. Učitelka se podle toho
- * rozhoduje, jak písemku poskládat, takže se obojí nesmí rozejít — sdílené
- * kousky (číslování mezer, značky buněk, písmena možností) proto obě strany
- * berou z `@testmaker/core/pdf/layout`.
+ * Modelled on `QuestionBody.tsx` in `packages/core/src/pdf`: what
+ * `@react-pdf/renderer` draws there, the browser draws here. The teacher
+ * decides how to compose the test based on this, so the two must not diverge —
+ * shared bits (blank numbering, cell markers, option letters) come from
+ * `@testmaker/core/pdf/layout` on both sides.
  *
- * Rozměry se zapisují v bodech PDF (pt) přes proměnnou `--paper-pt`, kterou
- * nastavuje `PaperSheet` podle skutečné šířky listu. Tím zůstane poměr písma,
- * okrajů i linek stejný jako na papíře, ať je náhled v okně jakkoli široký.
- * Bez listu (třeba v testech) platí záložní hodnota, tedy zhruba 1 pt = 1,33 px.
+ * Sizes are written in PDF points (pt) via the `--paper-pt` variable, set by
+ * `PaperSheet` from the real sheet width. That keeps font, margin and line
+ * proportions as on paper, however wide the preview is. Without a sheet (e.g.
+ * in tests) the fallback applies, roughly 1 pt = 1.33 px.
  *
- * Klíč se sem nikdy nekreslí: tohle je pohled na to, co dostanou žáci.
- * Vzorovou odpověď ukazuje skladač zvlášť, nad papírem.
+ * The answer key is never drawn here: this is the view of what pupils get.
+ * The composer shows the model answer separately, above the paper.
  */
 
-/** Rozměr v bodech PDF; `--paper-pt` nastavuje list, jinak platí 96/72 px. */
+/** Size in PDF points; `--paper-pt` is set by the sheet, otherwise 96/72 px. */
 const pt = (value: number): string => `calc(${value} * var(--paper-pt, 1.3333px))`
 
-/** Výchozí styl otázky — tytéž hodnoty jako `questionStyleSchema` v core. */
+/** Default question style — the same values as `questionStyleSchema` in core. */
 const DEFAULT_STYLE: QuestionStyle = {
   spacingBefore: 10,
   optionColumns: 1,
@@ -35,7 +36,7 @@ const DEFAULT_STYLE: QuestionStyle = {
   boxed: false,
 }
 
-/** Paušální výška zástupného obrázku; drží se odhadu v `pdf/estimate.ts`. */
+/** Fixed placeholder image height; matches the estimate in `pdf/estimate.ts`. */
 const IMAGE_PLACEHOLDER_HEIGHT = 110
 
 export function PaperQuestion({
@@ -48,13 +49,13 @@ export function PaperQuestion({
   className,
 }: {
   question: Question | QuestionContent
-  /** Číslo otázky tak, jak se vytiskne („3.“). Prázdné = bez čísla. */
+  /** Question number as printed ("3."). Empty = no number. */
   label?: string
-  /** Body vedle zadání; `null` = test není na známky, body se netisknou. */
+  /** Points next to the prompt; `null` = ungraded test, points are not printed. */
   points?: number | null
-  /** Přepis počtu linek na odpověď u volné odpovědi. */
+  /** Override of the answer line count for an open answer. */
   lines?: number | null
-  /** Styl z šablony; chybějící hodnoty doplní výchozí nastavení. */
+  /** Style from the template; missing values fall back to defaults. */
   style?: Partial<QuestionStyle>
   variant?: 'A' | 'B'
   className?: string
@@ -76,7 +77,7 @@ export function PaperQuestion({
         <span className="min-w-0 flex-1 font-bold break-words">{prompt}</span>
         {points != null ? (
           <span className="shrink-0 opacity-70" style={{ fontSize: pt(8), marginLeft: pt(6) }}>
-            ({formatPoints(points)} b.)
+            {t('ui:paper.question.points', { points: formatPoints(points) })}
           </span>
         ) : null}
       </div>
@@ -88,18 +89,18 @@ export function PaperQuestion({
   )
 }
 
-/** Příloha otázky: tabulka se vykreslí, obrázek zastoupí rámeček s popiskem. */
+/** A question attachment: a table is rendered, an image is replaced by a captioned frame. */
 function PaperBlock({ block }: { block: Block }) {
   if (block.kind === 'image') {
     return (
       <div style={{ marginTop: pt(6), marginBottom: pt(4), width: `${block.widthPercent}%` }}>
-        {/* Přílohy se do prohlížeče nestahují (jsou velké a náhled se překresluje
-            při každé úpravě) — místo obrázku drží místo rámeček téže výšky. */}
+        {/* Attachments are not downloaded to the browser (they are large and the
+            preview redraws on every edit) — a frame of the same height holds the place. */}
         <div
           className="flex items-center justify-center border border-paper-line opacity-70"
           style={{ height: pt(IMAGE_PLACEHOLDER_HEIGHT), fontSize: pt(8) }}
         >
-          obrázek
+          {t('ui:paper.question.image')}
         </div>
         {block.caption ? (
           <p className="opacity-70" style={{ fontSize: pt(8), marginTop: pt(2) }}>{block.caption}</p>
@@ -172,7 +173,7 @@ function PaperAnswerArea({
     case 'short_answer':
       return (
         <div className="flex items-end" style={{ marginTop: pt(6) }}>
-          <span>Odpověď:</span>
+          <span>{t('ui:paper.question.answer')}</span>
           <span
             className="flex-1 border-b border-paper-line"
             style={{ marginLeft: pt(6), height: pt(14) }}
@@ -220,20 +221,20 @@ function PaperAnswerArea({
           <thead>
             <tr className="bg-paper-shade">
               <th className="border border-paper-line text-left font-bold" style={{ padding: pt(4) }}>
-                Tvrzení
+                {t('ui:paper.question.statement')}
               </th>
               <th className="border border-paper-line font-bold" style={{ padding: pt(4), width: pt(44) }}>
-                ANO
+                {t('ui:paper.question.yes')}
               </th>
               <th className="border border-paper-line font-bold" style={{ padding: pt(4), width: pt(44) }}>
-                NE
+                {t('ui:paper.question.no')}
               </th>
             </tr>
           </thead>
           <tbody>
             {question.payload.statements.map((statement, i) => (
               <tr key={i}>
-                {/* Číslo tvrzení je i v klíči — bez něj by učitelka při opravování počítala řádky. */}
+                {/* The statement number is in the key too — without it the teacher would count rows while marking. */}
                 <td className="border border-paper-line break-words" style={{ padding: pt(4) }}>
                   {i + 1}. {statement.text}
                 </td>
@@ -256,7 +257,7 @@ function PaperAnswerArea({
               className="border border-paper-line break-words"
               style={{ marginTop: pt(6), padding: pt(5), fontSize: pt(9) }}
             >
-              Nabídka: {question.payload.wordBank.join(' • ')}
+              {t('ui:paper.question.wordBank', { words: question.payload.wordBank.join(' • ') })}
             </div>
           ) : null}
         </div>
@@ -265,7 +266,7 @@ function PaperAnswerArea({
     case 'matching':
       return (
         <div style={{ marginTop: pt(6) }}>
-          <PaperHint text="Do rámečku napiš písmeno možnosti vpravo, která patří k položce vlevo." />
+          <PaperHint text={t('ui:paper.question.matchingHint')} />
           <div className="flex">
             <ol className="min-w-0 flex-1" style={{ paddingRight: pt(8) }}>
               {question.payload.left.map((item, i) => (
@@ -293,11 +294,11 @@ function PaperAnswerArea({
       )
 
     case 'ordering': {
-      // Položky jsou na papíře zamíchané; totéž pořadí počítá i tisk.
+      // Items are shuffled on paper; printing computes the same order.
       const order = displayOrder(question, variant)
       return (
         <div style={{ marginTop: pt(6) }}>
-          <PaperHint text="Do rámečku napiš pořadové číslo (1, 2, 3, …), v jakém pořadí položky jdou za sebou." />
+          <PaperHint text={t('ui:paper.question.orderingHint')} />
           <ol>
             {order.map((sourceIndex, i) => (
               <li key={i} className="flex items-start" style={{ marginBottom: pt(5) }}>
@@ -360,7 +361,7 @@ function PaperAnswerArea({
             className="flex w-[70%] items-center justify-center border border-paper-line opacity-70"
             style={{ height: pt(IMAGE_PLACEHOLDER_HEIGHT), fontSize: pt(8) }}
           >
-            obrázek k popisu
+            {t('ui:paper.question.imageToLabel')}
           </div>
           <ol>
             {question.payload.labels.map((_, i) => (
@@ -382,8 +383,8 @@ function PaperAnswerArea({
 }
 
 /**
- * Krátký pokyn, jak vyplnit odpověď — týž text jako v PDF. Patří k vykreslení
- * symbolu rámečku, ne k obsahu otázky.
+ * A short instruction on how to fill in the answer — the same text as in the
+ * PDF. It belongs to rendering the box symbol, not to the question content.
  */
 function PaperHint({ text }: { text: string }) {
   return (

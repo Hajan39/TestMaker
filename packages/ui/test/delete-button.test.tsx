@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { DeleteButton } from '../src'
 
 describe('DeleteButton', () => {
-  it('na neutrálním podkladu má červený nápis', () => {
+  it('has red text on a neutral background', () => {
     render(<DeleteButton label="Smazat téma" title="Smazat?" onConfirm={() => {}} />)
     expect(screen.getByRole('button', { name: 'Smazat téma' })).toHaveClass('text-danger')
   })
 
-  it('u destruktivní varianty nevnucuje barvu textu — jinak je červená na červené', () => {
+  it('does not force the text colour on the destructive variant — otherwise red on red', () => {
     render(
       <DeleteButton label="Smazat (3)" variant="destructive" title="Smazat?" onConfirm={() => {}} />,
     )

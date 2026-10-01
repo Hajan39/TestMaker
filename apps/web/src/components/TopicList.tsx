@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { EmptyState, NavList, TEMATA, pocet } from '@testmaker/ui'
+import { EmptyState, NavList } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import type { GradeNode } from '@/lib/library'
 import { NewLibraryItem } from '@/components/LibraryItemDialogs'
 
-/** Druhý sloupec: témata zvoleného ročníku. */
+/** Second column: the selected grade's topics. */
 export function TopicList({
   grade,
   activeTopicId,
@@ -12,11 +13,11 @@ export function TopicList({
   activeTopicId?: string
 }) {
   if (!grade) {
-    // Prázdný stav vypadá všude v aplikaci stejně — i tady, kde je jen věta.
+    // The empty state looks the same everywhere in the app — even here, where it is just a sentence.
     return (
       <EmptyState
-        title="Zatím není vybraný ročník"
-        hint="Vyber ročník v levém sloupci a objeví se tu jeho témata."
+        title={t('library:topicList.noGradeTitle')}
+        hint={t('library:topicList.noGradeHint')}
       />
     )
   }
@@ -24,9 +25,9 @@ export function TopicList({
     <div>
       <div className="mb-1 flex items-center justify-between gap-1 px-2">
         <p className="ui-label min-w-0 truncate">
-          {grade.name || 'Bez ročníku'} · {pocet(grade.topics.length, TEMATA)}
+          {grade.name || t('library:labels.noGrade')} · {t('library:count.topics', { count: grade.topics.length })}
         </p>
-        <NewLibraryItem kind="topic" parentId={grade.id} label="+ téma" variant="ghost" />
+        <NewLibraryItem kind="topic" parentId={grade.id} label={t('library:topicList.addTopic')} variant="ghost" />
       </div>
       <NavList
         activeId={activeTopicId}

@@ -8,34 +8,36 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Jediný vzor akcí u řádku: tlačítko se třemi tečkami a v něm nabídka.
+ * The single pattern for row actions: a three-dots button with a menu.
  *
- * Dřív měl každý seznam akce jinak — v bance dva textové odkazy vedle sebe
- * („Upravit" vypadalo stejně neškodně jako „Nahradit modelem", které přepíše
- * hotovou otázku), v seznamu testů nabídku pod třemi tečkami, v knihovně holé
- * ikony. Kliknout omylem na to, co přepisuje nebo maže, šlo jen v tom prvním
- * případě — proto vyhrála nabídka: ta se musí nejdřív otevřít a v ní je vidět
- * název akce i to, že je nevratná (červená položka).
+ * Every list used to do actions differently — the bank had two text links side
+ * by side ("Upravit" looked as harmless as "Nahradit modelem", which overwrites
+ * a finished question), the tests list a three-dots menu, the library bare
+ * icons. Accidentally clicking something that overwrites or deletes was only
+ * possible in the first case — so the menu won: it has to be opened first and
+ * shows the action's name and that it's irreversible (red item).
  *
- * `busy` nahradí tlačítko popiskem toho, co se právě děje: nabídka se po
- * kliknutí zavře, takže čekání se nemá kde ukázat v ní.
+ * `busy` replaces the button with a label of what's happening: the menu
+ * closes after the click, so there's nowhere in it to show the wait.
  */
 export function RowActions({
-  label = 'Akce',
+  label = t('library:rowActions.label'),
   busy = null,
   triggerRef,
   children,
 }: {
-  /** Popisek tlačítka pro čtečku obrazovky; u karet se hodí doplnit název položky. */
+  /** Button label for screen readers; on cards it's worth adding the item's name. */
   label?: string
   busy?: string | null
   /**
-   * Ref na samotné tlačítko. Nabídka po výběru „Upravit" sama vrátí ohnisko
-   * sem — jenže otevře-li se editor (dialog) ve stejném tiku, tenhle krok mu
-   * ukradne a po zavření dialogu (Escape) skončí ohnisko na `<body>`. Kdo
-   * dialog otevírá, si přes ref tlačítko podrží a po zavření ho zaostří sám.
+   * Ref to the button itself. After choosing "Upravit" the menu returns focus
+   * here on its own — but if an editor (dialog) opens in the same tick, this
+   * step steals focus from it and after closing the dialog (Escape) focus ends
+   * up on `<body>`. Whoever opens the dialog keeps the button via the ref and
+   * focuses it after closing.
    */
   triggerRef?: React.Ref<HTMLButtonElement>
   children: ReactNode

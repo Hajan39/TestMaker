@@ -9,7 +9,6 @@ import {
   Button,
   Input,
   Label,
-  pocet,
   Tabs,
   TabsContent,
   TabsList,
@@ -19,7 +18,8 @@ import {
 } from '@testmaker/ui'
 import type { Role } from '@/lib/role'
 import type { PickerTopic } from '@/lib/questionPicker'
-import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 import { PrintMenu } from '@/components/PrintMenu'
 import { QuestionEditor } from '@/components/QuestionEditor'
 import { testPath } from '@/app/tests/paths'
@@ -38,19 +38,20 @@ import {
 } from '@/components/test-builder/types'
 import { defaultTemplateId, emptyHeader } from '@/components/test-builder/defaults'
 
-const STRUCTURAL_TEXT: Record<'heading' | 'instruction' | 'page_break', string | null> = {
-  heading: 'Nová část',
-  instruction: 'Pokyn k vypracování',
-  page_break: null,
+/** Default text of a newly inserted structural item. */
+function structuralText(kind: 'heading' | 'instruction' | 'page_break'): string | null {
+  if (kind === 'heading') return t('tests:builder.newSection')
+  if (kind === 'instruction') return t('tests:page.instructionField')
+  return null
 }
 
 /**
- * Skládání testu. Drží stav; oba sloupce — banka otázek vlevo a stránka
- * písemky vpravo — jsou řízené komponenty.
+ * The test builder. It holds the state; both columns — the question bank on
+ * the left and the test page on the right — are controlled components.
  *
- * Stránka je zároveň náhled i pracovní plocha: dřív se vedle sebe ukazoval
- * hrubý náhled a zvlášť osnova, takže učitelka skládala v jednom sloupci a
- * výsledek si domýšlela podle druhého.
+ * The page is both preview and workspace: there used to be a rough preview
+ * next to a separate outline, so the teacher built in one column and guessed
+ * the result from the other.
  */
 export function TestBuilder({
   topics,
@@ -69,33 +70,34 @@ export function TestBuilder({
   templates: Template[]
   test: Test | null
   items: ResolvedTestItem[]
-  /** Třída testu (`gradeId` z `loadTest`) — jí se předfiltruje banka. */
+  /** The test's grade (`gradeId` from `loadTest`) — pre-filters the bank. */
   gradeId?: string | null
-  /** Popisek třídy k zobrazení v hlavičce, např. „Přírodopis · 6. ročník". */
+  /** Grade label for the header, e.g. "Přírodopis · 6. ročník". */
   gradeLabel?: string | null
-  /** Téma, ze kterého test vznikl (`?tema=`) — jen když patří škole. */
+  /** The topic the test came from (`?tema=`) — only when it belongs to the school. */
   backTopic?: { id: string; name: string } | null
-  /** Role přihlášené osoby — náhled verzi písemky nesmí vůbec vidět. */
+  /** Role of the signed-in user — the preview role must not see test versions at all. */
   role?: Role
   /**
-   * Je nastavené generování (`aiStatus()` ze stránky)? Bez modelu verze
-   * písemky vzniknout nemůže — nabídka to řekne místo tlačítek, která by
-   * skončila chybou.
+   * Is generation configured (`aiStatus()` from the page)? Without a model no
+   * test version can be made — the menu says so instead of buttons that would
+   * only fail.
    */
   ai: { configured: boolean; problems: string[] }
-  /** Kolik položek model po vygenerování listu vynechal (`?vynechano=`). */
+  /** How many items the model skipped when generating the worksheet (`?vynechano=`). */
   dropped?: number
   /**
-   * Je písemka přihlášené osoby? Nasdílenou od kolegyně server přepsat
-   * nedovolí, takže se jen čte a tiskne a k úpravám se nabízí kopie.
+   * Does the test belong to the signed-in user? The server won't let anyone
+   * overwrite a colleague's shared test, so it is only read and printed, and a
+   * copy is offered for edits.
    */
   mine?: boolean
 }) {
   const router = useRouter()
   const readOnly = !mine
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
-  // Pracovní list vzniká vždy z formuláře „Nový pracovní list“, takže do
-  // editoru přichází už uložený a druh se pozná podle testu.
+  // A worksheet is always created from the "Nový pracovní list" form, so it
+  // arrives in the editor already saved and its kind comes from the test.
   const worksheet = test?.kind === 'pracovni_list'
   const kind = test?.kind ?? 'pisemka'
   const [settings, setSettings] = useState<TestSettingsValue>(() => ({
@@ -105,11 +107,10 @@ export function TestBuilder({
     templateId: test?.templateId ?? defaultTemplateId(templates),
     header: test?.header ?? emptyHeader(),
     variants: test?.variants ?? 1,
-    // Klíč se už nenastavuje u testu, ale volí se až při tisku („Zadání pro
-    // žáky" / „Klíč pro mě"). Sloupec v databázi zůstává, jen ho nic nemění.
+    // The key is no longer set on the test but chosen at print time ("Zadání
+    // pro žáky" / "Klíč pro mě"). The DB column stays; nothing changes it.
     showKey: test?.showKey ?? true,
-    // Písemka je ve výchozím stavu soukromá; nasdílí se, až když si to
-    // autorka řekne.
+    // A test is private by default; it is shared only when the author asks.
     visibility: test?.visibility ?? 'soukrome',
   }))
   const [draft, setDraft] = useState<DraftItem[]>(() =>
@@ -131,36 +132,36 @@ export function TestBuilder({
       needsCheck: item.needsCheck ?? false,
     })),
   )
-  // Na stav otázky se tu nefiltruje: do banky jdou ze serveru jen schválené
-  // otázky, takže do ostré písemky nemá koncept kudy proklouznout.
+  // No status filter here: the server only sends approved questions to the
+  // bank, so a draft has no way into a real test.
   //
-  // Výchozí filtr třídy = třída testu — kdo dělá písemku pro 6. B, chce
-  // nejdřív vidět jen 6. B. Přepnutím na „Všechny třídy" jde vybrat i z
-  // jiných ročníků, tak vzniká opakovací test napříč tématy. Test bez třídy
-  // (starší nebo založený bez tématu) nabídne rovnou všechno jako dřív.
+  // Default grade filter = the test's grade — whoever builds a test for 6. B
+  // wants to see 6. B first. Switching to "Všechny třídy" allows picking from
+  // other grades, which is how a cross-topic review test is made. A test
+  // without a grade (older or created without a topic) offers everything.
   const [filters, setFilters] = useState<BankFilters>({
     search: '',
     subject: '',
-    // Předfiltrovat na třídu testu má smysl, jen když v bance vůbec něco z
-    // téhle třídy je — jinak by na Select svítil prázdný štítek nad prázdnou
-    // bankou a učitelka by nevěděla, že za to může zapnutý filtr.
+    // Pre-filtering to the test's grade only makes sense if the bank has
+    // anything from that grade — otherwise the Select would show an empty label
+    // over an empty bank and the teacher would not know the filter is to blame.
     grade: gradeId && topics.some((topic) => topic.gradeId === gradeId) ? gradeId : '',
     type: '',
   })
   const [saving, setSaving] = useState(false)
   const [copying, setCopying] = useState(false)
-  // Jen chyba názvu — patří k poli; ostatní chyby akcí jdou do oznámení (toast).
+  // Only the title error — it belongs to the field; other action errors go to toasts.
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
-  // Chybějící název se dřív ohlásil u lišty, ale pole bylo schované v panelu
-  // nastavení. Teď je pole v hlavičce a při chybě se na něj rovnou zaostří.
+  // A missing title used to be reported at the bar while the field was hidden
+  // in the settings panel. Now the field is in the header and gets focus on error.
   const titleRef = useRef<HTMLInputElement>(null)
   const [titleInvalid, setTitleInvalid] = useState(false)
 
   /**
-   * Kolikrát je která otázka v osnově. Táž otázka smí být v testu víckrát
-   * (jednou jako rozcvička, podruhé v jiné části), proto se počítá, ne jen
-   * eviduje přítomnost.
+   * How many times each question is in the outline. The same question may
+   * appear more than once (a warm-up, then again in another part), so it is
+   * counted, not just flagged as present.
    */
   const usedCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -171,7 +172,7 @@ export function TestBuilder({
     return counts
   }, [draft])
   const questionCount = draft.filter((item) => item.kind === 'question').length
-  const template = templates.find((t) => t.id === settings.templateId) ?? templates[0] ?? null
+  const template = templates.find((candidate) => candidate.id === settings.templateId) ?? templates[0] ?? null
 
   function questionItem(question: Question): DraftItem {
     return {
@@ -191,12 +192,12 @@ export function TestBuilder({
     }
   }
 
-  /** Další výskyt téže otázky na konci osnovy — ostatní výskyty zůstávají. */
+  /** Another occurrence of the same question at the end of the outline — others stay. */
   function addQuestion(question: Question) {
     setDraft((current) => [...current, questionItem(question)])
   }
 
-  /** Zaškrtávátko v bance: buď otázku přidá, nebo vyhodí všechny její výskyty. */
+  /** Bank checkbox: either adds the question or removes all its occurrences. */
   function toggleQuestion(question: Question) {
     setDraft((current) =>
       usedCounts.has(question.id)
@@ -206,9 +207,9 @@ export function TestBuilder({
   }
 
   /**
-   * Zaškrtnutí celé skupiny. Přidávají se jen otázky, které v osnově ještě
-   * nejsou, aby se hromadným výběrem nezdvojily už vybrané; odebírání naopak
-   * vyhodí celou skupinu naráz.
+   * Ticking a whole group. Only questions not yet in the outline are added, so
+   * a bulk pick does not duplicate selected ones; removing drops the whole
+   * group at once.
    */
   function toggleMany(list: Question[], add: boolean) {
     setDraft((current) => {
@@ -223,10 +224,10 @@ export function TestBuilder({
   }
 
   /**
-   * Vylosovaný test do osnovy. Rozpracovaná osnova se nesmí ztratit potichu:
-   * `append` přidá vylosované na konec, `replace` nahradí celou osnovu, a
-   * učitelka si v dialogu vybírá, co z toho. Uloženo není nic — na to je
-   * pořád tlačítko Uložit.
+   * A drawn test into the outline. Work in progress must not be lost silently:
+   * `append` adds the drawn questions at the end, `replace` replaces the whole
+   * outline, and the teacher picks in the dialog. Nothing is saved — that is
+   * still the Save button's job.
    */
   function insertRandom(questions: Question[], mode: InsertMode) {
     setDraft((current) => {
@@ -236,8 +237,8 @@ export function TestBuilder({
   }
 
   /**
-   * Nadpis, pokyn i zalomení strany jde vložit kamkoli: `index` je místo, kam
-   * položka přijde (0 = úplně nahoru). Bez něj se připojí na konec.
+   * Headings, instructions and page breaks can be inserted anywhere: `index` is
+   * where the item goes (0 = very top). Without it, it is appended.
    */
   function addStructural(kind: 'heading' | 'instruction' | 'page_break', index?: number) {
     setDraft((current) => {
@@ -246,7 +247,7 @@ export function TestBuilder({
         id: null,
         kind,
         questionId: null,
-        text: STRUCTURAL_TEXT[kind],
+        text: structuralText(kind),
         pointsOverride: null,
         linesOverride: null,
         question: null,
@@ -280,9 +281,9 @@ export function TestBuilder({
     setDraft((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
-  /* --------------------------------------------------- pracovní list */
+  /* --------------------------------------------------- worksheet */
 
-  // Editor úlohy listu: `key` upravované položky, nebo místo pro novou.
+  // Worksheet task editor: `key` of the edited item, or the slot for a new one.
   const [questionDialog, setQuestionDialog] = useState<{ key: string | null; index?: number } | null>(null)
   const [regenerating, setRegenerating] = useState<string | null>(null)
 
@@ -295,7 +296,7 @@ export function TestBuilder({
     })
   }
 
-  /** Úloha listu jako otázka pro náhled; metadata banky u ní nic neznamenají. */
+  /** A worksheet task as a question for the preview; bank metadata mean nothing here. */
   function worksheetQuestion(content: QuestionContent): Question {
     return {
       ...content,
@@ -338,7 +339,7 @@ export function TestBuilder({
     setQuestionDialog(null)
   }
 
-  /** Položka od modelu v podobě položky editoru; klíč a id zůstávají původní. */
+  /** A model item as an editor item; key and id stay the same. */
   function fromModel(item: WorksheetItemDraft, previous: DraftItem): DraftItem {
     const base = { ...blankItem(item.kind), key: previous.key, id: previous.id, needsCheck: item.needsCheck }
     switch (item.kind) {
@@ -361,23 +362,24 @@ export function TestBuilder({
     return null
   }
 
-  /** Text položky pro seznam „tohle už na listu je“. */
+  /** Item text for the "already on the worksheet" list. */
   function summaryOf(item: DraftItem): string {
     if (item.kind === 'question') return (item.question?.payload as { prompt?: string } | undefined)?.prompt ?? ''
-    if (item.kind === 'table') return item.table ? `Tabulka: ${item.table.header.join(', ')}` : ''
+    if (item.kind === 'table') return item.table ? t('worksheets:builder.tableSummary', { columns: item.table.header.join(', ') }) : ''
     return item.text ?? ''
   }
 
   /**
-   * Nová podoba jednoho kusu od modelu, na tomtéž místě. Neukládá se sama —
-   * list se uloží tlačítkem Uložit jako po každé jiné úpravě.
+   * A new version of one item from the model, in the same place. It is not
+   * saved by itself — the worksheet is saved with the Save button like after
+   * any other edit.
    */
   async function regenerate(key: string) {
     const item = draft.find((candidate) => candidate.key === key)
     const target = item ? targetOf(item) : null
     if (!item || !target || !savedId) return
     setRegenerating(key)
-    const failure = 'Položku se nepodařilo přegenerovat.'
+    const failure = t('worksheets:builder.regenerateFailed')
     try {
       const data = await requestJson<{ item: WorksheetItemDraft }>(
         `/api/worksheets/${encodeURIComponent(savedId)}/items/${encodeURIComponent(item.id ?? key)}/regenerate`,
@@ -387,14 +389,14 @@ export function TestBuilder({
         }),
         failure,
       )
-      if (!data.item) throw new Error(`${failure} ${SERVER_TROUBLE}`)
+      if (!data.item) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
       const replacement = fromModel(data.item, item)
       setDraft((current) => current.map((candidate) => (candidate.key === key ? replacement : candidate)))
-      // Nová podoba přepíše i ruční úpravy položky — původní jde ještě vrátit.
-      toast.success('Položka je přegenerovaná.', {
+      // The new version overwrites manual edits too — the original can still be restored.
+      toast.success(t('worksheets:builder.regenerated'), {
         duration: 10_000,
         action: {
-          label: 'Vrátit',
+          label: t('common:actions.undo'),
           onClick: () => setDraft((current) => current.map((candidate) => (candidate.key === key ? item : candidate))),
         },
       })
@@ -407,7 +409,7 @@ export function TestBuilder({
 
   const toCheck = draft.filter((item) => item.needsCheck).length
 
-  /** Otisk toho, co je opravdu uložené — porovnáním se pozná neuložená změna. */
+  /** Fingerprint of what is actually saved — comparing it reveals unsaved changes. */
   const fingerprint = useMemo(
     () =>
       JSON.stringify({
@@ -422,21 +424,21 @@ export function TestBuilder({
           table: item.table,
           textContent: item.textContent,
           needsCheck: item.needsCheck,
-          // Úloha listu žije jen v položce — její úprava je změna listu.
+          // A worksheet task lives only in its item — editing it changes the worksheet.
           question: worksheet && !item.questionId ? item.question : null,
         })),
       }),
     [settings, draft, worksheet],
   )
-  // Otisk naposledy uloženého stavu. Ve stavu, ne v ref — ref se během
-  // vykreslování nemá číst a React na to upozorňuje.
+  // Fingerprint of the last saved state. In state, not a ref — refs must not be
+  // read during render and React warns about it.
   const [savedFingerprint, setSavedFingerprint] = useState<string | null>(test ? fingerprint : null)
-  // Nasdílenou písemku uložit nejde, takže v ní ani není co ztratit.
+  // A shared test cannot be saved, so there is nothing to lose.
   const dirty = !readOnly && savedFingerprint !== fingerprint
 
-  // Zavření okna s rozpracovanou osnovou znamenalo ztrátu celé práce bez varování.
-  // Odkazy uvnitř aplikace (zpět do tématu, hlavní nabídka) okno nezavírají,
-  // `beforeunload` je nezachytí — proto se klik na ně ověří zvlášť.
+  // Closing the window with unsaved work used to lose it all without warning.
+  // In-app links (back to the topic, main menu) don't close the window and
+  // `beforeunload` misses them — so clicks on them are confirmed separately.
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -444,7 +446,7 @@ export function TestBuilder({
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return
       const link = event.target instanceof Element ? event.target.closest('a[href^="/"]') : null
       if (!link || link.getAttribute('target') === '_blank') return
-      if (window.confirm('Máš neuložené změny. Opravdu odejít?')) return
+      if (window.confirm(t('common:leaveConfirm'))) return
       event.preventDefault()
       event.stopPropagation()
     }
@@ -456,19 +458,19 @@ export function TestBuilder({
     }
   }, [dirty])
 
-  /** Kopie nasdílené písemky — tu si pak autorka upravuje po svém. */
+  /** Copy of a shared test — which the author then edits her own way. */
   async function copy() {
     if (!savedId) return
     setCopying(true)
-    const failure = 'Kopii se nepodařilo vytvořit.'
+    const failure = t('tests:row.copyFailed')
     try {
       const data = await requestJson<{ id: string }>(
         `/api/tests?copyOf=${encodeURIComponent(savedId)}`,
         { method: 'POST' },
         failure,
       )
-      if (!data.id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
-      toast.success('Kopie je hotová — teď ji můžeš upravit.')
+      if (!data.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      toast.success(t('tests:builder.copied'))
       router.push(testPath(kind, data.id))
     } catch (copyError) {
       toast.error(errorMessage(copyError, failure))
@@ -482,11 +484,11 @@ export function TestBuilder({
     if (!settings.title.trim()) {
       setTitleInvalid(true)
       titleRef.current?.focus()
-      return setError(worksheet ? 'Vyplň název listu.' : 'Vyplň název písemky.')
+      return setError(worksheet ? t('worksheets:builder.titleRequired') : t('tests:builder.titleRequired'))
     }
     if (worksheet) {
-      if (draft.length === 0) return void toast.error('Přidej do listu aspoň jednu položku.')
-    } else if (questionCount === 0) return void toast.error('Přidej aspoň jednu otázku.')
+      if (draft.length === 0) return void toast.error(t('worksheets:builder.itemRequired'))
+    } else if (questionCount === 0) return void toast.error(t('tests:builder.questionRequired'))
 
     setSaving(true)
     const body = {
@@ -495,8 +497,8 @@ export function TestBuilder({
       description: settings.description.trim() || null,
       graded: settings.graded,
       templateId: settings.templateId,
-      // Třída testu se nemění v editoru — jen se drží, aby ji první uložení
-      // (POST i PUT) nevynulovalo tím, že pole vůbec nepošle.
+      // The test's grade is not changed in the editor — it is only carried so the
+      // first save (POST or PUT) does not clear it by omitting the field.
       gradeId: gradeId ?? null,
       header: settings.header,
       variants: settings.variants,
@@ -506,20 +508,20 @@ export function TestBuilder({
         id: item.id,
         kind: item.kind,
         questionId: item.questionId,
-        // Hlavolam se do písemky zařazuje z obrazovky Hlavolamy; tady se jen
-        // veze dál, aby ho přeuložení osnovy nesmazalo.
+        // A puzzle is added to a test from the Puzzles screen; here it is only
+        // carried along so re-saving the outline does not delete it.
         puzzleId: item.puzzleId,
         text: item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
         content: item.kind === 'table' ? item.table : item.kind === 'text' ? item.textContent : undefined,
         needsCheck: item.needsCheck,
-        // Úloha listu v bance není — její obsah jde se snímkem položky.
+        // A worksheet task is not in the bank — its content goes with the item snapshot.
         question: worksheet && item.kind === 'question' && !item.questionId ? item.question : null,
       })),
     }
 
-    const failure = worksheet ? 'List se nepodařilo uložit.' : 'Písemku se nepodařilo uložit.'
+    const failure = worksheet ? t('worksheets:builder.saveFailed') : t('tests:builder.saveFailed')
     try {
       const result = await requestJson<{ id: string; itemIds: string[] }>(
         '/api/tests',
@@ -527,16 +529,16 @@ export function TestBuilder({
         failure,
       )
       const id = result.id
-      if (!id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
-      // Bez id z uložení by další uložení položky nepoznalo a jejich zmrazené
-      // snímky by se pořídily znovu z aktuální banky.
+      if (!id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      // Without ids from the save the next save would not recognise the items
+      // and their frozen snapshots would be retaken from the current bank.
       const itemIds = result.itemIds
       if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
       setSavedFingerprint(fingerprint)
       setSavedId(id)
-      toast.success('Uloženo.')
-      // `?vynechano=` patří jen k čerstvě vygenerovanému listu — po uložení
-      // by upozornění na vynechané položky viselo dál, proto adresa bez něj.
+      toast.success(t('common:status.saved'))
+      // `?vynechano=` only belongs to a freshly generated worksheet — after a save
+      // the skipped-items notice would linger, so the URL drops it.
       if (!test || dropped > 0) router.replace(testPath(kind, id))
       else router.refresh()
     } catch (saveError) {
@@ -574,8 +576,8 @@ export function TestBuilder({
           ? {
               onAdd: addWorksheetItem,
               onEditQuestion: (key) => setQuestionDialog({ key }),
-              // Přegenerovat jde jen s nastaveným modelem a u uloženého listu
-              // (zadání listu je na serveru); náhled nemění nic.
+              // Regenerating needs a configured model and a saved worksheet (its
+              // brief is on the server); the preview role changes nothing.
               onRegenerate: ai.configured && savedId && role !== 'nahled' ? (key) => void regenerate(key) : undefined,
               regenerating,
             }
@@ -589,11 +591,11 @@ export function TestBuilder({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        {/* Název není nastavení mezi ostatními: bez něj se test neuloží, takže
-            patří do hlavičky na oči, ne do panelu, který se ani neotevře. */}
+        {/* The title is not just another setting: without it the test can't be
+            saved, so it belongs in plain sight in the header, not in a panel. */}
         <div className="min-w-0 flex-1 basis-64">
           <h1 className="ui-page-title">
-            {worksheet ? 'Úprava pracovního listu' : test ? 'Úprava testu' : 'Nový test'}
+            {worksheet ? t('worksheets:builder.editTitle') : test ? t('tests:builder.editTitle') : t('tests:builder.newTitle')}
           </h1>
           {gradeLabel || backTopic ? (
             <p className="mt-1 text-sm text-fg-muted">
@@ -601,20 +603,20 @@ export function TestBuilder({
               {gradeLabel && backTopic ? ' · ' : null}
               {backTopic ? (
                 <Link href={`/topics/${backTopic.id}`} className="underline hover:no-underline">
-                  ← Zpět do tématu {backTopic.name}
+                  {t('tests:builder.backToTopic', { topic: backTopic.name })}
                 </Link>
               ) : null}
             </p>
           ) : null}
           <div className="mt-2 max-w-md">
-            <Label htmlFor="test-title">{worksheet ? 'Název listu' : 'Název písemky'}</Label>
+            <Label htmlFor="test-title">{worksheet ? t('worksheets:builder.titleLabel') : t('tests:builder.titleLabel')}</Label>
             <Input
               id="test-title"
               ref={titleRef}
               value={settings.title}
               maxLength={200}
               readOnly={readOnly}
-              placeholder={worksheet ? 'Např. Sopky – procvičování' : 'Např. Čtvrtletní písemka – přírodopis'}
+              placeholder={worksheet ? t('worksheets:builder.titlePlaceholder') : t('tests:builder.titlePlaceholder')}
               aria-invalid={titleInvalid || undefined}
               aria-describedby={titleInvalid ? 'test-title-error' : undefined}
               onChange={(event) => {
@@ -624,37 +626,37 @@ export function TestBuilder({
             />
           </div>
         </div>
-        {/* Počty (otázek, bodů, odhad stran) se čtou na jediném místě — v patičce
-            pod stránkou písemky, kde vznikají. V liště nahoře stálo totéž ještě
-            jednou a obě čísla se musela hlídat, aby si neodporovala. */}
+        {/* Counts (questions, points, page estimate) are read in one place only —
+            the footer under the test page where they arise. The top bar used to
+            repeat them and both numbers had to be kept from contradicting. */}
         <div className="flex flex-wrap items-center gap-2">
           {savedId ? <PrintMenu testId={savedId} variants={settings.variants} dirty={dirty} /> : null}
           {readOnly ? (
             <Button disabled={copying} aria-busy={copying || undefined} onClick={() => void copy()}>
-              {copying ? 'Kopíruji…' : 'Vytvořit kopii'}
+              {copying ? t('tests:row.copying') : t('tests:row.copy')}
             </Button>
           ) : null}
-          {/* Verze písemky vzniká z uložené podoby — bez uloženého testu (nový
-              test, role náhled) nemá tlačítko co dělat. */}
+          {/* A test version is made from the saved state — without a saved test
+              (new test, preview role) the button has nothing to do. */}
           {savedId && role !== 'nahled' && !worksheet && !readOnly ? (
             <TestVariantMenu
               testId={savedId}
               ai={ai}
               dirty={dirty}
-              onDirty={() => toast.error('Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.')}
+              onDirty={() => toast.error(t('tests:builder.saveBeforeVariant'))}
             />
           ) : null}
-          {/* Losování i banka patří písemce — úlohy listu z banky nejsou. */}
+          {/* Random draw and bank belong to a written test — worksheet tasks don't come from the bank. */}
           {readOnly ? null : (
             <>
               {worksheet ? null : <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />}
               <TestSettings value={settings} templates={templates} onChange={setSettings} worksheet={worksheet} />
               {dirty ? (
                 <span className="text-sm text-fg-muted" role="status">
-                  Neuložené změny
+                  {t('common:status.unsavedChanges')}
                 </span>
               ) : null}
-              <Button disabled={saving} onClick={() => void save()}>{saving ? 'Ukládám…' : 'Uložit'}</Button>
+              <Button disabled={saving} onClick={() => void save()}>{saving ? t('common:actions.saving') : t('common:actions.save')}</Button>
             </>
           )}
         </div>
@@ -662,7 +664,7 @@ export function TestBuilder({
 
       {readOnly ? (
         <p className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft">
-          Sdílená písemka — pro úpravy si vytvoř kopii.
+          {t('tests:builder.sharedReadOnly')}
         </p>
       ) : null}
 
@@ -674,15 +676,13 @@ export function TestBuilder({
 
       {worksheet && dropped > 0 ? (
         <p className="text-sm text-fg-muted">
-          {pocet(dropped, ['položku', 'položky', 'položek'])} model nevrátil v pořádku a{' '}
-          {dropped === 1 ? 'vynechala se' : 'vynechaly se'}. Chybějící kus můžeš přidat ručně.
+          {t('worksheets:builder.dropped', { count: dropped })}
         </p>
       ) : null}
       {worksheet && toCheck > 0 ? (
-        // Nenápadné upozornění; tisk nijak neblokuje.
+        // A subtle notice; it does not block printing.
         <p className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg" data-slot="ke-kontrole">
-          Ke kontrole: {pocet(toCheck, ['položka', 'položky', 'položek'])}. Jejich obsah nevychází z materiálů —
-          ověř ho a značku „ověř“ pak odškrtni kliknutím.
+          {t('worksheets:builder.toCheck', { count: toCheck })}
         </p>
       ) : null}
 
@@ -690,37 +690,37 @@ export function TestBuilder({
         <QuestionEditor
           topicId=""
           question={editedQuestion}
-          title={editedQuestion ? 'Upravit úlohu' : 'Nová úloha'}
+          title={editedQuestion ? t('worksheets:builder.editTask') : t('worksheets:builder.newTask')}
           onClose={() => setQuestionDialog(null)}
           onSaved={() => setQuestionDialog(null)}
           onSubmit={submitQuestion}
         />
       ) : null}
 
-      {/* Vykresluje se jen jedna podoba. Obě naráz (jedna schovaná) znamenaly
-          zdvojená `id` filtrů a zdvojené zaškrtávátko „Vybrat vše". */}
+      {/* Only one layout is rendered. Both at once (one hidden) meant duplicate
+          filter `id`s and a duplicate "Vybrat vše" checkbox. */}
       {readOnly ? (
-        // Nasdílená písemka se jen prohlíží: banka by nebyla k ničemu a
-        // `fieldset disabled` vypne všechno ovládání stránky naráz.
+        // A shared test is view-only: the bank would be useless and
+        // `fieldset disabled` turns off all page controls at once.
         <fieldset disabled className="contents">
           <div className="h-[75vh]">{sheet}</div>
         </fieldset>
       ) : worksheet ? (
-        // List banku nemá — stránka dostane celou šířku.
+        // A worksheet has no bank — the page gets the full width.
         <div className="h-[75vh]">{sheet}</div>
       ) : narrow ? (
-        // Pod 1024 px: jeden sloupec se záložkami.
+        // Below 1024 px: one column with tabs.
         <Tabs defaultValue="banka">
           <TabsList>
-            <TabsTrigger value="banka">Banka</TabsTrigger>
-            <TabsTrigger value="stranka">Stránka</TabsTrigger>
+            <TabsTrigger value="banka">{t('tests:builder.tabBank')}</TabsTrigger>
+            <TabsTrigger value="stranka">{t('tests:page.title')}</TabsTrigger>
           </TabsList>
           <TabsContent value="banka"><div className="h-[70vh]">{bank}</div></TabsContent>
           <TabsContent value="stranka"><div className="h-[70vh]">{sheet}</div></TabsContent>
         </Tabs>
       ) : (
-        // Od 1024 px vedle sebe: banka vlevo, stránka vpravo. Stránka dostane
-        // víc místa — je na ní vidět, jak se písemka vytiskne, a pracuje se na ní.
+        // From 1024 px side by side: bank left, page right. The page gets more
+        // room — it shows how the test prints and is where the work happens.
         <div className="grid h-[70vh] gap-4 grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-h-0">{bank}</div>
           <div className="min-h-0">{sheet}</div>

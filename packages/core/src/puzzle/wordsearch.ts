@@ -1,45 +1,58 @@
 import type { PuzzleEntry } from '../schema/puzzle'
+import { t } from '../i18n'
 import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
 import { puzzleLetters, splitWord, type PuzzleProblem } from './letters'
 
 /**
- * Osmisměrka: slova se rozmístí do mřížky v osmi směrech, zbytek se dosype
- * náhodnými písmeny.
+ * Word search: words are placed in the grid in eight directions, the rest is
+ * filled with random letters.
  *
- * Losování je řízené seedem (`seededRandom` z `pdf/shuffle`, týž generátor
- * jako u variant testu), takže táž slova a týž seed dají vždycky tutéž
- * mřížku — vytištěná osmisměrka jde po měsíci vyrobit znovu beze změny.
+ * The draw is seeded (`seededRandom` from `pdf/shuffle`, the same generator as
+ * for test variants), so the same words and seed always give the same grid —
+ * a printed word search can be reproduced a month later unchanged.
  *
- * Co se nevejde nebo nejde umístit, se **nikdy tiše nevynechá**: takové slovo
- * skončí v `problems` i v `unplaced` a volající to učitelce řekne, než se
- * hlavolam vytiskne. Žák by jinak hledal slovo, které v mřížce není.
+ * Whatever does not fit or cannot be placed is **never silently dropped**:
+ * such a word ends up in both `problems` and `unplaced`, and the caller tells
+ * the teacher before the puzzle is printed. Otherwise the pupil would look for
+ * a word that is not in the grid.
  */
 
+/** Direction names; the key-for-the-teacher label is `puzzles:directions.<name>`. */
+export type WordSearchDirectionName =
+  | 'right'
+  | 'left'
+  | 'down'
+  | 'up'
+  | 'downRight'
+  | 'downLeft'
+  | 'upRight'
+  | 'upLeft'
+
 export interface WordSearchDirection {
-  /** Posun po řádcích (−1 nahoru, 0 vodorovně, 1 dolů). */
+  /** Row step (−1 up, 0 horizontal, 1 down). */
   dr: -1 | 0 | 1
-  /** Posun po sloupcích. */
+  /** Column step. */
   dc: -1 | 0 | 1
-  /** Jméno směru do klíče pro učitelku. */
-  label: string
+  /** Direction name for the answer key. */
+  name: WordSearchDirectionName
 }
 
-/** Osm směrů, ve kterých smí slovo ležet. */
+/** The eight directions a word may run in. */
 export const WORD_SEARCH_DIRECTIONS: readonly WordSearchDirection[] = [
-  { dr: 0, dc: 1, label: 'vpravo' },
-  { dr: 0, dc: -1, label: 'vlevo' },
-  { dr: 1, dc: 0, label: 'dolů' },
-  { dr: -1, dc: 0, label: 'nahoru' },
-  { dr: 1, dc: 1, label: 'vpravo dolů' },
-  { dr: 1, dc: -1, label: 'vlevo dolů' },
-  { dr: -1, dc: 1, label: 'vpravo nahoru' },
-  { dr: -1, dc: -1, label: 'vlevo nahoru' },
+  { dr: 0, dc: 1, name: 'right' },
+  { dr: 0, dc: -1, name: 'left' },
+  { dr: 1, dc: 0, name: 'down' },
+  { dr: -1, dc: 0, name: 'up' },
+  { dr: 1, dc: 1, name: 'downRight' },
+  { dr: 1, dc: -1, name: 'downLeft' },
+  { dr: -1, dc: 1, name: 'upRight' },
+  { dr: -1, dc: -1, name: 'upLeft' },
 ]
 
 export interface WordSearchPlacement {
-  /** Slovo tak, jak ho napsala učitelka. */
+  /** The word as the teacher wrote it. */
   word: string
-  /** Písmena v buňkách (velká, bez mezer). */
+  /** Letters in the cells (upper case, no spaces). */
   letters: string[]
   row: number
   col: number
@@ -49,10 +62,10 @@ export interface WordSearchPlacement {
 export interface WordSearchResult {
   cols: number
   rows: number
-  /** Mřížka po řádcích; každá buňka je jedno velké písmeno. */
+  /** The grid by rows; each cell is one upper-case letter. */
   grid: string[][]
   placements: WordSearchPlacement[]
-  /** Slova, na která se v mřížce nenašlo místo. */
+  /** Words for which no place was found in the grid. */
   unplaced: string[]
   problems: PuzzleProblem[]
 }
@@ -63,21 +76,22 @@ export interface WordSearchInput {
   rows: number
   seed: string
   /**
-   * Povolené směry; prázdné (nebo chybí) = všech osm. Slouží testům
-   * a případnému snazšímu zadání pro mladší žáky.
+   * Allowed directions; empty (or missing) = all eight. Used by tests and
+   * possibly for an easier variant for younger pupils.
    */
   directions?: readonly WordSearchDirection[]
 }
 
-/** Nejkratší slovo, které má v osmisměrce smysl hledat. */
+/** The shortest word worth looking for in a word search. */
 const MIN_WORD_LETTERS = 2
 
 /**
- * Česká abeceda s vahami podle toho, jak často se písmeno v češtině
- * objevuje (zhruba v procentech; vzácná písmena zvednutá na 1). Bere se do výplně, když
- * slova sama dávají příliš málo písmen. Vzácná písmena (Ď, Ť, Ň, Ů, Ó)
- * v ní jsou schválně také — jinak by slovo s háčkem v mřížce svítilo
- * jako jediné písmeno svého druhu a žák by ho našel bez hledání.
+ * The Czech alphabet weighted by how often each letter appears in Czech
+ * (roughly in percent; rare letters raised to 1). Used for the filler when the
+ * words themselves give too few letters. Rare letters (Ď, Ť, Ň, Ů, Ó) are
+ * included on purpose — otherwise a word with a caron would stand out in the
+ * grid as the only letter of its kind and the pupil would find it without
+ * searching.
  */
 const CZECH_LETTER_WEIGHTS: Readonly<Record<string, number>> = {
   O: 9, E: 8, A: 7, N: 7, T: 6, S: 5, I: 5, V: 4, L: 4, R: 4, K: 4, D: 4,
@@ -86,18 +100,18 @@ const CZECH_LETTER_WEIGHTS: Readonly<Record<string, number>> = {
 }
 
 /**
- * Písmena do výplně, když slova sama nestačí. Každé písmeno je tu tolikrát,
- * kolik je jeho váha — rovnoměrný los z pole je tak los vážený.
+ * Filler letters for when the words alone are not enough. Each letter appears
+ * as many times as its weight — a uniform draw from the array is a weighted one.
  */
 const FILLER_FALLBACK: readonly string[] = Object.entries(CZECH_LETTER_WEIGHTS).flatMap(([letter, weight]) =>
   Array.from({ length: weight }, () => letter),
 )
 
 /**
- * Sprostá slova, která výplň nesmí náhodou složit v žádném směru. Porovnává
- * se bez háčků a čárek (i „PICA" dítě přečte), proto jsou tu jen základní
- * tvary. Seznam je schválně krátký: jde o to, aby osmisměrka neodešla do
- * třídy s nadávkou, ne o úplný slovník.
+ * Vulgar words the filler must never spell by accident in any direction.
+ * Compared without diacritics (a child reads "PICA" too), so only base forms
+ * are listed. The list is short on purpose: the point is that a word search
+ * does not reach the class with a swear word, not a complete dictionary.
  */
 export const WORD_SEARCH_BLOCKLIST: readonly string[] = [
   'PIČA',
@@ -119,21 +133,21 @@ export const WORD_SEARCH_BLOCKLIST: readonly string[] = [
 ]
 
 /**
- * Kolikrát se celá mřížka zkusí poskládat znovu, když se z písmen slov
- * (ne z výplně) složí slovo ze seznamu podruhé nebo sprosté slovo. Taková
- * shoda se přelosováním výplně opravit nedá.
+ * How many times the whole grid is laid out again when the letters of the
+ * words (not the filler) spell a listed word a second time or a vulgar word.
+ * Re-drawing the filler cannot fix such a match.
  */
 const LAYOUT_ATTEMPTS = 8
 
-/** Kolik kol přelosování výplně se zkusí, než se to vzdá. */
+/** How many rounds of filler re-draws are tried before giving up. */
 const REROLL_ROUNDS = 200
 
-/** Písmena bez háčků a čárek. */
+/** A letter without diacritics. */
 function baseLetter(letter: string): string {
   return letter.normalize('NFD').replace(/\p{M}/gu, '')
 }
 
-/** Vejde se slovo na dané místo? Překryv se povolí jen na shodném písmenu. */
+/** Does the word fit at this spot? Overlap is allowed only on the same letter. */
 function fits(
   grid: (string | null)[][],
   letters: string[],
@@ -153,7 +167,7 @@ function fits(
   return true
 }
 
-/** Kolik písmen se při tomhle umístění překryje s už položenými slovy. */
+/** How many letters of this placement overlap already placed words. */
 function overlapCount(
   grid: (string | null)[][],
   letters: string[],
@@ -168,15 +182,15 @@ function overlapCount(
   return overlap
 }
 
-/** Výskyt hledaného řetězce v mřížce: index cíle a buňky (řádek × šířka + sloupec). */
+/** An occurrence of a target string in the grid: target index and cells (row × width + column). */
 interface Occurrence {
   target: number
   cells: number[]
 }
 
 /**
- * Všechny výskyty cílů v mřížce ve všech osmi směrech — tak, jak je hledá
- * žák, bez ohledu na to, v jakých směrech se slova pokládala.
+ * All occurrences of the targets in the grid in all eight directions — the way
+ * the pupil searches, regardless of which directions the words were laid in.
  */
 function scanGrid(grid: string[][], targets: readonly string[][]): Occurrence[] {
   const rows = grid.length
@@ -220,19 +234,19 @@ function scanGrid(grid: string[][], targets: readonly string[][]): Occurrence[] 
   return found
 }
 
-/** Jedno poskládání mřížky: slova, výplň a to, co se opravit nepodařilo. */
+/** One layout of the grid: words, filler and whatever could not be fixed. */
 interface Layout {
   grid: string[][]
   placements: WordSearchPlacement[]
   unplaced: string[]
   problems: PuzzleProblem[]
-  /** Slova ze seznamu, která v mřížce leží víckrát (a opravit to nešlo). */
+  /** Listed words that appear in the grid more than once (and could not be fixed). */
   repeated: Set<string>
-  /** Sprostá slova, která v mřížce zůstala. */
+  /** Vulgar words left in the grid. */
   vulgar: Set<string>
 }
 
-/** Sestaví osmisměrku. Nic nevyhazuje — potíže vrací v `problems`. */
+/** Builds a word search. Never throws — returns problems in `problems`. */
 export function buildWordSearch(input: WordSearchInput): WordSearchResult {
   const { cols, rows, seed } = input
   const directions = input.directions && input.directions.length > 0 ? input.directions : WORD_SEARCH_DIRECTIONS
@@ -240,7 +254,7 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
   const problems: PuzzleProblem[] = []
   const unplaced: string[] = []
 
-  /** Nejdelší úsečka, která se do mřížky vejde — víc písmen se tam nevejde nikdy. */
+  /** The longest line that fits in the grid — more letters never fit. */
   const longestPossible = Math.max(cols, rows)
 
   const candidates: { entry: PuzzleEntry; letters: string[] }[] = []
@@ -250,13 +264,13 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     if (unusable.length > 0) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" obsahuje znaky, které se do mřížky zapsat nedají (${unusable.join(' ')}). Nech v něm jen písmena.`,
+        message: t('puzzles:problems.gridUnusable', { word: entry.word, chars: unusable.join(' ') }),
       })
     }
     if (letters.length < MIN_WORD_LETTERS) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" je na osmisměrku příliš krátké — potřebuje aspoň dvě písmena.`,
+        message: t('puzzles:problems.wordsearchWordTooShort', { word: entry.word }),
       })
       unplaced.push(entry.word)
       continue
@@ -264,7 +278,7 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     if (letters.length > longestPossible) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" má ${letters.length} písmen a do mřížky ${cols} × ${rows} se nevejde. Zvětši mřížku, nebo slovo vynech.`,
+        message: t('puzzles:problems.wordTooLong', { word: entry.word, letters: letters.length, cols, rows }),
       })
       unplaced.push(entry.word)
       continue
@@ -273,7 +287,7 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     if (seen.has(key)) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" je v seznamu podruhé; v mřížce bude jen jednou.`,
+        message: t('puzzles:problems.wordsearchDuplicate', { word: entry.word }),
       })
       continue
     }
@@ -281,8 +295,9 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     candidates.push({ entry, letters })
   }
 
-  // Slovo schované v jiném slově ze seznamu (i pozpátku) najde žák v mřížce
-  // víckrát, ať se položí kamkoli — to se opravit nedá, jen říct učitelce.
+  // A word hidden inside another listed word (even backwards) will be found
+  // in the grid more than once wherever it goes — that cannot be fixed, only
+  // reported to the teacher.
   candidates.forEach((short, i) => {
     const word = short.letters.join('')
     for (const [j, long] of candidates.entries()) {
@@ -290,32 +305,34 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
       const forward = long.letters.join('')
       const backward = [...long.letters].reverse().join('')
       const sameLength = long.letters.length === short.letters.length
-      // Stejně dlouhá dvojice (ret × ter) se ohlásí jen jednou, u pozdějšího slova.
+      // A pair of equal length (ret × ter) is reported only once, on the later word.
       if (sameLength && j > i) continue
       if (sameLength ? backward === word : forward.includes(word) || backward.includes(word)) {
         problems.push({
           subject: short.entry.word,
-          message: sameLength
-            ? `Slovo „${short.entry.word}" je pozpátku slovo „${long.entry.word}" — žák ho v mřížce najde dvakrát. Jedno z nich vynech.`
-            : `Slovo „${short.entry.word}" je schované ve slově „${long.entry.word}" — žák ho v mřížce najde víckrát. Nahraď ho jiným slovem, nebo ho vynech.`,
+          message: t(sameLength ? 'puzzles:problems.reversed' : 'puzzles:problems.hidden', {
+            word: short.entry.word,
+            other: long.entry.word,
+          }),
         })
         break
       }
     }
   })
 
-  // Nejdelší slova první: na ta je v mřížce nejmíň místa, a když se položí
-  // až nakonec, často se už nevejdou. Stejně dlouhá slova jdou v pořadí
-  // zadání (řazení je stabilní) — proto **jiné pořadí slov dá jinou mřížku**,
-  // i když seed zůstane stejný. Je to v pořádku: táž slova v témž pořadí
-  // a týž seed dají vždycky tutéž mřížku, a na tom tisk po měsíci stojí.
+  // Longest words first: they have the least room in the grid, and placed
+  // last they often no longer fit. Words of equal length keep the input order
+  // (the sort is stable) — so **a different word order gives a different
+  // grid** even with the same seed. That is fine: the same words in the same
+  // order with the same seed always give the same grid, and reprinting a
+  // month later relies on exactly that.
   const ordered = [...candidates].sort((a, b) => b.letters.length - a.letters.length)
 
   const blocklist = WORD_SEARCH_BLOCKLIST.map((word) => [...word].map(baseLetter))
 
-  /** Poskládá mřížku jednou; `attempt` > 0 je nový pokus s jiným losem. */
+  /** Lays out the grid once; `attempt` > 0 is a fresh try with a different draw. */
   function layout(attempt: number): Layout {
-    // První pokus má los jako vždycky, aby dřívější mřížky zůstaly, jaké byly.
+    // The first attempt draws as always, so earlier grids stay as they were.
     const base = `osmismerka:${seed}:${cols}x${rows}`
     const rand = seededRandom(hashSeed(attempt === 0 ? base : `${base}:${attempt}`))
     const layoutProblems: PuzzleProblem[] = []
@@ -324,11 +341,12 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
 
     const placements: WordSearchPlacement[] = []
     for (const { entry, letters } of ordered) {
-      // Všechna možná místa, zamíchaná seedem. Prochází se celý seznam, takže
-      // se slovo neumístí náhodně „skoro vždycky", ale vždycky, když místo je.
-      // Místo, kde by slovo leželo celé na písmenech jiných slov, se nepočítá:
-      // „les" uvnitř „lesníku" by žák nenašel jako samostatné slovo a klíč
-      // by ukazoval dvě slova na týchž buňkách.
+      // All possible spots, shuffled by the seed. The whole list is scanned, so
+      // the word is placed not "almost always" at random but always when there
+      // is room. A spot where the word would lie entirely on other words'
+      // letters does not count: the pupil would not find "les" inside
+      // "lesníku" as a word of its own, and the key would show two words on
+      // the same cells.
       const spots: { row: number; col: number; direction: WordSearchDirection; overlap: number }[] = []
       for (const direction of directions) {
         for (let row = 0; row < rows; row += 1) {
@@ -344,13 +362,13 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
         layoutUnplaced.push(entry.word)
         layoutProblems.push({
           subject: entry.word,
-          message: `Slovo „${entry.word}" se do mřížky nevešlo. Zvětši mřížku, uber slova, nebo zkus jiný seed.`,
+          message: t('puzzles:problems.noRoom', { word: entry.word }),
         })
         continue
       }
 
-      // Z náhodného pořadí se vybere místo s největším překryvem — slova se tak
-      // proplétají a mřížka nevypadá jako seznam vedle sebe.
+      // From the random order pick the spot with the largest overlap — words
+      // interlock and the grid does not look like a list laid side by side.
       const shuffledSpots = shuffled(spots, rand)
       let best = shuffledSpots[0] as (typeof spots)[number]
       for (const spot of shuffledSpots) if (spot.overlap > best.overlap) best = spot
@@ -363,13 +381,13 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
       placements.push({ word: entry.word, letters, row: best.row, col: best.col, direction: best.direction })
     }
 
-    // Výplň: písmena z použitých slov, ať mřížka vypadá česky.
+    // Filler: letters from the placed words, so the grid looks Czech.
     const pool = placements.flatMap((placement) => placement.letters)
     const filler = pool.length >= 8 ? [...new Set(pool)] : FILLER_FALLBACK
     const pick = () => filler[Math.floor(rand() * filler.length)] as string
     const filled = grid.map((row) => row.map((cell) => cell ?? pick()))
 
-    // Buňky slov jsou pevné; přelosovat se smí jen výplň.
+    // Word cells are fixed; only the filler may be re-drawn.
     const own = placements.map((placement) => {
       const cells = new Set<number>()
       for (let i = 0; i < placement.letters.length; i += 1) {
@@ -382,10 +400,10 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     const targets = placements.map((placement) => placement.letters)
 
     /**
-     * Výskyty, které v mřížce nemají co dělat: slovo ze seznamu jinde než na
-     * svém místě, nebo sprosté slovo. Výskyt uvnitř jediného slova ze seznamu
-     * se nepočítá — „les" v „lesníku" je ohlášený výš a sprosté slovo, které
-     * je součástí zadaného slova, si učitelka napsala sama.
+     * Occurrences that do not belong in the grid: a listed word anywhere but
+     * its own place, or a vulgar word. An occurrence inside a single listed
+     * word does not count — "les" in "lesníku" is reported above, and a vulgar
+     * word that is part of a given word was written by the teacher herself.
      */
     function unwanted(): { occurrence: Occurrence; vulgar: boolean }[] {
       const bad: { occurrence: Occurrence; vulgar: boolean }[] = []
@@ -403,8 +421,8 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
       return bad
     }
 
-    // Přelosování výplně: v každém nežádoucím výskytu se vymění jedna buňka
-    // výplně. Los jde z téhož generátoru, takže výsledek zůstává určený seedem.
+    // Filler re-draw: in each unwanted occurrence one filler cell is swapped.
+    // The draw comes from the same generator, so the result stays seeded.
     let bad = unwanted()
     for (let round = 0; round < REROLL_ROUNDS; round += 1) {
       const touched = new Set<number>()
@@ -432,9 +450,10 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
     return { grid: filled, placements, unplaced: layoutUnplaced, problems: layoutProblems, repeated, vulgar }
   }
 
-  // Když se nežádoucí shoda složí přímo z písmen slov, výplň nepomůže —
-  // mřížka se poskládá znovu s jiným losem. Vybere se první čistá, jinak
-  // ta, ve které se vešlo nejvíc slov a zůstalo nejmíň potíží.
+  // When an unwanted match is spelled by the words' own letters, the filler
+  // cannot help — the grid is laid out again with a different draw. The first
+  // clean one wins, otherwise the one that fit the most words with the fewest
+  // problems left.
   let chosen = layout(0)
   const score = (candidate: Layout) => [candidate.unplaced.length, candidate.repeated.size + candidate.vulgar.size]
   for (let attempt = 1; attempt < LAYOUT_ATTEMPTS && chosen.repeated.size + chosen.vulgar.size > 0; attempt += 1) {
@@ -449,17 +468,17 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
   for (const word of chosen.repeated) {
     problems.push({
       subject: word,
-      message: `Slovo „${word}" se v mřížce složilo víckrát z písmen jiných slov. Zkus jiný seed, nebo slovo nahraď.`,
+      message: t('puzzles:problems.repeated', { word }),
     })
   }
   for (const word of chosen.vulgar) {
     problems.push({
-      message: `Z písmen slov se v mřížce složilo nevhodné slovo („${word}"). Zkus jiný seed.`,
+      message: t('puzzles:problems.vulgar', { word }),
     })
   }
 
-  // Pořadí v `placements` je podle délky slov; učitelka i klíč čtou seznam
-  // tak, jak ho napsala, proto se vrací v pořadí zadání.
+  // `placements` is ordered by word length; the teacher and the key read the
+  // list as it was written, so it is returned in input order.
   const placements = chosen.placements
   const orderOf = new Map(input.entries.map((entry, index) => [entry.word, index]))
   placements.sort((a, b) => (orderOf.get(a.word) ?? 0) - (orderOf.get(b.word) ?? 0))
@@ -468,8 +487,8 @@ export function buildWordSearch(input: WordSearchInput): WordSearchResult {
 }
 
 /**
- * Najde slovo v hotové mřížce — všech osm směrů. Vrací všechna místa, kde
- * slovo leží. Slouží kontrole (a testům): co se vytiskne, musí jít najít.
+ * Finds a word in a finished grid — all eight directions. Returns every place
+ * the word lies. Used for checks (and tests): what gets printed must be findable.
  */
 export function findWord(grid: string[][], word: string): WordSearchPlacement[] {
   const letters = puzzleLetters(word)
@@ -498,8 +517,8 @@ export function findWord(grid: string[][], word: string): WordSearchPlacement[] 
 }
 
 /**
- * Mřížka, ve které jsou vidět jen písmena hledaných slov — klíč pro
- * učitelku. Ostatní buňky jsou prázdné, takže je řešení na první pohled.
+ * A grid showing only the letters of the hidden words — the teacher's key.
+ * All other cells are empty, so the solution is visible at a glance.
  */
 export function solutionGrid(result: WordSearchResult): (string | null)[][] {
   const marked: (string | null)[][] = Array.from({ length: result.rows }, () =>
@@ -515,7 +534,12 @@ export function solutionGrid(result: WordSearchResult): (string | null)[][] {
   return marked
 }
 
-/** Popis, kde slovo leží — jedna řádka klíče („STONEK: řádek 3, sloupec 5, vpravo dolů"). */
+/** Where a word lies — one line of the key ("STONEK: řádek 3, sloupec 5, vpravo dolů"). */
 export function describePlacement(placement: WordSearchPlacement): string {
-  return `${placement.word}: řádek ${placement.row + 1}, sloupec ${placement.col + 1}, ${placement.direction.label}`
+  return t('puzzles:placement', {
+    word: placement.word,
+    row: placement.row + 1,
+    col: placement.col + 1,
+    direction: t(`puzzles:directions.${placement.direction.name}`),
+  })
 }

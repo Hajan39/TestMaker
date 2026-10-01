@@ -2,17 +2,17 @@ import { z } from 'zod'
 import { QUESTION_TYPES } from './question'
 
 /**
- * Šablona je data, ne komponenta. PDF renderer je jeden generický a řídí se tímto JSON.
- * Editor šablon (pozdější fáze) tedy edituje jen tuto strukturu.
+ * A template is data, not a component. There is one generic PDF renderer driven by this JSON.
+ * The template editor (a later phase) therefore edits only this structure.
  */
 
 export const headerFieldSchema = z.object({
-  /** Klíč pole, např. `name`, `class`, `date`, `school`, `subject`. */
+  /** Field key, e.g. `name`, `class`, `date`, `school`, `subject`. */
   key: z.string().min(1),
   label: z.string().min(1),
-  /** Šířka v procentech řádku hlavičky. */
+  /** Width as a percentage of the header row. */
   widthPercent: z.number().int().min(10).max(100).default(50),
-  /** Předvyplněná hodnota (škola, předmět). Prázdné = linka pro žáka. */
+  /** Prefilled value (school, subject). Empty = a line for the pupil. */
   value: z.string().default(''),
 })
 
@@ -37,31 +37,31 @@ export const headerStyleSchema = z.object({
     })
     .prefault({}),
   fields: z.array(headerFieldSchema).default([]),
-  /** Políčko na body a známku — vykreslí se jen u testu na známky. */
+  /** Box for points and grade — rendered only for graded tests. */
   scoreBox: z.boolean().default(true),
-  /** Vodorovná linka pod hlavičkou. */
+  /** Horizontal rule below the header. */
   rule: z.boolean().default(true),
 })
 
 export const questionStyleSchema = z.object({
-  /** Mezera nad otázkou v bodech. */
+  /** Space above the question in points. */
   spacingBefore: z.number().min(0).max(40).default(10),
-  /** Možnosti u výběrových otázek ve dvou sloupcích. */
+  /** Options of choice questions in two columns. */
   optionColumns: z.union([z.literal(1), z.literal(2)]).default(1),
-  /** Výška jedné linky na odpověď v bodech (typ `open`). */
+  /** Height of one answer line in points (type `open`). */
   answerLineHeight: z.number().min(10).max(40).default(20),
-  /** Rámeček kolem celé otázky. */
+  /** Box around the whole question. */
   boxed: z.boolean().default(false),
 })
 
 export const templateConfigSchema = z.object({
   page: pageStyleSchema.prefault({}),
   header: headerStyleSchema.prefault({}),
-  /** Styl číslování otázek. */
+  /** Question numbering style. */
   numbering: z.enum(['decimal', 'decimal-dot', 'paren', 'none']).default('decimal-dot'),
-  /** Zobrazovat u otázky počet bodů (jen test na známky). */
+  /** Show points next to the question (graded tests only). */
   showPoints: z.boolean().default(true),
-  /** Zápatí s číslem strany a variantou. */
+  /** Footer with page number and variant. */
   footer: z.boolean().default(true),
   sectionStyle: z.object({
     fontSize: z.number().min(8).max(20).default(12),
@@ -70,8 +70,9 @@ export const templateConfigSchema = z.object({
     spacingBefore: z.number().min(0).max(60).default(16),
   }).prefault({}),
   /**
-   * Rámeček fun factu v pracovním listu. Výchozí hodnoty drží stávající
-   * šablony v chodu beze změny — nastavení přibylo až s listy.
+   * Fun fact box in a worksheet. The defaults keep existing templates working
+   * unchanged — the setting was added together with worksheets. The label
+   * default is stored template data.
    */
   funFact: z
     .object({
@@ -80,7 +81,7 @@ export const templateConfigSchema = z.object({
       shaded: z.boolean().default(true),
     })
     .prefault({}),
-  /** Výchozí styl otázky + přepisy pro konkrétní typy. */
+  /** Default question style + overrides for specific types. */
   questionDefaults: questionStyleSchema.prefault({}),
   questionStyles: z.partialRecord(z.enum(QUESTION_TYPES), questionStyleSchema.partial()).default({}),
 })
@@ -97,7 +98,7 @@ export interface Template {
   builtIn: boolean
 }
 
-/** Vrátí efektivní styl pro daný typ otázky (výchozí + přepis). */
+/** Returns the effective style for the given question type (default + override). */
 export function resolveQuestionStyle(
   config: TemplateConfig,
   type: (typeof QUESTION_TYPES)[number],

@@ -1,0 +1,40 @@
+{
+  "actions": {
+    "save": "Uložit",
+    "saving": "Ukládám…",
+    "cancel": "Zrušit",
+    "close": "Zavřít",
+    "delete": "Smazat",
+    "deleting": "Mažu…",
+    "edit": "Upravit",
+    "open": "Otevřít",
+    "back": "Zpět",
+    "home": "Domů",
+    "retry": "Zkusit znovu",
+    "copy": "Zkopírovat",
+    "done": "Hotovo",
+    "confirm": "Potvrdit",
+    "undo": "Vrátit",
+    "print": "Vytisknout",
+    "download": "Stáhnout"
+  },
+  "status": {
+    "loading": "Načítám…",
+    "saved": "Uloženo.",
+    "unsavedChanges": "Neuložené změny"
+  },
+  "errors": {
+    "serverTrouble": "Server teď neodpověděl, jak měl. Zkus to za chvíli znovu; když to nepomůže, obnov stránku.",
+    "offline": "Nepodařilo se spojit se serverem. Zkontroluj připojení k internetu a zkus to znovu.",
+    "sessionExpired": "Přihlášení vypršelo. Přihlas se znovu v nové záložce — rozdělaná práce v tomhle okně zůstane — a zkus to znovu.",
+    "pageLoadTitle": "Stránku se nepodařilo načíst",
+    "appLoadTitle": "Aplikaci se nepodařilo načíst",
+    "loadHint": "Zkus to za chvíli znovu. Když to nepomůže, dej vědět správci.",
+    "loadHintWithCode": "Zkus to za chvíli znovu. Když to nepomůže, dej vědět správci a pošli mu kód {{code}}.",
+    "appErrorTitle": "TestMaker – chyba"
+  },
+  "leaveConfirm": "Máš neuložené změny. Opravdu odejít?",
+  "items_one": "{{count}} položka",
+  "items_few": "{{count}} položky",
+  "items_other": "{{count}} položek"
+}

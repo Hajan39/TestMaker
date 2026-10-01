@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
+import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
 
-/** Klíč v `localStorage`; stejný čte i skript v hlavičce dokumentu. */
+/** `localStorage` key; the script in the document head reads the same one. */
 export const THEME_STORAGE_KEY = 'testmaker-theme'
 
 /**
- * Skript, který běží dřív než se stránka vykreslí, aby při tmavém motivu
- * nezablikala světlá. Vkládá se do `<head>` jako `dangerouslySetInnerHTML`;
- * záměrně bez závislostí a bez `import`, protože běží mimo bundle.
+ * Script that runs before the page renders so a dark theme does not flash
+ * light. Injected into `<head>` via `dangerouslySetInnerHTML`; deliberately
+ * dependency-free and without `import`, as it runs outside the bundle.
  */
 export const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}`
 
@@ -24,22 +25,22 @@ function apply(choice: ThemeChoice) {
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
 }
 
-const OPTIONS: { value: ThemeChoice; label: string; Icon: typeof Sun }[] = [
-  { value: 'light', label: 'Světlý motiv', Icon: Sun },
-  { value: 'dark', label: 'Tmavý motiv', Icon: Moon },
-  { value: 'system', label: 'Podle systému', Icon: Monitor },
+const OPTIONS: { value: ThemeChoice; Icon: typeof Sun }[] = [
+  { value: 'light', Icon: Sun },
+  { value: 'dark', Icon: Moon },
+  { value: 'system', Icon: Monitor },
 ]
 
 /**
- * Přepínač světlého a tmavého motivu. Výchozí je nastavení systému, dokud si
- * učitelka nevybere jinak; volba se pamatuje v prohlížeči, na serveru se nic
- * neukládá.
+ * Light/dark theme toggle. Defaults to the system setting until the teacher
+ * picks otherwise; the choice is remembered in the browser, nothing is stored
+ * on the server.
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const [choice, setChoice] = useState<ThemeChoice>('system')
-  // Než se komponenta na klientovi probudí, neví, co je v `localStorage` —
-  // do té doby se nesmí zvýraznit žádná volba, jinak se server a klient
-  // rozejdou a React to ohlásí jako chybu hydratace.
+  // Until the component hydrates it does not know what is in `localStorage` —
+  // no option may be highlighted before then, otherwise server and client
+  // diverge and React reports a hydration error.
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     setReady(true)
   }, [])
 
-  // Při volbě „podle systému" reaguje aplikace i na pozdější přepnutí v systému.
+  // With "system" selected the app also follows later system switches.
   useEffect(() => {
     if (choice !== 'system') return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -63,7 +64,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       if (next === 'system') localStorage.removeItem(THEME_STORAGE_KEY)
       else localStorage.setItem(THEME_STORAGE_KEY, next)
     } catch {
-      // Soukromé okno bez úložiště — motiv pak platí jen do zavření stránky.
+      // Private window without storage — the theme then lasts until the page closes.
     }
     apply(next)
   }
@@ -72,9 +73,11 @@ export function ThemeToggle({ className }: { className?: string }) {
     <div
       className={cn('flex items-center gap-0.5 rounded-[var(--radius-outer)] border border-line p-0.5', className)}
       role="group"
-      aria-label="Motiv"
+      aria-label={t('ui:themeToggle.group')}
     >
-      {OPTIONS.map(({ value, label, Icon }) => (
+      {OPTIONS.map(({ value, Icon }) => {
+        const label = t(`ui:themeToggle.${value}`)
+        return (
         <button
           key={value}
           type="button"
@@ -89,7 +92,8 @@ export function ThemeToggle({ className }: { className?: string }) {
         >
           <Icon className="size-3.5" />
         </button>
-      ))}
+        )
+      })}
     </div>
   )
 }

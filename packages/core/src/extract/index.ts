@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { ExtractedMaterial } from '../schema/material'
 import { extractDocx } from './docx'
 import { extractHtml } from './html'
@@ -24,7 +25,7 @@ const MIME_BY_EXT: Record<string, string> = {
   md: 'text/markdown',
 }
 
-/** Extrahuje text podle přípony souboru. */
+/** Extracts text according to the file extension. */
 export async function extractFile(file: File): Promise<ExtractionResult> {
   const ext = fileExtension(file.name)
   switch (ext) {
@@ -42,20 +43,20 @@ export async function extractFile(file: File): Promise<ExtractionResult> {
     case 'txt':
     case 'md': {
       const text = normalizeText(await file.text())
-      // `needsOcr` značí sken bez textové vrstvy — TXT/MD je vždy textový
-      // formát, krátký text tu znamená prázdný soubor, ne naskenovaný obrázek.
+      // `needsOcr` marks a scan without a text layer — TXT/MD is always a text
+      // format, a short text here means an empty file, not a scanned image.
       return { text, pageCount: null, needsOcr: false }
     }
     case 'doc':
     case 'ppt':
     case 'xls':
-      throw new UnsupportedFileError(file.name, 'Převeď soubor v LibreOffice nebo Wordu na .docx / .odp.')
+      throw new UnsupportedFileError(file.name, t('core:extract.hints.legacyFormat'))
     default:
-      throw new UnsupportedFileError(file.name, 'Nepodporovaná přípona.')
+      throw new UnsupportedFileError(file.name, t('core:extract.hints.unknownExtension'))
   }
 }
 
-/** SHA-256 textu jako hex — brání opakovanému importu téhož obsahu. */
+/** SHA-256 of the text as hex — prevents importing the same content twice. */
 export async function hashText(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
@@ -71,7 +72,7 @@ export interface ProcessedFile {
   reason?: string
 }
 
-/** Zpracuje jeden soubor z výběru složky na materiál připravený k odeslání. */
+/** Processes one file from the folder selection into a material ready to be sent. */
 export async function processFile(file: File, relativePathOverride?: string): Promise<ProcessedFile> {
   const relativePath =
     relativePathOverride ??
@@ -84,6 +85,7 @@ export async function processFile(file: File, relativePathOverride?: string): Pr
     const parsed = parsePath(relativePath)
     const result = await extractFile(file)
     if (result.text.length < 40 && !result.needsOcr) {
+      // The reason is a code the web maps to a message (`skipLabel`), like `SkipReason`.
       return { status: 'skipped', relativePath, reason: 'prázdný text' }
     }
     return {

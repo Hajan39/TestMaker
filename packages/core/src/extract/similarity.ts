@@ -1,9 +1,9 @@
 /**
- * Rozpoznání téhož obsahu ve dvou materiálech. Typický případ: prezentace `.odp`
- * a její PDF export leží ve stejné složce a nesou stejný text.
+ * Detecting the same content in two materials. Typical case: an `.odp`
+ * presentation and its PDF export lie in the same folder and carry the same text.
  */
 
-/** Slova bez diakritiky, interpunkce a velikosti písmen. */
+/** Words without diacritics, punctuation and case. */
 function tokenize(text: string): string[] {
   return text
     .normalize('NFD')
@@ -14,7 +14,7 @@ function tokenize(text: string): string[] {
     .filter((token) => token.length > 1)
 }
 
-/** Množina n-gramů (výchozí 4 slova) — odolná vůči přeházeným odstavcům. */
+/** Set of n-grams (4 words by default) — robust against reordered paragraphs. */
 export function shingles(text: string, size = 4): Set<string> {
   const tokens = tokenize(text)
   const result = new Set<string>()
@@ -25,9 +25,9 @@ export function shingles(text: string, size = 4): Set<string> {
 }
 
 /**
- * Podíl společných n-gramů vůči menšímu z dokumentů.
- * Na rozdíl od Jaccardu odhalí i případ, kdy jedna verze obsahuje navíc
- * poznámky přednášejícího, a přesto jde o tentýž materiál.
+ * Share of common n-grams relative to the smaller of the documents.
+ * Unlike Jaccard it also detects the case where one version additionally
+ * contains speaker notes and yet it is the same material.
  */
 export function containmentSimilarity(a: string, b: string, size = 4): number {
   const left = shingles(a, size)
@@ -40,13 +40,13 @@ export function containmentSimilarity(a: string, b: string, size = 4): number {
   return shared / small.size
 }
 
-/** Od této podobnosti považujeme materiály za tentýž obsah. */
+/** From this similarity on, materials are considered the same content. */
 export const DUPLICATE_THRESHOLD = 0.6
 
 /**
- * Který ze dvou materiálů se stejným obsahem si ponechat.
- * Prezentace nese poznámky přednášejícího, které v PDF exportu chybí,
- * jinak rozhoduje delší text.
+ * Which of two materials with the same content to keep.
+ * A presentation carries speaker notes missing from the PDF export;
+ * otherwise the longer text wins.
  */
 const FORMAT_RANK: Record<string, number> = {
   odp: 5,

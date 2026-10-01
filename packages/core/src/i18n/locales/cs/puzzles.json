@@ -1,0 +1,226 @@
+{
+  "page": {
+    "title": "Hlavolamy – TestMaker",
+    "loading": "Načítám hlavolamy…"
+  },
+  "kinds": {
+    "wordsearch": "Osmisměrka",
+    "cryptogram": "Tajenka"
+  },
+  "words_one": "{{count}} slovo",
+  "words_few": "{{count}} slova",
+  "words_other": "{{count}} slov",
+  "workshop": {
+    "title": "Hlavolamy",
+    "intro": "Osmisměrka a tajenka z materiálů tématu. Slova dodá model, mřížku skládá aplikace — vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.",
+    "readOnly": "Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitelka.",
+    "inLibrary_one": "{{count}} hlavolam v knihovně",
+    "inLibrary_few": "{{count}} hlavolamy v knihovně",
+    "inLibrary_other": "{{count}} hlavolamů v knihovně",
+    "opening": "Otevírám hlavolam…",
+    "openingShort": "Otevírám…",
+    "untitled": "Bez názvu",
+    "unsaved": "Máš neuložené změny.",
+    "newPuzzle": "Nový hlavolam",
+    "keepIt": "Nechat být",
+    "missingHeading": "Než půjde hlavolam uložit:",
+    "rows": {
+      "empty": "Prázdný řádek se nepoužije — napiš slovo, nebo řádek odeber.",
+      "wordMissing": "Doplň slovo k téhle nápovědě.",
+      "wordTooShort": "Slovo musí mít aspoň 2 znaky.",
+      "wordTooLong": "Slovo má {{length}} znaků, do hlavolamu se vejde nejvýš {{max}}. Zkrať ho.",
+      "clueTooLong": "Nápověda má {{length}} znaků, nejvýš jich smí být {{max}}. Zkrať ji.",
+      "clueRequired": "Doplň nápovědu — bez ní žák neví, co má do řádku napsat.",
+      "clueTooShort": "Nápověda musí mít aspoň 2 znaky, nebo ji nech prázdnou.",
+      "clueMissing": "Doplň nápovědu (aspoň 2 znaky)."
+    },
+    "missing": {
+      "brokenRows_one": "Oprav řádek označený v seznamu slov.",
+      "brokenRows_few": "Oprav {{count}} řádky označené v seznamu slov.",
+      "brokenRows_other": "Oprav {{count}} řádky označené v seznamu slov.",
+      "tooFewWords": "Hlavolam potřebuje aspoň dvě slova.",
+      "tooManyWords": "Hlavolam může mít nejvýš {{max}} slov — {{remove}} odeber.",
+      "cols": "Sloupce: zadej číslo od {{min}} do {{max}}.",
+      "rows": "Řádky: zadej číslo od {{min}} do {{max}}.",
+      "phraseMissing": "Napiš tajenou větu, která se má z políček složit.",
+      "phraseTooLong": "Tajená věta může mít nejvýš {{max}} znaků — zkrať ji.",
+      "instructionsTooLong": "Pokyn pro žáky může mít nejvýš {{max}} znaků — zkrať ho.",
+      "titleTooLong": "Název může mít nejvýš {{max}} znaků — zkrať ho.",
+      "unbuildable": "Hlavolam se nedá složit. Zkontroluj slova a nastavení mřížky.",
+      "title": "Doplň název hlavolamu — podle něj ho najdeš v knihovně."
+    },
+    "blocked": {
+      "unfinished": "Tisknout a zařadit do písemky půjde, až bude hlavolam hotový (viz výše, co chybí).",
+      "problems": "Tisknout a zařadit do písemky půjde, až opravíš potíže vypsané výš — jinak by žák hledal, co na papíře není."
+    },
+    "discard": {
+      "title": "Zahodit neuložené změny?",
+      "description": "Rozpracovaný hlavolam má změny, které nejsou uložené. {{action}} je zahodí.",
+      "confirm": "Zahodit změny",
+      "busy": "Chvilku…",
+      "actionNew": "Nový hlavolam",
+      "actionOpen": "Otevření jiného hlavolamu"
+    },
+    "fetch": {
+      "noTopic": "Vyber nejdřív téma, ze kterého se mají slova vzít.",
+      "listFull": "Seznam je plný — hlavolam může mít nejvýš {{max}} slov.",
+      "failed": "Slova se nepodařilo vytáhnout.",
+      "rejected": "Nehodilo se: {{list}}.",
+      "dropped_one": "{{count}} slovo se do hlavolamu nehodilo a vynechalo se.",
+      "dropped_few": "{{count}} slova se do hlavolamu nehodilo a vynechalo se.",
+      "dropped_other": "{{count}} slov se do hlavolamu nehodilo a vynechalo se.",
+      "none": "Model nedodal žádné nové slovo.",
+      "noneHint": "Zkus to znovu, vyber jiné téma, nebo slova napiš ručně. {{note}}",
+      "fewAdded": "Přibylo jen {{added}} z {{requested}} požadovaných.",
+      "fewAddedHint": "Materiály tématu jich víc asi nenabízejí. Zkus to znovu, nebo zbytek doplň ručně. {{note}}",
+      "added": "Přibylo {{added}}."
+    },
+    "save": {
+      "unfinished": "Hlavolam ještě není hotový.",
+      "failed": "Hlavolam se nepodařilo uložit.",
+      "savedUnprintable": "Hlavolam je uložený, ale zatím se nedá vytisknout ani zařadit do písemky.",
+      "saved": "Hlavolam „{{title}}\" je uložený.",
+      "button": "Uložit hlavolam",
+      "buttonChanges": "Uložit změny"
+    },
+    "print": {
+      "savedAndPrinting": "Změny jsou uložené, posílám hlavolam do tisku.",
+      "failed": "Hlavolam se nepodařilo vytisknout.",
+      "preparing": "Připravuji tisk…",
+      "withKey": "Vytisknout s řešením"
+    },
+    "tests": {
+      "loadFailed": "Seznam písemek se nepodařilo načíst.",
+      "addFailed": "Hlavolam se nepodařilo do písemky zařadit.",
+      "added": "Hlavolam je na konci písemky „{{title}}\".",
+      "button": "Zařadit do písemky",
+      "dialogTitle": "Do které písemky?",
+      "dialogDescription": "Hlavolam přibude na konec vybrané písemky.",
+      "dialogUnsaved": "Neuložené změny se před zařazením uloží.",
+      "searchPlaceholder": "Hledat písemku podle názvu",
+      "searchLabel": "Hledat písemku",
+      "adding": "Zařazuji…",
+      "noMatch": "Žádná z tvých písemek se tak nejmenuje.",
+      "none": "Zatím nemáš žádnou vlastní písemku — nejdřív si ji v Testech založ. Do písemek od kolegyň se zařazovat nedá; udělej si z nich kopii."
+    },
+    "open": {
+      "failed": "Hlavolam se nepodařilo načíst."
+    },
+    "remove": {
+      "failed": "Hlavolam se nepodařilo smazat.",
+      "done": "Hlavolam „{{title}}\" je smazaný.",
+      "confirmTitle": "Smazat hlavolam „{{title}}\"?",
+      "confirmDescription": "Hlavolam zmizí z knihovny a vrátit to nepůjde. Písemky, do kterých už je zařazený, si ho ponechají.",
+      "confirm": "Smazat hlavolam"
+    },
+    "form": {
+      "kind": "Druh hlavolamu",
+      "title": "Název",
+      "titlePlaceholder": "Části rostliny",
+      "titleHint": "Povinný — tiskne se nad hlavolamem a podle něj ho najdeš v knihovně.",
+      "topic": "Téma",
+      "noTopic": "Bez tématu",
+      "wordCount": "Kolik slov",
+      "listFull": "Seznam je plný",
+      "range": "{{min}} až {{max}}",
+      "searching": "Hledám slova…",
+      "fetchWords": "Vytáhnout slova z materiálů",
+      "aiOff": "Vytahování slov z materiálů není v této škole zapnuté. Slova napiš ručně; zapnout ho může správce aplikace.",
+      "instructions": "Pokyn pro žáky",
+      "instructionsPlaceholder": "Prázdné = použije se běžné zadání podle druhu hlavolamu.",
+      "cols": "Sloupce",
+      "rows": "Řádky",
+      "reshuffle": "Zamíchat znovu",
+      "showClues": "Vypsat i nápovědy",
+      "phrase": "Tajená věta",
+      "phrasePlaceholder": "rostliny dýchají"
+    },
+    "entries": {
+      "heading": "Slova ({{words}})",
+      "add": "Přidat slovo",
+      "hintWordsearch": "Slovo 2 až {{max}} znaků. Nápověda se tiskne jen na přání.",
+      "hintWordsearchOptional": "Slovo 2 až {{max}} znaků. Nápověda se tiskne jen na přání a smí zůstat prázdná.",
+      "hintCryptogram": "Slovo 2 až {{max}} znaků, nápověda je povinná.",
+      "limit": "Nejvýš {{max}} slov.",
+      "empty": "Zatím tu nic není. Přidej slova ručně, nebo je nech vytáhnout z materiálů tématu.",
+      "word": "Slovo {{number}}",
+      "clue": "Nápověda {{number}}",
+      "actions": "Akce pro slovo {{word}}",
+      "remove": "Odebrat slovo"
+    },
+    "preview": {
+      "heading": "Náhled",
+      "showSolution": "Ukázat řešení",
+      "emptyTitle": "Zatím není co ukázat",
+      "noTemplate": "Náhled potřebuje šablonu písemky. Škola zatím žádnou nemá — požádej správce, ať ji přidá.",
+      "needWords": "Náhled se objeví, jakmile budou v seznamu aspoň dvě slova."
+    },
+    "saved": {
+      "heading": "Uložené hlavolamy",
+      "empty": "Ještě žádný hlavolam neexistuje.",
+      "noTopic": "bez tématu",
+      "actions": "Akce pro hlavolam {{title}}"
+    }
+  },
+  "errors": {
+    "topicNotFound": "Vybrané téma se nenašlo — možná ho mezitím někdo smazal. Vyber jiné téma, nebo hlavolam ulož bez tématu.",
+    "notFound": "Hlavolam se nenašel — možná už je smazaný. Obnov stránku.",
+    "notFoundPlain": "Hlavolam nenalezen",
+    "saveFailed": "Hlavolam se nepodařilo uložit",
+    "notEnoughText": "Materiály tématu obsahují příliš málo textu na vytažení slov. Nahraj k tématu další materiál s textem, nebo slova napiš ručně.",
+    "missingParams": "Chybí téma nebo druh hlavolamu.",
+    "invalidData": "Neplatná data",
+    "aiOffManual": "{{message}} Slova můžeš zatím napsat ručně.",
+    "noUsableWord": "Model nevrátil žádné použitelné slovo. Zkus to znovu.",
+    "unprintable": "Hlavolam se zatím nedá vytisknout: {{problem}} Oprav ho v Hlavolamech a ulož.",
+    "unaddable": "Hlavolam se do písemky zařadit nedá: {{problem}} Oprav ho v Hlavolamech, ulož a zkus to znovu.",
+    "chooseTest": "Vyber písemku, do které se má hlavolam zařadit.",
+    "testNotFound": "Písemka se nenašla. Vyber jinou ze svých písemek.",
+    "issues": {
+      "generic": "Hlavolam se nedá uložit. Zkontroluj slova a nastavení a zkus to znovu.",
+      "entries": "Hlavolam potřebuje aspoň 2 a nejvýš 40 slov. Uprav seznam slov a ulož znovu.",
+      "word": "Slovo na {{row}}. řádku musí mít 2 až 24 znaků. Oprav ho a ulož znovu.",
+      "clue": "Nápověda na {{row}}. řádku musí mít 2 až 200 znaků. Oprav ji a ulož znovu.",
+      "title": "Doplň název hlavolamu (nejvýš 200 znaků).",
+      "instructions": "Pokyn pro žáky je delší než 500 znaků — zkrať ho.",
+      "grid": "Mřížka musí mít 6 až 20 sloupců i řádků.",
+      "phrase": "Tajená věta musí mít 2 až 120 znaků.",
+      "topicId": "Téma hlavolamu je neplatné. Vyber téma znovu."
+    }
+  },
+  "pdf": {
+    "fileFallback": "hlavolam",
+    "keySuffix": " + řešení"
+  },
+  "directions": {
+    "right": "vpravo",
+    "left": "vlevo",
+    "down": "dolů",
+    "up": "nahoru",
+    "downRight": "vpravo dolů",
+    "downLeft": "vlevo dolů",
+    "upRight": "vpravo nahoru",
+    "upLeft": "vlevo nahoru"
+  },
+  "placement": "{{word}}: řádek {{row}}, sloupec {{col}}, {{direction}}",
+  "problems": {
+    "phraseUnusable": "Tajenka „{{phrase}}\" obsahuje znaky, které se do políček zapsat nedají ({{chars}}), a v tajence by chyběly. Napiš čísla slovy, nebo je z věty vynech.",
+    "cellUnusable": "Slovo „{{word}}\" obsahuje znaky, které se do políček zapsat nedají ({{chars}}). Nech v něm jen písmena.",
+    "cryptogramWordTooShort": "Slovo „{{word}}\" je na tajenku příliš krátké — potřebuje aspoň dvě písmena.",
+    "noClue": "Slovo „{{word}}\" nemá nápovědu; bez ní žák neví, co má do řádku napsat.",
+    "cryptogramDuplicate": "Slovo „{{word}}\" je v seznamu podruhé; do tajenky se použije jen jednou. Nahraď ho jiným slovem.",
+    "clueReveals": "Nápověda ke slovu „{{word}}\" obsahuje samo slovo — žák ho jen opíše. Přepiš nápovědu tak, aby slovo neprozradila.",
+    "noLetters": "Tajenka nemá žádné písmeno — napiš větu, která se má z políček složit.",
+    "notEnoughWords": "Tajenka „{{phrase}}\" má {{letters}} písmen, ale použitelných slov je jen {{words}}. Přidej slova, nebo zvol kratší větu.",
+    "letterUnmatched": "Na písmeno „{{letter}}\" ({{position}}. v tajence) nezbylo žádné slovo. Přidej slovo, které tohle písmeno obsahuje.",
+    "gridUnusable": "Slovo „{{word}}\" obsahuje znaky, které se do mřížky zapsat nedají ({{chars}}). Nech v něm jen písmena.",
+    "wordsearchWordTooShort": "Slovo „{{word}}\" je na osmisměrku příliš krátké — potřebuje aspoň dvě písmena.",
+    "wordTooLong": "Slovo „{{word}}\" má {{letters}} písmen a do mřížky {{cols}} × {{rows}} se nevejde. Zvětši mřížku, nebo slovo vynech.",
+    "wordsearchDuplicate": "Slovo „{{word}}\" je v seznamu podruhé; v mřížce bude jen jednou.",
+    "reversed": "Slovo „{{word}}\" je pozpátku slovo „{{other}}\" — žák ho v mřížce najde dvakrát. Jedno z nich vynech.",
+    "hidden": "Slovo „{{word}}\" je schované ve slově „{{other}}\" — žák ho v mřížce najde víckrát. Nahraď ho jiným slovem, nebo ho vynech.",
+    "noRoom": "Slovo „{{word}}\" se do mřížky nevešlo. Zvětši mřížku, uber slova, nebo zkus jiný seed.",
+    "repeated": "Slovo „{{word}}\" se v mřížce složilo víckrát z písmen jiných slov. Zkus jiný seed, nebo slovo nahraď.",
+    "vulgar": "Z písmen slov se v mřížce složilo nevhodné slovo („{{word}}\"). Zkus jiný seed."
+  }
+}

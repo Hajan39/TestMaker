@@ -9,8 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
-    // Sestavení pro testy v prohlížeči (vlastní distDir, viz next.config.ts);
-    // hvězdička pokrývá i jednorázové složky z ověřovacích běhů.
+    // Builds for browser tests (custom distDir, see next.config.ts);
+    // the wildcard also covers one-off folders from verification runs.
     ".next-*/**",
     "out/**",
     "build/**",

@@ -1,0 +1,61 @@
+{
+  "questionTypes": {
+    "open": "Volná odpověď",
+    "draw": "Nakresli a popiš",
+    "short_answer": "Krátká odpověď",
+    "single_choice": "Výběr jedné možnosti",
+    "multi_choice": "Výběr více možností",
+    "true_false": "Pravda / nepravda",
+    "fill_blank": "Doplňování do textu",
+    "matching": "Přiřazování dvojic",
+    "ordering": "Řazení",
+    "table_fill": "Doplňovací tabulka",
+    "label_image": "Popis obrázku"
+  },
+  "regenerateReasons": {
+    "nesmysl": "Nedává smysl",
+    "moznosti": "Špatné možnosti",
+    "mimo": "Odpověď v materiálu není",
+    "tezka": "Moc těžká",
+    "lehka": "Moc lehká",
+    "cestina": "Špatná čeština",
+    "odkaz": "Odkazuje na materiál"
+  },
+  "validation": {
+    "correctIndexOutOfRange": "correctIndex mimo rozsah možností",
+    "correctIndicesOutOfRange": "correctIndices mimo rozsah",
+    "correctIndicesDuplicate": "correctIndices obsahuje duplicity",
+    "optionsRepeat": "možnosti se opakují",
+    "blanksMismatch": "počet ___ ({{placeholders}}) neodpovídá počtu blanks ({{blanks}})",
+    "pairsOutOfRange": "pairs odkazují mimo rozsah",
+    "leftRepeats": "levý sloupec se v pairs opakuje",
+    "rightRepeats": "pravý sloupec se v pairs opakuje",
+    "leftUnpaired": "každá položka vlevo musí mít dvojici",
+    "itemsDuplicate": "items obsahují duplicity",
+    "correctOrderInvalid": "correctOrder není platná permutace indexů items",
+    "rowsColumnMismatch": "řádky nemají stejný počet sloupců jako hlavička",
+    "blankCellsMismatch": "počet prázdných buněk ({{blanks}}) neodpovídá počtu answers ({{answers}})",
+    "inlineOptions": "zadání obsahuje vypsané možnosti (a), b), c)…) — patří do typu s výběrem, ne sem"
+  },
+  "puzzleKinds": {
+    "wordsearch": "Osmisměrka",
+    "cryptogram": "Tajenka"
+  },
+  "puzzleInstructions": {
+    "wordsearch": "Najdi v mřížce všechna slova ze seznamu. Slova jsou schovaná ve všech osmi směrech, i pozpátku.",
+    "cryptogram": "Doplň slova podle nápověd. Z písmen ve vyznačených políčkách složíš tajenku."
+  },
+  "extract": {
+    "unsupported": "Nepodporovaný soubor: {{fileName}}. {{hint}}",
+    "hints": {
+      "legacyFormat": "Převeď soubor v LibreOffice nebo Wordu na .docx / .odp.",
+      "unknownExtension": "Nepodporovaná přípona."
+    },
+    "missingPart": "Soubor neobsahuje {{part}}",
+    "unreadablePart": "{{part}} se nepodařilo načíst"
+  },
+  "worksheetTable": {
+    "rowLength": "Každý řádek tabulky musí mít tolik buněk, kolik je sloupců.",
+    "needsBlank": "Tabulka potřebuje aspoň jednu prázdnou buňku k doplnění."
+  }
+}

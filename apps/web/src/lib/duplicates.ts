@@ -7,7 +7,7 @@ import {
   preferredMaterial,
 } from '@testmaker/core/extract'
 import { db, materials, MIN_USABLE_TOPIC_CHARS, topics } from '@/db'
-import { skola, type Scope } from './uzivatel'
+import { inSchool, type Scope } from './user'
 
 interface Candidate {
   id: string
@@ -18,9 +18,9 @@ interface Candidate {
 }
 
 /**
- * Porovná nový materiál s ostatními v témže tématu. Když jde o tentýž obsah
- * v jiném formátu, označí horší z dvojice jako duplicitu — generování pak
- * neběží dvakrát nad stejným textem.
+ * Compares a new material with the others in the same topic. When it is the
+ * same content in another format, marks the worse of the pair as a duplicate —
+ * so generation doesn't run twice over the same text.
  */
 export async function linkDuplicates(
   scope: Scope,
@@ -32,20 +32,20 @@ export async function linkDuplicates(
   const [fresh] = await db
     .select()
     .from(materials)
-    .where(and(skola(scope, materials), eq(materials.id, materialId)))
+    .where(and(inSchool(scope, materials), eq(materials.id, materialId)))
     .limit(1)
   if (!fresh) return { duplicateOfId: null, score: null }
 
-  // Ručně vyřazený materiál nesmí vyhrát jako „ponechaný originál" — jinak by
-  // nahrání lepší verze (třeba PDF místo vyřazené prezentace) skončilo tak, že
-  // nová verze se označí jako duplicita té vyřazené a z tématu je nakonec
-  // nepoužitelné obojí.
+  // A manually excluded material must not win as the "kept original" —
+  // otherwise uploading a better version (say a PDF instead of an excluded
+  // presentation) would mark the new one as a duplicate of the excluded one,
+  // leaving both unusable in the topic.
   const siblings = await db
     .select()
     .from(materials)
     .where(
       and(
-        skola(scope, materials),
+        inSchool(scope, materials),
         eq(materials.topicId, fresh.topicId),
         ne(materials.id, materialId),
         isNull(materials.duplicateOfId),
@@ -73,7 +73,7 @@ export async function linkDuplicates(
     .set({ duplicateOfId: keep.id, duplicateScore: best.score })
     .where(eq(materials.id, drop.id))
 
-  // Materiály, které dosud ukazovaly na nově odsunutý záznam, přepneme na vítěze.
+  // Materials that pointed at the newly demoted record are switched to the winner.
   await db
     .update(materials)
     .set({ duplicateOfId: keep.id })
@@ -83,10 +83,10 @@ export async function linkDuplicates(
 }
 
 /**
- * Přepočítá použitelný objem textu tématu (bez duplicit a bez vynechaných
- * materiálů) a označí témata, na která na písemku nevystačí. Volá se po každé
- * změně materiálů tématu — importu, smazání, vynechání i po označení
- * duplicity, protože se nic z toho do součtu nepočítá.
+ * Recomputes the topic's usable text volume (without duplicates and excluded
+ * materials) and flags topics with too little for a test. Called after every
+ * change to the topic's materials — import, delete, exclude and duplicate
+ * marking, since none of those count toward the sum.
  */
 export async function recomputeTopicContent(scope: Scope, topicId: string): Promise<void> {
   const [row] = await db
@@ -94,7 +94,7 @@ export async function recomputeTopicContent(scope: Scope, topicId: string): Prom
     .from(materials)
     .where(
       and(
-        skola(scope, materials),
+        inSchool(scope, materials),
         eq(materials.topicId, topicId),
         isNull(materials.duplicateOfId),
         eq(materials.excluded, false),
@@ -105,7 +105,7 @@ export async function recomputeTopicContent(scope: Scope, topicId: string): Prom
   await db
     .update(topics)
     .set({ usableCharCount, lowContent: usableCharCount < MIN_USABLE_TOPIC_CHARS })
-    .where(and(skola(scope, topics), eq(topics.id, topicId)))
+    .where(and(inSchool(scope, topics), eq(topics.id, topicId)))
 }
 
 function toCandidate(row: typeof materials.$inferSelect): Candidate {

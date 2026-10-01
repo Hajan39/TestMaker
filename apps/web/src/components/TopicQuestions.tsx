@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
-import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
+import { QUESTION_TYPES, questionTypeLabel } from '@testmaker/core/schema'
 import {
   Button,
   Card,
@@ -20,16 +20,17 @@ import {
 import { QuestionEditorForm } from '@/components/QuestionEditor'
 import { QuestionCard } from '@/components/QuestionCard'
 import { SelectionBar } from '@/components/SelectionBar'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
 import { emptyHeader } from '@/components/test-builder/defaults'
 import { newId } from '@/lib/ids'
 import { errorMessage } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 interface Filters {
   type: QuestionType | ''
   difficulty: 1 | 2 | 3 | ''
-  /** „Jen nepoužité v testu" — schová otázky, které se aspoň v jednom viditelném testu už objevily. */
+  /** „Jen nepoužité v testu" — hides questions that already appear in at least one visible test. */
   onlyUnused: boolean
 }
 
@@ -38,7 +39,7 @@ export interface TestUsage {
   title: string
 }
 
-/** Jedna verze kořenové otázky, jak ji vrací `loadVariantLinks`. */
+/** One version of a root question, as returned by `loadVariantLinks`. */
 export interface VariantLink {
   id: string
   difficulty: 1 | 2 | 3
@@ -47,78 +48,78 @@ export interface VariantLink {
 
 export interface TopicQuestionsHandle {
   /**
-   * Otevře formulář „Nová otázka" zvenčí — z prázdného stavu tématu
-   * (`EmptyState` v `TopicWorkspace`), kde tahle karta zprvu není vidět.
+   * Opens the „Nová otázka" form from outside — from the topic's empty state
+   * (`EmptyState` in `TopicWorkspace`), where this card is not visible at first.
    */
   openCreate: () => void
 }
 
 /**
- * Otázky tématu jako karty: úprava přímo na místě, přegenerování, smazání
- * s vrácením a přidání vlastní — bez fronty ke schválení, ta v tématu končí.
+ * The topic's questions as cards: in-place editing, regeneration, deletion
+ * with undo and adding one's own — no approval queue; it ends in the topic.
  *
- * Karta rozpracované úpravy se drží podle `id` otázky, ne podle pozice v poli
- * `questions` — to se mění s každým `router.refresh()` (dogenerování,
- * smazání jiné karty), ale rozepsaná úprava zůstává otevřená dál.
+ * The card being edited is tracked by the question's `id`, not by its
+ * position in `questions` — that changes with every `router.refresh()`
+ * (top-up generation, deleting another card), but an edit in progress stays open.
  */
 export const TopicQuestions = forwardRef<
   TopicQuestionsHandle,
   {
-    /** Metadata tématu potřebná k založení testu rovnou z výběru otázek. */
+    /** Topic metadata needed to create a test straight from the question selection. */
     topic: { id: string; name: string; subjectName: string; gradeId: string; gradeName: string }
-    /** Výchozí šablona nové písemky (stejná volba jako u testu z prázdna). */
+    /** Default template for a new test (the same choice as for a test from scratch). */
     defaultTemplateId: string
     questions: Question[]
-    /** Testy, ve kterých otázka už je — jen ty viditelné volající. Chybějící klíč = nikde. */
+    /** Tests that already contain the question — only those visible to the caller. Missing key = none. */
     usage: Record<string, TestUsage[]>
     /**
-     * Počet smazaných (zamítnutých) otázek tématu, načtený se stránkou.
-     * Seznam smazaných karet se dotahuje zvlášť, až po zapnutí přepínače.
+     * Number of the topic's deleted (rejected) questions, loaded with the page.
+     * The list of deleted cards is fetched separately, only once the toggle is on.
      */
     rejectedCount: number
     /**
-     * Lehčí a těžší verze podle kořene (`loadVariantLinks`), pro řádek
-     * „Verze: …" na kartě. Klíč je id kořenové otázky, ne otázky samotné.
+     * Easier and harder versions by root (`loadVariantLinks`), for the
+     * „Verze: …" row on the card. The key is the root question's id, not the question's own.
      */
     variantLinks: Record<string, VariantLink[]>
   }
 >(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount, variantLinks }, ref) {
   const router = useRouter()
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const [creating, setCreating] = useState(false)
   useImperativeHandle(ref, () => ({
     openCreate: () => setCreating(true),
   }))
   const [editingId, setEditingId] = useState<string | null>(null)
-  // Smazaná (i přegenerovaná) karta zmizí hned, bez čekání na obnovení seznamu
-  // ze serveru — tahle množina je jediné místo, kde se to pozná.
+  // A deleted (or regenerated) card disappears right away, without waiting for
+  // the list to refresh from the server — this set is the only place that knows.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
-  // Otázka, u které se právě maže — chrání proti dvojímu kliknutí, než dojde
-  // odpověď ze serveru (smazání je optimistické, karta zmizí ještě dřív).
+  // Questions being deleted right now — guards against a double click before
+  // the server answers (deletion is optimistic, the card vanishes even sooner).
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
-  // Lehčí nebo těžší verze vzniklá v téhle relaci — objeví se hned, bez
-  // čekání na `router.refresh()` (ten navíc nemusí nic nového ukázat, když
-  // se odpověď serveru v e2e testu jen podvrhuje). Otázky, které se mezitím
-  // objevily i v `questions` (po skutečném obnovení stránky), se odtud
-  // vyřadí, ať se karta nezdvojí.
+  // Easier or harder versions created in this session — they appear right away,
+  // without waiting for `router.refresh()` (which may show nothing new anyway
+  // when an e2e test only fakes the server response). Questions that meanwhile
+  // also appeared in `questions` (after a real page refresh) are dropped from
+  // here so the card does not repeat.
   const [freshVersions, setFreshVersions] = useState<Question[]>([])
-  // Karta, na kterou právě odkázal řádek „Verze: …" nebo která právě vznikla
-  // jako nová verze — krátce zvýrazněná, ať je vidět, že se posun povedl.
-  // Vedle id nese i pořadí skoku: druhý skok na tutéž kartu (třeba hned po
-  // vzniku verze, dokud ještě svítí) musí odpočet spustit znovu, jinak by
-  // zvýraznění zhaslo dřív, než se k ní pohled posune.
+  // The card the „Verze: …" row just linked to, or that was just created as a
+  // new version — briefly highlighted so it is clear the scroll worked.
+  // Besides the id it carries a jump counter: a second jump to the same card
+  // (e.g. right after the version was created, while it still glows) must
+  // restart the countdown, otherwise the highlight would fade before the view
+  // scrolls to it.
   const [highlight, setHighlight] = useState<{ id: string; jump: number } | null>(null)
   const highlightedId = highlight?.id ?? null
-  // Id karty, ke které se má po překreslení posunout pohled — dvoukrokové
-  // (nastavit stav, pak v efektu najít prvek v DOM), protože hned po
-  // `setFreshVersions` nová karta v DOM ještě není.
+  // Id of the card to scroll to after rendering — two steps (set state, then
+  // find the element in the DOM in an effect), because right after
+  // `setFreshVersions` the new card is not in the DOM yet.
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null)
-  // Posun a rozsvícení jsou dva samostatné efekty schválně: kdyby byl posun
-  // (nastavení `pendingScrollId`) a odpočet zvýraznění ve stejném efektu,
-  // úklid po tomhle efektu (spuštěný, jakmile `pendingScrollId` doběhne zpět
-  // na `null`) by smazal i právě nastavený časovač zvýraznění — karta by
-  // zůstala rozsvícená napořád, protože by se zvýraznění nikdy
-  // nezavolalo.
+  // Scrolling and highlighting are two separate effects on purpose: if the
+  // scroll (setting `pendingScrollId`) and the highlight countdown were in the
+  // same effect, its cleanup (run once `pendingScrollId` goes back to `null`)
+  // would also clear the just-set highlight timer — the card would stay
+  // highlighted forever because the reset would never be called.
   useEffect(() => {
     if (!pendingScrollId) return
     const el = document.querySelector(`[data-question-id="${pendingScrollId}"]`)
@@ -135,29 +136,29 @@ export const TopicQuestions = forwardRef<
     return () => window.clearTimeout(timeout)
   }, [highlight])
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
-  // Zaškrtnuté otázky do nového testu. Smazaná (i přegenerovaná) karta z výběru
-  // sama zmizí — výběr se počítá jen proti otázkám, které pořád existují
-  // (`active`), takže o odebrání se tahle množina starat nemusí.
+  // Questions checked for a new test. A deleted (or regenerated) card drops out
+  // of the selection by itself — the selection only counts questions that
+  // still exist (`active`), so this set need not handle removal.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [creatingTest, setCreatingTest] = useState(false)
-  // Smazané otázky se zvlášť: `null` znamená „ještě nenačteno" — teprve po
-  // zapnutí přepínače se pro ně pošle dotaz, aby se nenačítaly zbytečně
-  // pokaždé, když učitelka otevře téma.
+  // Deleted questions separately: `null` means "not loaded yet" — they are
+  // only requested once the toggle is switched on, so they are not loaded
+  // needlessly every time the teacher opens the topic.
   const [showDeleted, setShowDeleted] = useState(false)
   const [deletedQuestions, setDeletedQuestions] = useState<Question[] | null>(null)
   const [loadingDeleted, setLoadingDeleted] = useState(false)
-  // Kurzor za poslední načtenou smazanou otázkou — `null` znamená „další
-  // stránka není" (buď se ještě nenačetlo nic, nebo je to konec seznamu;
-  // rozlišuje to `deletedQuestions === null`).
+  // Cursor after the last loaded deleted question — `null` means "no next page"
+  // (either nothing has loaded yet, or it is the end of the list;
+  // `deletedQuestions === null` tells them apart).
   const [deletedCursor, setDeletedCursor] = useState<string | null>(null)
   const [loadingMoreDeleted, setLoadingMoreDeleted] = useState(false)
-  // Otázka, u které se právě obnovuje stav — chrání proti dvojímu kliknutí
-  // na „Obnovit", stejně jako `busyIds` u mazání.
+  // Questions being restored right now — guards against a double click on
+  // „Obnovit", just like `busyIds` for deletion.
   const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set())
-  // Kolik se toho od posledního obnovení stránky ze serveru smazalo (+) nebo
-  // vrátilo (-), aniž by se to promítlo do `rejectedCount` — ten se totiž
-  // nemění, dokud stránku neobnoví `router.refresh()`. Jakmile se to stane
-  // a `rejectedCount` se posune, delta se zase vynuluje.
+  // How many were deleted (+) or restored (-) since the last server refresh
+  // without showing in `rejectedCount` — it does not change until
+  // `router.refresh()` reloads the page. Once that happens and
+  // `rejectedCount` moves, the delta resets to zero.
   const [deletedDelta, setDeletedDelta] = useState(0)
   const previousRejectedCount = useRef(rejectedCount)
   useEffect(() => {
@@ -167,14 +168,14 @@ export const TopicQuestions = forwardRef<
     }
   }, [rejectedCount])
 
-  // Dokud se seznam smazaných nenačetl, počet se počítá z hodnoty ze
-  // serveru a lokální delty; jakmile se seznam jednou stáhne, počítá se
-  // přímo z něj — ten se při obnovení karty zmenšuje sám.
+  // Until the deleted list has loaded, the count comes from the server value
+  // plus the local delta; once the list is fetched, it is counted from the
+  // list directly — which shrinks by itself when a card is restored.
   const deletedCount = deletedQuestions?.length ?? rejectedCount + deletedDelta
 
-  // Verze vzniklé v téhle relaci se přidávají k otázkám ze serveru — po
-  // skutečném obnovení stránky se objeví i tam a odtud se pak vyřadí podle
-  // id, ať se karta nezdvojí.
+  // Versions created in this session are added to the server's questions —
+  // after a real page refresh they appear there too and are then dropped
+  // from here by id so the card does not repeat.
   const allQuestions = useMemo(() => {
     const known = new Set(questions.map((question) => question.id))
     return [...freshVersions.filter((question) => !known.has(question.id)), ...questions]
@@ -188,19 +189,20 @@ export const TopicQuestions = forwardRef<
     [allQuestions],
   )
 
-  // Smazané (nebo přegenerované) karty se z tématu odečítají úplně — na
-  // hlavičce i na nabídce typů v filtru; filtr sám počet dál nemění.
+  // Deleted (or regenerated) cards are subtracted from the topic entirely —
+  // in the header and in the filter's type options; the filter itself does
+  // not change the count.
   const active = useMemo(() => sorted.filter((question) => !hiddenIds.has(question.id)), [sorted, hiddenIds])
 
-  // Kořen podle id — kartě verze dovolí najít vlastní kořen (`variantOf`) i
-  // s jeho obtížností, ať řádek „Verze: …" pozná, co je oproti ní lehčí nebo
-  // těžší. `allQuestions`, ne `active`: kořen zůstává ve hře, i kdyby jeho
-  // vlastní kartu zrovna schovalo optimistické smazání nebo přegenerování.
+  // Root by id — lets a version's card find its root (`variantOf`) with its
+  // difficulty, so the „Verze: …" row knows what is easier or harder than it.
+  // `allQuestions`, not `active`: the root stays in play even if its own card
+  // is currently hidden by an optimistic delete or regeneration.
   const byId = useMemo(() => new Map(allQuestions.map((question) => [question.id, question])), [allQuestions])
 
-  // `variantLinks` ze serveru (`loadVariantLinks`) doplněné o verze vzniklé
-  // v téhle relaci — ty v odpovědi serveru ještě být nemusí (u e2e testů
-  // vůbec, tam se odpověď na vytvoření verze jen podvrhuje).
+  // `variantLinks` from the server (`loadVariantLinks`) plus the versions
+  // created in this session — those may not be in the server response yet
+  // (never in e2e tests, where the version-creation response is faked).
   const mergedVariantLinks = useMemo(() => {
     const merged: Record<string, VariantLink[]> = {}
     for (const [rootId, links] of Object.entries(variantLinks)) merged[rootId] = [...links]
@@ -215,15 +217,15 @@ export const TopicQuestions = forwardRef<
   }, [variantLinks, freshVersions])
 
   /**
-   * Verze kořene otázky (nebo otázky samotné, je-li kořen), pro řádek
-   * „Verze: …" na kartě. Zamítnuté (smazané) verze se nenabízejí — jejich
-   * karta v seznamu není, odkaz by nikam nevedl. Stejně tak se vynechá
-   * cokoli mimo `byId` (otázka, která v tomhle tématu vůbec není — cizí
-   * téma, nebo se ještě nenačetla) a cokoli v `hiddenIds` (smazaná nebo
-   * přegenerovaná karta zrovna teď mizí ze seznamu, ale server o tom
-   * ještě neví) — odkaz by v obou případech nikam nevedl.
+   * Versions of the question's root (or of the question itself if it is the
+   * root), for the „Verze: …" row on the card. Rejected (deleted) versions are
+   * not offered — their card is not in the list, the link would go nowhere.
+   * Likewise anything outside `byId` is skipped (a question not in this topic
+   * at all — another topic, or not loaded yet) and anything in `hiddenIds` (a
+   * deleted or regenerated card that is disappearing from the list while the
+   * server does not know yet) — in both cases the link would go nowhere.
    */
-  function versionsFor(question: Question): { id: string; label: 'lehčí' | 'těžší' }[] {
+  function versionsFor(question: Question): { id: string; direction: 'easier' | 'harder' }[] {
     const rootId = question.variantOf ?? question.id
     const entries: { id: string; difficulty: 1 | 2 | 3 }[] = []
     if (rootId !== question.id && !hiddenIds.has(rootId)) {
@@ -238,27 +240,27 @@ export const TopicQuestions = forwardRef<
     }
     return entries
       .filter((entry) => entry.difficulty !== question.difficulty)
-      .map((entry) => ({ id: entry.id, label: entry.difficulty < question.difficulty ? 'lehčí' : 'těžší' }))
+      .map((entry) => ({ id: entry.id, direction: entry.difficulty < question.difficulty ? 'easier' : 'harder' }))
   }
 
   /**
-   * Posune pohled na kartu a krátce ji zvýrazní — z řádku „Verze: …" i po
-   * vytvoření nové verze. Když cíl zrovna schovává filtr (typ, obtížnost,
-   * „jen nepoužité"), filtr se nejdřív zruší — jinak by se posun neměl kam
-   * posunout, karta by v DOM vůbec nebyla.
+   * Scrolls to a card and briefly highlights it — from the „Verze: …" row and
+   * after creating a new version. When the filter (type, difficulty, „jen
+   * nepoužité") currently hides the target, the filter is reset first —
+   * otherwise there would be nothing to scroll to; the card would not be in the DOM.
    */
   function jumpToQuestion(id: string) {
-    const jeSchovanyFiltrem = !visible.some((question) => question.id === id) && active.some((question) => question.id === id)
-    if (jeSchovanyFiltrem) resetFilters()
+    const isHiddenByFilter = !visible.some((question) => question.id === id) && active.some((question) => question.id === id)
+    if (isHiddenByFilter) resetFilters()
     setPendingScrollId(id)
   }
 
-  // Filtr typu nabízí jen typy, které v tématu opravdu jsou — jinak by
-  // učitelka zvolila „Doplňovačka“ a dostala prázdno, i kdyby v tématu žádná
-  // nebyla nikdy.
+  // The type filter only offers types actually present in the topic —
+  // otherwise the teacher could pick „Doplňovačka“ and get nothing, even if
+  // the topic never had one.
   const availableTypes = useMemo(() => {
     const present = new Set(active.map((question) => question.type))
-    return (Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((type) => present.has(type))
+    return [...QUESTION_TYPES].filter((type) => present.has(type))
   }, [active])
 
   const visible = active.filter((question) => {
@@ -273,18 +275,18 @@ export const TopicQuestions = forwardRef<
   }
 
   /**
-   * Vybrané otázky, které pořád existují, v pořadí, v jakém stojí v seznamu
-   * (`active`) — ne v pořadí zaškrtnutí. Smazaná nebo přegenerovaná karta tak
-   * z výběru i ze součtu bodů zmizí sama, jen tím, že vypadne z `active`.
+   * Selected questions that still exist, in list order (`active`) — not in
+   * the order they were checked. A deleted or regenerated card thus drops out
+   * of the selection and the points total by itself, just by leaving `active`.
    */
   const selectedQuestions = useMemo(
     () => active.filter((question) => selectedIds.has(question.id)),
     [active, selectedIds],
   )
   const selectedPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
-  // Kolik vybraných otázek aktuální filtr schovává — bez toho by po zapnutí
-  // filtru vypadalo, že se výběr sám o sobě zmenšil, i když otázky zůstaly
-  // vybrané, jen nejsou vidět.
+  // How many selected questions the current filter hides — without it,
+  // turning on a filter would look like the selection shrank by itself, even
+  // though the questions stayed selected, just not visible.
   const hiddenSelectedCount = useMemo(() => {
     const visibleIds = new Set(visible.map((question) => question.id))
     return selectedQuestions.filter((question) => !visibleIds.has(question.id)).length
@@ -299,7 +301,7 @@ export const TopicQuestions = forwardRef<
     })
   }
 
-  /** Nový test rovnou z vybraných otázek tématu — název přebírá od tématu. */
+  /** A new test straight from the topic's selected questions — named after the topic. */
   async function createTestFromSelection() {
     if (selectedQuestions.length === 0) return
     setCreatingTest(true)
@@ -325,40 +327,40 @@ export const TopicQuestions = forwardRef<
       })
       if (!response.ok) {
         const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(detail.error ?? `Test se nepodařilo založit (${response.status})`)
+        throw new Error(detail.error ?? t('library:topicQuestions.createTestFailedStatus', { status: response.status }))
       }
       const result = (await response.json()) as { id: string }
-      // `refresh()` před `push()`: bez něj zůstane tahle stránka tématu
-      // v historii se starým stavem (bez štítku „V testu“) a návrat tlačítkem
-      // zpět ho ukáže neaktuální.
+      // `refresh()` before `push()`: without it this topic page stays in the
+      // history with its old state (without the „V testu“ badge) and going back
+      // shows it out of date.
       router.refresh()
       router.push(`/tests/${result.id}?tema=${topic.id}`)
     } catch (error) {
-      toast.error(errorMessage(error, 'Test se nepodařilo založit.'))
+      toast.error(errorMessage(error, t('library:topicQuestions.createTestFailed')))
       setCreatingTest(false)
     }
   }
 
-  /** Smazání beze ptaní — jde hned vrátit zpět, proto tu není potvrzovací dialog. */
+  /** Deleting without asking — it can be undone right away, hence no confirmation dialog. */
   async function remove(question: Question) {
     if (busyIds.has(question.id)) return
     setBusyIds((current) => new Set(current).add(question.id))
-    // Optimisticky: karta zmizí hned, ať smazání nečeká na odpověď ze
-    // serveru. Nepovede-li se, karta se vrátí a chyba se ohlásí hláškou.
+    // Optimistic: the card disappears right away so deleting does not wait for
+    // the server. If it fails, the card comes back and a toast reports the error.
     setHiddenIds((current) => new Set(current).add(question.id))
     try {
       const previous = await rejectQuestions([question])
-      // Smazaná karta se počítá do „Smazané" hned, ne až po obnovení
-      // stránky ze serveru — a přibude i do už načteného seznamu smazaných,
-      // ať je vidět, i když se panel zrovna teď zapne.
+      // The deleted card counts toward „Smazané" right away, not only after the
+      // page refreshes from the server — and is added to an already loaded
+      // deleted list, so it shows even if the panel is switched on now.
       setDeletedDelta((current) => current + 1)
       setDeletedQuestions((current) =>
         current === null ? null : [{ ...question, status: 'rejected' }, ...current],
       )
-      toast.success('Otázka smazána', {
+      toast.success(t('library:topicQuestions.deleted'), {
         duration: 10_000,
         action: {
-          label: 'Vrátit zpět',
+          label: t('library:topicQuestions.undo'),
           onClick: () =>
             void restoreStatuses(previous)
               .then(() => {
@@ -371,22 +373,22 @@ export const TopicQuestions = forwardRef<
                 setDeletedQuestions((current) =>
                   current === null ? null : current.filter((q) => q.id !== question.id),
                 )
-                toast.success('Vráceno zpět')
+                toast.success(t('library:topicQuestions.undone'))
                 router.refresh()
               })
               .catch((error) =>
-                toast.error(errorMessage(error, 'Vrácení se nepodařilo.')),
+                toast.error(errorMessage(error, t('library:topicQuestions.undoFailed'))),
               ),
         },
       })
     } catch (error) {
-      // Smazání se nepovedlo — karta se vrátí zpátky do seznamu.
+      // Deletion failed — the card returns to the list.
       setHiddenIds((current) => {
         const next = new Set(current)
         next.delete(question.id)
         return next
       })
-      toast.error(errorMessage(error, 'Otázku se nepodařilo smazat.'))
+      toast.error(errorMessage(error, t('library:topicQuestions.deleteFailed')))
     } finally {
       setBusyIds((current) => {
         const next = new Set(current)
@@ -397,10 +399,9 @@ export const TopicQuestions = forwardRef<
   }
 
   /**
-   * Dotáhne smazané (zamítnuté) otázky tématu — jen jednou, při prvním
-   * zapnutí. Řadí se od nejnovějších (`order=desc`), ať je nahoře to, co
-   * učitelka smazala naposled; stránka se bere jen jedna, další přes
-   * „Načíst další" (`loadMoreDeleted`).
+   * Fetches the topic's deleted (rejected) questions — only once, on first
+   * toggle. Newest first (`order=desc`), so what the teacher deleted last is
+   * on top; only one page is taken, more via „Načíst další" (`loadMoreDeleted`).
    */
   async function loadDeleted() {
     setLoadingDeleted(true)
@@ -408,19 +409,19 @@ export const TopicQuestions = forwardRef<
       const response = await fetch(
         `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected&order=desc`,
       )
-      if (!response.ok) throw new Error('Smazané otázky se nepodařilo načíst.')
+      if (!response.ok) throw new Error(t('library:topicQuestions.loadDeletedFailed'))
       const data = (await response.json()) as { items: Question[]; nextCursor: string | null }
       setDeletedQuestions(data.items)
       setDeletedCursor(data.nextCursor)
     } catch (error) {
-      toast.error(errorMessage(error, 'Smazané otázky se nepodařilo načíst.'))
+      toast.error(errorMessage(error, t('library:topicQuestions.loadDeletedFailed')))
       setShowDeleted(false)
     } finally {
       setLoadingDeleted(false)
     }
   }
 
-  /** Dotáhne další stránku smazaných otázek za kurzorem z předchozího načtení. */
+  /** Fetches the next page of deleted questions after the cursor from the previous load. */
   async function loadMoreDeleted() {
     if (!deletedCursor) return
     setLoadingMoreDeleted(true)
@@ -428,20 +429,19 @@ export const TopicQuestions = forwardRef<
       const response = await fetch(
         `/api/questions?topicId=${encodeURIComponent(topic.id)}&status=rejected&order=desc&cursor=${encodeURIComponent(deletedCursor)}`,
       )
-      if (!response.ok) throw new Error('Další smazané otázky se nepodařilo načíst.')
+      if (!response.ok) throw new Error(t('library:topicQuestions.loadMoreDeletedFailed'))
       const data = (await response.json()) as { items: Question[]; nextCursor: string | null }
       setDeletedQuestions((current) => [...(current ?? []), ...data.items])
       setDeletedCursor(data.nextCursor)
     } catch (error) {
-      toast.error(errorMessage(error, 'Další smazané otázky se nepodařilo načíst.'))
+      toast.error(errorMessage(error, t('library:topicQuestions.loadMoreDeletedFailed')))
     } finally {
       setLoadingMoreDeleted(false)
     }
   }
 
-  // Panel smazaných je dole pod dlouhým seznamem otázek — bez posunu na
-  // pohled by po zapnutí přepínače nebylo v dlouhém tématu vůbec vidět, že se
-  // něco stalo.
+  // The deleted panel sits below a long question list — without scrolling to
+  // it, switching the toggle on in a long topic would show no visible change.
   const deletedPanelRef = useRef<HTMLDivElement>(null)
 
   function toggleShowDeleted() {
@@ -455,7 +455,7 @@ export const TopicQuestions = forwardRef<
     })
   }
 
-  /** Vrátí smazanou otázku zpátky mezi schválené. */
+  /** Restores a deleted question back to approved. */
   async function restore(question: Question) {
     if (restoringIds.has(question.id)) return
     setRestoringIds((current) => new Set(current).add(question.id))
@@ -463,18 +463,18 @@ export const TopicQuestions = forwardRef<
       await restoreStatuses([[question.id, 'approved']])
       setDeletedQuestions((current) => (current ?? []).filter((q) => q.id !== question.id))
       setDeletedDelta((current) => Math.max(0, current - 1))
-      // Otázka se mohla schovat i tady (smazáním v tomhle náčtu stránky) —
-      // bez odebrání z `hiddenIds` by po obnovení zůstala v běžném seznamu
-      // dál skrytá, i když ji server už znovu posílá jako schválenou.
+      // The question may also be hidden here (deleted during this page load) —
+      // without removing it from `hiddenIds` it would stay hidden in the main
+      // list after restoring, even though the server sends it as approved again.
       setHiddenIds((current) => {
         const next = new Set(current)
         next.delete(question.id)
         return next
       })
-      toast.success('Otázka obnovena')
+      toast.success(t('library:topicQuestions.restored'))
       router.refresh()
     } catch (error) {
-      toast.error(errorMessage(error, 'Otázku se nepodařilo obnovit.'))
+      toast.error(errorMessage(error, t('library:topicQuestions.restoreFailed')))
     } finally {
       setRestoringIds((current) => {
         const next = new Set(current)
@@ -487,10 +487,10 @@ export const TopicQuestions = forwardRef<
   return (
     <Card className="gap-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-sm font-semibold text-fg">Otázky ({active.length})</h2>
+        <h2 className="text-sm font-semibold text-fg">{t('library:topicQuestions.heading', { count: active.length })}</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="w-44">
-            <Label htmlFor="topic-question-type-filter">Typ</Label>
+            <Label htmlFor="topic-question-type-filter">{t('library:topicQuestions.type')}</Label>
             <Select
               value={filters.type || 'vse'}
               onValueChange={(value) =>
@@ -504,17 +504,17 @@ export const TopicQuestions = forwardRef<
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="vse">Všechny typy</SelectItem>
+                <SelectItem value="vse">{t('library:topicQuestions.allTypes')}</SelectItem>
                 {availableTypes.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {QUESTION_TYPE_LABELS[type]}
+                    {questionTypeLabel(type)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="w-36">
-            <Label htmlFor="topic-question-difficulty-filter">Obtížnost</Label>
+            <Label htmlFor="topic-question-difficulty-filter">{t('library:topicQuestions.difficulty')}</Label>
             <Select
               value={filters.difficulty ? String(filters.difficulty) : 'vse'}
               onValueChange={(value) =>
@@ -528,10 +528,10 @@ export const TopicQuestions = forwardRef<
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="vse">Všechny</SelectItem>
-                <SelectItem value="1">Lehká</SelectItem>
-                <SelectItem value="2">Střední</SelectItem>
-                <SelectItem value="3">Těžká</SelectItem>
+                <SelectItem value="vse">{t('library:topicQuestions.allDifficulties')}</SelectItem>
+                <SelectItem value="1">{t('library:questionEditor.difficultyEasy')}</SelectItem>
+                <SelectItem value="2">{t('library:questionEditor.difficultyMedium')}</SelectItem>
+                <SelectItem value="3">{t('library:questionEditor.difficultyHard')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -542,21 +542,21 @@ export const TopicQuestions = forwardRef<
                 setFilters((current) => ({ ...current, onlyUnused: checked === true }))
               }
             />
-            Jen nepoužité v testu
+            {t('library:topicQuestions.onlyUnused')}
           </label>
-          {muzeMenit ? (
+          {canEdit ? (
             <Button
               size="sm"
               variant={showDeleted ? 'secondary' : 'outline'}
               aria-pressed={showDeleted}
               onClick={toggleShowDeleted}
             >
-              Smazané ({deletedCount})
+              {t('library:topicQuestions.deletedToggle', { count: deletedCount })}
             </Button>
           ) : null}
-          {muzeMenit ? (
+          {canEdit ? (
             <Button size="sm" variant="outline" onClick={() => setCreating(true)} disabled={creating}>
-              Nová otázka
+              {t('library:questionEditor.newTitle')}
             </Button>
           ) : null}
         </div>
@@ -583,17 +583,17 @@ export const TopicQuestions = forwardRef<
         <div className="mt-4">
           {active.length === 0 ? (
             <EmptyState
-              title="V tématu zatím nejsou otázky."
-              // Náhled (role `nahled`) si nepíše otázky sama — ten dodatek
-              // by jí jen nabízel akci, kterou nemá.
-              hint={muzeMenit ? 'Nech je vygenerovat, nebo napiš první sama.' : 'Nech je vygenerovat.'}
+              title={t('library:topicQuestions.emptyTitle')}
+              // A viewer (role `nahled`) does not write questions — that addition
+              // would only offer an action she does not have.
+              hint={canEdit ? t('library:topicQuestions.emptyHintEditor') : t('library:topicQuestions.emptyHintViewer')}
             />
           ) : (
             <EmptyState
-              title="Filtru neodpovídá žádná otázka."
+              title={t('library:topicQuestions.noMatchTitle')}
               action={
                 <Button variant="outline" onClick={resetFilters}>
-                  Zrušit filtr
+                  {t('library:topicQuestions.resetFilter')}
                 </Button>
               }
             />
@@ -615,7 +615,7 @@ export const TopicQuestions = forwardRef<
                 topicId={topic.id}
                 question={question}
                 editing={editingId === question.id}
-                muzeMenit={muzeMenit}
+                canEdit={canEdit}
                 selected={selectedIds.has(question.id)}
                 busy={busyIds.has(question.id)}
                 usage={usage[question.id]}
@@ -651,13 +651,13 @@ export const TopicQuestions = forwardRef<
         />
       ) : null}
 
-      {showDeleted && muzeMenit ? (
+      {showDeleted && canEdit ? (
         <div ref={deletedPanelRef} className="mt-4 border-t border-line-soft pt-3">
-          <h3 className="text-sm font-semibold text-fg-soft">Smazané otázky</h3>
+          <h3 className="text-sm font-semibold text-fg-soft">{t('library:topicQuestions.deletedHeading')}</h3>
           {loadingDeleted ? (
-            <p className="mt-2 text-sm text-fg-muted">Načítám…</p>
+            <p className="mt-2 text-sm text-fg-muted">{t('common:status.loading')}</p>
           ) : (deletedQuestions?.length ?? 0) === 0 ? (
-            <p className="mt-2 text-sm text-fg-muted">Žádné smazané otázky.</p>
+            <p className="mt-2 text-sm text-fg-muted">{t('library:topicQuestions.noDeleted')}</p>
           ) : (
             <ul className="mt-2 divide-y divide-line-soft">
               {deletedQuestions!.map((question) => (
@@ -666,7 +666,7 @@ export const TopicQuestions = forwardRef<
                     topicId={topic.id}
                     question={question}
                     editing={false}
-                    muzeMenit={muzeMenit}
+                    canEdit={canEdit}
                     selected={false}
                     busy={false}
                     usage={undefined}
@@ -695,7 +695,7 @@ export const TopicQuestions = forwardRef<
                 disabled={loadingMoreDeleted}
                 onClick={() => void loadMoreDeleted()}
               >
-                {loadingMoreDeleted ? 'Načítám…' : 'Načíst další'}
+                {loadingMoreDeleted ? t('common:status.loading') : t('library:topicQuestions.loadMore')}
               </Button>
             </div>
           ) : null}

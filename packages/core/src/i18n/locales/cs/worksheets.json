@@ -1,0 +1,107 @@
+{
+  "meta": {
+    "detail": "Pracovní list – TestMaker",
+    "list": "Pracovní listy – TestMaker",
+    "new": "Nový pracovní list – TestMaker"
+  },
+  "loading": {
+    "worksheet": "Načítám pracovní list…",
+    "list": "Načítám pracovní listy…",
+    "form": "Načítám formulář…"
+  },
+  "api": {
+    "editManually": "Položku můžeš upravit ručně.",
+    "regenerateInvalid": "Položku se nepodařilo přegenerovat. Obnov stránku a zkus to znovu.",
+    "notFound": "Pracovní list se nenašel",
+    "createEmptyInstead": "Můžeš ale založit prázdný list a vyplnit ho ručně.",
+    "briefIncomplete": "Zadání listu není úplné — vyber téma, nebo napiš, o čem má list být (nejvýš 200 znaků), a zkus to znovu.",
+    "topicGone": "Téma už v knihovně není, vyber jiné.",
+    "invalidTextVariant": "Text v listu nemá platnou variantu (text, nebo fun fact).",
+    "invalidTable": "Tabulku nejde uložit: každý řádek musí mít tolik buněk, kolik je sloupců (nejvýš 6 sloupců a 12 řádků), a aspoň jedna buňka musí zůstat prázdná k doplnění.",
+    "emptyTask": "Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber."
+  },
+  "text": {
+    "funFactLabel": "Text fun factu",
+    "textLabel": "Krátký text",
+    "funFactPlaceholder": "Zajímavost k tématu",
+    "textPlaceholder": "Krátký text k tématu"
+  },
+  "table": {
+    "defaultTerm": "Pojem",
+    "defaultFill": "Doplň",
+    "defaultColumn": "Sloupec {{number}}",
+    "caption": "Popisek nad tabulkou",
+    "captionPlaceholder": "Popisek nad tabulkou (nepovinné)",
+    "columnName": "Název {{column}}. sloupce",
+    "cell": "Buňka {{row}}. řádku, {{column}}. sloupce",
+    "keyAnswer": "odpověď do klíče",
+    "blank": "prázdná na vyplnění",
+    "addRow": "+ Řádek",
+    "removeRow": "− Řádek",
+    "addColumn": "+ Sloupec",
+    "removeColumn": "− Sloupec",
+    "noBlank": "Označ aspoň jednu buňku jako prázdnou — jinak není co doplňovat."
+  },
+  "overview": {
+    "title": "Pracovní listy",
+    "add": "Nový pracovní list",
+    "emptyTitle": "Zatím žádný pracovní list",
+    "emptyHint": "Nech model připravit list k tématu nebo podle vlastního zadání a pak ho uprav jako písemku.",
+    "create": "Vytvořit pracovní list"
+  },
+  "row": {
+    "deleteFailed": "List se nepodařilo smazat.",
+    "actions": "Akce u listu {{title}}",
+    "deleteTitle": "Smazat pracovní list „{{title}}“?",
+    "deleteHint": "List se smaže i se všemi položkami.",
+    "topic": "téma: {{topic}}",
+    "freeBrief": "volné zadání"
+  },
+  "new": {
+    "title": "Nový pracovní list",
+    "missingTopic": "Vyber předmět, ročník a téma.",
+    "missingTitle": "Napiš, o čem má list být.",
+    "createFailed": "List se nepodařilo založit.",
+    "fromTopic": "Téma z knihovny",
+    "free": "Volné zadání",
+    "emptyLibrary": "Knihovna je zatím prázdná. Použij volné zadání.",
+    "subject": "Předmět",
+    "pickSubject": "Vyber předmět",
+    "grade": "Ročník",
+    "pickGrade": "Vyber ročník",
+    "topic": "Téma",
+    "pickTopic": "Vyber téma",
+    "about": "O čem má list být",
+    "aboutPlaceholder": "Např. Vánoce v Evropě",
+    "noGrade": "Bez ročníku",
+    "instructions": "Pokyn pro model (nepovinné)",
+    "instructionsPlaceholder": "Např. víc tabulek, jeden fun fact, na 20 minut",
+    "ownText": "Vlastní text (nepovinné)",
+    "ownTextPlaceholder": "Sem můžeš vložit text, ze kterého má list vycházet — třeba úryvek z učebnice.",
+    "notConfigured": "Generování listu není nastavené, takže ho model připravit nemůže. Založ prázdný list a vyplň ho ručně.",
+    "generating": "List se připravuje. Když stránku opustíš, dokončí se i tak a najdeš ho v přehledu pracovních listů.",
+    "creating": "Zakládám…",
+    "createBlank": "Založit prázdný list",
+    "generatingButton": "Generuji list… (může to trvat minutu)",
+    "generate": "Vygenerovat"
+  },
+  "builder": {
+    "tableSummary": "Tabulka: {{columns}}",
+    "regenerateFailed": "Položku se nepodařilo přegenerovat.",
+    "regenerated": "Položka je přegenerovaná.",
+    "titleRequired": "Vyplň název listu.",
+    "itemRequired": "Přidej do listu aspoň jednu položku.",
+    "saveFailed": "List se nepodařilo uložit.",
+    "editTitle": "Úprava pracovního listu",
+    "titleLabel": "Název listu",
+    "titlePlaceholder": "Např. Sopky – procvičování",
+    "dropped_one": "{{count}} položku model nevrátil v pořádku a vynechala se. Chybějící kus můžeš přidat ručně.",
+    "dropped_few": "{{count}} položky model nevrátil v pořádku a vynechaly se. Chybějící kus můžeš přidat ručně.",
+    "dropped_other": "{{count}} položek model nevrátil v pořádku a vynechaly se. Chybějící kus můžeš přidat ručně.",
+    "toCheck_one": "Ke kontrole: {{count}} položka. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
+    "toCheck_few": "Ke kontrole: {{count}} položky. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
+    "toCheck_other": "Ke kontrole: {{count}} položek. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
+    "editTask": "Upravit úlohu",
+    "newTask": "Nová úloha"
+  }
+}

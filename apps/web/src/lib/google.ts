@@ -1,27 +1,28 @@
 import 'server-only'
 import { createHash, randomBytes } from 'node:crypto'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Přihlášení účtem Google, ručně a bez knihovny.
+ * Google account sign-in, by hand and without a library.
  *
- * Je to obyčejný OAuth 2.0 „authorization code" s PKCE: aplikace pošle
- * učitelku na Google, ten ji vrátí s kódem a kód se na serveru vymění za
- * tokeny. Knihovna typu NextAuth by sem přinesla vlastní model relací, který
- * už máme, a vlastní tabulky, které nechceme.
+ * It is a plain OAuth 2.0 "authorization code" flow with PKCE: the app sends
+ * the teacher to Google, which returns her with a code, and the server
+ * exchanges the code for tokens. A library like NextAuth would bring its own
+ * session model, which we already have, and its own tables, which we don't want.
  */
 
-export interface GoogleNastaveni {
+export interface GoogleSettings {
   clientId: string
   clientSecret: string
   redirectUri: string
-  /** Doména školních účtů; bez ní se přes Google nepřihlašuje. */
+  /** Domain of school accounts; without it there is no Google sign-in. */
   hd: string | null
 }
 
-/** Nastavení z prostředí; `null` znamená „Google se nenabízí". */
-export function googleNastaveni(
+/** Settings from the environment; `null` means "Google is not offered". */
+export function googleSettings(
   env: Record<string, string | undefined> = process.env,
-): GoogleNastaveni | null {
+): GoogleSettings | null {
   const clientId = env.GOOGLE_CLIENT_ID
   const clientSecret = env.GOOGLE_CLIENT_SECRET
   const redirectUri = env.GOOGLE_REDIRECT_URI
@@ -36,58 +37,58 @@ function base64url(buffer: Buffer): string {
   return buffer.toString('base64url')
 }
 
-export interface OauthStav {
+export interface OauthState {
   state: string
   codeVerifier: string
-  /** Kam se má uživatelka po přihlášení vrátit. */
+  /** Where the user should return after sign-in. */
   dal: string
 }
 
-export function novyOauthStav(dal: string): OauthStav {
-  return { state: base64url(randomBytes(24)), codeVerifier: base64url(randomBytes(32)), dal }
+export function newOauthState(next: string): OauthState {
+  return { state: base64url(randomBytes(24)), codeVerifier: base64url(randomBytes(32)), dal: next }
 }
 
 export function codeChallenge(codeVerifier: string): string {
   return base64url(createHash('sha256').update(codeVerifier).digest())
 }
 
-/** Adresa, na kterou se uživatelka posílá k přihlášení. */
-export function prihlasovaciAdresa(nastaveni: GoogleNastaveni, stav: OauthStav): string {
+/** The address the user is sent to for sign-in. */
+export function authorizationUrl(settings: GoogleSettings, state: OauthState): string {
   const url = new URL(AUTHORIZE_URL)
-  url.searchParams.set('client_id', nastaveni.clientId)
-  url.searchParams.set('redirect_uri', nastaveni.redirectUri)
+  url.searchParams.set('client_id', settings.clientId)
+  url.searchParams.set('redirect_uri', settings.redirectUri)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', 'openid email profile')
-  url.searchParams.set('state', stav.state)
-  url.searchParams.set('code_challenge', codeChallenge(stav.codeVerifier))
+  url.searchParams.set('state', state.state)
+  url.searchParams.set('code_challenge', codeChallenge(state.codeVerifier))
   url.searchParams.set('code_challenge_method', 'S256')
-  // Účet se vybírá pokaždé: ve sborovně se u jednoho počítače vystřídá víc lidí.
+  // The account is chosen every time: several people take turns at one staff-room computer.
   url.searchParams.set('prompt', 'select_account')
-  if (nastaveni.hd) url.searchParams.set('hd', nastaveni.hd)
+  if (settings.hd) url.searchParams.set('hd', settings.hd)
   return url.toString()
 }
 
-export interface GoogleIdentita {
+export interface GoogleIdentity {
   sub: string
   email: string
-  jmeno: string
-  /** Doména účtu z Google Workspace. */
+  name: string
+  /** Account domain from Google Workspace. */
   hd: string | null
 }
 
 /**
- * Obsah `id_token` bez ověřování podpisu.
+ * Contents of `id_token` without signature verification.
  *
- * Token přišel přímo z tokenového endpointu Googlu přes TLS, takže podle
- * OIDC podpis ověřovat nemusíme a klíče z JWKS není potřeba stahovat. Kdyby
- * se někdy `id_token` přebíral z prohlížeče (Google One Tap), musí se
- * ověřování podpisu doplnit — jinak by stačilo token vymyslet.
+ * The token came straight from Google's token endpoint over TLS, so per OIDC
+ * we need not verify the signature nor download JWKS keys. If `id_token` were
+ * ever taken from the browser (Google One Tap), signature verification must
+ * be added — otherwise making up a token would suffice.
  */
-export function rozebratIdToken(idToken: string): Record<string, unknown> | null {
-  const cast = idToken.split('.')[1]
-  if (!cast) return null
+export function decodeIdToken(idToken: string): Record<string, unknown> | null {
+  const payload = idToken.split('.')[1]
+  if (!payload) return null
   try {
-    return JSON.parse(Buffer.from(cast, 'base64url').toString('utf8')) as Record<string, unknown>
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
   } catch {
     return null
   }
@@ -95,76 +96,76 @@ export function rozebratIdToken(idToken: string): Record<string, unknown> | null
 
 const ISS = new Set(['accounts.google.com', 'https://accounts.google.com'])
 
-/** Ověří nároky v tokenu a vytáhne z nich identitu, nebo českou hlášku. */
-export function overitIdToken(
+/** Checks the token claims and extracts the identity, or a user-facing message. */
+export function verifyIdToken(
   idToken: string,
-  nastaveni: GoogleNastaveni,
+  settings: GoogleSettings,
   now: number = Date.now(),
-): { identita: GoogleIdentita } | { chyba: string } {
-  const claims = rozebratIdToken(idToken)
-  if (!claims) return { chyba: 'Od Googlu přišla odpověď, které nerozumíme. Zkuste to znovu.' }
+): { identity: GoogleIdentity } | { error: string } {
+  const claims = decodeIdToken(idToken)
+  if (!claims) return { error: t('auth:google.unreadableResponse') }
 
   const iss = typeof claims.iss === 'string' ? claims.iss : ''
   const aud = typeof claims.aud === 'string' ? claims.aud : ''
   const exp = typeof claims.exp === 'number' ? claims.exp : 0
-  if (!ISS.has(iss) || aud !== nastaveni.clientId || exp * 1000 <= now) {
-    return { chyba: 'Přihlášení přes Google se nepodařilo ověřit. Zkuste to znovu.' }
+  if (!ISS.has(iss) || aud !== settings.clientId || exp * 1000 <= now) {
+    return { error: t('auth:google.verifyFailed') }
   }
 
   const email = typeof claims.email === 'string' ? claims.email.toLowerCase() : ''
   if (!email || claims.email_verified !== true) {
-    return { chyba: 'Google neověřil e-mail účtu, proto se s ním přihlásit nedá.' }
+    return { error: t('auth:google.emailNotVerified') }
   }
 
   const hd = typeof claims.hd === 'string' ? claims.hd : null
-  if (nastaveni.hd && hd !== nastaveni.hd) {
+  if (settings.hd && hd !== settings.hd) {
     return {
-      chyba: `Přihlásit se jde jen účtem z domény ${nastaveni.hd}, ne soukromým Gmailem.`,
+      error: t('auth:google.wrongDomain', { domain: settings.hd }),
     }
   }
 
   const sub = typeof claims.sub === 'string' ? claims.sub : ''
-  if (!sub) return { chyba: 'Od Googlu nepřišel identifikátor účtu.' }
+  if (!sub) return { error: t('auth:google.missingSub') }
 
-  const jmeno = typeof claims.name === 'string' && claims.name ? claims.name : email
-  return { identita: { sub, email, jmeno, hd } }
+  const name = typeof claims.name === 'string' && claims.name ? claims.name : email
+  return { identity: { sub, email, name, hd } }
 }
 
-/** Výměna kódu za tokeny. Vrací `id_token`, nic jiného nepotřebujeme. */
-export async function vymenitKod(
-  nastaveni: GoogleNastaveni,
+/** Exchanges the code for tokens. Returns `id_token`, we need nothing else. */
+export async function exchangeCode(
+  settings: GoogleSettings,
   code: string,
   codeVerifier: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ idToken: string } | { chyba: string }> {
+): Promise<{ idToken: string } | { error: string }> {
   const response = await fetchImpl(TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: nastaveni.clientId,
-      client_secret: nastaveni.clientSecret,
+      client_id: settings.clientId,
+      client_secret: settings.clientSecret,
       code,
       code_verifier: codeVerifier,
       grant_type: 'authorization_code',
-      redirect_uri: nastaveni.redirectUri,
+      redirect_uri: settings.redirectUri,
     }),
   })
   if (!response.ok) {
-    return { chyba: 'Google odmítl přihlášení. Zkuste to prosím znovu.' }
+    return { error: t('auth:google.rejected') }
   }
   const data = (await response.json()) as { id_token?: string }
-  if (!data.id_token) return { chyba: 'Od Googlu nepřišel přihlašovací token.' }
+  if (!data.id_token) return { error: t('auth:google.missingToken') }
   return { idToken: data.id_token }
 }
 
 /**
- * Přesměrování, do kterého jde ještě přidat cookie. `Response.redirect()`
- * vrací odpověď se zamčenými hlavičkami, takže se k ní relace nedá připnout.
+ * A redirect that still accepts cookies. `Response.redirect()` returns a
+ * response with locked headers, so a session cannot be attached to it.
  */
-export function presmeruj(cil: string | URL, cookies: string[] = []): Response {
-  const headers = new Headers({ location: String(cil) })
+export function redirectResponse(target: string | URL, cookies: string[] = []): Response {
+  const headers = new Headers({ location: String(target) })
   for (const cookie of cookies) headers.append('set-cookie', cookie)
   return new Response(null, { status: 307, headers })
 }
 
-export { bezpecnyNavrat } from './navrat'
+export { safeReturnPath } from './returnPath'

@@ -1,51 +1,51 @@
 import { describe, expect, it } from 'vitest'
 import { loadPickerTopics } from '@/lib/questionPicker'
-import { seedQuestion, seedTopic, UCET } from './helpers'
+import { seedQuestion, seedTopic, ACCOUNT } from './helpers'
 
 /**
- * Do písemky smí jen schválená otázka. Dokud se stav nečetl, šlo do testu
- * vybrat i otázku, kterou učitelka zamítla — schvalování pak nemělo žádný
- * účinek a kontrola byla práce pro nic.
+ * Only an approved question may go into a test. Until the status was read, a
+ * question the teacher rejected could be picked into a test too — approval
+ * then had no effect and reviewing was work for nothing.
  */
-describe('výběr otázek do testu', () => {
-  it('nevydá koncept ani zamítnutou otázku', async () => {
+describe('picking questions for a test', () => {
+  it('returns neither a draft nor a rejected question', async () => {
     const { topicId } = await seedTopic({ topic: 'Dýchací soustava' })
     const approved = await seedQuestion(topicId, { prompt: 'Schválená', status: 'approved' })
     await seedQuestion(topicId, { prompt: 'Koncept', status: 'draft' })
     await seedQuestion(topicId, { prompt: 'Zamítnutá', status: 'rejected' })
 
-    const topics = await loadPickerTopics(UCET)
+    const topics = await loadPickerTopics(ACCOUNT)
     const picked = topics.flatMap((topic) => topic.questions)
 
     expect(picked.map((question) => question.id)).toEqual([approved])
     expect(picked.every((question) => question.status === 'approved')).toBe(true)
   })
 
-  it('nese id ročníku, ne jen jeho název — banka podle něj předfiltruje na třídu testu', async () => {
+  it('carries the grade id, not just its name — the bank pre-filters to the test class by it', async () => {
     const { topicId, gradeId } = await seedTopic({ topic: 'Oběhová soustava' })
     await seedQuestion(topicId, { prompt: 'Schválená', status: 'approved' })
 
-    const topics = await loadPickerTopics(UCET)
+    const topics = await loadPickerTopics(ACCOUNT)
     const topic = topics.find((entry) => entry.id === topicId)
 
     expect(topic?.gradeId).toBe(gradeId)
   })
 
-  it('téma, ve kterém jsou jen koncepty, v nabídce vůbec není', async () => {
+  it('a topic with only drafts is not offered at all', async () => {
     const { topicId } = await seedTopic({ topic: 'Jen koncepty' })
     await seedQuestion(topicId, { status: 'draft' })
 
-    const topics = await loadPickerTopics(UCET)
+    const topics = await loadPickerTopics(ACCOUNT)
     expect(topics.find((topic) => topic.id === topicId)).toBeUndefined()
   })
 
-  it('přehled banky si vyžádá i koncepty a zamítnuté', async () => {
+  it('the bank overview asks for drafts and rejected ones too', async () => {
     const { topicId } = await seedTopic({ topic: 'Přehled banky' })
     await seedQuestion(topicId, { status: 'approved' })
     await seedQuestion(topicId, { status: 'draft' })
     await seedQuestion(topicId, { status: 'rejected' })
 
-    const topics = await loadPickerTopics(UCET, { statuses: ['draft', 'approved', 'rejected'] })
+    const topics = await loadPickerTopics(ACCOUNT, { statuses: ['draft', 'approved', 'rejected'] })
     const topic = topics.find((entry) => entry.id === topicId)
     expect(topic?.questions).toHaveLength(3)
   })

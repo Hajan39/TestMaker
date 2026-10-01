@@ -9,6 +9,7 @@ import {
   testKindSchema,
   type TestKind,
 } from '@testmaker/core/schema'
+import { t } from '@testmaker/core/i18n'
 import { db, templates, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
 import {
@@ -19,102 +20,97 @@ import {
   resolveTopic,
   testConditions,
 } from '@/lib/tests'
-import { skola, sRozsahem, vlastni, type Prihlaseny } from '@/lib/uzivatel'
+import { inSchool, withScope, ownedBy, type SignedInUser } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
 const itemSchema = z.object({
   /**
-   * Id už uložené položky, pokud jde o úpravu. Slouží k tomu, aby se při
-   * přeuložení nezahodil zmrazený obsah otázky, která mezitím z banky zmizela
-   * — tam už není z čeho snímek pořídit znovu.
+   * Id of an already saved item when editing. Keeps a re-save from dropping
+   * the frozen content of a question that has since vanished from the bank —
+   * there is nothing left to retake the snapshot from.
    */
   id: z.string().nullable().default(null),
   kind: z.enum(TEST_ITEM_KINDS),
   questionId: z.string().nullable().default(null),
-  /** Vyplněné u položky druhu `puzzle` — hlavolam zařazený do písemky. */
+  /** Set on items of kind `puzzle` — a puzzle included in the test. */
   puzzleId: z.string().nullable().default(null),
   text: z.string().nullable().default(null),
   pointsOverride: z.number().nullable().default(null),
-  /** Počet linek na odpověď jen pro tenhle test; prázdné = podle otázky. */
+  /** Number of answer lines for this test only; empty = per the question. */
   linesOverride: z.number().int().min(1).max(30).nullable().default(null),
-  /** Obsah položky `text` (varianta) nebo `table` (mřížka); ověřuje se schématem z core. */
+  /** Content of a `text` item (variant) or `table` item (grid); validated by the core schema. */
   content: z.unknown().optional(),
-  /** Značka „ověř“ u položky listu. */
+  /** The "ověř" (verify) flag on a worksheet item. */
   needsCheck: z.boolean().default(false),
   /**
-   * Obsah úlohy pracovního listu. Úloha listu v bance není, takže její snímek
-   * posílá klient; u písemky se pole ignoruje a snímek vzniká z banky.
+   * Content of a worksheet task. Worksheet tasks are not in the bank, so the
+   * client sends the snapshot; for a written test the field is ignored and the
+   * snapshot comes from the bank.
    */
   question: questionContentSchema.nullable().default(null),
 })
 
 const testSchema = z.object({
   title: z.string().min(1).max(200),
-  /** Sdílení s kolegyněmi; výchozí je soukromá písemka. */
+  /** Sharing with colleagues; private by default. */
   visibility: z.enum(['soukrome', 'skola']).default('soukrome'),
   description: z.string().max(1000).nullable().default(null),
   graded: z.boolean().default(true),
   templateId: z.string().min(1),
-  /** Třída, ze které test vznikl; ověřuje se proti škole při uložení. */
+  /** The grade the test came from; checked against the school on save. */
   gradeId: z.string().min(1).nullable().default(null),
   header: testHeaderConfigSchema,
   variants: z.union([z.literal(1), z.literal(2)]).default(1),
   showKey: z.boolean().default(true),
   items: z.array(itemSchema).default([]),
-  /** Písemka, nebo pracovní list. Mění se jen při založení. */
+  /** Written test or worksheet. Set only on creation. */
   kind: testKindSchema.default('pisemka'),
-  /** Téma listu; ověřuje se proti škole. Mění se jen při založení. */
+  /** Worksheet topic; checked against the school. Set only on creation. */
   topicId: z.string().min(1).nullable().default(null),
-  /** Zadání listu (JSON podle `worksheetBriefSchema`). Mění se jen při založení. */
+  /** Worksheet brief (JSON per `worksheetBriefSchema`). Set only on creation. */
   brief: z.string().max(40_000).nullable().default(null),
 })
 
 type Item = z.infer<typeof itemSchema>
 
 /**
- * Odmítnuté tělo požadavku. Editor hlídá název i položky sám, takže sem se
- * dostane spíš zastaralá stránka nebo chybějící šablona než překlep.
+ * Rejected request body. The editor checks title and items itself, so this is
+ * more likely a stale page or a missing template than a typo.
  */
-const NEPLATNY_TEST =
-  'Písemku se nepodařilo uložit — chybí název (nejvýš 200 znaků) nebo šablona, případně je některá položka neúplná. ' +
-  'Zkontroluj to, obnov stránku a zkus to znovu.'
+const invalidTest = () => t('tests:api.invalidTest')
 
 /**
- * Obsah položek zkontrolovaný dřív, než se cokoli zapíše — odmítnutý list
- * nesmí zůstat v databázi napůl uložený.
+ * Item content checked before anything is written — a rejected worksheet must
+ * not stay half-saved in the database.
  */
 function checkItems(kind: TestKind, items: Item[]): Response | null {
   for (const item of items) {
     if (item.kind === 'text' && !parseItemContent('text', item.content)) {
-      return Response.json({ error: 'Text v listu nemá platnou variantu (text, nebo fun fact).' }, { status: 400 })
+      return Response.json({ error: t('worksheets:api.invalidTextVariant') }, { status: 400 })
     }
     if (item.kind === 'table' && !parseItemContent('table', item.content)) {
       return Response.json(
-        {
-          error:
-            'Tabulku nejde uložit: každý řádek musí mít tolik buněk, kolik je sloupců (nejvýš 6 sloupců a 12 řádků), ' +
-            'a aspoň jedna buňka musí zůstat prázdná k doplnění.',
-        },
+        { error: t('worksheets:api.invalidTable') },
         { status: 400 },
       )
     }
     if (kind === 'pracovni_list' && item.kind === 'question' && !item.questionId && !item.question) {
-      return Response.json({ error: 'Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber.' }, { status: 400 })
+      return Response.json({ error: t('worksheets:api.emptyTask') }, { status: 400 })
     }
   }
   return null
 }
 
 /**
- * Seznam testů. Volitelně zúžený hledáním v názvu a popisu (`q`), šablonou
- * (`templateId`) a třídou (`gradeId`) — testů přibývá každý rok a projít je
- * očima přestalo stačit.
+ * Test list. Optionally narrowed by searching title and description (`q`),
+ * template (`templateId`) and grade (`gradeId`) — tests pile up every year and
+ * scanning them by eye stopped being enough.
  */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const params = new URL(request.url).searchParams
-  const conditions = testConditions(ucet, {
+  const conditions = testConditions(account, {
     search: params.get('q') ?? undefined,
     templateId: params.get('templateId') ?? undefined,
     gradeId: params.get('gradeId') ?? undefined,
@@ -128,8 +124,8 @@ export async function GET(request: Request) {
       createdAt: tests.createdAt,
       updatedAt: tests.updatedAt,
       templateName: templates.name,
-      /** Vlastní, nebo nasdílená kolegyní — v seznamu to musí být poznat. */
-      mine: sql<boolean>`${tests.ownerId} = ${ucet.userId}`,
+      /** Own or shared by a colleague — the list must tell them apart. */
+      mine: sql<boolean>`${tests.ownerId} = ${account.userId}`,
       visibility: tests.visibility,
       itemCount: sql<number>`(select count(*) from ${testItems} where ${testItems.testId} = ${tests.id})`,
     })
@@ -141,51 +137,51 @@ export async function GET(request: Request) {
   })
 }
 
-/** Odpověď na `?copyOf=`: kopie testu z `lib/tests.ts`, nebo 404, když zdroj není vidět. */
-async function copyTestResponse(ucet: Prihlaseny, sourceId: string): Promise<Response> {
-  const result = await copyTest(ucet, sourceId)
-  if (!result) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
+/** Response to `?copyOf=`: a test copy from `lib/tests.ts`, or 404 when the source is not visible. */
+async function copyTestResponse(account: SignedInUser, sourceId: string): Promise<Response> {
+  const result = await copyTest(account, sourceId)
+  if (!result) return Response.json({ error: t('tests:api.testNotFoundShort') }, { status: 404 })
   return Response.json({ id: result.id, copiedFrom: result.copiedFrom, items: result.items.length })
 }
 
-/** Založí test i s položkami; s `?copyOf=<id>` udělá kopii existujícího. */
+/** Creates a test with its items; with `?copyOf=<id>` copies an existing one. */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const copyOf = new URL(request.url).searchParams.get('copyOf')
-      // Kopie se pozná podle adresy a tělo požadavku nemá — čte se proto až
-      // tady, po odbočce.
-      if (copyOf) return copyTestResponse(ucet, copyOf)
+      // A copy is recognised by the URL and has no body — so the body is only
+      // read here, after the branch.
+      if (copyOf) return copyTestResponse(account, copyOf)
 
       const parsed = testSchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) {
-        return Response.json({ error: NEPLATNY_TEST, detail: parsed.error.issues }, { status: 400 })
+        return Response.json({ error: invalidTest(), detail: parsed.error.issues }, { status: 400 })
       }
       const id = newId()
-      const { items, kind, topicId: topicVstup, brief, ...test } = parsed.data
+      const { items, kind, topicId: topicInput, brief, ...test } = parsed.data
       const invalid = checkItems(kind, items)
       if (invalid) return invalid
 
       const worksheet = kind === 'pracovni_list'
-      // Téma a zadání patří jen listu; ročník listu k tématu se bere z tématu.
-      const topic = worksheet ? await resolveTopic(ucet, topicVstup) : null
-      const gradeId = (await resolveGradeId(ucet, test.gradeId)) ?? topic?.gradeId ?? null
+      // Topic and brief belong only to worksheets; a topic worksheet takes its grade from the topic.
+      const topic = worksheet ? await resolveTopic(account, topicInput) : null
+      const gradeId = (await resolveGradeId(account, test.gradeId)) ?? topic?.gradeId ?? null
 
-      const rows = await itemRows(ucet, id, kind, items)
+      const rows = await itemRows(account, id, kind, items)
       if (rows instanceof Response) return rows
 
-      // Test a položky jedním dávkovým zápisem — jinak by po chybě vložení
-      // zůstal v přehledu prázdný test.
+      // Test and items in one batch — otherwise a failed insert would leave an
+      // empty test in the overview.
       await db.batch([
         db.insert(tests).values({
           id,
-          schoolId: ucet.schoolId,
-          ownerId: ucet.userId,
+          schoolId: account.schoolId,
+          ownerId: account.userId,
           ...test,
           kind,
           topicId: topic?.id ?? null,
           brief: worksheet ? brief : null,
-          // Na listu se nic neznámkuje — bez ohledu na to, co pošle klient.
+          // Nothing on a worksheet is graded — regardless of what the client sends.
           graded: worksheet ? false : test.graded,
           gradeId,
         }),
@@ -194,44 +190,44 @@ export async function POST(request: Request) {
 
       return Response.json({ id })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
-/** Přepíše test i celý seznam položek. */
+/** Overwrites the test and its whole item list. */
 export async function PUT(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
-  // `gradeId` u PUT nemá výchozí hodnotu jako u POST: chybějící pole znamená
-  // „nech třídu, jak je" (starší klient, co pole vůbec neposílá), zatímco
-  // výslovné `null` znamená „zruš vazbu na třídu". Kdyby default doplnil
-  // `null` i za chybějící pole, první uložení z editoru, který gradeId
-  // neposílá, by třídu testu potichu smazalo.
-  // Druh, téma a zadání se při úpravě nemění — editor je neposílá a výchozí
-  // hodnoty schématu by je jinak potichu smazaly.
+  return withScope(
+    async (account) => {
+  // `gradeId` on PUT has no default unlike POST: a missing field means "keep
+  // the grade" (an older client that never sends it), while an explicit `null`
+  // means "unlink the grade". If the default filled `null` for a missing
+  // field, the first save from an editor that doesn't send gradeId would
+  // silently clear the test's grade.
+  // Kind, topic and brief don't change on edit — the editor doesn't send them
+  // and schema defaults would otherwise silently clear them.
   const schema = testSchema.omit({ kind: true, topicId: true, brief: true }).extend({
     id: z.string().min(1),
     gradeId: z.string().min(1).nullable().optional(),
   })
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return Response.json({ error: NEPLATNY_TEST, detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: invalidTest(), detail: parsed.error.issues }, { status: 400 })
   }
-  const { id, items, gradeId: gradeIdVstup, ...test } = parsed.data
-  const gradeId = gradeIdVstup === undefined ? undefined : await resolveGradeId(ucet, gradeIdVstup)
+  const { id, items, gradeId: gradeIdInput, ...test } = parsed.data
+  const gradeId = gradeIdInput === undefined ? undefined : await resolveGradeId(account, gradeIdInput)
 
-  // Upravovat smí jen vlastník: nasdílená písemka se dá přečíst a vytisknout,
-  // ne přepsat.
-  const [puvodni] = await db
+  // Only the owner may edit: a shared test can be read and printed, not
+  // overwritten.
+  const [original] = await db
     .select({ kind: tests.kind })
     .from(tests)
-    .where(and(eq(tests.id, id), vlastni(ucet, tests)))
+    .where(and(eq(tests.id, id), ownedBy(account, tests)))
     .limit(1)
-  if (!puvodni) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
-  const invalid = checkItems(puvodni.kind, items)
+  if (!original) return Response.json({ error: t('tests:api.testNotFoundShort') }, { status: 404 })
+  const invalid = checkItems(original.kind, items)
   if (invalid) return invalid
 
-  // Snímky zmizelých otázek se musí načíst dřív, než se staré položky smažou.
+  // Snapshots of vanished questions must be loaded before the old items are deleted.
   const existing = await db
     .select({
       id: testItems.id,
@@ -239,7 +235,7 @@ export async function PUT(request: Request) {
       puzzleSnapshot: testItems.puzzleSnapshot,
     })
     .from(testItems)
-    .where(and(skola(ucet, testItems), eq(testItems.testId, id)))
+    .where(and(inSchool(account, testItems), eq(testItems.testId, id)))
   const keptSnapshots = new Map(
     existing.filter((row) => row.questionSnapshot).map((row) => [row.id, row.questionSnapshot as string]),
   )
@@ -247,56 +243,56 @@ export async function PUT(request: Request) {
     existing.filter((row) => row.puzzleSnapshot).map((row) => [row.id, row.puzzleSnapshot as string]),
   )
 
-  const rows = await itemRows(ucet, id, puvodni.kind, items, {
+  const rows = await itemRows(account, id, original.kind, items, {
     ids: new Set(existing.map((row) => row.id)),
     snapshots: keptSnapshots,
     puzzleSnapshots: keptPuzzleSnapshots,
   })
   if (rows instanceof Response) return rows
 
-  // Úprava, smazání starých a vložení nových položek naráz: kdyby vložení
-  // selhalo, nesmí test zůstat bez položek.
+  // Update, delete old and insert new items at once: if the insert failed,
+  // the test must not be left without items.
   await db.batch([
     db
       .update(tests)
       .set({
         ...test,
-        graded: puvodni.kind === 'pracovni_list' ? false : test.graded,
-        // `gradeId` se do `.set()` dává, jen když ho tělo vůbec neslo — jinak
-        // by explicitní `undefined` v objektu `.set()` třídu nechtěně smazal.
+        graded: original.kind === 'pracovni_list' ? false : test.graded,
+        // `gradeId` goes into `.set()` only when the body carried it — otherwise
+        // an explicit `undefined` in the `.set()` object would clear the grade.
         ...(gradeId !== undefined ? { gradeId } : {}),
         updatedAt: new Date().toISOString(),
       })
-      .where(and(eq(tests.id, id), vlastni(ucet, tests))),
-    db.delete(testItems).where(and(skola(ucet, testItems), eq(testItems.testId, id))),
+      .where(and(eq(tests.id, id), ownedBy(account, tests))),
+    db.delete(testItems).where(and(inSchool(account, testItems), eq(testItems.testId, id))),
     ...(rows.length > 0 ? [db.insert(testItems).values(rows)] : []),
   ])
 
-  // Id položek se vracejí, aby editor při dalším uložení navázal na tytéž
-  // položky a jejich zmrazené snímky.
+  // Item ids are returned so the next save from the editor links to the same
+  // items and their frozen snapshots.
   return Response.json({ id, itemIds: rows.map((row) => row.id) })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
 export async function DELETE(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const id = new URL(request.url).searchParams.get('id')
-      if (!id) return Response.json({ error: 'Chybí id' }, { status: 400 })
-      const smazano = await db
+      if (!id) return Response.json({ error: t('tests:api.missingId') }, { status: 400 })
+      const deleted = await db
         .delete(tests)
-        .where(and(eq(tests.id, id), vlastni(ucet, tests)))
+        .where(and(eq(tests.id, id), ownedBy(account, tests)))
         .returning({ id: tests.id })
-      if (smazano.length === 0) return Response.json({ error: 'Test se nenašel' }, { status: 404 })
+      if (deleted.length === 0) return Response.json({ error: t('tests:api.testNotFoundShort') }, { status: 404 })
       return Response.json({ ok: true })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
-/** Co test už měl: id položek a jejich zmrazené snímky. */
+/** What the test already had: item ids and their frozen snapshots. */
 interface KeptItems {
   ids: Set<string>
   snapshots: Map<string, string>
@@ -304,11 +300,11 @@ interface KeptItems {
 }
 
 /**
- * Připraví řádky položek testu k vložení. Vrací odpověď, když se něco
- * odmítlo — zapisuje až volající, aby šlo všechno jedním dávkovým zápisem.
+ * Prepares test item rows for insertion. Returns a response when something is
+ * rejected — the caller writes, so everything goes in one batch.
  */
 async function itemRows(
-  ucet: Prihlaseny,
+  account: SignedInUser,
   testId: string,
   kind: TestKind,
   items: Item[],
@@ -318,35 +314,35 @@ async function itemRows(
   const keptSnapshots = kept.snapshots
   const keptPuzzleSnapshots = kept.puzzleSnapshots
 
-  // Snímek se pořizuje tady na serveru z aktuálního obsahu banky. Klient ho
-  // neposílá — jinak by šlo do hotové písemky podstrčit cokoli.
+  // The snapshot is taken here on the server from the current bank. The client
+  // doesn't send it — otherwise anything could be slipped into a finished test.
   const snapshots = await buildQuestionSnapshots(
-    ucet,
+    account,
     items
       .filter((item) => item.kind === 'question')
       .map((item) => item.questionId)
       .filter((id): id is string => Boolean(id)),
   )
 
-  // Totéž pro hlavolam: co se zařadilo do písemky, drží snímek. Zmrazit jde
-  // ale jen vlastní hlavolam — cizí se sem nedostane ani uhodnutým id.
-  const zadaneHlavolamy = items
+  // Same for puzzles: what was added to the test keeps a snapshot. Only an
+  // own puzzle can be frozen — a foreign one can't get in even by a guessed id.
+  const givenPuzzles = items
     .filter((item) => item.kind === 'puzzle')
     .map((item) => item.puzzleId)
     .filter((id): id is string => Boolean(id))
-  const puzzleSnapshots = await buildPuzzleSnapshots(ucet, zadaneHlavolamy)
-  const cizi = zadaneHlavolamy.filter(
+  const puzzleSnapshots = await buildPuzzleSnapshots(account, givenPuzzles)
+  const foreign = givenPuzzles.filter(
     (id) => !puzzleSnapshots.has(id) && !keptPuzzleSnapshots.has(id),
   )
-  if (cizi.length > 0) {
+  if (foreign.length > 0) {
     return Response.json(
-      { error: 'Do písemky jde zařadit jen vlastní hlavolam.' },
+      { error: t('tests:api.foreignPuzzle') },
       { status: 403 },
     )
   }
 
-  // Položka, která v testu už byla, si nechává své id — jen tak na ni editor
-  // při dalším uložení naváže i se zmrazeným snímkem.
+  // An item already in the test keeps its id — only then can the editor link
+  // to it and its frozen snapshot on the next save.
   const used = new Set<string>()
   const keepId = (id: string | null | undefined): string => {
     const value = id && kept.ids.has(id) && !used.has(id) ? id : newId()
@@ -359,13 +355,13 @@ async function itemRows(
       const puzzleId = item.kind === 'puzzle' ? item.puzzleId : null
       return {
         id: keepId(item.id),
-        schoolId: ucet.schoolId,
+        schoolId: account.schoolId,
         testId,
         position: index,
         kind: item.kind,
         questionId,
         text: item.kind === 'question' || item.kind === 'puzzle' || item.kind === 'table' ? null : item.text,
-        // Obsah prošel kontrolou v `checkItems`; ukládá se v podobě ze schématu.
+        // Content passed `checkItems`; it is stored in the schema's shape.
         content:
           item.kind === 'text'
             ? parseItemContent('text', item.content)
@@ -375,14 +371,14 @@ async function itemRows(
         needsCheck: item.needsCheck,
         pointsOverride: item.pointsOverride,
         linesOverride: item.kind === 'question' ? item.linesOverride : null,
-        // Snímek se pořizuje jednou, při zařazení otázky do testu. U položky,
-        // která v testu už byla, se drží ten původní — jinak by přeuložení
-        // testu (třeba kvůli opravě názvu) přepsalo obsah už vytištěné
-        // písemky aktuálním zněním otázky, čemuž má zmrazení bránit.
+        // The snapshot is taken once, when the question is added to the test. An
+        // item already in the test keeps the original — otherwise re-saving
+        // (say, to fix the title) would overwrite an already printed test with
+        // the current question wording, which freezing exists to prevent.
         //
-        // Úloha pracovního listu v bance není: její obsah upravuje učitelka
-        // přímo v listu a snímek posílá klient, takže má přednost i před
-        // dříve uloženým snímkem.
+        // A worksheet task is not in the bank: the teacher edits its content
+        // right in the worksheet and the client sends the snapshot, so it wins
+        // even over a previously saved snapshot.
         questionSnapshot:
           (kind === 'pracovni_list' && item.kind === 'question' && item.question
             ? serializeQuestionSnapshot(item.question)

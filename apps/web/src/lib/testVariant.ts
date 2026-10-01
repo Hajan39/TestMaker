@@ -1,8 +1,9 @@
 import 'server-only'
 import { and, asc, eq } from 'drizzle-orm'
 import type { generateQuestions } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
 import { db, questions, testItems } from '@/db'
-import { skola, type Scope } from '@/lib/uzivatel'
+import { inSchool, type Scope } from '@/lib/user'
 import { createVariant } from '@/lib/generation'
 import { loadVariantLinks } from '@/lib/questions'
 import { buildQuestionSnapshots, copyTest } from '@/lib/tests'
@@ -11,81 +12,84 @@ export type TestVariantDirection = 'easier' | 'harder'
 
 export interface TestVariantOutcome {
   testId: string
-  /** Kolik položek dostalo už existující verzi kořenové otázky. */
+  /** How many items got an existing version of the root question. */
   replaced: number
-  /** Kolik položek dostalo čerstvě vygenerovanou verzi. */
+  /** How many items got a freshly generated version. */
   generated: number
-  /** Kolik položek zůstalo u původní otázky (hranice obtížnosti, zaneprázdněné téma, selhání modelu). */
+  /** How many items kept the original question (difficulty limit, busy topic, model failure). */
   kept: number
 }
 
-/** Název nové písemky — vždycky z uloženého názvu zdroje, ne z rozpracované úpravy v editoru. */
+/** Title of the new test — always from the saved source title, not from unsaved edits. */
 export function testVariantTitle(sourceTitle: string, direction: TestVariantDirection): string {
-  return `${sourceTitle} – ${direction === 'easier' ? 'lehčí' : 'těžší'}`
+  return direction === 'easier'
+    ? t('tests:variant.titleEasier', { title: sourceTitle })
+    : t('tests:variant.titleHarder', { title: sourceTitle })
 }
 
 /**
- * Vytvoří lehčí nebo těžší verzi celé písemky: kopii testu, ve které je
- * každá otázková položka nahrazená verzí kořenové otázky o stupeň lehčí nebo
- * těžší.
+ * Creates an easier or harder version of a whole test: a copy of the test in
+ * which every question item is replaced by a version of its root question one
+ * level easier or harder.
  *
- * Kopie vzniká hned na začátku (`copyTest`) — jakmile existuje, žádná chyba
- * u jednotlivé položky ji neruší, jen položka zůstane u původní otázky.
- * Selže jen předběžná kontrola (zdrojový test není vidět); pak nevznikne nic.
+ * The copy is made right at the start (`copyTest`) — once it exists, no error
+ * on a single item undoes it; that item just keeps its original question.
+ * Only the preliminary check can fail (source test not visible); then nothing
+ * is created.
  *
- * Pro každou položku druhu `question` s otázkou z banky:
- * 1. Najde se kořen (`variantOf` původní otázky, nebo otázka sama).
- * 2. Mezi verzemi kořene s obtížností `původní ± 1` a stavem jiným než
- *    `rejected` se hledá ta, která se dá použít rovnou (`replaced`) — a která
- *    v kopii ještě není, aby žádná otázka nestála na papíře dvakrát.
- * 3. Když žádná není, zkusí se `createVariant` (`generated`). Selže-li —
- *    hranice obtížnosti, zaneprázdněné téma, nebo model — položka zůstane
- *    beze změny (`kept`) a pokračuje se dál.
+ * For every `question` item with a bank question:
+ * 1. Find the root (`variantOf` of the original question, or the question itself).
+ * 2. Among the root's versions with difficulty `original ± 1` and a status other
+ *    than `rejected`, look for one usable as is (`replaced`) — and not yet in
+ *    the copy, so no question appears on the paper twice.
+ * 3. If there is none, try `createVariant` (`generated`). If that fails —
+ *    difficulty limit, busy topic or the model — the item stays unchanged
+ *    (`kept`) and we move on.
  *
- * Položka bez otázky z banky (`questionId` null, otázka smazaná natvrdo) a
- * hlavolam zůstávají beze změny a do součtů se nepočítají.
+ * Items without a bank question (`questionId` null, question hard-deleted) and
+ * puzzles stay unchanged and are not counted.
  */
 export async function createTestVariant(
   scope: Scope,
   testId: string,
   direction: TestVariantDirection,
   options: {
-    /** Volá se, jakmile kopie existuje — s jejím id, aby o ni klient nepřišel, kdyby průběh spadl. */
+    /** Called once the copy exists — with its id so the client keeps it if the run fails. */
     onStart?: (total: number, testId: string) => void
     onProgress?: (done: number, total: number) => void
     signal?: AbortSignal
-    /** Podvržené generování pro testy; v aplikaci se nepředává. */
+    /** Stubbed generation for tests; never passed in the app. */
     generate?: typeof generateQuestions
   } = {},
 ): Promise<TestVariantOutcome> {
   const copy = await copyTest(scope, testId, { title: (title) => testVariantTitle(title, direction) })
-  if (!copy) throw new Error('Test se nenašel')
+  if (!copy) throw new Error(t('tests:api.testNotFoundShort'))
 
-  // Pořadí na papíře — `copyTest` sice vrací položky ve stejném pořadí, v jakém
-  // je uložil, ale bez tahu přes `position` by se řazení lámalo, kdyby to
-  // jednou přestala být pravda.
+  // Order on paper — `copyTest` does return items in the order it saved them,
+  // but without going through `position` the ordering would break if that
+  // ever stopped being true.
   const orderedItems = await db
     .select({ id: testItems.id, kind: testItems.kind, questionId: testItems.questionId })
     .from(testItems)
-    .where(and(skola(scope, testItems), eq(testItems.testId, copy.id)))
+    .where(and(inSchool(scope, testItems), eq(testItems.testId, copy.id)))
     .orderBy(asc(testItems.position))
 
   const total = orderedItems.length
   options.onStart?.(total, copy.id)
 
-  // Které otázky v kopii právě jsou (s počtem výskytů). Náhrada se vybírá jen
-  // z otázek, které v kopii ještě nejsou — jinak by dvě položky, třeba
-  // originál a jeho lehčí verze, skončily u téže otázky a na papíře by stála
-  // dvakrát.
-  const vKopii = new Map<string, number>()
-  const pridej = (id: string) => vKopii.set(id, (vKopii.get(id) ?? 0) + 1)
-  const uber = (id: string) => {
-    const pocet = (vKopii.get(id) ?? 0) - 1
-    if (pocet > 0) vKopii.set(id, pocet)
-    else vKopii.delete(id)
+  // Which questions are currently in the copy (with occurrence counts). A
+  // replacement is only picked from questions not yet in the copy — otherwise
+  // two items, say an original and its easier version, would end up with the
+  // same question and it would appear on the paper twice.
+  const inCopy = new Map<string, number>()
+  const add = (id: string) => inCopy.set(id, (inCopy.get(id) ?? 0) + 1)
+  const drop = (id: string) => {
+    const count = (inCopy.get(id) ?? 0) - 1
+    if (count > 0) inCopy.set(id, count)
+    else inCopy.delete(id)
   }
   for (const item of orderedItems) {
-    if (item.kind === 'question' && item.questionId) pridej(item.questionId)
+    if (item.kind === 'question' && item.questionId) add(item.questionId)
   }
 
   let replaced = 0
@@ -104,10 +108,10 @@ export async function createTestVariant(
     const [original] = await db
       .select({ difficulty: questions.difficulty, variantOf: questions.variantOf })
       .from(questions)
-      .where(and(skola(scope, questions), eq(questions.id, item.questionId)))
+      .where(and(inSchool(scope, questions), eq(questions.id, item.questionId)))
       .limit(1)
     if (!original) {
-      // Otázka z banky natvrdo zmizela — nemá se z čeho vzít nová verze.
+      // The bank question was hard-deleted — there is nothing to take a new version from.
       done += 1
       options.onProgress?.(done, total)
       continue
@@ -119,16 +123,16 @@ export async function createTestVariant(
 
     let replacementId: string | null = null
     if (targetDifficulty >= 1 && targetDifficulty <= 3) {
-      // Kandidáti jsou sourozenci kořene (`loadVariantLinks`) i kořen sám —
-      // otázka v testu nemusí být kořenem svých verzí (může to být třeba
-      // těžší verze, kterou teď chceme zase zlehčit), a v tom případě je
-      // kandidátem na požadovanou obtížnost klidně kořen sám.
+      // Candidates are the root's siblings (`loadVariantLinks`) and the root
+      // itself — the question in the test need not be the root of its versions
+      // (it may be, say, a harder version we now want easier again), in which
+      // case the root itself may be the candidate for the target difficulty.
       const candidates: { id: string; difficulty: number; status: string }[] = []
       if (root !== item.questionId) {
         const [rootRow] = await db
           .select({ id: questions.id, difficulty: questions.difficulty, status: questions.status })
           .from(questions)
-          .where(and(skola(scope, questions), eq(questions.id, root)))
+          .where(and(inSchool(scope, questions), eq(questions.id, root)))
           .limit(1)
         if (rootRow) candidates.push({ id: rootRow.id, difficulty: rootRow.difficulty ?? 2, status: rootRow.status })
       }
@@ -138,7 +142,7 @@ export async function createTestVariant(
       const existing = candidates.find(
         (candidate) =>
           candidate.id !== item.questionId &&
-          !vKopii.has(candidate.id) &&
+          !inCopy.has(candidate.id) &&
           candidate.status !== 'rejected' &&
           candidate.difficulty === targetDifficulty,
       )
@@ -157,23 +161,23 @@ export async function createTestVariant(
         replacementId = variant.id
         generated += 1
       } catch {
-        // Hranice obtížnosti, zaneprázdněné téma nebo selhání modelu — položka
-        // zůstává u původní otázky a verze písemky pokračuje dál.
+        // Difficulty limit, busy topic or model failure — the item keeps its
+        // original question and the test version carries on.
         kept += 1
       }
-      // Zrušení mohlo přijít až uprostřed volání modelu — nemá smysl začínat
-      // další položku, když už nikdo na výsledek nečeká.
+      // Cancellation may have come mid model call — no point starting the next
+      // item when nobody is waiting for the result.
       if (options.signal?.aborted) break
     }
 
     if (replacementId) {
-      uber(item.questionId)
-      pridej(replacementId)
+      drop(item.questionId)
+      add(replacementId)
       const snapshots = await buildQuestionSnapshots(scope, [replacementId])
       await db
         .update(testItems)
         .set({ questionId: replacementId, questionSnapshot: snapshots.get(replacementId) ?? null })
-        .where(and(skola(scope, testItems), eq(testItems.id, item.id)))
+        .where(and(inSchool(scope, testItems), eq(testItems.id, item.id)))
     }
 
     done += 1

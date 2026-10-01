@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { db, grades, materials, questions, topics } from '@/db'
 import { recomputeTopicContent } from '@/lib/duplicates'
 import { newId } from '@/lib/ids'
-import { skola, sRozsahem, type Scope } from '@/lib/uzivatel'
+import { inSchool, withScope, type Scope } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
@@ -11,23 +12,23 @@ const patchSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1).max(200).optional(),
-    /** Název ročníku; prázdný řetězec znamená „bez ročníku“. Ročník vznikne, pokud ještě není. */
+    /** Grade name; an empty string means "no grade". The grade is created if it doesn't exist yet. */
     gradeName: z.string().max(60).optional(),
   })
   .refine((value) => value.name !== undefined || value.gradeName !== undefined, {
-    message: 'Není co měnit',
+    message: 'Nothing to change',
   })
 
 const mergeSchema = z.object({ sourceId: z.string().min(1), targetId: z.string().min(1) })
 const moveSchema = z.object({ materialId: z.string().min(1), topicId: z.string().min(1) })
 
 /**
- * Nabídky pro správu skupiny.
- * `siblingsOf` vrátí ostatní témata téhož ročníku (pro sloučení a přesun materiálu),
- * `gradesOf` vrátí ročníky téhož předmětu (pro přeřazení tématu).
+ * Options for managing a group.
+ * `siblingsOf` returns the other topics of the same grade (for merging and moving a material),
+ * `gradesOf` returns the grades of the same subject (for re-assigning the topic).
  */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const params = new URL(request.url).searchParams
   const siblingsOf = params.get('siblingsOf')
   const gradesOf = params.get('gradesOf')
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
     .select({ gradeId: topics.gradeId, subjectId: grades.subjectId, gradeName: grades.name })
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
-    .where(and(skola(ucet, topics), eq(topics.id, topicId)))
+    .where(and(inSchool(account, topics), eq(topics.id, topicId)))
     .limit(1)
   if (!current) return Response.json({ topics: [], grades: [] })
 
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     const rows = await db
       .select({ id: grades.id, name: grades.name })
       .from(grades)
-      .where(and(skola(ucet, grades), eq(grades.subjectId, current.subjectId)))
+      .where(and(inSchool(account, grades), eq(grades.subjectId, current.subjectId)))
       .orderBy(asc(grades.position), asc(grades.name))
     return Response.json({ grades: rows, currentGrade: current.gradeName })
   }
@@ -54,18 +55,18 @@ export async function GET(request: Request) {
   const rows = await db
     .select({ id: topics.id, name: topics.name })
     .from(topics)
-    .where(and(skola(ucet, topics), eq(topics.gradeId, current.gradeId), ne(topics.id, topicId)))
+    .where(and(inSchool(account, topics), eq(topics.gradeId, current.gradeId), ne(topics.id, topicId)))
     .orderBy(asc(topics.name))
 
   return Response.json({ topics: rows })
   })
 }
 
-/** Přejmenuje skupinu, přeřadí ji do jiného ročníku, nebo obojí. */
+/** Renames a group, moves it to another grade, or both. */
 export async function PATCH(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = patchSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: t('api:invalidRequest') }, { status: 400 })
   const { id, name, gradeName } = parsed.data
 
   const update: { name?: string; gradeId?: string } = {}
@@ -76,49 +77,49 @@ export async function PATCH(request: Request) {
       .select({ subjectId: grades.subjectId })
       .from(topics)
       .innerJoin(grades, eq(grades.id, topics.gradeId))
-      .where(and(skola(ucet, topics), eq(topics.id, id)))
+      .where(and(inSchool(account, topics), eq(topics.id, id)))
       .limit(1)
-    if (!current) return Response.json({ error: 'Téma se nenašlo — mezitím ho nejspíš někdo smazal. Obnov stránku a vyber jiné.' }, { status: 404 })
-    update.gradeId = await ensureGrade(ucet, current.subjectId, gradeName.trim())
+    if (!current) return topicNotFound()
+    update.gradeId = await ensureGrade(account, current.subjectId, gradeName.trim())
   }
 
-  await db.update(topics).set(update).where(and(skola(ucet, topics), eq(topics.id, id)))
+  await db.update(topics).set(update).where(and(inSchool(account, topics), eq(topics.id, id)))
   return Response.json({ ok: true })
-  }, { zapis: true })
+  }, { write: true })
 }
 
-/** Přesune materiál do jiné skupiny. */
+/** Moves a material to another group. */
 export async function PUT(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = moveSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: t('api:invalidRequest') }, { status: 400 })
   const { materialId, topicId } = parsed.data
 
   const [current] = await db
     .select({ topicId: materials.topicId, contentHash: materials.contentHash })
     .from(materials)
-    .where(and(skola(ucet, materials), eq(materials.id, materialId)))
+    .where(and(inSchool(account, materials), eq(materials.id, materialId)))
     .limit(1)
-  if (!current) return Response.json({ error: 'Materiál mezitím zmizel, obnov stránku.' }, { status: 404 })
-  if (!(await temaSkoly(ucet, topicId))) return temaNenalezeno()
+  if (!current) return Response.json({ error: t('library:topicsApi.materialGone') }, { status: 404 })
+  if (!(await schoolTopic(account, topicId))) return topicNotFound()
 
-  // Tentýž obsah smí být v tématu jen jednou — jinak by přesun spadl na
-  // unikátním indexu a učitelka by viděla jen chybu serveru.
-  const [uzTam] = await db
+  // The same content may be in a topic only once — otherwise the move would
+  // fail on the unique index and the teacher would see only a server error.
+  const [alreadyThere] = await db
     .select({ id: materials.id })
     .from(materials)
     .where(
       and(
-        skola(ucet, materials),
+        inSchool(account, materials),
         eq(materials.topicId, topicId),
         eq(materials.contentHash, current.contentHash),
         ne(materials.id, materialId),
       ),
     )
     .limit(1)
-  if (uzTam) {
+  if (alreadyThere) {
     return Response.json(
-      { error: 'Tentýž soubor už v cílové skupině je, přesouvat ho tam nemá smysl.' },
+      { error: t('library:topicsApi.sameFileInTarget') },
       { status: 409 },
     )
   }
@@ -126,64 +127,64 @@ export async function PUT(request: Request) {
   await db
     .update(materials)
     .set({ topicId, duplicateOfId: null, duplicateScore: null })
-    .where(and(skola(ucet, materials), eq(materials.id, materialId)))
+    .where(and(inSchool(account, materials), eq(materials.id, materialId)))
 
-  // Materiály, které přesouvaný označovaly za svůj originál, by po přesunu
-  // ukazovaly mimo své téma — generování by je kvůli tomu navždy vynechávalo.
-  // Odkaz proto rušíme; případnou novou duplicitu pozná až další import.
+  // Materials that marked the moved one as their original would point outside
+  // their topic after the move — generation would skip them forever because of it.
+  // So the link is dropped; any new duplicate is detected by the next import.
   await db
     .update(materials)
     .set({ duplicateOfId: null, duplicateScore: null })
-    .where(and(skola(ucet, materials), eq(materials.duplicateOfId, materialId)))
+    .where(and(inSchool(account, materials), eq(materials.duplicateOfId, materialId)))
 
-  // Otázky jdou za svým materiálem, a to ve všech stavech včetně schválených:
-  // zůstat v původním tématu by znamenalo ptát se v písemce na látku, která
-  // tam už není. Otázky bez vazby na materiál (chybí doklad původu, nebo se
-  // název souboru v tématu opakoval) zůstávají — přesouvat je naslepo by
-  // z tématu odneslo i cizí práci.
+  // Questions follow their material, in every status including approved:
+  // staying in the original topic would mean asking in a test about content
+  // that is no longer there. Questions without a material link (missing
+  // evidence, or the file name repeated in the topic) stay — moving them
+  // blindly would carry other people's work out of the topic.
   await db
     .update(questions)
     .set({ topicId })
     .where(
       and(
-        skola(ucet, questions),
+        inSchool(account, questions),
         eq(questions.materialId, materialId),
         eq(questions.topicId, current.topicId),
       ),
     )
 
   for (const affected of new Set([current.topicId, topicId])) {
-    await recomputeTopicContent(ucet, affected)
+    await recomputeTopicContent(account, affected)
   }
   return Response.json({ ok: true })
-  }, { zapis: true })
+  }, { write: true })
 }
 
-/** Sloučí téma do jiného: přesune materiály i otázky a původní téma smaže. */
+/** Merges a topic into another: moves materials and questions and deletes the original topic. */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = mergeSchema.safeParse(await request.json())
-  if (!parsed.success) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
+  if (!parsed.success) return Response.json({ error: t('api:invalidRequest') }, { status: 400 })
   const { sourceId, targetId } = parsed.data
   if (sourceId === targetId) {
-    return Response.json({ error: 'Téma nejde sloučit samo se sebou. Vyber jiné cílové téma.' }, { status: 400 })
+    return Response.json({ error: t('library:topicsApi.mergeIntoSelf') }, { status: 400 })
   }
-  if (!(await temaSkoly(ucet, sourceId)) || !(await temaSkoly(ucet, targetId))) return temaNenalezeno()
+  if (!(await schoolTopic(account, sourceId)) || !(await schoolTopic(account, targetId))) return topicNotFound()
 
-  // Obsah, který cílové téma už má, se do něj podruhé nevejde (tentýž obsah
-  // smí být v tématu jen jednou) — z rušeného tématu ho proto zahodíme.
+  // Content the target topic already has won't fit a second time (the same
+  // content may be in a topic only once) — so it's dropped from the removed topic.
   const targetHashes = (
     await db
       .select({ hash: materials.contentHash })
       .from(materials)
-      .where(and(skola(ucet, materials), eq(materials.topicId, targetId)))
+      .where(and(inSchool(account, materials), eq(materials.topicId, targetId)))
   ).map((row) => row.hash)
   if (targetHashes.length > 0) {
     await db
       .delete(materials)
       .where(
         and(
-          skola(ucet, materials),
+          inSchool(account, materials),
           eq(materials.topicId, sourceId),
           inArray(materials.contentHash, targetHashes),
         ),
@@ -193,41 +194,41 @@ export async function POST(request: Request) {
   await db
     .update(materials)
     .set({ topicId: targetId })
-    .where(and(skola(ucet, materials), eq(materials.topicId, sourceId)))
+    .where(and(inSchool(account, materials), eq(materials.topicId, sourceId)))
   await db
     .update(questions)
     .set({ topicId: targetId })
-    .where(and(skola(ucet, questions), eq(questions.topicId, sourceId)))
-  await db.delete(topics).where(and(skola(ucet, topics), eq(topics.id, sourceId)))
+    .where(and(inSchool(account, questions), eq(questions.topicId, sourceId)))
+  await db.delete(topics).where(and(inSchool(account, topics), eq(topics.id, sourceId)))
 
-  await recomputeTopicContent(ucet, targetId)
+  await recomputeTopicContent(account, targetId)
 
   return Response.json({ ok: true })
-  }, { zapis: true })
+  }, { write: true })
 }
 
-const temaNenalezeno = () =>
+const topicNotFound = () =>
   Response.json(
-  { error: 'Téma se nenašlo — mezitím ho nejspíš někdo smazal. Obnov stránku a vyber jiné.' },
+  { error: t('library:topicsApi.topicGone') },
   { status: 404 },
 )
 
-/** Je téma v mé škole? Cizí cíl přesunu se tváří jako neexistující. */
-async function temaSkoly(scope: Scope, id: string): Promise<boolean> {
+/** Is the topic in my school? A foreign move target looks non-existent. */
+async function schoolTopic(scope: Scope, id: string): Promise<boolean> {
   const [row] = await db
     .select({ id: topics.id })
     .from(topics)
-    .where(and(skola(scope, topics), eq(topics.id, id)))
+    .where(and(inSchool(scope, topics), eq(topics.id, id)))
     .limit(1)
   return Boolean(row)
 }
 
-/** Najde ročník daného jména v předmětu, nebo ho založí. */
+/** Finds a grade with the given name in a subject, or creates it. */
 async function ensureGrade(scope: Scope, subjectId: string, name: string): Promise<string> {
   const [existing] = await db
     .select({ id: grades.id })
     .from(grades)
-    .where(and(skola(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .where(and(inSchool(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, name)))
     .limit(1)
   if (existing) return existing.id
 
@@ -246,12 +247,12 @@ async function ensureGrade(scope: Scope, subjectId: string, name: string): Promi
   const [created] = await db
     .select({ id: grades.id })
     .from(grades)
-    .where(and(skola(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, name)))
+    .where(and(inSchool(scope, grades), eq(grades.subjectId, subjectId), eq(grades.name, name)))
     .limit(1)
   return created?.id ?? id
 }
 
-/** Ročník řadíme číselně, „bez ročníku“ jde první. */
+/** Grades sort numerically; "no grade" goes first. */
 function gradePosition(name: string): number {
   const match = /^(\d+)/.exec(name)
   return match ? Number(match[1]) : 0

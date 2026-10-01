@@ -1,11 +1,11 @@
 /**
- * Pomocníci vykreslení, které používá PDF i papírová stránka ve skladači
- * testu. Jsou tu proto, aby obrazovka a papír nemohly říkat každý něco
- * jiného: číslování mezer v doplňovačce, značky prázdných buněk v tabulce
- * i zápis bodů má jedinou definici.
+ * Rendering helpers used by both the PDF and the paper page in the test
+ * builder. They live here so screen and paper cannot disagree: blank numbering
+ * in fill-ins, empty table cell marks and point formatting have a single
+ * definition.
  *
- * Tenhle soubor nesmí sáhnout na `@react-pdf/renderer` — vtahuje se do
- * prohlížeče, kam vykreslovač PDF nepatří.
+ * This file must not touch `@react-pdf/renderer` — it is pulled into the
+ * browser, where the PDF renderer does not belong.
  */
 
 import type { PuzzleContent, PuzzleEntry } from '../schema/puzzle'
@@ -15,33 +15,33 @@ export { LETTERS, questionLabel } from './styles'
 export { displayOrder } from './shuffle'
 export { formatAnswer } from './answerKey'
 
-/** Body s desetinnou čárkou podle českého úzu, celá čísla bez zbytečné nuly. */
+/** Points with a decimal comma per Czech convention, integers without a trailing zero. */
 export function formatPoints(points: number): string {
   return Number.isInteger(points) ? String(points) : points.toFixed(1).replace('.', ',')
 }
 
 /**
- * Rozměry položek pracovního listu v bodech. Čte je vykreslení PDF
- * (`WorksheetBlocks.tsx`) i odhad výšky (`estimate.ts`), aby se náhled
- * lámal tam, kde PDF.
+ * Worksheet item dimensions in points. Read by the PDF renderer
+ * (`WorksheetBlocks.tsx`) and the height estimate (`estimate.ts`) so the
+ * preview breaks where the PDF does.
  */
 export const WORKSHEET_LAYOUT = {
-  /** Mezera nad krátkým textem. */
+  /** Space above a short text. */
   textSpacing: 8,
-  /** Mezera nad rámečkem fun factu a nad tabulkou. */
+  /** Space above a fun fact box and above a table. */
   blockSpacing: 10,
-  /** Vnitřní okraj rámečku fun factu. */
+  /** Inner padding of the fun fact box. */
   funFactPadding: 6,
-  /** Vnitřní okraj buňky tabulky. */
+  /** Inner padding of a table cell. */
   cellPadding: 4,
-  /** Nejmenší výška řádku tabulky — do prázdné buňky se píše rukou. */
+  /** Minimum table row height — empty cells are filled in by hand. */
   rowMinHeight: 22,
 } as const
 
 /**
- * Zadání doplňovačky, ve kterém jsou místa k doplnění (`___`) nahrazená
- * očíslovanou linkou. Týmiž čísly se na mezery odkazuje klíč, takže se
- * odpovědi nemusí dopočítávat podle pořadí v textu.
+ * Fill-in question text with the blanks (`___`) replaced by a numbered line.
+ * The key refers to the blanks by the same numbers, so answers need not be
+ * matched by their order in the text.
  */
 export function numberedBlanks(text: string): string {
   let blankNumber = 0
@@ -51,8 +51,8 @@ export function numberedBlanks(text: string): string {
         blankNumber += 1
         return ` (${blankNumber}) ______________ `
       })
-      // Mezery kolem značky drží čitelnost i tam, kde je „___“ přilepené ke
-      // slovu; tady se jen uklidí, co tím vzniklo navíc.
+      // Spaces around the mark keep it readable even where "___" sticks to a
+      // word; this just cleans up the extra spaces that creates.
       .replace(/ {2,}/g, ' ')
       .replace(/ ([,.;:!?])/g, '$1')
       .trim()
@@ -60,8 +60,8 @@ export function numberedBlanks(text: string): string {
 }
 
 /**
- * Čísla prázdných buněk doplňovací tabulky v pořadí čtení po řádcích;
- * vyplněná buňka má `null`. Čísla odpovídají pořadí odpovědí v klíči.
+ * Numbers of the empty cells of a fill-in table in row reading order; a
+ * filled cell has `null`. Numbers match the order of answers in the key.
  */
 export function tableBlankNumbers(rows: (string | null)[][]): (number | null)[][] {
   let blankNumber = 0
@@ -69,60 +69,60 @@ export function tableBlankNumbers(rows: (string | null)[][]): (number | null)[][
 }
 
 /* ------------------------------------------------------------------------
- * Rozměry hlavolamu. Tiskne je `PuzzleBody` (PDF), náhled `PaperPuzzle`
- * i odhad výšky v `estimate.ts` — jedna definice, aby se obrazovka, papír
- * a stránkování nerozešly.
+ * Puzzle dimensions. Used by `PuzzleBody` (PDF), the `PaperPuzzle` preview
+ * and the height estimate in `estimate.ts` — one definition so screen, paper
+ * and pagination stay in sync.
  * --------------------------------------------------------------------- */
 
 /**
- * Šířka, do které se mřížka i řádky tajenky musí vejít. A4 bez okrajů má
- * u vestavěných šablon 493–521 pt; počítá se s rezervou, aby hlavolam
- * nevytlačil pravý okraj ani u šablony s užšími okraji.
+ * Width the grid and cryptogram rows must fit into. A4 minus margins is
+ * 493–521 pt for the built-in templates; there is headroom so the puzzle does
+ * not push past the right margin even with a narrower-margin template.
  */
 export const PUZZLE_USABLE_WIDTH = 480
 
-/** Velikost buňky osmisměrky podle počtu sloupců — úzká mřížka má buňky větší. */
+/** Word search cell size by column count — a narrow grid gets bigger cells. */
 export function cellSize(cols: number): number {
   return Math.max(11, Math.min(20, Math.floor(PUZZLE_USABLE_WIDTH / Math.max(cols, 1))))
 }
 
-/** Počet sloupců seznamu slov pod osmisměrkou — na papíře i na obrazovce. */
+/** Number of columns of the word list under the word search — on paper and on screen. */
 export const WORD_LIST_COLUMNS = 3
 
-/** Šířka sloupce s číslem řádku tajenky („10.“ se nesmí dotýkat políčka). */
+/** Width of the cryptogram row number column ("10." must not touch the box). */
 export const CRYPTOGRAM_NUMBER_WIDTH = 20
 
-/** Políčko tajenky — pro děti aspoň 18 pt, ideálně 20 pt (asi 7 mm). */
+/** Cryptogram box — at least 18 pt for children, ideally 20 pt (about 7 mm). */
 export const CRYPTOGRAM_BOX_MAX = 20
-/** Pod tohle se políčko nezmenší ani u nejdelšího slova. */
+/** The box never shrinks below this, even for the longest word. */
 export const CRYPTOGRAM_BOX_MIN = 12
 
 /**
- * Velikost políčka tajenky. Nejširší řádek (i s odsazením, které staví
- * vyznačená políčka pod sebe) se musí vejít do šířky stránky; jen když se
- * nevejde, políčka se zmenší.
+ * Cryptogram box size. The widest row (including the offset that lines up the
+ * marked boxes) must fit the page width; boxes shrink only when it does not.
  */
 export function cryptogramBoxSize(widthInBoxes: number): number {
   const fit = Math.floor((PUZZLE_USABLE_WIDTH - CRYPTOGRAM_NUMBER_WIDTH) / Math.max(widthInBoxes, 1))
   return Math.max(CRYPTOGRAM_BOX_MIN, Math.min(CRYPTOGRAM_BOX_MAX, fit))
 }
 
-/** Rozvržení řádků tajenky: odsazení každého řádku a velikost políčka. */
+/** Cryptogram row layout: offset of each row and box size. */
 export function cryptogramLayout(result: CryptogramResult): {
   offsets: number[]
   widthInBoxes: number
   boxSize: number
 } {
-  // Odsazení řádků, aby vyznačená políčka stála pod sebou v jednom sloupci.
+  // Row offsets so the marked boxes line up in one column.
   const offsets = markedOffsets(result.rows)
   const widthInBoxes = Math.max(...result.rows.map((row, i) => (offsets[i] ?? 0) + row.letters.length), 1)
   return { offsets, widthInBoxes, boxSize: cryptogramBoxSize(widthInBoxes) }
 }
 
 /**
- * Písmena tajenky po slovech s číslem řádku, který k písmenu patří. Když se
- * na písmeno nenašlo slovo, `row` chybí a políčko se vytiskne rovnou
- * vyplněné — žák by jinak hledal řádek, který na papíře není.
+ * Cryptogram phrase letters grouped by word, with the number of the row each
+ * letter belongs to. When no word was found for a letter, `row` is false and
+ * the box is printed pre-filled — otherwise the pupil would look for a row
+ * that is not on the paper.
  */
 export function cryptogramPhraseCells(result: CryptogramResult): { letter: string; number: number; row: boolean }[][] {
   const built = new Set(result.rows.map((row) => row.number))
@@ -136,8 +136,8 @@ export function cryptogramPhraseCells(result: CryptogramResult): { letter: strin
 }
 
 /**
- * Slova do seznamu pod osmisměrkou — jen ta, která v mřížce opravdu jsou.
- * Slovo, které se do mřížky nevešlo, by žák hledal marně.
+ * Words for the list under the word search — only those actually in the grid.
+ * A word that did not fit would be searched for in vain.
  */
 export function placedEntries(puzzle: PuzzleContent, built: BuiltPuzzle): PuzzleEntry[] {
   if (built.kind !== 'wordsearch') return puzzle.entries
@@ -146,11 +146,10 @@ export function placedEntries(puzzle: PuzzleContent, built: BuiltPuzzle): Puzzle
 }
 
 /**
- * Hlavolam pro danou variantu písemky. Varianta B dostane jiný (pořád
- * deterministický) seed, aby osmisměrka nebo tajenka nevyšla stejně jako
- * u souseda v lavici. Když by jiný seed dopadl hůř (méně umístěných slov,
- * víc potíží), zůstane zadání varianty A — horší hlavolam za cenu jiného
- * vzhledu nestojí.
+ * Puzzle for the given test variant. Variant B gets a different (still
+ * deterministic) seed so the word search or cryptogram differs from the desk
+ * neighbour's. If the other seed turns out worse (fewer placed words, more
+ * problems), variant A is kept — a worse puzzle is not worth a different look.
  */
 export function puzzleForVariant(puzzle: PuzzleContent, variant: 'A' | 'B'): PuzzleContent {
   if (variant === 'A') return puzzle

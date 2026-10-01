@@ -55,9 +55,20 @@ komponenty proto přepiš `from "@/ui/<název>"` na `from "./<název>"` a
 
 ## Pravidla
 
-**Jazyk.** Kód, komentáře, commity a dokumentace anglicky nejsou — projekt je
-celý česky včetně komentářů, protože ho čte jeho majitel. Commity se píší
-anglicky podle Conventional Commits.
+**Jazyk.** Identifikátory (funkce, proměnné, typy, názvy souborů) i komentáře
+v kódu jsou anglicky — nikdy česky. Commity se píší anglicky podle
+Conventional Commits. Česky zůstávají jen data uložená v databázi (hodnoty
+jako `pracovni_list`, `ucitelka`), cesty v adresách (`/listy`, `/sprava`)
+a texty pro model v `packages/core/src/ai/prompts/`.
+
+**Texty rozhraní jsou v překladech.** Každý text, který uvidí uživatel
+(rozhraní, toasty, chyby z API i z core, popisky v PDF), žije v
+`packages/core/src/i18n/locales/cs/<jmenný prostor>.json` a čte se přes `t()`
+z `@testmaker/core/i18n` (i18next). V kódu se český text natvrdo nepíše.
+`t()` se volá v místě použití, ne v konstantě na úrovni modulu — jinak by
+pozdější přepnutí jazyka nefungovalo. Klíče jsou typované, překlep shodí
+`pnpm typecheck`. Množné číslo přes klíče `_one`, `_few`, `_other`.
+Zatím jen čeština; další jazyk = nová složka `locales/<jazyk>`.
 
 **Schémata.** Tvar otázky, šablony i testu určuje zod v `packages/core/src/schema`.
 Databáze i model se řídí týmž schématem; nikde se nezavádí druhá definice téhož.
@@ -88,8 +99,8 @@ Předplatné Claude Max se v aplikaci použít nedá; otázky přes něj vznikaj
 v Claude Code příkazem `/otazky` a nahrávají se do tématu jako soubor.
 
 **Každý dotaz má rozsah.** Funkce v `apps/web/src/lib/*` berou jako první
-parametr `Scope` (škola, uživatel, role) z `lib/uzivatel.ts` a doplňují ho do
-podmínky (`skola()`, `vlastni()`, `viditelnyTest()`). Knihovna a banka jsou
+parametr `Scope` (škola, uživatel, role) z `lib/user.ts` a doplňují ho do
+podmínky (`inSchool()`, `ownedBy()`, `visibleTest()`). Knihovna a banka jsou
 společné pro školu, písemky a hlavolamy patří své autorce. Cizí věc se tváří
 jako neexistující — vrací se `null` a 404, ne 403; z odpovědi nemá být poznat,
 že vůbec je. Kontrola v `proxy.ts` je jen hrubé síto podle role, ne
@@ -97,8 +108,8 @@ bezpečnostní hranice: rozhoduje se vždycky až nad databází.
 
 **Do brány se nesmí databáze.** `src/proxy.ts` běží v Edge runtime a smí
 importovat jedině `lib/session.ts`, který sám nesahá na `@/db` ani na
-`node:crypto`. Hlídá to `test/modul-proxy.test.ts`; hesla patří do
-`lib/heslo.ts`, který běží jen v Node.
+`node:crypto`. Hlídá to `test/proxy-module.test.ts`; hesla patří do
+`lib/password.ts`, který běží jen v Node.
 
 ## Ověřování
 
@@ -131,7 +142,7 @@ a ověř, že nehlásí žádnou změnu.
 
 Čistá databáze vzniká jediným základem `apps/web/drizzle/0000_zaklad.sql`;
 stará řada migrací je jen ve `drizzle-historie` pro převod starších databází
-(`src/db/migrace.ts`) a pro testy tehdejších datových migrací. Do historie se
+(`src/db/legacyMigrations.ts`) a pro testy tehdejších datových migrací. Do historie se
 nic nepřidává. Migrace se pouští jen přes `pnpm db:migrate`, nikdy přes
 `drizzle-kit migrate` — ten by převod obešel.
 

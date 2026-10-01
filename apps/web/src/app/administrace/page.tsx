@@ -1,39 +1,42 @@
+import { t } from '@testmaker/core/i18n'
 import { PageShell } from '@testmaker/ui'
-import { obdobiZ, prehledPouzitiAi } from '@/lib/aiUsage'
-import { seznamSkol } from '@/lib/skoly'
-import { ucetStranky } from '@/lib/uzivatel'
-import { AdministraceScreen } from './AdministraceScreen'
-import { PouzitiAi } from './PouzitiAi'
+import { periodFrom, aiUsageOverview } from '@/lib/aiUsage'
+import { listSchools } from '@/lib/schools'
+import { pageAccount } from '@/lib/user'
+import { AdminScreen } from './AdminScreen'
+import { AiUsagePanel } from './AiUsagePanel'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Administrace – TestMaker' }
+export function generateMetadata() {
+  return { title: t('admin:schools.metaTitle') }
+}
 
 /**
- * Školy nad školami: seznam, zakládání, úprava a přepnutí. Jen administrátor;
- * ostatní sem nepustí brána, a kdyby ano, stránka se tváří jako prázdná.
+ * Schools above schools: list, create, edit and switch. Administrator only;
+ * the gateway keeps others out, and if not, the page pretends to be empty.
  */
-export default async function AdministracePage({
+export default async function AdminPage({
   searchParams,
 }: {
   searchParams: Promise<{ dni?: string }>
 }) {
-  const ucet = await ucetStranky()
-  const { dni } = await searchParams
-  const [skoly, prehled] = await Promise.all([seznamSkol(ucet), prehledPouzitiAi(ucet, obdobiZ(dni))])
-  if (!skoly || !prehled) {
+  const account = await pageAccount()
+  const { dni: days } = await searchParams
+  const [schools, overview] = await Promise.all([listSchools(account), aiUsageOverview(account, periodFrom(days))])
+  if (!schools || !overview) {
     return (
       <PageShell>
-        <p className="text-sm text-fg-soft">Tahle stránka neexistuje.</p>
+        <p className="text-sm text-fg-soft">{t('admin:schools.pageNotFound')}</p>
       </PageShell>
     )
   }
   return (
     <PageShell>
-      <AdministraceScreen
-        skoly={skoly}
-        aktualni={ucet.schoolId}
-        domovska={ucet.domovskaSkolaId}
-        pouzitiAi={<PouzitiAi prehled={prehled} />}
+      <AdminScreen
+        schools={schools}
+        current={account.schoolId}
+        homeSchool={account.homeSchoolId}
+        aiUsage={<AiUsagePanel overview={overview} />}
       />
     </PageShell>
   )

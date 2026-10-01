@@ -1,8 +1,8 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
 /**
- * Mazání v knihovně je kaskádové, takže se musí vždy ptát a vždy ukázat dopad.
- * Test si zakládá vlastní data, aby nesahal na skutečnou knihovnu.
+ * Deleting in the library cascades, so it must always ask and always show the impact.
+ * The test creates its own data so it never touches the real library.
  */
 
 async function createDisposableTopic(request: APIRequestContext) {
@@ -28,29 +28,29 @@ async function createDisposableTopic(request: APIRequestContext) {
   expect(response.ok()).toBe(true)
 }
 
-test.describe('mazání v knihovně', () => {
-  test('ukáže dopad a smaže až po potvrzení', async ({ page }) => {
+test.describe('deleting in the library', () => {
+  test('shows the impact and deletes only after confirmation', async ({ page }) => {
     await createDisposableTopic(page.request)
     await page.goto('/')
 
-    // Předmět se objeví v přehledu knihovny. Hledá se přesně podle jména a
-    // maže se tlačítko z jeho vlastní části stránky — „poslední na stránce"
-    // by se trefilo do cizího předmětu, jakmile je v knihovně něco dalšího.
+    // The subject appears in the library overview. It is looked up by exact name
+    // and deleted via the button in its own section — "last on the page" would
+    // hit another subject as soon as the library holds anything else.
     const heading = page.getByRole('heading', { name: 'ZKOUŠKA', exact: true })
     await expect(heading).toBeVisible()
-    // `.last()` je ta nejvnitřnější sekce — panely rozvržení jsou taky `section`.
+    // `.last()` is the innermost section — layout panes are `section`s too.
     const section = page.locator('section', { has: heading }).last()
 
     await section.getByRole('button', { name: 'Smazat předmět' }).click()
 
     const dialog = page.getByRole('alertdialog')
     await expect(dialog).toBeVisible()
-    // Dopad se dopočítá a vypíše, co zmizí.
+    // The impact is computed and lists what will disappear.
     await expect(dialog).toContainText('ZKOUŠKA')
     await expect(dialog).toContainText('materiál')
     await expect(dialog).toContainText('Akci nejde vrátit zpět.')
 
-    // Zrušení nic nesmaže.
+    // Cancelling deletes nothing.
     await dialog.getByRole('button', { name: 'Zrušit' }).click()
     await expect(heading).toBeVisible()
 

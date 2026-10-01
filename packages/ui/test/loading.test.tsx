@@ -3,11 +3,12 @@ import { render, screen } from '@testing-library/react'
 import { Delayed, LoadingCard, LoadingHeading, LoadingTiles } from '../src/Loading'
 
 /**
- * Kostry obsahu. V prohlížeči se `loading.tsx` nedá spolehlivě vyvolat
- * (zdržená síť jen odloží přechod), proto se jejich chování hlídá tady.
+ * Content skeletons. `loading.tsx` cannot be triggered reliably in the
+ * browser (a slowed network only delays the transition), so their behaviour
+ * is checked here.
  */
-describe('kostry obsahu', () => {
-  it('oznámí čekání odečítači obrazovky, ale kostra sama je jen obrázek', () => {
+describe('content skeletons', () => {
+  it('announces waiting to screen readers, while the skeleton itself is just a picture', () => {
     render(
       <Delayed label="Načítám téma…">
         <LoadingCard />
@@ -16,16 +17,16 @@ describe('kostry obsahu', () => {
 
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent('Načítám téma…')
-    // Zpoždění drží třída; bez ní by kostra u rychlé odpovědi zablikala.
+    // The class holds the delay; without it the skeleton would flash on a fast response.
     expect(status).toHaveClass('ui-delayed')
   })
 
-  it('kostra má tolik dílků, kolik se jí zadá', () => {
+  it('the skeleton has as many pieces as requested', () => {
     const { container } = render(<LoadingTiles count={4} />)
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThanOrEqual(4)
   })
 
-  it('kostra nadpisu umí i řádek s počty', () => {
+  it('the heading skeleton can include the stats row', () => {
     const { container } = render(<LoadingHeading stats />)
     const withStats = container.querySelectorAll('[data-slot="skeleton"]').length
 
@@ -33,7 +34,7 @@ describe('kostry obsahu', () => {
     expect(withStats).toBeGreaterThan(plain.querySelectorAll('[data-slot="skeleton"]').length)
   })
 
-  it('kostra nenese žádný text, který by čtečka přečetla dvakrát', () => {
+  it('the skeleton carries no text a screen reader would read twice', () => {
     const { container } = render(<LoadingCard lines={3} />)
     expect(container.textContent).toBe('')
   })

@@ -3,11 +3,12 @@
 import { useSyncExternalStore } from 'react'
 
 /**
- * Sleduje šířku okna. Vrací `false` na serveru, kde se vykresluje široká podoba.
+ * Tracks the window width. Returns `false` on the server, where the wide
+ * layout renders.
  *
- * Slouží k tomu, aby se rozvržení vykreslilo jen jednou. Obě podoby naráz —
- * jedna schovaná přes `hidden` — znamenají zdvojená `id`, popisky polí mířící
- * na neviditelnou kopii a zdvojené prvky ve všem, co stránku prochází.
+ * It lets the layout render only once. Both layouts at once — one hidden via
+ * `hidden` — mean duplicated `id`s, field labels pointing at an invisible copy
+ * and duplicated elements for everything that walks the page.
  */
 export function useMatchesMedia(query: string): boolean {
   return useSyncExternalStore(

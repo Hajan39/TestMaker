@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
 
 /**
- * Banka otázek přes celou knihovnu se zrušila — otázky (i smazané, přes
- * přepínač „Smazané") se hledají přímo v tématu. Starý odkaz s `topicId`
- * (uložený v záložce nebo v odkazu odjinud) vede rovnou na tohle téma;
- * bez něj, nebo když téma mezitím zmizelo, skončí na úvodu místo chybové
- * stránky (existenci ověří až stránka tématu sama).
+ * The library-wide question bank was removed — questions (deleted ones too,
+ * via the "Smazané" toggle) are searched right in the topic. An old link with
+ * `topicId` (a bookmark or a link from elsewhere) goes straight to that topic;
+ * without it, or if the topic is gone, it lands on home instead of an error
+ * page (the topic page itself checks it exists).
  */
 export default async function QuestionsPage({
   searchParams,

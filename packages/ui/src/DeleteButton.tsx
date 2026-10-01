@@ -14,23 +14,24 @@ import {
   AlertDialogTrigger,
 } from './ui/alert-dialog'
 import { Trash2 } from 'lucide-react'
+import { t } from '@testmaker/core/i18n'
 import { Button } from './ui/button'
 import { Delayed, LoadingLines } from './Loading'
 
 /**
- * Tlačítko pro nevratnou akci. Potvrzení se ptá vždy a v popisu ukazuje,
- * co přesně zmizí — mazání v knihovně je kaskádové a učitelka musí vidět
- * dopad dřív, než ho potvrdí.
+ * Button for an irreversible action. It always asks for confirmation and the
+ * description shows exactly what will disappear — deleting in the library
+ * cascades and the teacher must see the impact before confirming.
  *
- * `describe` se volá až při otevření, aby se dopad zjišťoval jen tehdy,
- * když o něj někdo stojí.
+ * `describe` is called only on open, so the impact is looked up only when
+ * someone actually wants it.
  */
 export function DeleteButton({
-  label = 'Smazat',
+  label,
   title,
   description,
   describe,
-  confirmLabel = 'Smazat',
+  confirmLabel,
   iconOnly = false,
   size = 'sm',
   variant = 'ghost',
@@ -42,8 +43,8 @@ export function DeleteButton({
   describe?: () => Promise<ReactNode>
   confirmLabel?: string
   /**
-   * Jen ikona koše s popiskem při najetí. Hodí se tam, kde je akcí u každé
-   * položky víc a texty by přebily to, na čem záleží — tedy názvy.
+   * Just a trash icon with a hover tooltip. Useful where each item has several
+   * actions and texts would drown out what matters — the names.
    */
   iconOnly?: boolean
   size?: 'sm' | 'default' | 'lg' | 'icon-sm'
@@ -76,9 +77,9 @@ export function DeleteButton({
     <AlertDialog open={open} onOpenChange={(next) => void handleOpenChange(next)}>
       <AlertDialogTrigger asChild>
         {/*
-          Červený text patří jen na neutrální podklad (`ghost`, `outline`).
-          Varianta `destructive` má červené pozadí a světlé písmo sama — kdyby
-          se jí barva textu vnutila, vznikne červená na červené a nápis zmizí.
+          Red text belongs only on a neutral background (`ghost`, `outline`).
+          The `destructive` variant has a red background and light text of its
+          own — forcing the text colour would give red on red and hide the label.
         */}
         <Button
           size={iconOnly ? 'icon-sm' : size}
@@ -87,7 +88,7 @@ export function DeleteButton({
           title={iconOnly ? title : undefined}
           className={variant === 'destructive' ? undefined : 'text-danger hover:text-danger'}
         >
-          {iconOnly ? <Trash2 aria-hidden /> : label}
+          {iconOnly ? <Trash2 aria-hidden /> : (label ?? t('actions.delete'))}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -96,22 +97,22 @@ export function DeleteButton({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               {description ? <p>{description}</p> : null}
-              {/* Dokud dopad neznáme, drží jeho místo kostra: text „Zjišťuji…“
-                  byl o řádek kratší než výpis a tlačítko Smazat pak poskočilo
-                  přesně ve chvíli, kdy na něj někdo mířil myší. */}
+              {/* Until the impact is known a skeleton holds its place: a
+                  "Zjišťuji…" text was a line shorter than the listing and the
+                  delete button jumped exactly when someone was aiming at it. */}
               {describe
                 ? (detail ?? (
-                    <Delayed label="Zjišťuji, co zmizí…">
+                    <Delayed label={t('ui:deleteButton.findingImpact')}>
                       <LoadingLines lines={2} />
                     </Delayed>
                   ))
                 : null}
-              <p className="text-fg-muted">Akci nejde vrátit zpět.</p>
+              <p className="text-fg-muted">{t('ui:deleteButton.irreversible')}</p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Zrušit</AlertDialogCancel>
+          <AlertDialogCancel>{t('actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={busy}
@@ -121,7 +122,7 @@ export function DeleteButton({
               void confirm()
             }}
           >
-            {busy ? 'Mažu…' : confirmLabel}
+            {busy ? t('actions.deleting') : (confirmLabel ?? t('actions.delete'))}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -7,8 +7,8 @@ import { sanitizeText } from './text'
 const LIGHT = '0.6pt solid #999'
 
 /**
- * Krátký text, nebo fun fact v rámečku. Vzhled rámečku (okraj, podbarvení,
- * popisek) je nastavení šablony (`config.funFact`), ne pevná podoba.
+ * Short text, or a boxed fun fact. The box look (border, shading, label) is a
+ * template setting (`config.funFact`), not a fixed design.
  */
 export function TextBlock({ text, variant, config }: { text: string; variant: TextItemVariant; config: TemplateConfig }) {
   if (variant === 'text') {
@@ -32,9 +32,9 @@ export function TextBlock({ text, variant, config }: { text: string; variant: Te
 }
 
 /**
- * Tabulka k doplnění. Láme se přes stránku po řádcích a záhlaví se na každé
- * další straně zopakuje (`fixed` uvnitř obalu, který se láme). Prázdné buňky
- * mají výšku na psaní rukou; v klíči (`solved`) je v nich správná odpověď.
+ * Fill-in table. Breaks across pages by rows and the header repeats on every
+ * following page (`fixed` inside a wrapping container). Empty cells are tall
+ * enough for handwriting; in the key (`solved`) they hold the correct answer.
  */
 export function TableBlock({ table, solved = false }: { table: TableItemContent; solved?: boolean }) {
   const columns = table.header.length

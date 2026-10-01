@@ -11,16 +11,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
-/** Jak dlouho se čeká, než se psaní v hledání promítne do adresy. */
+/** How long to wait before typing in the search reaches the URL. */
 const SEARCH_DELAY = 350
 
 /**
- * Hledání a filtr nad seznamem testů.
+ * Search and filter over the test list.
  *
- * Filtry jsou v adrese, aby se dal odkaz poslat a aby se šlo vrátit zpátky
- * tam, kde učitelka skončila; samotné hledání dělá databáze, seznam se sem
- * nenačítá celý.
+ * Filters live in the URL so a link can be shared and the teacher can get back
+ * to where she left off; the database does the search itself, the whole list
+ * is never loaded here.
  */
 export function TestsFilters({
   basePath,
@@ -30,7 +31,7 @@ export function TestsFilters({
   gradeId,
   grades,
 }: {
-  /** `/tests`, nebo `/listy` — filtr zůstává na přehledu, ze kterého přišel. */
+  /** `/tests` or `/listy` — the filter stays on the overview it came from. */
   basePath: string
   search: string
   templateId: string
@@ -43,9 +44,9 @@ export function TestsFilters({
   const [navigating, startNavigate] = useTransition()
   const [applied, setApplied] = useState(search)
 
-  // Změna adresy zvenčí (tlačítko zpět, poslaný odkaz) se musí propsat do
-  // políčka, jinak by ukazovalo, co už neplatí. Srovnává se při vykreslení,
-  // ne v efektu — jinak by políčko na okamžik ukázalo starý text.
+  // A URL change from outside (back button, shared link) must reach the field,
+  // otherwise it would show stale text. Synced during render, not in an
+  // effect — otherwise the field would briefly show the old text.
   if (applied !== search) {
     setApplied(search)
     setText(search)
@@ -63,8 +64,8 @@ export function TestsFilters({
     [router, basePath],
   )
 
-  // Psaní se do adresy propisuje se zpožděním, aby se seznam nenačítal po
-  // každém písmenu.
+  // Typing reaches the URL with a delay so the list does not reload on every
+  // keystroke.
   useEffect(() => {
     if (text === search) return
     const timer = setTimeout(() => apply({ search: text, templateId, gradeId }), SEARCH_DELAY)
@@ -74,16 +75,16 @@ export function TestsFilters({
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div className="w-56">
-        <Label htmlFor="test-search">Hledat</Label>
+        <Label htmlFor="test-search">{t('tests:filters.search')}</Label>
         <Input
           id="test-search"
           value={text}
-          placeholder="název testu"
+          placeholder={t('tests:filters.searchPlaceholder')}
           onChange={(event) => setText(event.target.value)}
         />
       </div>
       <div className="w-52">
-        <Label htmlFor="test-template">Šablona</Label>
+        <Label htmlFor="test-template">{t('tests:filters.template')}</Label>
         <Select
           value={templateId || 'vse'}
           onValueChange={(value) =>
@@ -94,7 +95,7 @@ export function TestsFilters({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="vse">Všechny</SelectItem>
+            <SelectItem value="vse">{t('tests:filters.allTemplates')}</SelectItem>
             {templates.map((template) => (
               <SelectItem key={template.id} value={template.id}>
                 {template.name}
@@ -104,7 +105,7 @@ export function TestsFilters({
         </Select>
       </div>
       <div className="w-52">
-        <Label htmlFor="test-grade">Třída</Label>
+        <Label htmlFor="test-grade">{t('tests:filters.grade')}</Label>
         <Select
           value={gradeId || 'vse'}
           onValueChange={(value) =>
@@ -115,7 +116,7 @@ export function TestsFilters({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="vse">Všechny třídy</SelectItem>
+            <SelectItem value="vse">{t('tests:filters.allGrades')}</SelectItem>
             {grades.map((grade) => (
               <SelectItem key={grade.id} value={grade.id}>
                 {grade.label}
@@ -124,7 +125,7 @@ export function TestsFilters({
           </SelectContent>
         </Select>
       </div>
-      {navigating ? <p className="pb-2 text-sm text-fg-muted">Hledám…</p> : null}
+      {navigating ? <p className="pb-2 text-sm text-fg-muted">{t('tests:filters.searching')}</p> : null}
     </div>
   )
 }

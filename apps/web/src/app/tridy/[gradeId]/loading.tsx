@@ -1,13 +1,14 @@
 import { Delayed, LoadingHeading, LoadingList } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Přechod na stránku třídy: nadpis „Předmět · ročník" se statistikou a pod
- * ním seznam témat — kopíruje tvar `ClassTopics`, ne mřížku dlaždic (ta patří
- * úvodu).
+ * Transition to the class page: a "Subject · grade" heading with stats and a
+ * list of topics below — mirrors `ClassTopics`, not the tile grid (that one
+ * belongs to the home page).
  */
 export default function ClassLoading() {
   return (
-    <Delayed label="Načítám třídu…" className="space-y-5">
+    <Delayed label={t('library:grade.loading')} className="space-y-5">
       <LoadingHeading stats />
       <LoadingList items={8} />
     </Delayed>

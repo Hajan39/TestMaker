@@ -5,13 +5,14 @@ import { db, questions } from '@/db'
 import { loadTopicSource } from './generation'
 import { insertQuestions, loadAvoidPrompts } from './questions'
 import { loadActivePromptRules } from './promptRules'
-import type { Scope } from './uzivatel'
+import type { Scope } from './user'
 
 /**
- * Text tématu ke stažení pro Claude Code (`/otazky`). Stejný text, jaký
- * dostává model při generování v aplikaci, s hlavičkou o ročníku, otázkách,
- * které už v tématu jsou, a aktivních pravidlech školy — jinak by je Claude
- * Code neznal (skript `otazky:pravidla` je bez databáze). Cizí téma → `null`.
+ * Topic text to download for Claude Code (`/otazky`). The same text the model
+ * gets when generating in the app, with a header about the grade, questions
+ * already in the topic and the school's active rules — otherwise Claude Code
+ * wouldn't know them (the `otazky:pravidla` script has no database). Foreign
+ * topic → `null`.
  */
 export async function topicSourceFile(scope: Scope, topicId: string): Promise<{ fileName: string; text: string } | null> {
   const source = await loadTopicSource(scope, topicId)
@@ -32,9 +33,9 @@ export async function topicSourceFile(scope: Scope, topicId: string): Promise<{ 
 }
 
 /**
- * Nahraje otázky ze souboru z Claude Code. Kontrola je tatáž jako při
- * generování (tvar, doslovná citace, duplicity); co neprojde, vrátí se
- * s důvodem. Cizí téma → `null`.
+ * Imports questions from a Claude Code file. Validation is the same as for
+ * generation (shape, verbatim quote, duplicates); whatever fails is returned
+ * with a reason. Foreign topic → `null`.
  */
 export async function importQuestionFile(
   scope: Scope,
@@ -46,7 +47,7 @@ export async function importQuestionFile(
   const existing = await loadAvoidPrompts(scope, topicId)
   const { questions: accepted, rejected } = readQuestionFile(json, source.text, existing)
   const ids = await insertQuestions(scope, accepted, { topicId, source: 'ai' })
-  // Odkud otázka je, se ukládá jen do databáze pro srovnání kvality (jako u generování).
+  // The question's origin is stored only in the database for quality comparison (as with generation).
   if (ids.length > 0) await db.update(questions).set({ model: CLAUDE_CODE_MODEL }).where(inArray(questions.id, ids))
   return { created: ids.length, rejected }
 }

@@ -1,4 +1,4 @@
 import { nanoid } from 'nanoid'
 
-/** Krátké, URL-bezpečné ID pro řádky v databázi. */
+/** Short, URL-safe ID for database rows. */
 export const newId = (): string => nanoid(12)

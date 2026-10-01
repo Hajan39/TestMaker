@@ -1,14 +1,15 @@
+import { t } from '@testmaker/core/i18n'
 import { z } from 'zod'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import {
   MAX_PROMPT_RULE_LENGTH,
-  PrilisMnohoPravidel,
+  TooManyRules,
   createPromptRule,
   loadPromptRules,
   setPromptRuleActive,
 } from '@/lib/promptRules'
-import { ROLE_SPRAVY } from '@/lib/role'
-import { sRozsahem } from '@/lib/uzivatel'
+import { MANAGEMENT_ROLES } from '@/lib/role'
+import { withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
@@ -25,59 +26,59 @@ const updateSchema = z.object({
   active: z.boolean(),
 })
 
-/** Seznam pravidel promptu školy — jen správce. */
+/** List of the school's prompt rules — manager only. */
 export async function GET() {
-  return sRozsahem(
-    async (ucet) => {
-      const pravidla = await loadPromptRules(ucet)
-      return Response.json({ pravidla })
+  return withScope(
+    async (account) => {
+      const rules = await loadPromptRules(account)
+      return Response.json({ rules })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
 
 /**
- * Založí pravidlo. Nejčastěji z tlačítka „Udělat z toho pravidlo" u důvodu
- * přegenerování v záložce AI kvalita — text je předvyplněný z nápovědy
- * (`REGENERATE_REASONS[reason].hint`), ale správce ho může upravit, i vypustit
- * `reason` a napsat pravidlo úplně vlastní.
+ * Creates a rule. Usually from the "Make it a rule" button next to a
+ * regeneration reason in the AI quality tab — the text is prefilled from the hint
+ * (`REGENERATE_REASONS[reason].hint`), but the manager may edit it, or drop
+ * `reason` and write an entirely custom rule.
  */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = createSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
       try {
-        const pravidlo = await createPromptRule(ucet, { text: parsed.data.text, reason: parsed.data.reason })
-        return Response.json({ pravidlo })
+        const rule = await createPromptRule(account, { text: parsed.data.text, reason: parsed.data.reason })
+        return Response.json({ rule })
       } catch (error) {
-        if (error instanceof PrilisMnohoPravidel) {
+        if (error instanceof TooManyRules) {
           return Response.json({ error: error.message }, { status: 400 })
         }
         throw error
       }
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
 
-/** Zapne, nebo vypne pravidlo. Cizí, nebo neexistující id → 404. */
+/** Enables or disables a rule. A foreign or nonexistent id → 404. */
 export async function PATCH(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
       const parsed = updateSchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+      if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
       try {
-        const ok = await setPromptRuleActive(ucet, parsed.data.id, parsed.data.active)
-        if (!ok) return Response.json({ error: 'Pravidlo se nenašlo' }, { status: 404 })
+        const ok = await setPromptRuleActive(account, parsed.data.id, parsed.data.active)
+        if (!ok) return Response.json({ error: t('admin:errors.ruleNotFound') }, { status: 404 })
         return Response.json({ ok: true })
       } catch (error) {
-        if (error instanceof PrilisMnohoPravidel) {
+        if (error instanceof TooManyRules) {
           return Response.json({ error: error.message }, { status: 400 })
         }
         throw error
       }
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }

@@ -6,7 +6,7 @@ export interface Stat {
   tone?: 'default' | 'draft'
 }
 
-/** Řádek s počty pod nadpisem obrazovky. */
+/** Stats row below a screen heading. */
 export function StatRow({ items }: { items: Stat[] }) {
   return (
     <dl className="flex gap-6 border-y border-line-soft py-2.5">

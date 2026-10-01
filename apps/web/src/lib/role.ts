@@ -1,59 +1,48 @@
 /**
- * Role a stavy účtu. Vlastní maličký modul bez jediného importu schválně:
- * čtou ho jak schéma databáze (které běží i pod `tsx`, kde se alias `@/`
- * nerozřeší), tak `session.ts`, který nesmí do sebe vtáhnout nic z databáze,
- * protože běží v Edge runtime uvnitř `proxy.ts`.
+ * Account roles and statuses. A tiny module with deliberately no imports: it is
+ * read both by the database schema (which also runs under `tsx`, where the `@/`
+ * alias does not resolve) and by `session.ts`, which must not pull in anything
+ * from the database because it runs in the Edge runtime inside `proxy.ts`.
+ * Labels live in the `admin` namespace (`admin:roles.<role>`,
+ * `admin:statuses.<status>`).
  */
 
 /**
- * - `ucitelka` — plná práce s obsahem: import, generování, kontrola, testy.
- * - `spravce` — navíc účty, zálohy, nastavení a záznam událostí.
- * - `nahled` — jen čte a tiskne; nic nemění.
- * - `administrator` — nad školami: zakládá je, přepíná se mezi nimi a v každé
- *   smí všechno včetně soukromých písemek. Přiděluje ho jen skript
- *   `scripts/uzivatel.ts`, v aplikaci se nenabízí.
+ * - `ucitelka` — full work with content: import, generation, review, tests.
+ * - `spravce` — additionally accounts, backups, settings and the event log.
+ * - `nahled` — only reads and prints; changes nothing.
+ * - `administrator` — above schools: creates them, switches between them and
+ *   may do everything in each, private tests included. Granted only by the
+ *   `scripts/user.ts` script, never offered in the app.
  */
 export type Role = 'ucitelka' | 'spravce' | 'nahled' | 'administrator'
 
 export const ROLES: readonly Role[] = ['ucitelka', 'spravce', 'nahled', 'administrator']
 
-/** Role, které smí přidělit správce v aplikaci. Administrátora mezi nimi není. */
-export const ROLES_PRIDELITELNE: readonly Role[] = ['ucitelka', 'spravce', 'nahled']
+/** Roles a manager may assign in the app. Administrator is not among them. */
+export const ASSIGNABLE_ROLES: readonly Role[] = ['ucitelka', 'spravce', 'nahled']
 
-/** Kdo se dostane do správy školy. */
-export const ROLE_SPRAVY: Role[] = ['spravce', 'administrator']
-
-export const ROLE_LABELS: Record<Role, string> = {
-  ucitelka: 'Učitelka',
-  spravce: 'Správce',
-  nahled: 'Náhled',
-  administrator: 'Administrátor',
-}
+/** Who gets into school management. */
+export const MANAGEMENT_ROLES: Role[] = ['spravce', 'administrator']
 
 /**
- * - `aktivni` — účet se může přihlásit.
- * - `ceka` — přihlásil se přes Google, ale správce mu ještě nepřidělil roli.
- * - `zablokovany` — přístup odebrán; záznamy po něm zůstávají.
+ * - `aktivni` — the account can sign in.
+ * - `ceka` — signed in via Google, but a manager has not assigned a role yet.
+ * - `zablokovany` — access revoked; its records stay.
  */
 export type UserStatus = 'aktivni' | 'ceka' | 'zablokovany'
 
-export const USER_STATUS_LABELS: Record<UserStatus, string> = {
-  aktivni: 'Aktivní',
-  ceka: 'Čeká na schválení',
-  zablokovany: 'Zablokovaný',
-}
-
-/** Kdo smí měnit obsah. Náhled je jediná role, která nesmí nic. */
-export function roleMuzeMenit(role: Role): boolean {
+/** Who may change content. Preview is the only role that may not. */
+export function roleCanEdit(role: Role): boolean {
   return role !== 'nahled'
 }
 
-/** Kdo smí do správy: účty, zálohy, události. */
-export function roleMuzeSpravovat(role: Role): boolean {
+/** Who may enter management: accounts, backups, events. */
+export function roleCanManage(role: Role): boolean {
   return role === 'spravce' || role === 'administrator'
 }
 
-/** Kdo smí nad školy: zakládat je a přepínat se mezi nimi. */
-export function roleJeAdministrator(role: Role): boolean {
+/** Who may work above schools: create them and switch between them. */
+export function isAdministratorRole(role: Role): boolean {
   return role === 'administrator'
 }

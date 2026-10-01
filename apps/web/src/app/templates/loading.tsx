@@ -1,14 +1,15 @@
+import { t } from '@testmaker/core/i18n'
 import { Delayed, LoadingCards, LoadingHeading, PageShell } from '@testmaker/ui'
 
 /**
- * Přechod na šablony. Náhledy jsou skutečná PDF, takže se na ně čeká nejdél
- * ze všech obrazovek — kostra tu má poměr stran A4, aby se mřížka po dokreslení
- * náhledů nepřeskládala.
+ * Transition to templates. Previews are real PDFs, so this is the slowest
+ * screen of all — the skeleton keeps the A4 aspect ratio so the grid does not
+ * reflow once the previews are drawn.
  */
 export default function TemplatesLoading() {
   return (
     <PageShell>
-      <Delayed label="Načítám šablony…" className="space-y-5">
+      <Delayed label={t('tests:loading.templates')} className="space-y-5">
         <LoadingHeading />
         <LoadingCards count={3} />
       </Delayed>

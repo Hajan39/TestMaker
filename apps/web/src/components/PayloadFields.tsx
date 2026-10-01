@@ -14,10 +14,11 @@ import {
   SelectValue,
   Textarea,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 type Payload = Record<string, unknown>
 
-/** Formulářová pole podle typu otázky. Pracuje nad neotypovaným payloadem, validuje se až zod schématem. */
+/** Form fields by question type. Works on an untyped payload; validation happens later via the zod schema. */
 export function PayloadFields({
   type,
   payload,
@@ -31,14 +32,14 @@ export function PayloadFields({
   const str = (key: string) => String(payload[key] ?? '')
   const list = (key: string) => (payload[key] as string[] | undefined) ?? []
 
-  // Karta v úpravě a „Nová otázka" mohou stát na obrazovce vedle sebe — pevná
-  // id by se pak zdvojila a `htmlFor` by mířilo na cizí pole.
+  // A card being edited and „Nová otázka" can be on screen side by side —
+  // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
   const id = (name: string) => `payload-${name}-${uid}`
 
   const prompt = (
     <div>
-      <Label htmlFor={id('prompt')}>Zadání</Label>
+      <Label htmlFor={id('prompt')}>{t('library:payloadFields.prompt')}</Label>
       <Textarea id={id('prompt')} value={str('prompt')} onChange={(event) => set('prompt', event.target.value)} />
     </div>
   )
@@ -50,7 +51,7 @@ export function PayloadFields({
           {prompt}
           <div className="flex gap-3">
             <div className="w-32">
-              <Label htmlFor={id('lines')}>Počet linek</Label>
+              <Label htmlFor={id('lines')}>{t('library:payloadFields.lines')}</Label>
               <Input
                 id={id('lines')}
                 type="number"
@@ -62,7 +63,7 @@ export function PayloadFields({
             </div>
           </div>
           <div>
-            <Label htmlFor={id('open-answer')}>Vzorová odpověď (do klíče)</Label>
+            <Label htmlFor={id('open-answer')}>{t('library:payloadFields.openAnswer')}</Label>
             <Textarea
               id={id('open-answer')}
               value={str('answer')}
@@ -78,7 +79,7 @@ export function PayloadFields({
           {prompt}
           <div className="flex gap-3">
             <div className="w-32">
-              <Label htmlFor={id('lines')}>Místo (řádků)</Label>
+              <Label htmlFor={id('lines')}>{t('library:payloadFields.space')}</Label>
               <Input
                 id={id('lines')}
                 type="number"
@@ -90,7 +91,7 @@ export function PayloadFields({
             </div>
           </div>
           <div>
-            <Label htmlFor={id('draw-answer')}>Co má kresba obsahovat (do klíče)</Label>
+            <Label htmlFor={id('draw-answer')}>{t('library:payloadFields.drawAnswer')}</Label>
             <Textarea
               id={id('draw-answer')}
               value={str('answer')}
@@ -105,7 +106,7 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor={id('short-answer')}>Správná odpověď</Label>
+            <Label htmlFor={id('short-answer')}>{t('library:payloadFields.shortAnswer')}</Label>
             <Input
               id={id('short-answer')}
               value={str('answer')}
@@ -113,7 +114,7 @@ export function PayloadFields({
             />
           </div>
           <div>
-            <Label htmlFor={id('accepted-answers')}>Další uznávané odpovědi (oddělené středníkem)</Label>
+            <Label htmlFor={id('accepted-answers')}>{t('library:payloadFields.acceptedAnswers')}</Label>
             <Input
               id={id('accepted-answers')}
               value={list('acceptedAnswers').join('; ')}
@@ -154,7 +155,7 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label>Možnosti (zaškrtni správné)</Label>
+            <Label>{t('library:payloadFields.options')}</Label>
             <div className="space-y-2">
               {options.map((option, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -168,13 +169,13 @@ export function PayloadFields({
                     variant="ghost"
                     onClick={() => set('options', options.filter((_, i) => i !== index))}
                   >
-                    Odebrat
+                    {t('library:payloadFields.remove')}
                   </Button>
                 </div>
               ))}
             </div>
             <Button size="sm" variant="outline" className="mt-2" onClick={() => set('options', [...options, ''])}>
-              Přidat možnost
+              {t('library:payloadFields.addOption')}
             </Button>
           </div>
         </div>
@@ -187,7 +188,7 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label>Tvrzení (zaškrtnuté = pravdivé)</Label>
+            <Label>{t('library:payloadFields.statements')}</Label>
             <div className="space-y-2">
               {statements.map((statement, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -211,7 +212,7 @@ export function PayloadFields({
                     variant="ghost"
                     onClick={() => set('statements', statements.filter((_, i) => i !== index))}
                   >
-                    Odebrat
+                    {t('library:payloadFields.remove')}
                   </Button>
                 </div>
               ))}
@@ -222,7 +223,7 @@ export function PayloadFields({
               className="mt-2"
               onClick={() => set('statements', [...statements, { text: '', isTrue: true }])}
             >
-              Přidat tvrzení
+              {t('library:payloadFields.addStatement')}
             </Button>
           </div>
         </div>
@@ -237,14 +238,14 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor={id('fillblank-text')}>Text s vynechávkami — místo k doplnění zapiš jako ___</Label>
+            <Label htmlFor={id('fillblank-text')}>{t('library:payloadFields.fillBlankText')}</Label>
             <Textarea id={id('fillblank-text')} value={text} onChange={(event) => set('text', event.target.value)} />
             <p className="mt-1 text-xs text-fg-muted">
-              Vynechávek v textu: {placeholders}, doplňovaných výrazů: {blanks.length}
+              {t('library:payloadFields.blankStats', { placeholders, blanks: blanks.length })}
             </p>
           </div>
           <div>
-            <Label htmlFor={id('blanks')}>Správné výrazy v pořadí (oddělené středníkem)</Label>
+            <Label htmlFor={id('blanks')}>{t('library:payloadFields.blanks')}</Label>
             <Input
               id={id('blanks')}
               value={blanks.join('; ')}
@@ -254,7 +255,7 @@ export function PayloadFields({
             />
           </div>
           <div>
-            <Label htmlFor={id('wordbank')}>Nabídka slov navíc (nepovinné, oddělené středníkem)</Label>
+            <Label htmlFor={id('wordbank')}>{t('library:payloadFields.wordBank')}</Label>
             <Input
               id={id('wordbank')}
               value={list('wordBank').join('; ')}
@@ -275,18 +276,18 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div className="grid gap-3 sm:grid-cols-2">
-            <ColumnEditor label="Levý sloupec" items={left} onChange={(next) => set('left', next)} />
-            <ColumnEditor label="Pravý sloupec" items={right} onChange={(next) => set('right', next)} />
+            <ColumnEditor label={t('library:payloadFields.leftColumn')} items={left} onChange={(next) => set('left', next)} />
+            <ColumnEditor label={t('library:payloadFields.rightColumn')} items={right} onChange={(next) => set('right', next)} />
           </div>
           <div>
-            <Label>Správné dvojice</Label>
+            <Label>{t('library:payloadFields.pairs')}</Label>
             <div className="space-y-2">
               {left.map((item, index) => {
                 const pair = pairs.find(([l]) => l === index)
                 return (
                   <div key={index} className="flex items-center gap-2 text-sm">
                     <span className="w-1/2 truncate text-fg-soft">
-                      {index + 1}. {item || '(prázdné)'}
+                      {index + 1}. {item || t('library:payloadFields.empty')}
                     </span>
                     <Select
                       value={pair ? String(pair[1]) : 'zadne'}
@@ -307,7 +308,7 @@ export function PayloadFields({
                         <SelectItem value="zadne">—</SelectItem>
                         {right.map((option, i) => (
                           <SelectItem key={i} value={String(i)}>
-                            {String.fromCharCode(65 + i)}) {option || '(prázdné)'}
+                            {String.fromCharCode(65 + i)}) {option || t('library:payloadFields.empty')}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -326,7 +327,7 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <ColumnEditor
-            label="Položky ve správném pořadí (při tisku se zamíchají)"
+            label={t('library:payloadFields.orderingItems')}
             items={list('items')}
             onChange={(next) => set('items', next)}
           />
@@ -342,7 +343,7 @@ export function PayloadFields({
         <div className="space-y-3">
           {prompt}
           <div>
-            <Label htmlFor={id('headers')}>Hlavička (oddělená středníkem)</Label>
+            <Label htmlFor={id('headers')}>{t('library:payloadFields.headers')}</Label>
             <Input
               id={id('headers')}
               value={headers.join('; ')}
@@ -353,7 +354,7 @@ export function PayloadFields({
             />
           </div>
           <div>
-            <Label>Řádky — prázdné pole = buňka k doplnění</Label>
+            <Label>{t('library:payloadFields.rows')}</Label>
             <div className="space-y-2">
               {rows.map((row, r) => (
                 <div key={r} className="flex items-center gap-2">
@@ -361,7 +362,7 @@ export function PayloadFields({
                     <Input
                       key={c}
                       value={row[c] ?? ''}
-                      placeholder="k doplnění"
+                      placeholder={t('library:payloadFields.cellPlaceholder')}
                       onChange={(event) => {
                         const value = event.target.value
                         const nextRow = headers.map((__, i) =>
@@ -372,18 +373,18 @@ export function PayloadFields({
                     />
                   ))}
                   <Button size="sm" variant="ghost" onClick={() => set('rows', rows.filter((_, i) => i !== r))}>
-                    Odebrat
+                    {t('library:payloadFields.remove')}
                   </Button>
                 </div>
               ))}
             </div>
             <Button size="sm" variant="outline" className="mt-2" onClick={() => set('rows', [...rows, headers.map(() => null)])}>
-              Přidat řádek
+              {t('library:payloadFields.addRow')}
             </Button>
           </div>
           <div>
             <Label htmlFor={id('table-answers')}>
-              Správné hodnoty pro prázdné buňky po řádcích (oddělené středníkem)
+              {t('library:payloadFields.tableAnswers')}
             </Label>
             <Input
               id={id('table-answers')}
@@ -393,7 +394,7 @@ export function PayloadFields({
               }
             />
             <p className="mt-1 text-xs text-fg-muted">
-              Prázdných buněk: {blankCount}, zadaných hodnot: {answers.length}
+              {t('library:payloadFields.tableStats', { blankCount, answers: answers.length })}
             </p>
           </div>
         </div>
@@ -422,13 +423,13 @@ function ColumnEditor({
           <div key={index} className="flex items-center gap-2">
             <Input value={item} onChange={(event) => onChange(replaceAt(items, index, event.target.value))} />
             <Button size="sm" variant="ghost" onClick={() => onChange(items.filter((_, i) => i !== index))}>
-              Odebrat
+              {t('library:payloadFields.remove')}
             </Button>
           </div>
         ))}
       </div>
       <Button size="sm" variant="outline" className="mt-2" onClick={() => onChange([...items, ''])}>
-        Přidat
+        {t('library:payloadFields.add')}
       </Button>
     </div>
   )

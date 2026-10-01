@@ -1,5 +1,6 @@
 import { and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { t } from '@testmaker/core/i18n'
 import {
   QUESTION_STATUSES,
   QUESTION_TYPES,
@@ -17,7 +18,7 @@ import {
   setStatusForTopic,
   type QuestionQuery,
 } from '@/lib/questions'
-import { skola, sRozsahem } from '@/lib/uzivatel'
+import { inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
@@ -38,9 +39,9 @@ const bulkSchema = z.object({
 })
 
 /**
- * Hromadná akce nad celým tématem. Otázek v něm umí být přes tisíc a posílat
- * tisíc identifikátorů jen proto, aby se změnil stav jednoho tématu, nemá
- * smysl — stačí id tématu a stav, ze kterého se má měnit.
+ * Bulk action over a whole topic. A topic can hold over a thousand questions
+ * and sending a thousand ids just to change one topic's status makes no
+ * sense — the topic id and the source status are enough.
  */
 const bulkTopicSchema = z.object({
   topicId: z.string().min(1),
@@ -48,36 +49,36 @@ const bulkTopicSchema = z.object({
   status: z.enum(['draft', 'approved', 'rejected']),
 })
 
-/** Stránka fronty: filtr, velikost a kurzor za poslední přečtenou otázkou. */
+/** A queue page: filter, size and a cursor past the last question read. */
 const listSchema = z.object({
   statuses: z.array(z.enum(QUESTION_STATUSES)).optional(),
-  /** Typy otázek; filtr přes ně dnes posílá jen přímé volání API, ne aplikace. */
+  /** Question types; today only direct API calls filter by them, not the app. */
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
   topicId: z.string().optional(),
   gradeId: z.string().optional(),
   subjectId: z.string().optional(),
   /**
-   * Hledaný text; porovnává se se sloupcem `search_text`, ne v prohlížeči.
-   * Aplikace tenhle parametr sama nepoužívá — otázky se hledají jen uvnitř
-   * tématu (`topicId`); zůstává pro přímé volání API a testy.
+   * Search text; compared against the `search_text` column, not in the browser.
+   * The app itself doesn't use this parameter — questions are searched only
+   * within a topic (`topicId`); it stays for direct API calls and tests.
    */
   q: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(QUESTION_PAGE_SIZE),
   cursor: z.string().optional(),
-  /** `desc` = od nejnovějších podle poslední změny stavu — panel „Smazané". */
+  /** `desc` = newest first by last status change — the "Smazané" panel. */
   order: z.enum(['asc', 'desc']).optional().default('asc'),
 })
 
 /**
- * Stránka otázek tématu — dnes hlavně panel „Smazané" (`status=rejected`).
- * Stránkuje se kurzorem, ne offsetem: otázka, která z filtru mezitím vypadne
- * (obnoví se, schválí se jinde), by offset o tolik položek přeskočil dál a
- * učitelka by ji nikdy neuviděla.
+ * A page of a topic's questions — today mainly the "Smazané" panel (`status=rejected`).
+ * Paged by cursor, not offset: a question that meanwhile drops out of the filter
+ * (restored, approved elsewhere) would make an offset skip that many items and
+ * the teacher would never see it.
  *
- * Vrací i `total`, aby šlo ukázat, kolik otázek filtru odpovídá celkem.
+ * Also returns `total` so it can show how many questions match the filter overall.
  */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const params = new URL(request.url).searchParams
   const parsed = listSchema.safeParse({
     statuses: params.getAll('status').length > 0 ? params.getAll('status') : undefined,
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
     order: params.get('order') ?? undefined,
   })
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
 
   const query: QuestionQuery = {
@@ -104,50 +105,50 @@ export async function GET(request: Request) {
   }
 
   const [page, total] = await Promise.all([
-    loadQuestionPage(ucet, query, {
+    loadQuestionPage(account, query, {
       limit: parsed.data.limit,
       cursor: parsed.data.cursor,
       order: parsed.data.order,
     }),
-    countQuestions(ucet, query),
+    countQuestions(account, query),
   ])
 
   return Response.json({ items: page.items, nextCursor: page.nextCursor, total })
   })
 }
 
-/** Vlastní otázka učitele. */
+/** A teacher's own question. */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = createSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
   const problems = validateQuestionContent(parsed.data.question)
   if (problems.length > 0) return Response.json({ error: problems.join('; ') }, { status: 400 })
 
-  const [id] = await insertQuestions(ucet, [parsed.data.question], {
+  const [id] = await insertQuestions(account, [parsed.data.question], {
     topicId: parsed.data.topicId,
     source: 'manual',
     status: 'approved',
   })
   return Response.json({ id })
-  }, { zapis: true })
+  }, { write: true })
 }
 
-/** Úprava obsahu nebo stavu jedné otázky. */
+/** Edit of one question's content or status. */
 export async function PATCH(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const parsed = updateSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
 
   const update: Record<string, unknown> = {}
   if (parsed.data.status) {
     update.status = parsed.data.status
-    // U schválení a zamítnutí je vidět, kdo rozhodl — banka je společná.
-    update.reviewedBy = ucet.userId
+    // Approvals and rejections record who decided — the bank is shared.
+    update.reviewedBy = account.userId
     update.reviewedAt = new Date().toISOString()
   }
   if (parsed.data.question) {
@@ -159,58 +160,58 @@ export async function PATCH(request: Request) {
     update.points = parsed.data.question.points
     update.difficulty = parsed.data.question.difficulty
     update.explanation = parsed.data.question.explanation ?? null
-    // Text pro hledání se přepočítá spolu s obsahem — jinak by se upravená
-    // otázka dala v bance najít jen podle svého původního znění.
+    // The search text is recomputed with the content — otherwise an edited
+    // question could only be found in the bank by its original wording.
     update.searchText = searchTextFor(parsed.data.question)
   }
 
   await db
     .update(questions)
     .set(update)
-    .where(and(skola(ucet, questions), inArray(questions.id, [parsed.data.id])))
+    .where(and(inSchool(account, questions), inArray(questions.id, [parsed.data.id])))
   return Response.json({ ok: true })
-  }, { zapis: true })
+  }, { write: true })
 }
 
 /**
- * Hromadné schválení nebo zamítnutí — buď výčtem otázek, nebo celým tématem.
- * U tématu se vracejí id skutečně změněných otázek, aby šlo akci vzít zpět
- * přesně: co bylo schválené už předtím, se zpátky na koncept měnit nesmí.
+ * Bulk approval or rejection — either by a list of questions or by a whole topic.
+ * For a topic the ids of the questions actually changed are returned so the
+ * action can be undone precisely: what was approved before must not go back to draft.
  */
 export async function PUT(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const body = await request.json()
 
   if (body && typeof body === 'object' && 'topicId' in body) {
     const parsed = bulkTopicSchema.safeParse(body)
     if (!parsed.success) {
-      return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+      return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
     }
-    const ids = await setStatusForTopic(ucet, parsed.data.topicId, parsed.data.from, parsed.data.status)
+    const ids = await setStatusForTopic(account, parsed.data.topicId, parsed.data.from, parsed.data.status)
     return Response.json({ updated: ids.length, ids })
   }
 
   const parsed = bulkSchema.safeParse(body)
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
   await db
     .update(questions)
     .set({
       status: parsed.data.status,
-      reviewedBy: ucet.userId,
+      reviewedBy: account.userId,
       reviewedAt: new Date().toISOString(),
     })
-    .where(and(skola(ucet, questions), inArray(questions.id, parsed.data.ids)))
+    .where(and(inSchool(account, questions), inArray(questions.id, parsed.data.ids)))
   return Response.json({ updated: parsed.data.ids.length })
-  }, { zapis: true })
+  }, { write: true })
 }
 
 export async function DELETE(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     const ids = new URL(request.url).searchParams.getAll('id')
-    if (ids.length === 0) return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.' }, { status: 400 })
-    await deleteQuestionsWithAssets(ucet, ids)
+    if (ids.length === 0) return Response.json({ error: t('api:invalidRequest') }, { status: 400 })
+    await deleteQuestionsWithAssets(account, ids)
     return Response.json({ deleted: ids.length })
-  }, { zapis: true })
+  }, { write: true })
 }

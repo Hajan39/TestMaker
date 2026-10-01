@@ -1,70 +1,71 @@
+import { t } from '../i18n'
 import type { Question, QuestionType } from '../schema/question'
 import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
 
 /**
- * Náhodné poskládání písemky z banky otázek.
+ * Random composition of a test from the question bank.
  *
- * Čistá funkce bez Reactu a bez databáze: vstupem je seznam otázek a zadání,
- * výstupem vybrané otázky. Rozhraní ji volá v prohlížeči, ale stejně tak po ní
- * může sáhnout CLI nebo budoucí agent.
+ * A pure function without React or a database: the input is a list of
+ * questions and a request, the output the picked questions. The UI calls it in
+ * the browser, but a CLI or a future agent can use it just as well.
  *
- * Losování je řízené seedem, takže totéž zadání dá vždycky týž test —
- * „Zamíchat znovu“ v rozhraní není nic jiného než nový seed.
+ * Drawing is seed driven, so the same request always yields the same test —
+ * „Zamíchat znovu“ in the UI is nothing more than a new seed.
  */
 
-/** Obtížnost v zadání; `mix` znamená „na obtížnosti nezáleží“. */
+/** Requested difficulty; `mix` means "difficulty does not matter". */
 export type DifficultyChoice = 1 | 2 | 3 | 'mix'
 
-/** Čím je rozsah testu daný: počtem otázek, nebo celkovým počtem bodů. */
+/** What sets the test size: a question count or a total point count. */
 export type RandomTestLimit =
   | { kind: 'count'; count: number }
   | { kind: 'points'; points: number }
 
 export interface RandomTestRequest {
-  /** Témata, ze kterých se losuje. Prázdné (nebo chybí) = všechna dodaná. */
+  /** Topics to draw from. Empty (or missing) = all supplied. */
   topicIds?: string[]
   limit: RandomTestLimit
-  /** Povolené typy otázek; prázdné (nebo chybí) = všechny. */
+  /** Allowed question types; empty (or missing) = all. */
   types?: QuestionType[]
   difficulty?: DifficultyChoice
-  /** Jen schválené otázky — do ostré písemky nemá proklouznout koncept. */
+  /** Approved questions only — a draft must not slip into a real test. */
   onlyApproved?: boolean
-  /** Cokoli, co jde zapsat; stejný seed = stejný výběr. */
+  /** Anything writable; same seed = same selection. */
   seed: string
 }
 
-/** Kolik otázek na téma vyšlo a kolik jich vůbec bylo k dispozici. */
+/** How many questions a topic got and how many were available at all. */
 export interface RandomTestTopicShare {
-  /** `null` u otázek bez tématu. */
+  /** `null` for questions without a topic. */
   topicId: string | null
   picked: number
   available: number
 }
 
 export interface RandomTestResult {
-  /** Vybrané otázky v pořadí, v jakém mají jít do osnovy. */
+  /** Picked questions in the order they go into the outline. */
   questions: Question[]
   totalPoints: number
-  /** Rozdělení podle témat — rozhraní k nim doplní názvy. */
+  /** Breakdown by topic — the UI adds the names. */
   topics: RandomTestTopicShare[]
   /**
-   * Kolik chybí do zadání: u počtu otázek počet otázek, u bodů body.
-   * Nula znamená, že zadání vyšlo.
+   * How much is missing from the request: questions for a count, points for
+   * points. Zero means the request was met.
    */
   shortfall: number
-  /** Vysvětlení pro učitelku, česky; prázdné, když není co vysvětlovat. */
+  /** Explanations for the teacher; empty when there is nothing to explain. */
   notes: string[]
 }
 
-/** Klíč přihrádky pro otázky bez tématu; id z databáze takhle nevypadá. */
-const NO_TOPIC = '__bez-tematu__'
+/** Bucket key for questions without a topic; no database id looks like this. */
+const NO_TOPIC = '__no-topic__'
 
-/** Body s desetinnou čárkou podle českého úzu. */
+/** Points with a decimal comma per Czech convention. */
 function formatPoints(points: number): string {
   return Number.isInteger(points) ? String(points) : points.toFixed(1).replace('.', ',')
 }
 
-/** Projde otázka filtry zadání? */
+/** Does the question pass the request filters? */
 function matches(question: Question, request: RandomTestRequest, topicFilter: Set<string> | null): boolean {
   if (topicFilter && !(question.topicId && topicFilter.has(question.topicId))) return false
   if (request.onlyApproved && question.status !== 'approved') return false
@@ -75,20 +76,20 @@ function matches(question: Question, request: RandomTestRequest, topicFilter: Se
 }
 
 /**
- * Vybere otázky podle zadání.
+ * Picks questions according to the request.
  *
- * Rozprostření: losuje se po kolech přes témata (round robin), takže při
- * čtyřech tématech a deseti otázkách padnou na každé téma dvě až tři, ne
- * deset z jednoho. Uvnitř tématu dostane přednost otázka typu, kterého je
- * zatím ve výběru nejmíň — tím se rozprostřou i typy. Když téma dojde,
- * kolo ho jen přeskočí a zbytek doberou ostatní.
+ * Spreading: drawing goes in rounds across topics (round robin), so with four
+ * topics and ten questions each topic gets two or three, not ten from one.
+ * Within a topic, a question of the type least represented so far wins — that
+ * spreads types too. When a topic runs out, the round just skips it and the
+ * others make up the rest.
  */
 export function composeRandomTest(questions: Question[], request: RandomTestRequest): RandomTestResult {
   const topicFilter = request.topicIds && request.topicIds.length > 0 ? new Set(request.topicIds) : null
   const rand = seededRandom(hashSeed(request.seed))
 
-  // Přihrádky podle témat. Otázky se řadí podle id, ať výsledek nezáleží na
-  // pořadí, v jakém je dodala databáze; teprve pak se míchají seedem.
+  // Buckets by topic. Questions are sorted by id so the result does not depend
+  // on the order the database returned them in; only then are they shuffled.
   const pools = new Map<string, Question[]>()
   for (const question of questions) {
     if (!matches(question, request, topicFilter)) continue
@@ -97,15 +98,15 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
     if (pool) pool.push(question)
     else pools.set(key, [question])
   }
-  // Míchá se v pořadí podle klíče tématu, ne podle toho, které téma přišlo
-  // z databáze první — jinak by se losování rozešlo při jiném řazení dotazu.
+  // Shuffle in topic key order, not in the order topics came from the
+  // database — otherwise a different query ordering would change the draw.
   for (const key of [...pools.keys()].sort()) {
     const pool = pools.get(key) as Question[]
     pools.set(key, shuffled([...pool].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), rand))
   }
 
-  // Prázdná témata musí být ve výsledku vidět, i když z nich nic nevyšlo —
-  // jinak učitelka nepozná, proč jich v testu je míň, než zaškrtla.
+  // Empty topics must show in the result even when nothing came from them —
+  // otherwise the teacher cannot tell why the test has fewer than she ticked.
   const requested = request.topicIds && request.topicIds.length > 0 ? [...new Set(request.topicIds)] : [...pools.keys()]
   const available = new Map<string, number>()
   for (const key of requested) available.set(key, pools.get(key)?.length ?? 0)
@@ -122,9 +123,9 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
   const done = () => (target.kind === 'count' ? picked.length >= target.count : totalPoints >= target.points)
 
   /**
-   * Nejlepší dosud nepoužitá otázka tématu: nejdřív ta, která u bodového
-   * zadání cíl nepřestřelí, pak typ, kterého je ve výběru zatím nejmíň.
-   * Při shodě rozhoduje pořadí losu.
+   * Best unused question of a topic: first one that does not overshoot a
+   * points target, then the type least represented so far. Ties are broken by
+   * draw order.
    */
   function bestCandidate(key: string): { index: number; score: [number, number] } | null {
     const pool = pools.get(key)
@@ -137,8 +138,8 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
     let bestScore: [number, number] | null = null
     for (let i = from; i < pool.length; i += 1) {
       const question = pool[i] as Question
-      // U bodového zadání má přednost otázka, která cíl nepřestřelí; jinak by
-      // se na konec vlezla otázka za pět bodů kvůli jedinému chybějícímu.
+      // For a points target, a question that does not overshoot wins; otherwise
+      // a five-point question would be squeezed in for a single missing point.
       const overshoot = target.kind === 'points' && question.points > remaining ? 1 : 0
       const score: [number, number] = [overshoot, typeUsage.get(question.type) ?? 0]
       if (!bestScore || score[0] < bestScore[0] || (score[0] === bestScore[0] && score[1] < bestScore[1])) {
@@ -154,8 +155,8 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
     const pool = pools.get(key) as Question[]
     const from = cursors.get(key) ?? 0
     const question = pool[index] as Question
-    // Vybraná otázka se vymění s první nepoužitou a kurzor se posune — pole
-    // tak zůstane bez děr a další kolo bere zas od kurzoru.
+    // Swap the picked question with the first unused one and advance the
+    // cursor — the array stays hole-free and the next round starts at the cursor.
     pool[index] = pool[from] as Question
     pool[from] = question
     cursors.set(key, from + 1)
@@ -166,11 +167,11 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
     pickedPerTopic.set(key, (pickedPerTopic.get(key) ?? 0) + 1)
   }
 
-  // Kolo = každé téma nejvýš jednou, takže se počty mezi tématy nerozjedou.
-  // Na kterém tématu je uvnitř kola řada, se ale rozhoduje až podle typů:
-  // přednost má téma, které umí nabídnout typ zastoupený zatím nejmíň.
-  // Kdyby se v kole chodilo napevno podle pořadí, poslední otázka kola by
-  // padla na téma, kterému chybějící typ mezitím došel, a typy by se rozešly.
+  // A round = each topic at most once, so counts across topics stay even.
+  // Which topic goes next within a round is decided by types: the topic that
+  // can offer the least represented type wins. With a fixed order, the last
+  // question of a round would fall on a topic that has run out of the missing
+  // type, and types would drift apart.
   while (!done()) {
     const pending = new Set(order.filter((key) => (cursors.get(key) ?? 0) < (pools.get(key)?.length ?? 0)))
     if (pending.size === 0) break
@@ -216,28 +217,28 @@ export function composeRandomTest(questions: Question[], request: RandomTestRequ
   if (shortfall > 0 && picked.length > 0) {
     notes.push(
       target.kind === 'count'
-        ? `Vyhovujících otázek je jen ${picked.length} z požadovaných ${target.count}. Vloží se, co je — zbytek přidej ručně, nebo povol víc témat a typů.`
-        : `Dohromady to dá ${formatPoints(totalPoints)} b. místo požadovaných ${formatPoints(target.points)} b. Víc vyhovujících otázek ve vybraných tématech není.`,
+        ? t('pdf:compose.countShortfall', { picked: picked.length, requested: target.count })
+        : t('pdf:compose.pointsShortfall', { points: formatPoints(totalPoints), requested: formatPoints(target.points) }),
     )
   }
   const empty = topics.filter((topic) => topic.available === 0).length
   if (empty > 0) {
     notes.push(
       empty === 1
-        ? 'Jedno vybrané téma nemá žádnou otázku, která by prošla filtry.'
-        : `Vybraná témata bez jediné vyhovující otázky: ${empty}.`,
+        ? t('pdf:compose.oneEmptyTopic')
+        : t('pdf:compose.emptyTopics', { n: empty }),
     )
   }
   if (picked.length === 0) {
     notes.push(
-      'Filtrům nevyhovuje ani jedna otázka. Zkus povolit víc typů, jinou obtížnost, nebo i neschválené otázky.',
+      t('pdf:compose.nothingMatches'),
     )
   }
 
   return { questions: picked, totalPoints, topics, shortfall, notes }
 }
 
-/** Nový seed pro losování — krátký, aby se dal přečíst i opsat. */
+/** New draw seed — short, so it can be read and copied by hand. */
 export function randomSeed(): string {
   return Math.random().toString(36).slice(2, 8)
 }

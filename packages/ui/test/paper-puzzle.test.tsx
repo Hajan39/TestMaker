@@ -5,9 +5,9 @@ import { buildPuzzle } from '@testmaker/core/puzzle'
 import { PaperPuzzle } from '../src'
 
 /**
- * Náhled hlavolamu musí ukazovat totéž co PDF (`PuzzleBody.tsx`): seznam
- * slov ve třech sloupcích, jen slova, která v mřížce jsou, a v řešení
- * poznámku u slova, které se nevešlo.
+ * The puzzle preview must show the same as the PDF (`PuzzleBody.tsx`): a word
+ * list in three columns, only words that are in the grid, and in the solution
+ * a note for a word that did not fit.
  */
 
 const words = [
@@ -24,15 +24,15 @@ const overfull = puzzleContentSchema.parse({
 })
 
 describe('PaperPuzzle', () => {
-  it('seznam slov má tři sloupce jako na papíře', () => {
+  it('the word list has three columns as on paper', () => {
     const { container } = render(<PaperPuzzle puzzle={overfull} />)
     const list = container.querySelector('[data-slot="puzzle-words"]') as HTMLElement
     expect(list.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))')
   })
 
-  it('slovo, které se do mřížky nevešlo, žák v seznamu nevidí; v řešení je označené', () => {
+  it('a word that did not fit is hidden from pupils; marked in the solution', () => {
     const built = buildPuzzle(overfull)
-    if (built.kind !== 'wordsearch') throw new Error('čekala se osmisměrka')
+    if (built.kind !== 'wordsearch') throw new Error('expected a word search')
     expect(built.wordSearch.unplaced.length).toBeGreaterThan(0)
     const missing = built.wordSearch.unplaced[0]!
 
@@ -45,7 +45,7 @@ describe('PaperPuzzle', () => {
     expect(screen.getByText(`${missing}: v mřížce není`)).toBeInTheDocument()
   })
 
-  it('písmeno tajenky bez řádku je předvyplněné, ostatní políčka zůstanou prázdná', () => {
+  it('a phrase letter without a row is pre-filled, other boxes stay empty', () => {
     const puzzle = puzzleContentSchema.parse({
       kind: 'cryptogram',
       title: 'Tajenka',
@@ -53,7 +53,7 @@ describe('PaperPuzzle', () => {
         { word: 'plíce', clue: 'Párový orgán.' },
         { word: 'hrtan', clue: 'Orgán s hlasivkami.' },
       ],
-      // Na „Z“ žádné slovo není.
+      // No word covers "Z".
       payload: { phrase: 'PHZ', seed: 'ui' },
     })
     const { container } = render(<PaperPuzzle puzzle={puzzle} />)

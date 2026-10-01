@@ -15,7 +15,7 @@ async function page(url: string): Promise<Page> {
   return (await response.json()) as Page
 }
 
-/** Projde frontu kurzorem až do konce a vrátí id v pořadí, v jakém přišla. */
+/** Walks the queue by cursor to the end and returns ids in the order they came. */
 async function readAll(base: string, limit: number, startCursor: string | null = null): Promise<string[]> {
   const seen: string[] = []
   let cursor: string | null = startCursor
@@ -26,15 +26,15 @@ async function readAll(base: string, limit: number, startCursor: string | null =
     if (!data.nextCursor) return seen
     cursor = data.nextCursor
   }
-  throw new Error('Stránkování nedojelo do konce')
+  throw new Error('Paging did not reach the end')
 }
 
-describe('stránkování fronty kurzorem', () => {
-  it('nad smíšenými stavy nevynechá ani nezopakuje otázku', async () => {
+describe('cursor paging of the queue', () => {
+  it('over mixed statuses neither skips nor repeats a question', async () => {
     const { topicId } = await seedTopic()
     const drafts: string[] = []
     for (let i = 0; i < 17; i += 1) {
-      // Střídavě koncept a schválená otázka — fronta smí vidět jen koncepty.
+      // Alternating draft and approved question — the queue may see only drafts.
       const status = i % 3 === 0 ? 'approved' : 'draft'
       const id = await seedQuestion(topicId, { prompt: `Otázka ${i}`, status })
       if (status === 'draft') drafts.push(id)
@@ -42,11 +42,11 @@ describe('stránkování fronty kurzorem', () => {
 
     const seen = await readAll(`/api/questions?status=draft&topicId=${topicId}`, 5)
 
-    expect(new Set(seen).size, 'některá otázka přišla dvakrát').toBe(seen.length)
+    expect(new Set(seen).size, 'some question came twice').toBe(seen.length)
     expect([...seen].sort()).toEqual([...drafts].sort())
   })
 
-  it('schválením během procházení se zbytek fronty neposune (offset by přeskakoval)', async () => {
+  it('approving while browsing does not shift the rest of the queue (an offset would skip)', async () => {
     const { topicId } = await seedTopic()
     const drafts: string[] = []
     for (let i = 0; i < 12; i += 1) {
@@ -57,23 +57,23 @@ describe('stránkování fronty kurzorem', () => {
     expect(first.total).toBe(12)
     expect(first.items).toHaveLength(4)
 
-    // Přesně to, co dělá učitelka ve frontě: první čtyři schválí, takže
-    // z výsledku filtru vypadnou. S offsetem by další stránka začala až
-    // u deváté otázky a čtyři koncepty by nikdy neviděla.
+    // Exactly what the teacher does in the queue: approves the first four, so
+    // they drop out of the filter result. With an offset the next page would
+    // start at the ninth question and four drafts would never be seen.
     const approved = first.items.map((item) => item.id)
     const put = await PUT(jsonReq('/api/questions', 'PUT', { ids: approved, status: 'approved' }))
     expect(put.status).toBe(200)
 
-    // Pokračuje se kurzorem za první stránkou — tak, jak by to udělalo okno
-    // ve frontě, kterému došly načtené otázky.
+    // Continue with the cursor past the first page — as a queue window that
+    // ran out of loaded questions would.
     const rest = await readAll(`/api/questions?status=draft&topicId=${topicId}`, 4, first.nextCursor)
 
-    const zbytek = drafts.filter((id) => !approved.includes(id))
-    expect(new Set(rest).size, 'některá otázka přišla dvakrát').toBe(rest.length)
-    expect([...rest].sort()).toEqual([...zbytek].sort())
+    const remainingIds = drafts.filter((id) => !approved.includes(id))
+    expect(new Set(rest).size, 'some question came twice').toBe(rest.length)
+    expect([...rest].sort()).toEqual([...remainingIds].sort())
   })
 
-  it('filtr podle tématu nepustí do fronty otázky odjinud', async () => {
+  it('the topic filter keeps questions from elsewhere out of the queue', async () => {
     const mine = await seedTopic()
     const other = await seedTopic()
     const id = await seedQuestion(mine.topicId, { status: 'draft' })
@@ -84,26 +84,26 @@ describe('stránkování fronty kurzorem', () => {
     expect(data.items.map((item) => item.id)).toEqual([id])
   })
 
-  it('zúžení na ročník i předmět projde přes patra knihovny', async () => {
+  it('narrowing to a grade and a subject goes through the library levels', async () => {
     const mine = await seedTopic()
     const other = await seedTopic()
     await seedQuestion(mine.topicId, { status: 'draft' })
     await seedQuestion(other.topicId, { status: 'draft' })
 
-    const podleRocniku = await page(`/api/questions?status=draft&gradeId=${mine.gradeId}`)
-    expect(podleRocniku.total).toBe(1)
+    const byGrade = await page(`/api/questions?status=draft&gradeId=${mine.gradeId}`)
+    expect(byGrade.total).toBe(1)
 
-    const podlePredmetu = await page(`/api/questions?status=draft&subjectId=${mine.subjectId}`)
-    expect(podlePredmetu.total).toBe(1)
+    const bySubject = await page(`/api/questions?status=draft&subjectId=${mine.subjectId}`)
+    expect(bySubject.total).toBe(1)
   })
 })
 
-describe('panel „Smazané" — řazení od nejnovějších s víc než dvaceti položkami', () => {
-  it('seřadí podle reviewedAt sestupně a kurzor projde celý seznam bez opakování', async () => {
+describe('"Smazané" panel — newest first with more than twenty items', () => {
+  it('sorts by reviewedAt descending and the cursor walks the whole list without repeats', async () => {
     const { topicId } = await seedTopic()
-    // 22 smazaných otázek, každá s vlastním `reviewedAt` — index 0 je
-    // nejstarší zásah, index 21 nejnovější, takže očekávané pořadí je
-    // sestupně 21, 20, …, 0.
+    // 22 deleted questions, each with its own `reviewedAt` — index 0 is the
+    // oldest change, index 21 the newest, so the expected order is
+    // descending 21, 20, …, 0.
     const ids: string[] = []
     for (let i = 0; i < 22; i += 1) {
       ids.push(
@@ -134,8 +134,8 @@ describe('panel „Smazané" — řazení od nejnovějších s víc než dvaceti
   })
 })
 
-describe('hromadné schválení celého tématu', () => {
-  it('změní jen koncepty daného tématu a vrátí jejich id pro vzetí zpět', async () => {
+describe('bulk approval of a whole topic', () => {
+  it("changes only the topic's drafts and returns their ids for undo", async () => {
     const mine = await seedTopic()
     const other = await seedTopic()
 
@@ -154,17 +154,17 @@ describe('hromadné schválení celého tématu', () => {
     expect([...body.ids].sort()).toEqual([draftA, draftB].sort())
 
     const rows = await db.select({ id: questions.id, status: questions.status }).from(questions)
-    const stav = new Map(rows.map((row) => [row.id, row.status]))
-    expect(stav.get(draftA)).toBe('approved')
-    expect(stav.get(draftB)).toBe('approved')
-    // Co bylo schválené nebo zamítnuté už předtím, se akcí dotknout nesmí —
-    // jinak by „Vzít zpět" vrátilo do konceptů i cizí práci.
-    expect(stav.get(alreadyApproved)).toBe('approved')
-    expect(stav.get(rejected)).toBe('rejected')
-    expect(stav.get(foreignDraft)).toBe('draft')
+    const state = new Map(rows.map((row) => [row.id, row.status]))
+    expect(state.get(draftA)).toBe('approved')
+    expect(state.get(draftB)).toBe('approved')
+    // What was approved or rejected before must not be touched by the action —
+    // otherwise "Vzít zpět" would return other people's work to drafts too.
+    expect(state.get(alreadyApproved)).toBe('approved')
+    expect(state.get(rejected)).toBe('rejected')
+    expect(state.get(foreignDraft)).toBe('draft')
   })
 
-  it('téma bez konceptů nic nezmění a řekne to nulou', async () => {
+  it('a topic without drafts changes nothing and says so with zero', async () => {
     const { topicId } = await seedTopic()
     await seedQuestion(topicId, { status: 'approved' })
     const response = await PUT(

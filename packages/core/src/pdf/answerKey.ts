@@ -1,8 +1,9 @@
+import { t } from '../i18n'
 import type { Question } from '../schema/question'
 import { LETTERS } from './styles'
 import { displayOrder } from './shuffle'
 
-/** Textová podoba správné odpovědi pro klíč učitele. */
+/** Text form of the correct answer for the teacher's key. */
 export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
   switch (question.type) {
     case 'open':
@@ -22,11 +23,11 @@ export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
 
     case 'true_false':
       return question.payload.statements
-        .map((s, i) => `${i + 1}. ${s.isTrue ? 'ANO' : 'NE'}`)
+        .map((s, i) => `${i + 1}. ${s.isTrue ? t('pdf:yes') : t('pdf:no')}`)
         .join(', ')
 
     case 'fill_blank':
-      // Závorkované číslo je i v zadání u příslušné mezery (viz QuestionBody).
+      // The bracketed number also appears next to the blank in the question (see QuestionBody).
       return question.payload.blanks.map((b, i) => `(${i + 1}) ${b}`).join(', ')
 
     case 'matching':
@@ -35,15 +36,15 @@ export function formatAnswer(question: Question, variant: 'A' | 'B'): string {
         .join(', ')
 
     case 'ordering': {
-      // V testu jsou položky zamíchané; klíč uvádí, jaké číslo patří ke které řádce.
+      // Items are shuffled in the test; the key says which number belongs to which line.
       const order = displayOrder(question, variant)
       return order
-        .map((sourceIndex, displayIndex) => `${displayIndex + 1}. řádek → ${sourceIndex + 1}`)
+        .map((sourceIndex, displayIndex) => t('pdf:answerKey.orderingLine', { line: displayIndex + 1, number: sourceIndex + 1 }))
         .join(', ')
     }
 
     case 'table_fill':
-      // Číslo odpovídá značce v prázdné buňce tabulky v zadání.
+      // The number matches the mark in the empty table cell of the question.
       return question.payload.answers.map((a, i) => `(${i + 1}) ${a}`).join(', ')
 
     case 'label_image':

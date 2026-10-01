@@ -1,7 +1,7 @@
 'use client'
 
 import type { Question } from '@testmaker/core/schema'
-import { QUESTION_TYPE_LABELS } from '@testmaker/core/schema'
+import { QUESTION_TYPES, questionTypeLabel } from '@testmaker/core/schema'
 import {
   Badge,
   Button,
@@ -17,17 +17,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import { useMemo } from 'react'
 import Link from 'next/link'
 import type { PickerTopic } from '@/lib/questionPicker'
 import type { BankFilters } from './types'
 
 /**
- * Banka otázek — filtrování napříč předměty a ročníky, zaškrtnutím se otázka
- * přidá do osnovy. Nabízí jen schválené otázky; koncept ani zamítnutou sem
- * server neposílá, takže se filtr na stav nenabízí — nebylo by co filtrovat.
- * U otázky, která v testu už je, přibude počet použití a tlačítko, kterým jde
- * zařadit ještě jednou (rozcvička a pak znovu v jiné části).
+ * Question bank — filtering across subjects and grades; ticking a question adds
+ * it to the outline. Only approved questions are offered; the server never
+ * sends drafts or rejected ones, so there is no status filter — nothing to
+ * filter. A question already in the test gets a usage count and a button to
+ * add it once more (a warm-up and again in another part).
  */
 export function BankPanel({
   topics,
@@ -41,21 +42,21 @@ export function BankPanel({
   topics: PickerTopic[]
   filters: BankFilters
   onFiltersChange: (next: BankFilters) => void
-  /** Kolikrát je která otázka v osnově; chybějící klíč = ani jednou. */
+  /** How many times each question is in the outline; missing key = none. */
   usedCounts: Map<string, number>
-  /** Zaškrtávátko: otázku přidá, nebo vyhodí všechny její výskyty. */
+  /** Checkbox: adds the question or removes all its occurrences. */
   onToggle: (question: Question) => void
-  /** Přidá další výskyt otázky, aniž by se ty stávající dotkl. */
+  /** Adds another occurrence of the question without touching existing ones. */
   onAddAgain: (question: Question) => void
-  /** Přidá nebo odebere celou skupinu otázek naráz (zaškrtnutí u tématu). */
+  /** Adds or removes a whole group of questions at once (topic checkbox). */
   onToggleMany: (questions: Question[], add: boolean) => void
 }) {
   const isUsed = (id: string) => (usedCounts.get(id) ?? 0) > 0
   const subjects = useMemo(() => [...new Set(topics.map((topic) => topic.subject))].sort(), [topics])
   /**
-   * Nabídka ročníků je podle `gradeId`, ne podle názvu — dva ročníky se
-   * stejným jménem v různých předmětech ("6. ročník" v matice i v přírodopisu)
-   * by se jinak slily do jedné položky a filtr by ukázal obojí najednou.
+   * Grade options are keyed by `gradeId`, not name — two grades with the same
+   * name in different subjects ("6. ročník" in maths and in biology) would
+   * otherwise merge into one option and the filter would show both at once.
    */
   const grades = useMemo(() => {
     const byId = new Map<string, string>()
@@ -94,15 +95,14 @@ export function BankPanel({
 
   return (
     <Card className="flex h-full flex-col p-4">
-      <h2 className="text-sm font-semibold text-fg">Banka otázek</h2>
+      <h2 className="text-sm font-semibold text-fg">{t('tests:bank.title')}</h2>
       <p className="mt-1 text-sm text-fg-muted">
-        Vybírej napříč předměty i ročníky — hodí se pro čtvrtletky a opakování z loňska.
-        Jsou tu jen použitelné otázky; smazané se sem nedostanou.
+        {t('tests:bank.intro')}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <div className="w-36">
-          <Label htmlFor="bank-subject-filter">Předmět</Label>
+          <Label htmlFor="bank-subject-filter">{t('tests:bank.subject')}</Label>
           <Select
             value={filters.subject || 'vse'}
             onValueChange={(value) => onFiltersChange({ ...filters, subject: value === 'vse' ? '' : value })}
@@ -111,7 +111,7 @@ export function BankPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vse">Všechny</SelectItem>
+              <SelectItem value="vse">{t('tests:filters.allTemplates')}</SelectItem>
               {subjects.map((subject) => (
                 <SelectItem key={subject} value={subject}>
                   {subject}
@@ -121,7 +121,7 @@ export function BankPanel({
           </Select>
         </div>
         <div className="w-32">
-          <Label htmlFor="bank-grade-filter">Ročník</Label>
+          <Label htmlFor="bank-grade-filter">{t('tests:bank.grade')}</Label>
           <Select
             value={filters.grade || 'vse'}
             onValueChange={(value) => onFiltersChange({ ...filters, grade: value === 'vse' ? '' : value })}
@@ -130,7 +130,7 @@ export function BankPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vse">Všechny třídy</SelectItem>
+              <SelectItem value="vse">{t('tests:filters.allGrades')}</SelectItem>
               {grades.map(([gradeId, label]) => (
                 <SelectItem key={gradeId} value={gradeId}>
                   {label}
@@ -140,7 +140,7 @@ export function BankPanel({
           </Select>
         </div>
         <div className="w-40">
-          <Label htmlFor="bank-type-filter">Typ</Label>
+          <Label htmlFor="bank-type-filter">{t('tests:bank.type')}</Label>
           <Select
             value={filters.type || 'vse'}
             onValueChange={(value) => onFiltersChange({ ...filters, type: value === 'vse' ? '' : value })}
@@ -149,8 +149,8 @@ export function BankPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vse">Všechny</SelectItem>
-              {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
+              <SelectItem value="vse">{t('tests:filters.allTemplates')}</SelectItem>
+              {QUESTION_TYPES.map((type) => [type, questionTypeLabel(type)] as const).map(([type, label]) => (
                 <SelectItem key={type} value={type}>
                   {label}
                 </SelectItem>
@@ -159,7 +159,7 @@ export function BankPanel({
           </Select>
         </div>
         <div className="w-40">
-          <Label htmlFor="bank-search-filter">Hledat</Label>
+          <Label htmlFor="bank-search-filter">{t('tests:filters.search')}</Label>
           <Input
             id="bank-search-filter"
             value={filters.search}
@@ -173,43 +173,43 @@ export function BankPanel({
           <Checkbox
             checked={allVisibleUsed ? true : someVisibleUsed ? 'indeterminate' : false}
             onCheckedChange={() => onToggleMany(visibleQuestions, !allVisibleUsed)}
-            aria-label="Vybrat vše"
+            aria-label={t('tests:bank.selectAll')}
           />
-          Vybrat vše ({visibleQuestions.length})
+          {t('tests:bank.selectAllCount', { count: visibleQuestions.length })}
         </label>
       ) : null}
 
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {visibleTopics.length === 0 ? (
           topics.every((topic) => topic.questions.length === 0) ? (
-            // Prázdná banka není prázdný filtr — učitelka musí vědět, kde otázky vzniknou.
+            // An empty bank is not an empty filter — the teacher needs to know where questions come from.
             <EmptyState
-              title="V bance zatím nejsou schválené otázky — přidej materiály a schval otázky v Knihovně."
+              title={t('tests:bank.empty')}
               action={
                 <Button asChild variant="outline">
-                  <Link href="/">Otevřít Knihovnu</Link>
+                  <Link href="/">{t('tests:bank.openLibrary')}</Link>
                 </Button>
               }
             />
           ) : (
-            <EmptyState title="Žádné otázky neodpovídají filtru" />
+            <EmptyState title={t('tests:bank.noMatch')} />
           )
         ) : (
           visibleTopics.map((topic) => (
-            // Sbalené ve výchozím stavu — u desítek témat by rozbalená banka byla
-            // neprůchozí stěna. Téma se samo otevře, jen když z něj je otázka v osnově,
-            // ať učitelka hned vidí, odkud si co vzala. Ruční rozbalení jinak zůstává
-            // po uživateli (React na `open` sáhne jen když se spočtená hodnota změní).
+            // Collapsed by default — with dozens of topics an expanded bank would be an
+            // impassable wall. A topic opens by itself only when one of its questions is
+            // in the outline, so the teacher sees where things came from. Manual expanding
+            // is otherwise kept (React only touches `open` when the computed value changes).
             <details
               key={topic.id}
               className="rounded border border-line-soft"
               open={topic.questions.some((question) => isUsed(question.id))}
             >
               <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-fg-soft">
-                {/* Zaškrtnutí u tématu bere všechny jeho otázky, které projdou
-                    filtrem — u opakování z celého ročníku by jinak byla práce
-                    v klikání po jedné. `stopPropagation` brání tomu, aby se
-                    tématem zároveň rozbalovalo. */}
+                {/* The topic checkbox takes all its questions that pass the
+                    filter — for a review of a whole grade it would otherwise be
+                    clicking one by one. `stopPropagation` keeps it from also
+                    toggling the topic open. */}
                 <span
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => event.stopPropagation()}
@@ -229,7 +229,7 @@ export function BankPanel({
                         !topic.questions.every((question) => isUsed(question.id)),
                       )
                     }
-                    aria-label={`Vybrat všechny otázky tématu ${topic.label}`}
+                    aria-label={t('tests:bank.selectTopic', { topic: topic.label })}
                   />
                 </span>
                 <span className="min-w-0 flex-1 truncate">
@@ -251,20 +251,20 @@ export function BankPanel({
                           <QuestionPreview question={question} showAnswers={false} />
                         </div>
                       </label>
-                      {/* Počet použití a přidání dalšího výskytu. Tlačítko je
-                          schválně mimo <label>, jinak by klik zároveň přehodil
-                          zaškrtávátko a otázku místo přidání odebral. */}
+                      {/* Usage count and adding another occurrence. The button is
+                          deliberately outside <label>, otherwise the click would
+                          also flip the checkbox and remove the question instead. */}
                       {count > 0 ? (
                         <div className="flex shrink-0 items-center gap-1">
-                          <Badge variant="secondary" title={`V testu ${count}\u00d7`}>
+                          <Badge variant="secondary" title={t('tests:bank.usedTimes', { count })}>
                             {count}&times;
                           </Badge>
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-6 px-2"
-                            aria-label="Zařadit do testu ještě jednou"
-                            title="Zařadit do testu ještě jednou"
+                            aria-label={t('tests:bank.addAgain')}
+                            title={t('tests:bank.addAgain')}
                             onClick={() => onAddAgain(question)}
                           >
                             +

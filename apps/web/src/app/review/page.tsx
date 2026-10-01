@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 
 /**
- * Kontrola konceptů přes celou knihovnu se zrušila — schvalování se dělá
- * přímo v tématu. Starý odkaz s `topicId` (v záložkách, v e-mailu) vede
- * rovnou na tohle téma; bez něj skončí na úvodu místo chybové stránky
- * (existenci tématu ověří až jeho vlastní stránka).
+ * Library-wide draft review was removed — approval happens right in the
+ * topic. An old link with `topicId` (bookmarks, e-mail) goes straight to that
+ * topic; without it, it lands on home instead of an error page (the topic's
+ * own page checks it exists).
  */
 export default async function ReviewPage({
   searchParams,

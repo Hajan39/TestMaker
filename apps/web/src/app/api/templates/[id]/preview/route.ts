@@ -2,23 +2,24 @@ import { and, eq } from 'drizzle-orm'
 import { templateConfigSchema } from '@testmaker/core/schema'
 import { sampleRenderableTest } from '@testmaker/core/pdf'
 import { renderTestToBuffer } from '@testmaker/core/pdf/node'
+import { t } from '@testmaker/core/i18n'
 import { db, templates } from '@/db'
-import { skola, sRozsahem } from '@/lib/uzivatel'
+import { inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
-/** Náhled šablony: ukázkový test vykreslený jejím nastavením. */
+/** Template preview: a sample test rendered with its settings. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
   const { id } = await params
   const graded = new URL(request.url).searchParams.get('graded') !== '0'
 
   const [row] = await db
     .select()
     .from(templates)
-    .where(and(skola(ucet, templates), eq(templates.id, id)))
+    .where(and(inSchool(account, templates), eq(templates.id, id)))
     .limit(1)
-  if (!row) return new Response('Šablona nenalezena', { status: 404 })
+  if (!row) return new Response(t('tests:api.templateNotFound'), { status: 404 })
 
   const buffer = await renderTestToBuffer(
     sampleRenderableTest(
@@ -37,7 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     headers: {
       'content-type': 'application/pdf',
       'content-disposition': 'inline',
-      // Náhled se mění jen se šablonou; při jejím uložení se URL doplní o verzi.
+      // The preview only changes with the template; saving it adds a version to the URL.
       'cache-control': 'private, max-age=60',
     },
   })

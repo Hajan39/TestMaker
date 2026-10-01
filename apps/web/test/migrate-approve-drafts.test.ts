@@ -7,15 +7,16 @@ import { migrate } from 'drizzle-orm/libsql/migrator'
 import { afterEach, describe, expect, it } from 'vitest'
 
 /**
- * Migrace 0006 překlápí koncepty na schválené. Testuje se na vlastní databázi
- * postavené od nuly, ne na té z `test/setup.ts`: tam už migrace dávno proběhla
- * nad prázdnou tabulkou a nebylo by vidět, co udělala s daty.
+ * Migration 0006 flips drafts to approved. Tested on its own database built
+ * from scratch, not the one from `test/setup.ts`: there the migration ran long
+ * ago over an empty table and its effect on data would not be visible.
  *
- * Postup: nejdřív se schéma postaví migracemi po 0005 (kopie složky `drizzle`
- * se zkráceným rejstříkem), do něj se vloží otázky ve všech třech stavech,
- * a teprve pak se pustí plná sada migrací, tedy i 0006.
+ * Procedure: first the schema is built with migrations up to 0005 (a copy of
+ * the `drizzle` folder with a truncated journal), questions in all three
+ * states are inserted, and only then the full set of migrations runs,
+ * including 0006.
  */
-// Datové migrace ze staré řady; čistá databáze dnes vzniká jediným základem.
+// Data migrations from the old series; a clean database is now created by the single baseline.
 const drizzleFolder = resolve(import.meta.dirname, '..', 'drizzle-historie')
 const cleanups: (() => void)[] = []
 
@@ -27,7 +28,7 @@ afterEach(() => {
   }
 })
 
-/** Kopie složky migrací, ve které rejstřík končí u zadané migrace. */
+/** A copy of the migrations folder whose journal ends at the given migration. */
 function migrationsUpTo(tag: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'testmaker-drizzle-'))
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
@@ -66,8 +67,8 @@ async function countsByStatus(client: Client): Promise<Record<string, number>> {
   return Object.fromEntries(result.rows.map((row) => [String(row.status), Number(row.pocet)]))
 }
 
-describe('migrace 0006 — hromadné schválení konceptů', () => {
-  it('překlopí koncepty a jen je poznamená do pomocné tabulky', async () => {
+describe('migration 0006 — bulk approval of drafts', () => {
+  it('flips drafts and records only them in the helper table', async () => {
     const { client } = freshDb()
     await migrate(drizzle(client), { migrationsFolder: migrationsUpTo('0005_materials-hash-per-topic') })
 
@@ -80,18 +81,18 @@ describe('migrace 0006 — hromadné schválení konceptů', () => {
 
     await migrate(drizzle(client), { migrationsFolder: drizzleFolder })
 
-    // Koncepty zmizely, schválených je o ně víc, zamítnutá zůstala zamítnutá.
+    // Drafts are gone, approved ones grew by them, the rejected one stayed rejected.
     expect(await countsByStatus(client)).toEqual({ approved: 3, rejected: 1 })
 
-    // V pomocné tabulce jsou přesně ty otázky, kterých se to týkalo — ani
-    // dřív schválená, ani zamítnutá. Jinak by návrat zpět shodil cizí práci.
+    // The helper table holds exactly the affected questions — neither the
+    // previously approved nor the rejected one. Otherwise a rollback would undo others' work.
     const noted = await client.execute(
       'SELECT question_id FROM migration_0006_approved_drafts ORDER BY question_id',
     )
     expect(noted.rows.map((row) => String(row.question_id))).toEqual(['koncept-1', 'koncept-2'])
   })
 
-  it('jde vrátit zpět postupem z komentáře v migraci', async () => {
+  it('can be rolled back with the procedure from the migration comment', async () => {
     const { client } = freshDb()
     await migrate(drizzle(client), { migrationsFolder: migrationsUpTo('0005_materials-hash-per-topic') })
 
@@ -101,10 +102,10 @@ describe('migrace 0006 — hromadné schválení konceptů', () => {
 
     await migrate(drizzle(client), { migrationsFolder: drizzleFolder })
 
-    // Mezitím učitelka jednu z překlopených otázek zamítne.
+    // Meanwhile the teacher rejects one of the flipped questions.
     await client.execute("UPDATE questions SET status = 'rejected' WHERE id = 'koncept-pozdeji-zamitnuty'")
 
-    // Návrat zpět podle postupu v `docs/migrace-0006-schvaleni-konceptu.md`.
+    // Rollback per the procedure in `docs/migrace-0006-schvaleni-konceptu.md`.
     await client.execute(`UPDATE questions SET status = 'draft'
        WHERE status = 'approved'
          AND id IN (SELECT question_id FROM migration_0006_approved_drafts)`)
@@ -112,8 +113,8 @@ describe('migrace 0006 — hromadné schválení konceptů', () => {
 
     expect(await countsByStatus(client)).toEqual({ draft: 1, approved: 1, rejected: 1 })
 
-    const stavy = await client.execute('SELECT id, status FROM questions ORDER BY id')
-    expect(Object.fromEntries(stavy.rows.map((row) => [String(row.id), String(row.status)]))).toEqual({
+    const states = await client.execute('SELECT id, status FROM questions ORDER BY id')
+    expect(Object.fromEntries(states.rows.map((row) => [String(row.id), String(row.status)]))).toEqual({
       koncept: 'draft',
       'koncept-pozdeji-zamitnuty': 'rejected',
       'schvalena-rucne': 'approved',

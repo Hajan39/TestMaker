@@ -1,17 +1,18 @@
 import 'server-only'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { t } from '@testmaker/core/i18n'
 import type { RegenerateReason } from '@testmaker/core/schema'
 import { db, promptRules } from '@/db'
 import { newId } from './ids'
-import { skola, type Scope } from './uzivatel'
+import { inSchool, type Scope } from './user'
 
-/** Delší pravidlo by prompt nafouklo a učitelky do textového pole nepíšou eseje. */
+/** A longer rule would bloat the prompt, and teachers do not write essays into the text field. */
 export const MAX_PROMPT_RULE_LENGTH = 300
 
 /**
- * Aktivních pravidel nejvýš deset — prompt musí zůstat krátký, aby ho model
- * udržel celý (`ai.test.ts`: „systémový prompt je krátký"). Škola, která by
- * chtěla pravidel víc, si musí nějaké nejdřív vypnout.
+ * At most ten active rules — the prompt must stay short so the model keeps
+ * all of it (`ai.test.ts`: the system prompt is short). A school that wants
+ * more rules must first disable some.
  */
 export const MAX_ACTIVE_PROMPT_RULES = 10
 
@@ -23,15 +24,15 @@ export interface PromptRule {
   createdAt: string
 }
 
-/** Jedenácté aktivní pravidlo — správce musí nejdřív nějaké vypnout. */
-export class PrilisMnohoPravidel extends Error {
+/** An eleventh active rule — the manager must first disable one. */
+export class TooManyRules extends Error {
   constructor() {
-    super(`Aktivních pravidel může být nejvýš ${MAX_ACTIVE_PROMPT_RULES}. Nejdřív nějaké vypni.`)
-    this.name = 'PrilisMnohoPravidel'
+    super(t('admin:errors.tooManyRules', { max: MAX_ACTIVE_PROMPT_RULES }))
+    this.name = 'TooManyRules'
   }
 }
 
-function radek(row: {
+function toRuleRow(row: {
   id: string
   text: string
   reason: RegenerateReason | null
@@ -42,20 +43,20 @@ function radek(row: {
 }
 
 /**
- * Aktivní pravidla školy — jen text, v pořadí vzniku, pro připojení do
- * systémového promptu (`buildSystemPrompt`). Vypnuté pravidlo se sem nikdy
- * nedostane a pravidlo jiné školy taky ne — `skola()` je jediná podmínka.
+ * The school's active rules — text only, in creation order, for appending to
+ * the system prompt (`buildSystemPrompt`). A disabled rule never gets here,
+ * nor does another school's rule — `inSchool()` is the only condition.
  */
 export async function loadActivePromptRules(scope: Scope): Promise<string[]> {
   const rows = await db
     .select({ text: promptRules.text })
     .from(promptRules)
-    .where(and(skola(scope, promptRules), eq(promptRules.active, true)))
+    .where(and(inSchool(scope, promptRules), eq(promptRules.active, true)))
     .orderBy(asc(promptRules.createdAt))
   return rows.map((row) => row.text)
 }
 
-/** Všechna pravidla školy pro Správu — nejnovější první. */
+/** All of the school's rules for Management — newest first. */
 export async function loadPromptRules(scope: Scope): Promise<PromptRule[]> {
   const rows = await db
     .select({
@@ -66,35 +67,35 @@ export async function loadPromptRules(scope: Scope): Promise<PromptRule[]> {
       createdAt: promptRules.createdAt,
     })
     .from(promptRules)
-    .where(skola(scope, promptRules))
+    .where(inSchool(scope, promptRules))
     .orderBy(desc(promptRules.createdAt))
-  return rows.map(radek)
+  return rows.map(toRuleRow)
 }
 
 async function countActive(scope: Scope): Promise<number> {
   const [row] = await db
     .select({ value: sql<number>`count(*)` })
     .from(promptRules)
-    .where(and(skola(scope, promptRules), eq(promptRules.active, true)))
+    .where(and(inSchool(scope, promptRules), eq(promptRules.active, true)))
   return Number(row?.value ?? 0)
 }
 
 /**
- * Založí pravidlo — vždy aktivní a vždy jen na výslovné uložení správce
- * (nikdy samo od sebe). Text se ořízne na `MAX_PROMPT_RULE_LENGTH`, ne
- * odmítne: správce si ho ve formuláři upravuje sám, oříznutí je poslední
- * pojistka, ne první reakce.
+ * Creates a rule — always active and only on the manager's explicit save
+ * (never on its own). The text is truncated to `MAX_PROMPT_RULE_LENGTH`, not
+ * rejected: the manager edits it in the form, truncation is the last
+ * safeguard, not the first reaction.
  */
 export async function createPromptRule(
   scope: Scope,
   input: { text: string; reason?: RegenerateReason | null },
 ): Promise<PromptRule> {
-  // Sjednocené na jednu mezeru — pravidlo je odrážka v systémovém promptu
-  // (`- ${rule}`) i v hlavičce staženého souboru pro `/otazky`; víc mezer
-  // nebo odřádkování z Textarey by tam obojí rozbilo na víc řádků.
+  // Collapsed to single spaces — the rule is a bullet in the system prompt
+  // (`- ${rule}`) and in the header of the downloaded file for `/otazky`; extra spaces
+  // or line breaks from the Textarea would split both into several lines.
   const text = input.text.trim().replace(/\s+/g, ' ').slice(0, MAX_PROMPT_RULE_LENGTH)
-  if (!text) throw new Error('Pravidlo nemůže být prázdné.')
-  if ((await countActive(scope)) >= MAX_ACTIVE_PROMPT_RULES) throw new PrilisMnohoPravidel()
+  if (!text) throw new Error(t('admin:errors.ruleEmpty'))
+  if ((await countActive(scope)) >= MAX_ACTIVE_PROMPT_RULES) throw new TooManyRules()
 
   const id = newId()
   await db.insert(promptRules).values({
@@ -106,32 +107,32 @@ export async function createPromptRule(
     createdBy: scope.userId,
   })
   const [row] = await db.select().from(promptRules).where(eq(promptRules.id, id)).limit(1)
-  return radek(row!)
+  return toRuleRow(row!)
 }
 
 /**
- * Zapne, nebo vypne pravidlo. Cizí pravidlo se tváří jako neexistující —
- * `false`, ne výjimka, aby volající route mohla poslat 404 stejně jako
- * u všeho ostatního rozsahového čtení.
+ * Enables or disables a rule. A foreign rule pretends not to exist —
+ * `false`, not an exception, so the calling route can send 404 just like
+ * any other scoped read.
  */
 export async function setPromptRuleActive(scope: Scope, id: string, active: boolean): Promise<boolean> {
   const [existing] = await db
     .select({ active: promptRules.active })
     .from(promptRules)
-    .where(and(skola(scope, promptRules), eq(promptRules.id, id)))
+    .where(and(inSchool(scope, promptRules), eq(promptRules.id, id)))
     .limit(1)
   if (!existing) return false
 
-  // Limit se kontroluje jen při skutečném zapnutí — jinak by se pravidlo,
-  // které je aktivní už teď, nedalo znovu uložit jako aktivní na hranici deseti.
+  // The limit is checked only on an actual enable — otherwise a rule that
+  // is already active could not be saved as active again at the limit of ten.
   if (active && !existing.active && (await countActive(scope)) >= MAX_ACTIVE_PROMPT_RULES) {
-    throw new PrilisMnohoPravidel()
+    throw new TooManyRules()
   }
 
   const result = await db
     .update(promptRules)
     .set({ active })
-    .where(and(skola(scope, promptRules), eq(promptRules.id, id)))
+    .where(and(inSchool(scope, promptRules), eq(promptRules.id, id)))
     .returning({ id: promptRules.id })
   return result.length > 0
 }

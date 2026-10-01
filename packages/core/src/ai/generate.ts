@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 import {
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
@@ -22,21 +23,21 @@ const responseSchema = z.object({
 
 export interface GenerationResult {
   questions: QuestionContent[]
-  /** Otázky zahozené kvůli nekonzistenci (index → důvody). */
+  /** Questions dropped for inconsistency (index → reasons). */
   rejected: { index: number; errors: string[] }[]
   chunks: number
-  /** Volání, ze kterých se nepodařilo použít vůbec nic. */
+  /** Calls from which nothing at all could be used. */
   failedCalls: { reason: string }[]
   /**
-   * Modely, které v tomhle běhu opravdu odpověděly, v pořadí, jak se braly
-   * ze žebříčku (`poskytovatel:model`). Když je jich víc, míchaly se v jednom
-   * tématu otázky z různých modelů — a protože se kvalita mezi modely liší,
-   * musí to být vidět v hlášce po doběhnutí.
+   * Models that actually answered in this run, in the order they were taken
+   * from the ladder (`provider:model`). When there are several, questions
+   * from different models were mixed in one topic — and since quality differs
+   * between models, this must be visible in the message after the run.
    */
   models: string[]
 }
 
-/** Jedno volání modelu — v testech se podstrkuje, aby nesahaly na skutečný model. */
+/** One model call — faked in tests so they never touch a real model. */
 export type ModelCall = (input: {
   config: AiConfig
   system: string
@@ -48,10 +49,11 @@ export type ModelCall = (input: {
 const FILE_HEADER = /^=== .+ ===$/
 
 /**
- * Oddělovač mezi kusy uvnitř úseku — i mezi přeneseným záhlavím a obsahem,
- * který za ním hned následuje. Musí to být tentýž řetězec, kterým se kusy
- * opravdu spojují, jinak rozpočet v `chunkText` počítá s jinou délkou
- * odřezu, než jaká se pak doopravdy připojí, a úsek limit přesáhne.
+ * Separator between pieces within a chunk — also between a carried-over
+ * header and the content right after it. It must be the same string the
+ * pieces are actually joined with, otherwise the budget in `chunkText`
+ * counts with a different length than what is really appended and the chunk
+ * exceeds the limit.
  */
 const PIECE_SEPARATOR = '\n\n'
 
@@ -60,12 +62,12 @@ function firstLine(text: string): string {
 }
 
 /**
- * Rozdělí příliš dlouhý kus textu na části do `maxChars`: po řádcích, a když
- * je i řádek moc dlouhý (text z PDF bývá jeden nekonečný řádek), po větách.
- * Když v textu nejsou ani řádky, ani konce vět (souvislý text bez tečky),
- * poslední záchrana je dělení po slovech — věta delší než limit se tak
- * rozpadne mezi slova a vcelku zůstane jen jediné slovo delší než limit samo
- * o sobě (dovnitř slova se neřeže).
+ * Splits a too long piece of text into parts up to `maxChars`: by lines, and
+ * when a line is too long as well (PDF text is often one endless line), by
+ * sentences. When the text has neither lines nor sentence ends (continuous
+ * text without a full stop), the last resort is splitting by words — a
+ * sentence longer than the limit falls apart between words and only a single
+ * word longer than the limit by itself stays whole (words are never cut).
  */
 function splitLong(text: string, maxChars: number): string[] {
   if (text.length <= maxChars) return [text]
@@ -86,15 +88,16 @@ function splitLong(text: string, maxChars: number): string[] {
 }
 
 /**
- * Rozdělí dlouhý text na části na hranicích odstavců. Záhlaví `=== soubor ===`
- * se z odstavce vždy nejdřív vyjme a řeší se zvlášť od zbytku (`body`): dělí
- * se jen `body`, do rozpočtu zmenšeného o délku záhlaví a oddělovače za ním,
- * a záhlaví se pak výslovně připojí před každou takto vzniklou část — model
- * podle něj vyplňuje `evidence.fileName`. Díky tomuhle rozdělení `splitLong`
- * záhlaví nikdy neuvidí jako běžný řádek textu k rozdělení, takže žádná
- * část nemůže limit přesáhnout jinak než jedinou dovolenou výjimkou: slovo
- * bez mezer delší než rozpočet samo o sobě (dovnitř slova se neřeže, i kdyby
- * s připojeným záhlavím limit společně přesáhlo).
+ * Splits a long text into parts at paragraph boundaries. A `=== file ===`
+ * header is always taken out of the paragraph first and handled separately
+ * from the rest (`body`): only `body` is split, into a budget reduced by the
+ * length of the header and the separator after it, and the header is then
+ * explicitly prepended to every resulting part — the model fills in
+ * `evidence.fileName` from it. Thanks to this split `splitLong` never sees
+ * the header as an ordinary line to split, so no part can exceed the limit
+ * except for the single allowed exception: a word without spaces longer than
+ * the budget by itself (words are never cut, even if together with the
+ * header they exceed the limit).
  */
 export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsPerCall): string[] {
   if (text.length <= maxChars) return [text]
@@ -114,8 +117,8 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
       header = first
       const afterHeader = paragraph.indexOf('\n')
       body = afterHeader === -1 ? '' : paragraph.slice(afterHeader + 1)
-      // Nové záhlaví vždy začíná novou část, i kdyby se dosavadní obsah do
-      // limitu ještě vešel — jinak by jedna část patřila dvěma souborům.
+      // A new header always starts a new part, even if the content so far would
+      // still fit the limit — otherwise one part would belong to two files.
       flush()
     }
     if (!body) continue
@@ -133,15 +136,15 @@ export function chunkText(text: string, maxChars: number = AI_SETTINGS.maxCharsP
 }
 
 /**
- * Když je úseků víc, než kolik se jich použije, vybere je rovnoměrně po celém
- * materiálu — jinak by u dlouhého tématu a pár otázek padly všechny na první
- * kapitoly.
+ * When there are more chunks than will be used, picks them evenly across the
+ * whole material — otherwise for a long topic and a few questions all would
+ * fall on the first chapters.
  *
- * `offset` celé rozložení pootočí (s přetečením na začátek). Bez něj by každé
- * dogenerování i každá náhrada vybraly tytéž úseky a zbytek tématu by model
- * nikdy neviděl; generování proto posouvá podle počtu otázek, které už
- * v tématu jsou. Výběr zůstává bez opakování, protože se všechny indexy
- * posouvají o totéž.
+ * `offset` rotates the whole distribution (wrapping to the start). Without it
+ * every top-up and every replacement would pick the same chunks and the model
+ * would never see the rest of the topic; generation therefore shifts by the
+ * number of questions already in the topic. The selection stays without
+ * repeats because all indices shift by the same amount.
  */
 export function pickChunks(chunks: string[], count: number, offset: number = 0): string[] {
   const n = chunks.length
@@ -152,7 +155,7 @@ export function pickChunks(chunks: string[], count: number, offset: number = 0):
   return Array.from({ length: count }, (_, i) => at(Math.floor((i * n) / count)))
 }
 
-/** Rozdělí požadovaný počet otázek na dávky, které se vejdou do jednoho volání. */
+/** Splits the requested number of questions into batches that fit one call. */
 export function splitIntoBatches(count: number, perCall: number = AI_SETTINGS.questionsPerCall): number[] {
   const batches: number[] = []
   let left = count
@@ -164,12 +167,12 @@ export function splitIntoBatches(count: number, perCall: number = AI_SETTINGS.qu
 }
 
 /**
- * Rozdělí `count` otázek mezi zadané typy po kolečku (round-robin), takže
- * výsledek je co nejrovnoměrnější bez ohledu na to, jestli je `count`
- * dělitelný počtem typů. Používá se pro celé generování, ne pro jednu dávku —
- * "rovnoměrně mezi devět typů" nedává smysl v dávce po pěti otázkách, ale dává
- * smysl napříč celým požadovaným počtem. Konkrétní dávka pak dostane jen svůj
- * úsek tohoto rozvrhu (viz volání v `generateQuestions`).
+ * Distributes `count` questions among the given types round-robin, so the
+ * result is as even as possible regardless of whether `count` is divisible
+ * by the number of types. Used for the whole generation, not for one batch —
+ * "evenly across nine types" makes no sense in a batch of five questions, but
+ * it does across the whole requested count. A particular batch then gets only
+ * its slice of this schedule (see the call in `generateQuestions`).
  */
 export function distributeTypes(types: QuestionType[], count: number): QuestionType[] {
   if (types.length === 0 || count <= 0) return []
@@ -179,8 +182,9 @@ export function distributeTypes(types: QuestionType[], count: number): QuestionT
 }
 
 /**
- * Zachrání použitelné otázky z odpovědi, kterou schéma odmítlo jako celek.
- * Model občas u jedné otázky netrefí tvar; bez tohohle by s ní padly i ostatní.
+ * Salvages usable questions from an answer the schema rejected as a whole.
+ * The model sometimes misses the shape of one question; without this the
+ * others would fail along with it.
  */
 export function salvageQuestions(raw: unknown): QuestionContent[] {
   const container = raw as { questions?: unknown }
@@ -195,12 +199,12 @@ export function salvageQuestions(raw: unknown): QuestionContent[] {
 }
 
 /**
- * Body otázky od modelu. Kde jdou spočítat z rozsahu odpovědi (doplnění,
- * přiřazení, výběr), určí je `pointsByScope` a číslo modelu se zahodí.
- * U volné odpovědi a kresby se převezme, jen když je v rozumných mezích —
- * Gemini nabízelo i 25 bodů a jedna otázka pak převáží celou písemku.
- * Učitelka si body může kdykoli přepsat ručně, schéma proto širší rozsah
- * dál připouští.
+ * Question points from the model. Where they can be computed from the scope
+ * of the answer (blanks, pairs, choice), `pointsByScope` decides and the
+ * model's number is dropped. For open answers and drawings it is taken only
+ * within reasonable limits — Gemini offered even 25 points and one question
+ * then outweighs the whole test. The teacher can override points manually at
+ * any time, so the schema still allows a wider range.
  */
 export function withDefaultPoints(question: QuestionContent): QuestionContent {
   const byScope = pointsByScope(question)
@@ -209,21 +213,28 @@ export function withDefaultPoints(question: QuestionContent): QuestionContent {
   return { ...question, points: DEFAULT_POINTS[question.type] }
 }
 
-export const EVIDENCE_NOT_FOUND = 'citace v evidence se v materiálu nenašla'
-export const REFERENCES_SOURCE = 'otázka odkazuje na materiál místo toho, aby stála sama'
+/** Rejection reason: the evidence quote is not in the material. */
+export function evidenceNotFoundMessage(): string {
+  return t('ai:questions.evidenceNotFound')
+}
+
+/** Rejection reason: the question refers to the material instead of standing on its own. */
+export function referencesSourceMessage(): string {
+  return t('ai:questions.referencesSource')
+}
 
 /**
- * Text pro porovnání citace s materiálem: bez rozdílu velikosti písmen,
- * uvozovek a bílých znaků. Model citaci opisuje a drobnosti mění; kvůli nim
- * se otázka zahodit nesmí.
+ * Text for comparing a quote with the material: ignoring case, quotation
+ * marks and whitespace. The model copies the quote and changes small details;
+ * the question must not be dropped because of them.
  */
 function normalizeForMatch(text: string): string {
   return (
     text
       .normalize('NFC')
-      // Měkký spojovník z PDF v textu není vidět, model ho do citace nepřepíše.
+      // A soft hyphen from a PDF is invisible in the text; the model does not copy it into the quote.
       .replace(/\u00AD/g, '')
-      // Slovo rozdělené na konci řádku („chloro-⏎fyl") model cituje vcelku.
+      // A word hyphenated at the end of a line ("chloro-⏎fyl") is quoted whole by the model.
       .replace(/-[ \t]*\r?\n\s*(?=\p{L})/gu, '')
       .toLowerCase()
       .replace(/[„“”"'‚‘’«»]/g, '')
@@ -233,9 +244,10 @@ function normalizeForMatch(text: string): string {
 }
 
 /**
- * Kusy citace k hledání v materiálu: citace se dělí na vypuštění („…",
- * „...") a kusy kratší než `minEvidencePart` se vynechají — našly by se
- * kdekoli. Prázdný výsledek znamená, že v citaci není co hledat.
+ * Quote pieces to search for in the material: the quote is split at
+ * ellipses ("…", "...") and pieces shorter than `minEvidencePart` are
+ * skipped — they would match anywhere. An empty result means there is
+ * nothing to search for in the quote.
  */
 function quoteParts(quote: string | undefined): string[] {
   if (!quote?.trim()) return []
@@ -251,9 +263,9 @@ function quoteFoundIn(parts: string[], source: string): boolean {
 }
 
 /**
- * Stojí citace z `evidence` opravdu v materiálu? Každý kus citace (viz
- * `quoteParts`) musí v textu být. Otázka bez citace projde — chybějící doklad
- * je slabší prohřešek než vymyšlený.
+ * Is the quote from `evidence` really in the material? Every quote piece (see
+ * `quoteParts`) must be in the text. A question without a quote passes —
+ * missing evidence is a lesser offence than made-up evidence.
  */
 export function evidenceMatches(question: QuestionContent, source: string): boolean {
   const parts = quoteParts(question.evidence?.quote)
@@ -262,10 +274,11 @@ export function evidenceMatches(question: QuestionContent, source: string): bool
 }
 
 /**
- * Úseky, ze kterých se bude generovat. Když má požadavek `focus` (citaci
- * nahrazované otázky), jde první úsek, ve kterém ta citace stojí — náhrada
- * pak vzniká z téže pasáže, ne vždy z prvního úseku tématu. Zbytek (nebo
- * všechno, když se citace nenajde) se vybere rovnoměrně s posunem `offset`.
+ * Chunks to generate from. When the request has `focus` (the quote of the
+ * question being replaced), the first chunk containing that quote goes first —
+ * the replacement then comes from the same passage, not always from the
+ * topic's first chunk. The rest (or everything, when the quote is not found)
+ * is picked evenly with the `offset` shift.
  */
 export function selectChunks(chunks: string[], count: number, offset: number, focus?: string): string[] {
   const parts = quoteParts(focus)
@@ -275,18 +288,18 @@ export function selectChunks(chunks: string[], count: number, offset: number, fo
   return [hit, ...pickChunks(chunks.filter((chunk) => chunk !== hit), count - 1, offset)]
 }
 
-/** Všechny důvody, proč otázku nepustit do banky: tvar i doklad. */
+/** All reasons not to let the question into the bank: shape and evidence. */
 export function checkQuestion(question: QuestionContent, source: string): string[] {
   const errors = validateQuestionContent(question)
-  if (!evidenceMatches(question, source)) errors.push(EVIDENCE_NOT_FOUND)
-  if (referencesSource(question)) errors.push(REFERENCES_SOURCE)
+  if (!evidenceMatches(question, source)) errors.push(evidenceNotFoundMessage())
+  if (referencesSource(question)) errors.push(referencesSourceMessage())
   return errors
 }
 
 /**
- * Požadované typy zúžené na ty, které smí AI generovat. Ve frontě můžou čekat
- * úlohy založené dřív, s typy, které už model nedostává; ty se tiše vynechají.
- * Když nezbude nic, generuje se ze všech povolených.
+ * Requested types narrowed to those the AI may generate. The queue may hold
+ * older jobs with types the model no longer gets; those are silently skipped.
+ * When nothing remains, all allowed types are used.
  */
 export function onlyAiTypes(types: QuestionType[]): QuestionType[] {
   const allowed = types.filter((t) => (AI_QUESTION_TYPES as readonly QuestionType[]).includes(t))
@@ -294,25 +307,26 @@ export function onlyAiTypes(types: QuestionType[]): QuestionType[] {
 }
 
 /**
- * Vygeneruje otázky k materiálu.
+ * Generates questions for the material.
  *
- * Nevalidní otázky zahodí a vrátí v `rejected`. Když schéma odmítne celou
- * odpověď, zachrání z ní otázky, které v pořádku jsou. Modelů může být víc
- * (žebříček `AI_MODELS`); přepíná se po dávce, takže hotové dávky zůstávají
- * uložené (`onBatch`), i když prvnímu modelu uprostřed dojde limit.
+ * Drops invalid questions and returns them in `rejected`. When the schema
+ * rejects the whole answer, salvages the questions that are fine. There can
+ * be several models (the `AI_MODELS` ladder); switching happens per batch,
+ * so finished batches stay saved (`onBatch`) even when the first model runs
+ * out of quota midway.
  */
 export async function generateQuestions(
   request: GenerationRequest,
   options: {
-    /** Žebříček modelů; bez něj se čte z prostředí (`AI_MODELS`). */
+    /** Model ladder; read from the environment (`AI_MODELS`) without it. */
     models?: AiConfig[]
     signal?: AbortSignal
     onChunk?: (done: number, total: number) => void
-    /** Po každé dávce, ať se dá ukládat průběžně; dostane i model, který dávku vyrobil. */
+    /** After every batch, so saving can happen as it goes; also receives the model that made the batch. */
     onBatch?: (questions: QuestionContent[], info: { model: string }) => Promise<void> | void
-    /** Podvržené volání modelu pro testy; v aplikaci se nepředává. */
+    /** Fake model call for tests; not passed in the app. */
     callModel?: ModelCall
-    /** Každý pokus o volání modelu (viz `startLadder`); web z něj zapisuje přehled použití. */
+    /** Every model call attempt (see `startLadder`); the web records the usage overview from it. */
     onCall?: AiCallListener
   } = {},
 ): Promise<GenerationResult> {
@@ -326,9 +340,9 @@ export async function generateQuestions(
     })()
   const system = buildSystemPrompt(request.gradeName, request.schoolRules)
 
-  // Úseků jen tolik, kolik je potřeba plných dávek (viz `questionsPerCall`),
-  // a posun podle toho, kolik otázek už v tématu je — další dogenerování tak
-  // sáhne po jiných částech materiálu než to předchozí.
+  // Only as many chunks as full batches are needed (see `questionsPerCall`),
+  // shifted by how many questions are already in the topic — the next top-up
+  // thus reaches for other parts of the material than the previous one.
   const chunks = selectChunks(
     chunkText(request.text),
     Math.ceil(request.count / AI_SETTINGS.questionsPerCall),
@@ -336,7 +350,7 @@ export async function generateQuestions(
     request.focus,
   )
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
-  // Rozvrh typů pro celé generování — každá dávka si vezme svůj úsek.
+  // Type schedule for the whole generation — each batch takes its slice.
   const typeSchedule = distributeTypes(request.types, request.count)
 
   const accepted: QuestionContent[] = []
@@ -357,7 +371,7 @@ export async function generateQuestions(
         text: chunk,
         count: batchSize,
         types: batchTypes.length > 0 ? batchTypes : request.types,
-        // Nově vzniklé otázky jdou první, ať se ořezem seznamu neztratí.
+        // Newly created questions go first so trimming the list does not lose them.
         avoid: [...accepted.map(promptOf), ...(request.avoid ?? [])],
       })
 
@@ -413,8 +427,9 @@ export async function generateQuestions(
 }
 
 /**
- * Klíč pro rozpoznání téže otázky: bez velikosti písmen, interpunkce
- * a rozdílů v mezerách. Model tutéž otázku často vrátí jen s jinou tečkou.
+ * Key for recognising the same question: ignoring case, punctuation and
+ * whitespace differences. The model often returns the same question with
+ * just a different full stop.
  */
 export function dedupeKey(text: string): string {
   return text
@@ -425,11 +440,12 @@ export function dedupeKey(text: string): string {
 }
 
 /**
- * Zadání otázky pro deduplikaci napříč částmi. U `true_false`, `fill_blank`
- * a `matching` bývá `prompt` obecná fráze ("Rozhodni, zda...") stejná pro
- * spoustu různých otázek — otisk proto musí vzít skutečný obsah (tvrzení,
- * doplňovaná slova, dvojice), jinak by se stejný obsah v jiném obalu
- * nerozpoznal jako duplicita.
+ * Question prompt for deduplication across parts. For `true_false`,
+ * `fill_blank` and `matching` the `prompt` is often a generic phrase
+ * ("Rozhodni, zda...") shared by many different questions — the fingerprint
+ * must therefore take the actual content (statements, blank words, pairs),
+ * otherwise the same content in a different wrapper would not be recognised
+ * as a duplicate.
  */
 export function promptOf(question: QuestionContent): string {
   switch (question.type) {
@@ -449,9 +465,10 @@ export function promptOf(question: QuestionContent): string {
 }
 
 /**
- * Otisk otázky pro rozpoznání duplicit. U výběru z možností bývá zadání
- * obecné („Vyber správnou možnost.") a otázky se liší až možnostmi, proto
- * se k zadání přidají. Ostatní typy mají obsah už v `promptOf`.
+ * Question fingerprint for recognising duplicates. For choice questions the
+ * prompt is often generic ("Vyber správnou možnost.") and questions differ
+ * only in their options, so those are added to the prompt. Other types
+ * already have their content in `promptOf`.
  */
 export function questionKey(question: QuestionContent): string {
   const prompt = promptOf(question)
@@ -462,10 +479,11 @@ export function questionKey(question: QuestionContent): string {
 }
 
 /**
- * Kontrola duplicit pro jeden běh (generování nebo nahrání souboru). Otázky
- * z běhu se porovnávají celým otiskem (`questionKey`). Existující otázky
- * tématu jsou k dispozici jen jako zadání (`existing`), takže se s nimi
- * porovnává zadání. Vrací `true` pro duplicitu; jinak si otázku zapamatuje.
+ * Duplicate check for one run (generation or file upload). Questions from the
+ * run are compared by their full fingerprint (`questionKey`). Existing topic
+ * questions are available only as prompts (`existing`), so the prompt is
+ * compared with them. Returns `true` for a duplicate; otherwise remembers
+ * the question.
  */
 export function duplicateCheck(existing: string[]): (question: QuestionContent) => boolean {
   const existingKeys = new Set(existing.map(dedupeKey))

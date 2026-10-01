@@ -17,31 +17,20 @@ import {
   Label,
 } from '@testmaker/ui'
 import type { LibraryKind } from '@/lib/library'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import { errorMessage, readJson, responseError } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Zakládání a přejmenování v knihovně.
+ * Creating and renaming in the library.
  *
- * Do teď vznikl předmět, ročník i téma jedině importem souborů. Učitelka ale
- * potřebuje i prázdné téma, do kterého si otázky napíše sama, a opravu názvu
- * předmětu, který vznikl z názvu složky velkými písmeny.
+ * Until now a subject, grade or topic could only come from importing files.
+ * But the teacher also needs an empty topic to write her own questions into,
+ * and a way to fix a subject name that came from an upper-case folder name.
  *
- * Obě akce sdílejí jeden dialog s jediným polem na název: liší se jen tím,
- * co se posílá na `/api/library` a kam se jde potom.
+ * Both actions share one dialog with a single name field: they differ only in
+ * what is sent to `/api/library` and where to go afterwards.
  */
-
-const NAZVY: Record<LibraryKind, { novy: string; prejmenovat: string; popisek: string }> = {
-  subject: { novy: 'Nový předmět', prejmenovat: 'Přejmenovat předmět', popisek: 'Název předmětu' },
-  grade: { novy: 'Nový ročník', prejmenovat: 'Přejmenovat ročník', popisek: 'Název ročníku' },
-  topic: { novy: 'Nové téma', prejmenovat: 'Přejmenovat téma', popisek: 'Název tématu' },
-}
-
-const NAPOVEDA: Record<LibraryKind, string> = {
-  subject: 'Např. Přírodopis. Ročníky a témata se do něj doplní potom.',
-  grade: 'Např. 8. ročník. Ročníky se řadí podle čísla na začátku názvu.',
-  topic: 'Téma vznikne prázdné — otázky do něj můžeš napsat sama nebo k němu přidat materiály.',
-}
 
 interface NameDialogProps {
   title: string
@@ -51,7 +40,7 @@ interface NameDialogProps {
   confirmLabel: string
   busyLabel: string
   trigger: ReactNode
-  /** Vrací chybovou hlášku, nebo `null`, když se akce povedla. */
+  /** Returns an error message, or `null` when the action succeeded. */
   onSubmit: (name: string) => Promise<string | null>
 }
 
@@ -72,9 +61,9 @@ function NameDialog({
 
   function change(next: boolean) {
     setOpen(next)
-    // Při každém otevření i zavření se pole vrací k platnému názvu a chyba mizí.
-    // Otevřít dialog podruhé a najít v něm nedopsaný název, starou chybu nebo
-    // jméno, které už se mezitím změnilo, by mátlo.
+    // Every open and close resets the field to the current name and clears the
+    // error. Reopening the dialog to find a half-typed name, a stale error or a
+    // name that has changed meanwhile would be confusing.
     setName(initialName)
     setError(null)
   }
@@ -91,8 +80,8 @@ function NameDialog({
       }
       change(false)
     } catch (submitError) {
-      // Síťová chyba dřív neukázala nic — tlačítko se jen vrátilo do klidu.
-      setError(errorMessage(submitError, 'Nepovedlo se to uložit.'))
+      // A network error used to show nothing — the button just went idle again.
+      setError(errorMessage(submitError, t('library:itemDialogs.saveFailed')))
     } finally {
       setBusy(false)
     }
@@ -126,7 +115,7 @@ function NameDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => change(false)}>
-            Zrušit
+            {t('common:actions.cancel')}
           </Button>
           <BusyButton busy={busy} busyLabel={busyLabel} disabled={!name.trim()} onClick={() => void submit()}>
             {confirmLabel}
@@ -137,15 +126,15 @@ function NameDialog({
   )
 }
 
-/** Odpověď API přeložená na hlášku, kterou má smysl ukázat učitelce. */
+/** The API response turned into a message worth showing the teacher. */
 async function problem(response: Response): Promise<string | null> {
   if (response.ok) return null
-  return responseError(response, await readJson(response), 'Nepovedlo se to uložit.').message
+  return responseError(response, await readJson(response), t('library:itemDialogs.saveFailed')).message
 }
 
 /**
- * Tlačítko „Nový předmět / ročník / téma“ s dialogem na název.
- * `parentId` je předmět u ročníku a ročník u tématu; u předmětu se nevyplňuje.
+ * A "Nový předmět / ročník / téma" button with a name dialog.
+ * `parentId` is the subject for a grade and the grade for a topic; not set for a subject.
  */
 export function NewLibraryItem({
   kind,
@@ -158,34 +147,34 @@ export function NewLibraryItem({
   kind: LibraryKind
   parentId?: string
   label?: string
-  /** Jen ikona s popiskem při najetí — pro místa, kde by se texty u každé položky sčítaly. */
+  /** Icon only with a hover label — for places where per-item texts would pile up. */
   iconOnly?: boolean
   size?: ComponentProps<typeof Button>['size']
   variant?: ComponentProps<typeof Button>['variant']
 }) {
-  // Náhled knihovnu nemění, takže ani nezakládá a nepřejmenovává. Hlídka je
-  // až za hooky, aby se jich v každém vykreslení volal stejný počet.
-  const muzeMenit = useMuzeMenit()
+  // A viewer doesn't change the library, so it neither creates nor renames. The
+  // guard sits after the hooks so the same number of them is called on every render.
+  const canEdit = useCanEdit()
   const router = useRouter()
-  const popisek = label ?? NAZVY[kind].novy
-  if (!muzeMenit) return null
+  const fieldLabel = label ?? t(`library:itemDialogs.${kind}.newItem`)
+  if (!canEdit) return null
 
   return (
     <NameDialog
-      title={NAZVY[kind].novy}
-      fieldLabel={NAZVY[kind].popisek}
-      hint={NAPOVEDA[kind]}
+      title={t(`library:itemDialogs.${kind}.newItem`)}
+      fieldLabel={t(`library:itemDialogs.${kind}.label`)}
+      hint={t(`library:itemDialogs.${kind}.hint`)}
       initialName=""
-      confirmLabel="Založit"
-      busyLabel="Zakládám…"
+      confirmLabel={t('library:itemDialogs.create')}
+      busyLabel={t('library:itemDialogs.creating')}
       trigger={
         iconOnly ? (
-          <Button size="icon-sm" variant={variant} aria-label={popisek} title={popisek}>
+          <Button size="icon-sm" variant={variant} aria-label={fieldLabel} title={fieldLabel}>
             <Plus aria-hidden />
           </Button>
         ) : (
           <Button size={size} variant={variant}>
-            {popisek}
+            {fieldLabel}
           </Button>
         )
       }
@@ -199,8 +188,8 @@ export function NewLibraryItem({
         if (failure) return failure
 
         const { id } = (await response.json()) as { id: string }
-        // Po založení je užitečné rovnou být tam, kde se dá pokračovat:
-        // v novém tématu se píšou otázky, v novém ročníku se zakládají témata.
+        // After creating, it helps to land right where work continues:
+        // questions are written in a new topic, topics are created in a new grade.
         if (kind === 'topic') router.push(`/topics/${id}`)
         else if (kind === 'grade') router.push(`/tridy/${id}`)
         router.refresh()
@@ -211,8 +200,8 @@ export function NewLibraryItem({
 }
 
 /**
- * Tlačítko „Přejmenovat“ u položky knihovny. `iconOnly` je pro místa, kde by
- * popisek u každé položky zvlášť přebil to podstatné — třeba u dlaždic témat.
+ * A "Přejmenovat" button on a library item. `iconOnly` is for places where a
+ * label on every item would drown out what matters — e.g. on topic tiles.
  */
 export function RenameLibraryItem({
   kind,
@@ -231,27 +220,27 @@ export function RenameLibraryItem({
   size?: ComponentProps<typeof Button>['size']
   variant?: ComponentProps<typeof Button>['variant']
 }) {
-  // Totéž co u zakládání: náhled jen čte.
-  const muzeMenit = useMuzeMenit()
+  // Same as for creating: a viewer only reads.
+  const canEdit = useCanEdit()
   const router = useRouter()
-  const popisek = label ?? NAZVY[kind].prejmenovat
-  if (!muzeMenit) return null
+  const fieldLabel = label ?? t(`library:itemDialogs.${kind}.rename`)
+  if (!canEdit) return null
 
   return (
     <NameDialog
-      title={NAZVY[kind].prejmenovat}
-      fieldLabel={NAZVY[kind].popisek}
+      title={t(`library:itemDialogs.${kind}.rename`)}
+      fieldLabel={t(`library:itemDialogs.${kind}.label`)}
       initialName={name}
-      confirmLabel="Uložit"
-      busyLabel="Ukládám…"
+      confirmLabel={t('common:actions.save')}
+      busyLabel={t('common:actions.saving')}
       trigger={
         iconOnly ? (
-          <Button size="icon-sm" variant={variant} aria-label={popisek} title={popisek}>
+          <Button size="icon-sm" variant={variant} aria-label={fieldLabel} title={fieldLabel}>
             <Pencil aria-hidden />
           </Button>
         ) : (
           <Button size={size} variant={variant}>
-            {popisek}
+            {fieldLabel}
           </Button>
         )
       }

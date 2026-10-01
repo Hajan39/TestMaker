@@ -9,9 +9,9 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        // Stav, ne akce: značková zelená patří tomu, co se dá stisknout.
-        // Odznak „schváleno“ u dvaceti řádků banky by jinak svítil zeleně
-        // víc než tlačítka nad ním.
+        // A status, not an action: brand green belongs to what can be pressed.
+        // An "approved" badge on twenty bank rows would otherwise glow greener
+        // than the buttons above it.
         status: "border-line bg-surface-muted text-fg-soft",
         secondary:
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",

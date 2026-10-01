@@ -1,21 +1,25 @@
 import { generateObject, NoObjectGeneratedError, type LanguageModel } from 'ai'
 import type { z } from 'zod'
+import { t } from '../i18n'
 import { describeAiError } from './errors'
 import { describeAiConfig, getModel, type AiConfig } from './provider'
 import { AI_SETTINGS } from './settings'
 
-export const NO_MODEL_MESSAGE = 'Žádný model není nastavený. Doplň do .env.local klíč a případně AI_MODELS.'
+/** Error when the ladder has no model to call. */
+export function noModelMessage(): string {
+  return t('ai:setup.noModel')
+}
 
-/** Vytáhne z chyby surovou odpověď modelu, pokud ji nese (model odpověděl, jen ne ve tvaru). */
+/** Extracts the raw model answer from the error, if it carries one (the model answered, just not in shape). */
 export function rawTextOf(error: unknown): string | null {
   if (!NoObjectGeneratedError.isInstance(error)) return null
   const text = (error as { text?: unknown }).text
   return typeof text === 'string' ? text : null
 }
 
-/** Jeden pokus o volání jednoho modelu — i ten, kterému došel limit. */
+/** One attempt to call one model — including one that ran out of quota. */
 export interface AiCallEvent {
-  /** `poskytovatel:model` */
+  /** `provider:model` */
   model: string
   outcome: 'ok' | 'limit' | 'bad_shape' | 'error'
   inputTokens: number | null
@@ -23,30 +27,32 @@ export interface AiCallEvent {
   durationMs: number
 }
 
-/** Posluchač pokusů o volání. Core o úloze ani o databázi neví; zapisuje až web. */
+/** Listener for call attempts. Core knows nothing about jobs or the database; the web records them. */
 export type AiCallListener = (event: AiCallEvent) => void
 
-/** Kudy funkce volání předá žebříčku spotřebu tokenů. */
+/** How the call function reports token usage to the ladder. */
 export interface CallMeter {
   usage(input: number | null | undefined, output: number | null | undefined): void
 }
 
 export interface LadderRun {
-  /** Modely, které v běhu opravdu odpověděly (`poskytovatel:model`), v pořadí použití. */
+  /** Models that actually answered during the run (`provider:model`), in order of use. */
   used: string[]
-  /** Zavolá `fn` s prvním modelem, kterému ještě nedošel limit. */
+  /** Calls `fn` with the first model that has not run out of quota yet. */
   call<T>(fn: (config: AiConfig, meter: CallMeter) => Promise<T>, options?: { nextOnBadShape?: boolean }): Promise<{ value: T; model: string }>
 }
 
 /**
- * Jeden běh nad žebříčkem modelů. Model, kterému došel limit nebo je
- * přetížený, se do konce běhu přeskakuje — jinak by na tutéž chybu čekala
- * každá další dávka. Chyba, na které nic nezmění ani jiný model (chybný klíč),
- * letí rovnou nahoru. Odpověď ve špatném tvaru znamená, že model funguje:
- * volající ji zachrání sám (otázky), nebo si řekne o další model (hlavolamy).
+ * One run over the model ladder. A model that ran out of quota or is
+ * overloaded is skipped until the end of the run — otherwise every further
+ * batch would wait for the same error. An error that no other model would
+ * change either (wrong key) is thrown right away. An answer in the wrong
+ * shape means the model works: the caller either salvages it (questions) or
+ * asks for the next model (puzzles).
  *
- * `onCall` dostane každý pokus o volání (i model, kterému došel limit).
- * Přerušení se neměří a výjimka z posluchače generování nikdy neshodí.
+ * `onCall` receives every call attempt (including a model out of quota).
+ * Aborts are not measured, and an exception from the listener never breaks
+ * generation.
  */
 export function startLadder(models: AiConfig[], signal?: AbortSignal, onCall?: AiCallListener): LadderRun {
   const exhausted = new Set<string>()
@@ -64,14 +70,14 @@ export function startLadder(models: AiConfig[], signal?: AbortSignal, onCall?: A
     try {
       onCall({ model, outcome, inputTokens: tokens.input, outputTokens: tokens.output, durationMs: Date.now() - started })
     } catch (error) {
-      console.error('Záznam o volání modelu se nepodařilo předat:', error)
+      console.error('Failed to report a model call record:', error)
     }
   }
 
   return {
     used,
     async call(fn, options = {}) {
-      let lastError: unknown = new Error(NO_MODEL_MESSAGE)
+      let lastError: unknown = new Error(noModelMessage())
       for (const config of models) {
         const key = describeAiConfig(config)
         if (exhausted.has(key)) continue
@@ -107,13 +113,13 @@ export function startLadder(models: AiConfig[], signal?: AbortSignal, onCall?: A
   }
 }
 
-/** Volání modelu, které vrací objekt podle schématu. Model se sestaví jednou na běh. */
+/** Model call returning an object per the schema. The model is built once per run. */
 export type ObjectCall<T> = (input: {
   config: AiConfig
   system: string
   prompt: string
   signal?: AbortSignal
-  /** Kam zapsat spotřebu tokenů; poskytovatel bez `usage` zapíše `null`. */
+  /** Where to record token usage; a provider without `usage` records `null`. */
   meter?: CallMeter
 }) => Promise<T>
 

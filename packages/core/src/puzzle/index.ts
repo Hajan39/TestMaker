@@ -8,14 +8,14 @@ export * from './wordsearch'
 export * from './cryptogram'
 
 /**
- * Hotový hlavolam: to, co se opravdu vytiskne. Papír i náhled na obrazovce
- * berou obojí odsud, aby nemohly ukázat každý něco jiného.
+ * A built puzzle: what actually gets printed. Both the paper and the on-screen
+ * preview take it from here so they can never show different things.
  */
 export type BuiltPuzzle =
   | { kind: 'wordsearch'; wordSearch: WordSearchResult }
   | { kind: 'cryptogram'; cryptogram: CryptogramResult }
 
-/** Složí hlavolam z uloženého zadání. Čistá funkce: týž vstup, týž výstup. */
+/** Builds a puzzle from its stored definition. Pure: same input, same output. */
 export function buildPuzzle(puzzle: PuzzleContent): BuiltPuzzle {
   if (puzzle.kind === 'wordsearch') {
     return {
@@ -38,7 +38,7 @@ export function buildPuzzle(puzzle: PuzzleContent): BuiltPuzzle {
   }
 }
 
-/** Potíže hotového hlavolamu — jedno místo pro rozhraní i pro tisk. */
+/** Problems of a built puzzle — one place for both the UI and printing. */
 export function puzzleProblems(built: BuiltPuzzle): PuzzleProblem[] {
   return built.kind === 'wordsearch' ? built.wordSearch.problems : built.cryptogram.problems
 }

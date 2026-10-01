@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { planUndo } from '../src'
 
 describe('planUndo', () => {
-  it('z prázdného vstupu nevznikne žádný krok', () => {
+  it('empty input yields no step', () => {
     expect(planUndo([])).toEqual([])
   })
 
-  it('seskupí id podle stavu, do kterého se mají vrátit', () => {
+  it('groups ids by the status to return to', () => {
     const plan = planUndo([
       ['q1', 'draft'],
       ['q2', 'approved'],
@@ -19,14 +19,14 @@ describe('planUndo', () => {
     ])
   })
 
-  it('stejný stav pro všechny znamená jediný krok', () => {
+  it('the same status for all means a single step', () => {
     expect(planUndo([
       ['q1', 'draft'],
       ['q2', 'draft'],
     ])).toEqual([{ status: 'draft', ids: ['q1', 'q2'] }])
   })
 
-  it('pořadí skupin i id odpovídá pořadí vstupu', () => {
+  it('group and id order follows the input order', () => {
     const plan = planUndo([
       ['q9', 'rejected'],
       ['q8', 'draft'],
@@ -37,7 +37,7 @@ describe('planUndo', () => {
     expect(plan[0]!.ids).toEqual(['q9', 'q7'])
   })
 
-  it('opakované id se započítá jen jednou a platí jeho první stav', () => {
+  it('a repeated id counts once and its first status wins', () => {
     const plan = planUndo([
       ['q1', 'draft'],
       ['q1', 'approved'],
@@ -46,7 +46,7 @@ describe('planUndo', () => {
     expect(plan).toEqual([{ status: 'draft', ids: ['q1'] }])
   })
 
-  it('bere i mapu předchozích stavů, jak ji drží panel', () => {
+  it('also accepts a map of previous statuses as the panel holds it', () => {
     const previous = new Map<string, 'draft' | 'approved' | 'rejected'>([
       ['q1', 'draft'],
       ['q2', 'rejected'],

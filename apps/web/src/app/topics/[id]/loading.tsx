@@ -1,13 +1,14 @@
 import { Delayed, LoadingCard, LoadingHeading } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Přechod na detail tématu. Sloupce s ročníky a tématy drží layout nad tímhle
- * souborem, takže se překreslí jen obsahová část — kliknutí na téma v seznamu
- * tedy nerozsvítí kostru pod celou obrazovkou.
+ * Navigation to a topic detail. The grade and topic columns are held by the
+ * layout above this file, so only the content area repaints — clicking a topic
+ * in the list does not light up a skeleton over the whole screen.
  */
 export default function TopicLoading() {
   return (
-    <Delayed label="Načítám téma…" className="space-y-5">
+    <Delayed label={t('library:topicPage.loading')} className="space-y-5">
       <LoadingHeading stats />
       <LoadingCard lines={3} />
       <LoadingCard lines={4} />

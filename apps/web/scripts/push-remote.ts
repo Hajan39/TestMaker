@@ -1,185 +1,186 @@
 /**
- * Přenos hotové knihovny z počítače do provozní databáze (Turso).
+ * Transfers the finished library from the computer to the production database (Turso).
  *
  *   TARGET_DATABASE_URL=libsql://…  TARGET_DATABASE_AUTH_TOKEN=…  \
- *     pnpm --filter @testmaker/web push:remote            # jen spočítá, nic nezapíše
+ *     pnpm --filter @testmaker/web push:remote            # only counts, writes nothing
  *     pnpm --filter @testmaker/web push:remote -- --zapsat
  *
- * Proč databáze rovnou do databáze, a ne přes aplikaci: požadavek na Vercelu
- * smí mít nejvýš 4,5 MB a funkce běží jen omezenou dobu. Tenhle skript běží
- * na počítači majitele, mluví s Tursem přímo a žádné takové stropy se ho
- * netýkají — 268 materiálů s plnými texty projde jedním během.
+ * Why database straight to database and not through the app: a request on
+ * Vercel may be at most 4.5 MB and functions run only for a limited time. This
+ * script runs on the owner's computer, talks to Turso directly and none of
+ * those caps apply — 268 materials with full texts go through in one run.
  *
- * Běh se dá kdykoli zopakovat: zapisuje se `insert … on conflict(id) do update`,
- * takže druhý běh nic nezdvojí, jen srovná, co se mezitím změnilo. Když se běh
- * přeruší v půlce, stačí ho spustit znovu.
+ * The run can be repeated at any time: it writes `insert … on conflict(id) do
+ * update`, so a second run duplicates nothing and only aligns what changed
+ * meanwhile. If a run is interrupted halfway, just start it again.
  *
- * Fronta generování (`generation_jobs`) se nepřenáší — je to pracovní stav
- * jednoho počítače, ne obsah knihovny.
+ * The generation queue (`generation_jobs`) is not transferred — it is one
+ * computer's working state, not library content.
  *
- * Škola se musí uvést (`--skola <id>`) a platí pro čtení i pro zápis: bez ní
- * by šlo omylem slít obsah dvou škol do jedné a zpátky by to nikdo nerozebral.
- * Vlastník, který v cíli neexistuje, připadne účtu z `--ucet`.
+ * The school must be given (`--skola <id>`) and applies to both reading and
+ * writing: without it the content of two schools could accidentally be merged
+ * into one and nobody could pull it apart again. An owner who does not exist in
+ * the target is replaced by the account from `--ucet`.
  */
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { sql } from 'drizzle-orm'
 import * as schema from '../src/db/schema'
 import {
-  PORADI,
-  citejTabulku,
-  existujiciTabulky,
-  prazdnePocty,
-  spocitej,
-  zapisOdkazyDuplicit,
-  zapisRadky,
+  TABLE_ORDER,
+  readTable,
+  existingTables,
+  emptyCounts,
+  countRows,
+  writeSelfReferences,
+  writeRows,
   type BackupDb,
-  type NazevTabulky,
-  type OdkazDuplicity,
+  type TableName,
+  type SelfReference,
 } from '../src/lib/backup'
-import { popisTabulky } from '../src/lib/backupClient'
+import { tableLabel } from '../src/lib/backupClient'
 
-const zapsat = process.argv.includes('--zapsat')
-const dryRun = !zapsat || process.argv.includes('--dry-run')
+const write = process.argv.includes('--zapsat')
+const dryRun = !write || process.argv.includes('--dry-run')
 
-/** Hodnota přepínače `--jmeno hodnota`. */
-function prepinac(jmeno: string): string | null {
-  const index = process.argv.indexOf(`--${jmeno}`)
+/** Value of a `--name value` switch. */
+function flag(name: string): string | null {
+  const index = process.argv.indexOf(`--${name}`)
   return index >= 0 ? (process.argv[index + 1] ?? null) : null
 }
 
-const skolaId = prepinac('skola')
-const ucetId = prepinac('ucet')
+const schoolId = flag('skola')
+const accountId = flag('ucet')
 
 /**
- * Cíl se schválně nebere z `DATABASE_URL`. Ta míří na zdroj (lokální soubor)
- * a kdyby se z ní bral i cíl, stačilo by zapomenout na jednu proměnnou
- * a skript by přepsal knihovnu sám sebou.
+ * The target is deliberately not taken from `DATABASE_URL`. That points to the
+ * source (a local file), and if the target came from it too, forgetting one
+ * variable would make the script overwrite the library with itself.
  */
-const cilUrl = process.env.TARGET_DATABASE_URL
-const cilToken = process.env.TARGET_DATABASE_AUTH_TOKEN
-const zdrojUrl = process.env.SOURCE_DATABASE_URL || 'file:./local.db'
+const targetUrl = process.env.TARGET_DATABASE_URL
+const targetToken = process.env.TARGET_DATABASE_AUTH_TOKEN
+const sourceUrl = process.env.SOURCE_DATABASE_URL || 'file:./local.db'
 
-function konec(zprava: string): never {
-  console.error(zprava)
+function end(message: string): never {
+  console.error(message)
   process.exit(1)
 }
 
 async function main() {
-  if (!skolaId || !ucetId) {
-    konec(
+  if (!schoolId || !accountId) {
+    end(
       'Chybí --skola <id> a --ucet <id>. Škola určuje, co se přenáší a kam se to ' +
         'zapíše; účet dostane obsah, jehož původní vlastník v cíli není. ' +
         'Id najdeš v tabulkách `schools` a `users`.',
     )
   }
-  if (!cilUrl) {
-    konec(
+  if (!targetUrl) {
+    end(
       'Chybí TARGET_DATABASE_URL — adresa databáze, do které se má přenášet ' +
         '(v Tursu `turso db show <jméno> --url`). Spolu s ní obvykle i ' +
         'TARGET_DATABASE_AUTH_TOKEN.',
     )
   }
-  if (cilUrl === zdrojUrl) {
-    konec('TARGET_DATABASE_URL je totéž co zdroj — to by knihovna přepsala sama sebe.')
+  if (targetUrl === sourceUrl) {
+    end('TARGET_DATABASE_URL je totéž co zdroj — to by knihovna přepsala sama sebe.')
   }
 
-  const zdrojKlient = createClient({ url: zdrojUrl })
-  const cilKlient = createClient({ url: cilUrl, authToken: cilToken })
-  const zdroj = drizzle(zdrojKlient, { schema }) as BackupDb
-  const cil = drizzle(cilKlient, { schema }) as BackupDb
+  const sourceClient = createClient({ url: sourceUrl })
+  const targetClient = createClient({ url: targetUrl, authToken: targetToken })
+  const source = drizzle(sourceClient, { schema }) as BackupDb
+  const target = drizzle(targetClient, { schema }) as BackupDb
 
-  console.log(`Zdroj: ${zdrojUrl}`)
-  console.log(`Cíl:   ${cilUrl}`)
+  console.log(`Zdroj: ${sourceUrl}`)
+  console.log(`Cíl:   ${targetUrl}`)
   console.log('')
 
-  await overSchema(cil)
+  await checkSchema(target)
 
-  const pred = await spocitej(cil, { schoolId: skolaId })
-  const zdrojovePocty = await spocitej(zdroj, { schoolId: skolaId })
+  const before = await countRows(target, { schoolId: schoolId })
+  const sourceCounts = await countRows(source, { schoolId: schoolId })
 
   if (dryRun) {
     console.log('Nanečisto (--dry-run): nic se nezapisuje.\n')
-    vypisTabulku(zdrojovePocty, pred)
+    printTable(sourceCounts, before)
     console.log('\nSkutečný přenos spustíš s přepínačem --zapsat.')
-    zdrojKlient.close()
-    cilKlient.close()
+    sourceClient.close()
+    targetClient.close()
     return
   }
 
-  const veZdroji = await existujiciTabulky(zdroj)
-  const preneseno = prazdnePocty()
-  for (const nazev of PORADI) {
-    if (!veZdroji.has(nazev)) {
-      // Zdroj je starší než aplikace — tabulka v něm ještě není a přenášet
-      // z ní není co.
-      console.log(`${nazev}: ve zdroji není, přeskakuji`)
+  const inSource = await existingTables(source)
+  const transferred = emptyCounts()
+  for (const name of TABLE_ORDER) {
+    if (!inSource.has(name)) {
+      // The source is older than the app — the table does not exist there yet
+      // and there is nothing to transfer.
+      console.log(`${name}: ve zdroji není, přeskakuji`)
       continue
     }
-    const odkazy: OdkazDuplicity[] = []
-    let hotovo = 0
-    for await (const davka of citejTabulku(zdroj, nazev, { schoolId: skolaId })) {
-      const vysledek = await zapisRadky(cil, nazev, davka, { schoolId: skolaId, userId: ucetId })
-      odkazy.push(...vysledek.odkazy)
-      hotovo += vysledek.zapsano
-      if (zdrojovePocty[nazev] > 0) prubeh(`${nazev}: ${hotovo}/${zdrojovePocty[nazev]}`)
+    const links: SelfReference[] = []
+    let done = 0
+    for await (const batch of readTable(source, name, { schoolId: schoolId })) {
+      const result = await writeRows(target, name, batch, { schoolId: schoolId, userId: accountId })
+      links.push(...result.links)
+      done += result.written
+      if (sourceCounts[name] > 0) progress(`${name}: ${done}/${sourceCounts[name]}`)
     }
-    preneseno[nazev] = hotovo
-    let dopsano = 0
-    if (odkazy.length > 0) dopsano = await zapisOdkazyDuplicit(cil, odkazy, { schoolId: skolaId })
-    if (zdrojovePocty[nazev] > 0) {
-      hotovoRadek(
-        `${nazev}: ${hotovo}/${zdrojovePocty[nazev]}` +
-          (odkazy.length > 0 ? ` (${nazev === 'questions' ? 'verze' : 'duplicity'}: ${dopsano})` : ''),
+    transferred[name] = done
+    let appended = 0
+    if (links.length > 0) appended = await writeSelfReferences(target, links, { schoolId: schoolId })
+    if (sourceCounts[name] > 0) {
+      doneRow(
+        `${name}: ${done}/${sourceCounts[name]}` +
+          (links.length > 0 ? ` (${name === 'questions' ? 'verze' : 'duplicity'}: ${appended})` : ''),
       )
     }
   }
 
   console.log('')
-  const po = await spocitej(cil, { schoolId: skolaId })
-  vypisTabulku(zdrojovePocty, po, preneseno)
+  const after = await countRows(target, { schoolId: schoolId })
+  printTable(sourceCounts, after, transferred)
 
-  const chybi = PORADI.filter((nazev) => po[nazev] < zdrojovePocty[nazev])
-  if (chybi.length > 0) {
+  const missing = TABLE_ORDER.filter((name) => after[name] < sourceCounts[name])
+  if (missing.length > 0) {
     console.log(
-      `\nV cíli je míň řádků než ve zdroji (${chybi.join(', ')}). Spusť přenos znovu; ` +
+      `\nV cíli je míň řádků než ve zdroji (${missing.join(', ')}). Spusť přenos znovu; ` +
         'opakovaný běh nic nezdvojí.',
     )
   } else {
     console.log('\nHotovo. V cíli je všechno, co je ve zdroji.')
   }
 
-  zdrojKlient.close()
-  cilKlient.close()
+  sourceClient.close()
+  targetClient.close()
 }
 
 /**
- * Průběh dlouhé tabulky. V terminálu se řádek přepisuje, v přesměrovaném
- * výstupu (log z běhu) by z toho byla nečitelná kaše, tak se tam mlčí a
- * vypíše se až hotová tabulka.
+ * Progress of a long table. In a terminal the line is overwritten; in
+ * redirected output (a run log) it would be an unreadable mess, so it stays
+ * silent there and only the finished table is printed.
  */
-function prubeh(text: string): void {
+function progress(text: string): void {
   if (process.stdout.isTTY) process.stdout.write(`\r${text}   `)
 }
 
-/** Dokončená tabulka — vypíše se vždycky, i do souboru. */
-function hotovoRadek(text: string): void {
+/** A finished table — always printed, even to a file. */
+function doneRow(text: string): void {
   if (process.stdout.isTTY) process.stdout.write('\r')
   console.log(`${text}   `)
 }
 
 /**
- * Cílová databáze musí mít schéma — migrace tam pouští GitHub Actions
- * (`.github/workflows/migrate.yml`), ne tenhle skript. Bez téhle kontroly by
- * přenos spadl uprostřed na nesrozumitelné „no such table“.
+ * The target database must have the schema — GitHub Actions runs migrations
+ * there (`.github/workflows/migrate.yml`), not this script. Without this check
+ * the transfer would fail midway on an unhelpful "no such table".
  */
-async function overSchema(cil: BackupDb): Promise<void> {
-  const vysledek = await cil.run(sql`select name from sqlite_master where type = 'table'`)
-  const tabulky = new Set(vysledek.rows.map((row) => String(row.name)))
-  const chybi = PORADI.filter((nazev) => !tabulky.has(nazev))
-  if (chybi.length > 0) {
-    konec(
-      `V cílové databázi chybí tabulky (${chybi.join(', ')}). Nejdřív tam pusť migrace — ` +
+async function checkSchema(target: BackupDb): Promise<void> {
+  const result = await target.run(sql`select name from sqlite_master where type = 'table'`)
+  const tables = new Set(result.rows.map((row) => String(row.name)))
+  const missing = TABLE_ORDER.filter((name) => !tables.has(name))
+  if (missing.length > 0) {
+    end(
+      `V cílové databázi chybí tabulky (${missing.join(', ')}). Nejdřív tam pusť migrace — ` +
         've workflow „migrate“ na GitHubu, nebo z počítače:\n' +
         '  DATABASE_URL=$TARGET_DATABASE_URL DATABASE_AUTH_TOKEN=$TARGET_DATABASE_AUTH_TOKEN \\\n' +
         '    pnpm --filter @testmaker/web db:migrate',
@@ -187,22 +188,22 @@ async function overSchema(cil: BackupDb): Promise<void> {
   }
 }
 
-/** Přehled „co je ve zdroji / co je v cíli“, ať je na první pohled vidět rozdíl. */
-function vypisTabulku(
-  zdroj: Record<NazevTabulky, number>,
-  cil: Record<NazevTabulky, number>,
-  preneseno?: Record<NazevTabulky, number>,
+/** Overview of "what is in the source / what is in the target", so the difference is visible at a glance. */
+function printTable(
+  source: Record<TableName, number>,
+  target: Record<TableName, number>,
+  transferred?: Record<TableName, number>,
 ): void {
-  const sirka = Math.max(...PORADI.map((nazev) => popisTabulky(nazev).length))
+  const width = Math.max(...TABLE_ORDER.map((name) => tableLabel(name).length))
   console.log(
-    `${'tabulka'.padEnd(sirka)}  ${'zdroj'.padStart(7)}  ${'cíl'.padStart(7)}` +
-      (preneseno ? `  ${'posláno'.padStart(7)}` : ''),
+    `${'tabulka'.padEnd(width)}  ${'zdroj'.padStart(7)}  ${'cíl'.padStart(7)}` +
+      (transferred ? `  ${'posláno'.padStart(7)}` : ''),
   )
-  for (const nazev of PORADI) {
+  for (const name of TABLE_ORDER) {
     console.log(
-      `${popisTabulky(nazev).padEnd(sirka)}  ${String(zdroj[nazev]).padStart(7)}  ` +
-        `${String(cil[nazev]).padStart(7)}` +
-        (preneseno ? `  ${String(preneseno[nazev]).padStart(7)}` : ''),
+      `${tableLabel(name).padEnd(width)}  ${String(source[name]).padStart(7)}  ` +
+        `${String(target[name]).padStart(7)}` +
+        (transferred ? `  ${String(transferred[name]).padStart(7)}` : ''),
     )
   }
 }

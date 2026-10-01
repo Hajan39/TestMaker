@@ -1,26 +1,27 @@
+import { t } from '@testmaker/core/i18n'
 import { z } from 'zod'
-import { roleJeAdministrator } from '@/lib/role'
-import { prepnoutSkolu } from '@/lib/skoly'
-import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
+import { isAdministratorRole } from '@/lib/role'
+import { switchSchool } from '@/lib/schools'
+import { withScope, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
 const schema = z.object({ schoolId: z.string().min(1) })
 
-/** Přepne administrátora do jiné školy; volba se uloží k jeho účtu. */
+/** Switches the administrator to another school; the choice is stored on their account. */
 export async function POST(request: Request) {
-  return sRozsahem(async (ucet) => {
-    if (!roleJeAdministrator(ucet.role)) return Response.json({ error: 'Nenalezeno' }, { status: 404 })
+  return withScope(async (account) => {
+    if (!isAdministratorRole(account.role)) return Response.json({ error: t('admin:errors.notFound') }, { status: 404 })
 
     const parsed = schema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+    if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
 
-    if (!(await prepnoutSkolu(ucet, parsed.data.schoolId))) {
-      return Response.json({ error: 'Škola se nenašla.' }, { status: 404 })
+    if (!(await switchSchool(account, parsed.data.schoolId))) {
+      return Response.json({ error: t('admin:errors.schoolNotFound') }, { status: 404 })
     }
-    await zapsatAudit({
+    await writeAudit({
       schoolId: parsed.data.schoolId,
-      userId: ucet.userId,
+      userId: account.userId,
       action: 'administrator-prepnul-skolu',
       entity: 'school',
       entityId: parsed.data.schoolId,

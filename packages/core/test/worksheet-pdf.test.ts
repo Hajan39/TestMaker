@@ -37,64 +37,64 @@ const tableItem = (rows: number, longCells = false): ResolvedTestItem => ({
   table: makeTable(rows, longCells),
 })
 
-describe('odhad výšky položek listu', () => {
+describe('worksheet item height estimate', () => {
   const [, text, funFact] = makeWorksheetItems()
 
-  it('text zabere místo a s délkou roste', () => {
+  it('a text takes space and grows with length', () => {
     const short = estimateHeight(text!, config)
     const long = estimateHeight({ ...text!, text: `${text!.text} `.repeat(8) }, config)
     expect(short).toBeGreaterThan(0)
     expect(long).toBeGreaterThan(short)
   })
 
-  it('fun fact v rámečku s popiskem je vyšší než týž text bez rámečku', () => {
+  it('a boxed fun fact with a label is taller than the same text without a box', () => {
     expect(estimateHeight({ ...funFact!, text: text!.text }, config)).toBeGreaterThan(estimateHeight(text!, config))
   })
 
-  it('tabulka roste s počtem řádků', () => {
+  it('a table grows with its row count', () => {
     expect(estimateHeight(tableItem(12), config)).toBeGreaterThan(estimateHeight(tableItem(2), config))
   })
 
-  it('tabulka se dělí po řádcích: první kus nese popisek, záhlaví i první řádek', () => {
+  it('a table splits by rows: the first chunk carries caption, header and first row', () => {
     const parts = tableParts(tableItem(4), config)!
     expect(parts).toHaveLength(4)
     expect(parts[0]).toBeGreaterThan(parts[1]!)
     expect(tableParts(makeWorksheetItems()[1]!, config)).toBeNull()
   })
 
-  it('poškozená tabulka nemá výšku ani kusy', () => {
+  it('a broken table has no height and no chunks', () => {
     const broken = { ...tableItem(3), table: null }
     expect(estimateHeight(broken, config)).toBe(0)
     expect(tableParts(broken, config)).toBeNull()
   })
 
-  it('vysoká tabulka přeteče na další stranu, místo aby se celá odsunula', () => {
+  it('a tall table overflows to the next page instead of moving down whole', () => {
     const tall = tableItem(12, true)
     const total = estimateHeight(tall, config)
-    // Předpoklad testu: tabulka je vyšší než polovina strany.
+    // Test precondition: the table is taller than half a page.
     expect(total).toBeGreaterThan(usablePageHeight(config) / 2)
     const pages = paginate([...makeWorksheetItems().slice(0, 3), tableItem(12, true), tall], config)
     expect(pages.length).toBeGreaterThanOrEqual(2)
-    // První vysoká tabulka začíná na první straně hned za texty.
+    // The first tall table starts on the first page right after the texts.
     expect(pages[0]!.map((item) => item.id)).toContain('tab-12')
   })
 })
 
-describe('tisk pracovního listu', () => {
-  it('vytiskne text, fun fact s popiskem i tabulku, v klíči s doplněnými buňkami', async () => {
+describe('worksheet printing', () => {
+  it('prints text, a labelled fun fact and a table, with filled cells in the key', async () => {
     const text = await renderText(makeWorksheetItems())
     expect(text).toContain('Plíce jsou párový orgán')
     expect(text).toContain('Věděli jste?')
     expect(text).toContain('dvacettisíckrát')
     expect(text).toContain('Doplň tabulku orgánů')
     expect(text).toContain('Kde leží')
-    // Prázdná buňka se v zadání nevytiskne, v klíči ano.
+    // An empty cell is not printed in the questions, but is in the key.
     const withoutKey = await renderText(makeWorksheetItems(), false)
     expect(withoutKey).not.toContain('funkce 1')
     expect(text).toContain('funkce 1')
   })
 
-  it('popisek fun factu bere ze šablony', async () => {
+  it('takes the fun fact label from the template', async () => {
     const custom = { ...template, config: { ...config, funFact: { ...config.funFact, label: 'Zajímavost' } } }
     const buffer = await renderToBuffer(
       createElement(TestDocument, {
@@ -111,7 +111,7 @@ describe('tisk pracovního listu', () => {
     expect(text).not.toContain('Věděli jste?')
   })
 
-  it('poškozená tabulka se vynechá a zbytek listu se vytiskne', async () => {
+  it('a broken table is skipped and the rest of the worksheet prints', async () => {
     const items = makeWorksheetItems().map((item) => (item.kind === 'table' ? { ...item, table: null } : item))
     const text = await renderText(items)
     expect(text).toContain('Věděli jste?')

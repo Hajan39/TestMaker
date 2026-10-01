@@ -3,7 +3,7 @@
 import { useId, useState } from 'react'
 import {
   DEFAULT_POINTS,
-  QUESTION_TYPE_LABELS,
+  questionTypeLabel,
   QUESTION_TYPES,
   questionContentSchema,
   validateQuestionContent,
@@ -29,32 +29,19 @@ import {
 import { emptyPayload } from '@/lib/questionDefaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { PayloadFields } from './PayloadFields'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Co opravit, podle pole, které zod odmítl. Anglická hláška zodu s cestou
- * typu „payload.options.1: String must contain…“ učitelce nic neřekne.
+ * What to fix, by the field zod rejected. Zod's English message with a path
+ * like „payload.options.1: String must contain…“ tells the teacher nothing.
  */
-const FIELD_PROBLEMS: Record<string, string> = {
-  prompt: 'Zadání je moc krátké — napiš aspoň pár slov.',
-  options: 'Doplň možnosti odpovědí: žádná nesmí zůstat prázdná a musí jich být dost (u jedné správné aspoň 2, u více správných aspoň 3).',
-  correctIndex: 'Označ správnou odpověď.',
-  correctIndices: 'Označ aspoň jednu správnou odpověď.',
-  answer: 'Vyplň správnou odpověď do klíče.',
-  acceptedAnswers: 'Další přípustné odpovědi nesmějí být prázdné (nejvýš 10).',
-  statements: 'Každé tvrzení musí mít aspoň pár písmen; tvrzení může být nejvýš 12.',
-  text: 'Napiš text s místy k doplnění a označ je třemi podtržítky ___.',
-  blanks: 'Ke každému místu ___ doplň správný výraz.',
-  wordBank: 'Slova v nabídce nesmějí být prázdná (nejvýš 30).',
-  left: 'Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.',
-  right: 'Vyplň obě strany dvojic — aspoň dvě položky vlevo i vpravo, žádná prázdná.',
-  pairs: 'Přiřaď k sobě aspoň dvě dvojice.',
-  items: 'Vyplň aspoň tři položky k seřazení, žádná nesmí zůstat prázdná.',
-  headers: 'Doplň záhlaví tabulky.',
-  rows: 'Tabulka musí mít aspoň jeden řádek.',
-  answers: 'Doplň správné odpovědi do prázdných buněk tabulky.',
-  lines: 'Počet řádků na odpověď je moc velký — zvol menší číslo.',
-  points: 'Body musí být číslo od 0 do 100.',
-  explanation: 'Poznámka do klíče je moc dlouhá — zkrať ji pod 1000 znaků.',
+const PROBLEM_FIELDS = ['prompt', 'options', 'correctIndex', 'correctIndices', 'answer', 'acceptedAnswers', 'statements', 'text', 'blanks', 'wordBank', 'left', 'right', 'pairs', 'items', 'headers', 'rows', 'answers', 'lines', 'points', 'explanation'] as const
+type ProblemField = (typeof PROBLEM_FIELDS)[number]
+
+function fieldProblem(field: string): string {
+  return (PROBLEM_FIELDS as readonly string[]).includes(field)
+    ? t(`library:questionEditor.problems.${field as ProblemField}`)
+    : t('library:questionEditor.problems.incomplete')
 }
 
 function describeIssues(paths: PropertyKey[][]): string {
@@ -62,16 +49,16 @@ function describeIssues(paths: PropertyKey[][]): string {
     paths.map((path) => {
       // `payload.options.1` → `options`, `points` → `points`.
       const field = String(path[0] === 'payload' ? path[1] : path[0])
-      return FIELD_PROBLEMS[field] ?? 'Otázka není vyplněná celá. Zkontroluj zadání, odpovědi a správné řešení.'
+      return fieldProblem(field)
     }),
   )
   return [...messages].join(' ')
 }
 
 /**
- * Formulář otázky — pole, uložení i chyby, bez dialogu okolo. Vyjmutý
- * z `QuestionEditor`, aby šel použít i jinde než ve vyskakovacím okně (třeba
- * rovnou v řádku seznamu).
+ * The question form — fields, saving and errors, without a surrounding
+ * dialog. Extracted from `QuestionEditor` so it can be used outside a popup
+ * too (e.g. right in a list row).
  */
 export function QuestionEditorForm({
   topicId,
@@ -85,9 +72,9 @@ export function QuestionEditorForm({
   onCancel: () => void
   onSaved: (saved?: Question) => void
   /**
-   * Místo uložení do banky předá obsah volajícímu — úloha pracovního listu
-   * žije jen ve snímku položky listu, do banky nepatří. Body se pak nenabízejí,
-   * list se neznámkuje.
+   * Hands the content to the caller instead of saving it to the bank — a
+   * worksheet task lives only in the worksheet item's snapshot and does not
+   * belong in the bank. Points are not offered then; worksheets are not graded.
    */
   onSubmit?: (content: QuestionContent) => void
 }) {
@@ -100,8 +87,8 @@ export function QuestionEditorForm({
   const [explanation, setExplanation] = useState(question?.explanation ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  // Karta v úpravě a „Nová otázka" mohou stát na obrazovce vedle sebe —
-  // pevná id by se pak zdvojila a `htmlFor` by mířilo na cizí pole.
+  // A card being edited and „Nová otázka" can be on screen side by side —
+  // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
 
   function changeType(next: QuestionType) {
@@ -144,11 +131,11 @@ export function QuestionEditorForm({
         question
           ? jsonBody('PATCH', { id: question.id, question: parsed.data })
           : jsonBody('POST', { topicId, question: parsed.data }),
-        'Otázku se nepodařilo uložit.',
+        t('library:questionEditor.saveFailed'),
       )
       onSaved()
     } catch (saveError) {
-      setError(errorMessage(saveError, 'Otázku se nepodařilo uložit.'))
+      setError(errorMessage(saveError, t('library:questionEditor.saveFailed')))
     } finally {
       setSaving(false)
     }
@@ -158,22 +145,22 @@ export function QuestionEditorForm({
     <>
       <div className="flex flex-wrap gap-3">
         <div className="w-56">
-          <Label htmlFor={`question-editor-type-${uid}`}>Typ</Label>
+          <Label htmlFor={`question-editor-type-${uid}`}>{t('library:questionEditor.type')}</Label>
           <Select value={type} onValueChange={(next) => changeType(next as QuestionType)}>
             <SelectTrigger id={`question-editor-type-${uid}`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {QUESTION_TYPES.filter((t) => t !== 'label_image').map((value) => (
+              {QUESTION_TYPES.filter((option) => option !== 'label_image').map((value) => (
                 <SelectItem key={value} value={value}>
-                  {QUESTION_TYPE_LABELS[value]}
+                  {questionTypeLabel(value)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div className={onSubmit ? 'hidden' : 'w-24'}>
-          <Label htmlFor={`question-editor-points-${uid}`}>Body</Label>
+          <Label htmlFor={`question-editor-points-${uid}`}>{t('library:questionEditor.points')}</Label>
           <Input
             id={`question-editor-points-${uid}`}
             type="number"
@@ -184,7 +171,7 @@ export function QuestionEditorForm({
           />
         </div>
         <div className="w-36">
-          <Label htmlFor={`question-editor-difficulty-${uid}`}>Obtížnost</Label>
+          <Label htmlFor={`question-editor-difficulty-${uid}`}>{t('library:questionEditor.difficulty')}</Label>
           <Select
             value={String(difficulty)}
             onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
@@ -193,9 +180,9 @@ export function QuestionEditorForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">Lehká</SelectItem>
-              <SelectItem value="2">Střední</SelectItem>
-              <SelectItem value="3">Těžká</SelectItem>
+              <SelectItem value="1">{t('library:questionEditor.difficultyEasy')}</SelectItem>
+              <SelectItem value="2">{t('library:questionEditor.difficultyMedium')}</SelectItem>
+              <SelectItem value="3">{t('library:questionEditor.difficultyHard')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -206,11 +193,11 @@ export function QuestionEditorForm({
       </div>
 
       <div className="mt-4">
-        <Label htmlFor={`question-editor-explanation-${uid}`}>Poznámka do klíče (nepovinné)</Label>
+        <Label htmlFor={`question-editor-explanation-${uid}`}>{t('library:questionEditor.explanation')}</Label>
         <Textarea
           id={`question-editor-explanation-${uid}`}
           value={explanation}
-          placeholder="Proč je odpověď správně — vytiskne se jen do klíče pro učitele."
+          placeholder={t('library:questionEditor.explanationPlaceholder')}
           onChange={(event) => setExplanation(event.target.value)}
         />
       </div>
@@ -219,17 +206,17 @@ export function QuestionEditorForm({
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>
-          Zrušit
+          {t('common:actions.cancel')}
         </Button>
         <Button disabled={saving} onClick={() => void save()}>
-          {saving ? 'Ukládám…' : 'Uložit'}
+          {saving ? t('common:actions.saving') : t('common:actions.save')}
         </Button>
       </div>
     </>
   )
 }
 
-/** Editor jedné otázky v dialogu — vlastní i vygenerované; všechny typy ve stejném formuláři. */
+/** Editor for one question in a dialog — hand-written or generated; all types in the same form. */
 export function QuestionEditor({
   topicId,
   question,
@@ -242,17 +229,17 @@ export function QuestionEditor({
   topicId: string
   question: Question | null
   /**
-   * Tlačítko, na které se má vrátit ohnisko po zavření dialogu. Otevírá-li
-   * se editor z nabídky u řádku (třemi tečkami), Radix bez tohohle vrátí
-   * ohnisko na `<body>` — nabídka se zavírá ve stejném tiku, ve kterém se
-   * dialog otevírá, a okrade tak sama sebe o svůj vlastní návrat ohniska.
+   * The button focus should return to after the dialog closes. When the
+   * editor opens from a row menu (the three dots), Radix would otherwise
+   * return focus to `<body>` — the menu closes in the same tick the dialog
+   * opens and so robs itself of its own focus return.
    */
   returnFocusRef?: React.RefObject<HTMLElement | null>
   onClose: () => void
   onSaved: () => void
-  /** Viz `QuestionEditorForm` — obsah bez uložení do banky. */
+  /** See `QuestionEditorForm` — content without saving to the bank. */
   onSubmit?: (content: QuestionContent) => void
-  /** Nadpis dialogu místo výchozího „Upravit otázku“ / „Nová otázka“. */
+  /** Dialog title instead of the default „Upravit otázku“ / „Nová otázka“. */
   title?: string
 }) {
   return (
@@ -266,7 +253,7 @@ export function QuestionEditor({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{title ?? (question ? 'Upravit otázku' : 'Nová otázka')}</DialogTitle>
+          <DialogTitle>{title ?? (question ? t('library:questionEditor.editTitle') : t('library:questionEditor.newTitle'))}</DialogTitle>
         </DialogHeader>
         <QuestionEditorForm
           topicId={topicId}

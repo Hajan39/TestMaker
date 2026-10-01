@@ -1,13 +1,13 @@
 import 'server-only'
 import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm'
 import { db, generationJobs, grades, subjects, topics, users } from '@/db'
-import { muzeSpravovat, skola, type Scope } from './uzivatel'
+import { canManage, inSchool, type Scope } from './user'
 
 /**
- * Fronta generování pro přehled. Obrazovka i ukazatel v liště čtou totéž:
- * co běží, co čeká, co je hotové a co se nepovedlo. Tabulka `generation_jobs`
- * to všechno ví — jen se to dosud nikde neukazovalo a učitelka neměla jak
- * poznat, že se něco zaseklo.
+ * Generation queue for the overview. The screen and the toolbar indicator read
+ * the same thing: what runs, what waits, what is done and what failed. The
+ * `generation_jobs` table knows all of it — it just wasn't shown anywhere and
+ * the teacher had no way to tell that something got stuck.
  */
 
 export type JobState = 'queued' | 'running' | 'done' | 'error'
@@ -18,9 +18,9 @@ export interface QueueCounts {
   done: number
   error: number
   /**
-   * Téma jediné běžící nebo čekající úlohy, když nic neselhalo. Ukazatel v
-   * liště jím nahradí obecný odkaz na přehled — u jednoho tématu stačí vést
-   * rovnou do něj.
+   * Topic of the only running or queued job, when nothing failed. The toolbar
+   * indicator replaces the generic overview link with it — with one topic it
+   * can lead straight there.
    */
   topicId?: string
 }
@@ -29,15 +29,15 @@ export interface QueueJob {
   id: string
   topicId: string
   topicName: string
-  /** Předmět a ročník, aby šlo poznat, o které téma z knihovny jde. */
+  /** Subject and grade, so it's clear which library topic this is. */
   place: string
   status: JobState
-  /** Kolik otázek zadání chtělo — u čekajících je to jediné, co se dá říct. */
+  /** How many questions were requested — for queued jobs that's all we can say. */
   wanted: number | null
   createdCount: number
-  /** Jméno té, kdo úlohu zadala. */
+  /** Name of the person who requested the job. */
   requestedByName: string
-  /** Je úloha moje? Podle toho se v přehledu nabízí opakování a mazání. */
+  /** Is the job mine? Decides whether the overview offers retry and delete. */
   mine: boolean
   error: string | null
   createdAt: string
@@ -45,15 +45,15 @@ export interface QueueJob {
   finishedAt: string | null
 }
 
-/** Kolik hotových úloh se vypisuje. Starší už nikoho nezajímají. */
+/** How many finished jobs are listed. Older ones interest nobody. */
 export const DONE_LIMIT = 20
 
-/** Počty podle stavu — levný dotaz pro ukazatel v liště. */
+/** Counts per state — a cheap query for the toolbar indicator. */
 export async function countJobs(scope: Scope): Promise<QueueCounts> {
   const rows = await db
     .select({ status: generationJobs.status, value: count() })
     .from(generationJobs)
-    .where(skola(scope, generationJobs))
+    .where(inSchool(scope, generationJobs))
     .groupBy(generationJobs.status)
 
   const byStatus = Object.fromEntries(rows.map((row) => [row.status, row.value]))
@@ -64,13 +64,13 @@ export async function countJobs(scope: Scope): Promise<QueueCounts> {
     error: byStatus.error ?? 0,
   }
 
-  // Přesně jedna nedokončená úloha a nic neselhalo: ukazatel v liště může
-  // vést rovnou do jejího tématu místo do obecného přehledu.
+  // Exactly one unfinished job and no failures: the toolbar indicator can lead
+  // straight to its topic instead of the generic overview.
   if (counts.queued + counts.running === 1 && counts.error === 0) {
     const [solo] = await db
       .select({ topicId: generationJobs.topicId })
       .from(generationJobs)
-      .where(and(skola(scope, generationJobs), inArray(generationJobs.status, ['queued', 'running'])))
+      .where(and(inSchool(scope, generationJobs), inArray(generationJobs.status, ['queued', 'running'])))
       .limit(1)
     if (solo) counts.topicId = solo.topicId
   }
@@ -79,8 +79,8 @@ export async function countJobs(scope: Scope): Promise<QueueCounts> {
 }
 
 /**
- * Úlohy pro přehled: všechno nedokončené a k tomu posledních pár hotových.
- * Řadí se tak, jak se to čte — co běží, co čeká, co spadlo, co je hotové.
+ * Jobs for the overview: everything unfinished plus the last few finished ones.
+ * Ordered the way it's read — running, queued, failed, done.
  */
 export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
   const rows = await db
@@ -90,7 +90,7 @@ export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
       topicName: topics.name,
       gradeName: grades.name,
       subjectName: subjects.name,
-      /** Kdo úlohu zadal — jinak není poznat, kdo drží zablokované téma. */
+      /** Who requested the job — otherwise nobody knows who holds a blocked topic. */
       requestedByName: users.name,
       requestedBy: generationJobs.requestedBy,
       status: generationJobs.status,
@@ -108,11 +108,11 @@ export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
     .innerJoin(users, eq(users.id, generationJobs.requestedBy))
     .where(
       and(
-      skola(scope, generationJobs),
+      inSchool(scope, generationJobs),
       or(
         inArray(generationJobs.status, ['queued', 'running', 'error']),
-        // Hotové jen posledních pár: po hromadném generování jich jsou stovky
-        // a přehled by z nich byl nekonečný výpis.
+        // Only the last few finished: after bulk generation there are hundreds
+        // and the overview would become an endless list.
         sql`${generationJobs.id} in (
           select id from ${generationJobs}
           where status = 'done'
@@ -123,7 +123,7 @@ export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
       ),
     )
     .orderBy(
-      // Pořadí stavů: běžící, čekající, spadlé, hotové.
+      // State order: running, queued, failed, done.
       sql`case ${generationJobs.status} when 'running' then 0 when 'queued' then 1 when 'error' then 2 else 3 end`,
       asc(generationJobs.createdAt),
     )
@@ -146,17 +146,16 @@ export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
 }
 
 /**
- * Vrátí nedokončené úlohy zpátky mezi čekající. Bez toho by po vyčerpaném
- * limitu modelu zbývalo jediné: zařadit celý rozsah znovu a generovat i to,
- * co už hotové je.
- */
-/**
- * Opakovat jde jen vlastní úlohy; správce navíc i cizí, aby po někom uklidil.
+ * Puts unfinished jobs back into the queue. Without it, after a model quota ran
+ * out the only option would be to enqueue the whole range again and regenerate
+ * what is already done.
+ *
+ * Only own jobs can be retried; an admin also others', to clean up after someone.
  */
 export async function retryFailedJobs(scope: Scope, ids?: string[]): Promise<number> {
   const target = and(
-    skola(scope, generationJobs),
-    muzeSpravovat(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
+    inSchool(scope, generationJobs),
+    canManage(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
     eq(generationJobs.status, 'error'),
     ids?.length ? inArray(generationJobs.id, ids) : undefined,
   )
@@ -167,14 +166,14 @@ export async function retryFailedJobs(scope: Scope, ids?: string[]): Promise<num
     .where(target)
   if (failed.length === 0) return 0
 
-  // Téma, které mezitím znovu běží nebo čeká, se nezařazuje podruhé — dvě
-  // generování nad týmž tématem o sobě nevědí a vyrobila by tytéž otázky.
+  // A topic that is running or queued again meanwhile isn't enqueued twice —
+  // two runs over the same topic don't know about each other and would produce the same questions.
   const busy = await db
     .select({ topicId: generationJobs.topicId })
     .from(generationJobs)
     .where(
       and(
-        skola(scope, generationJobs),
+        inSchool(scope, generationJobs),
         inArray(generationJobs.topicId, failed.map((row) => row.topicId)),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
@@ -191,24 +190,24 @@ export async function retryFailedJobs(scope: Scope, ids?: string[]): Promise<num
 }
 
 /**
- * Vyprázdní frontu.
+ * Empties the queue.
  *
- * `cekajici` (výchozí) zahodí i běžící úlohy: po přerušeném běhu zůstávají
- * viset a jejich téma by šlo odblokovat jedině zásahem do databáze.
- * `vse` k tomu smaže i výpis hotových, když si ho učitelka chce uklidit.
+ * `cekajici` (default) also drops running jobs: after an interrupted run they
+ * stay hanging and their topic could only be unblocked by editing the database.
+ * `vse` additionally deletes the list of finished jobs when the teacher wants it cleaned up.
  */
 export async function clearJobs(
   scope: Scope,
-  co: 'cekajici' | 'vse' = 'cekajici',
+  mode: 'cekajici' | 'vse' = 'cekajici',
 ): Promise<number> {
   const removed = await db
     .delete(generationJobs)
     .where(
       and(
-        skola(scope, generationJobs),
-        // Uklízet cizí frontu smí jedině správce.
-        muzeSpravovat(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
-        co === 'vse' ? undefined : inArray(generationJobs.status, ['queued', 'error', 'running']),
+        inSchool(scope, generationJobs),
+        // Only an admin may clear other people's queue.
+        canManage(scope) ? undefined : eq(generationJobs.requestedBy, scope.userId),
+        mode === 'vse' ? undefined : inArray(generationJobs.status, ['queued', 'error', 'running']),
       ),
     )
     .returning({ id: generationJobs.id })

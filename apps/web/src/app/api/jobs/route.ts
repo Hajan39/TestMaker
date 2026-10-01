@@ -5,76 +5,77 @@ import { db, generationJobs, grades, materials, questions, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { DEFAULT_GENERATE_PARAMS } from '@/lib/generation'
 import { clearJobs, countJobs, loadJobs } from '@/lib/jobs'
-import { skola, sRozsahem, type Scope } from '@/lib/uzivatel'
+import { inSchool, withScope, type Scope } from '@/lib/user'
+import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
 
 const enqueueSchema = z.object({
-  /** Rozsah zařazení — stačí jeden z údajů. */
+  /** Enqueue range — one of the fields is enough. */
   topicIds: z.array(z.string()).optional(),
   gradeId: z.string().optional(),
   subjectId: z.string().optional(),
   count: z.number().int().min(1).max(60).default(DEFAULT_GENERATE_PARAMS.count),
   types: z.array(z.enum(AI_QUESTION_TYPES)).min(1).default([...AI_QUESTION_TYPES]),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal('mix')]).default('mix'),
-  /** Přeskočit témata, která už otázky mají. U doplňování nedává smysl. */
+  /** Skip topics that already have questions. Makes no sense when topping up. */
   skipWithQuestions: z.boolean().default(true),
-  /** `add` = tolik nových otázek, `target` = doplnit každé téma na tenhle počet. */
+  /** `add` = this many new questions, `target` = top each topic up to this count. */
   mode: z.enum(['add', 'target']).default('add'),
 })
 
 /**
- * Stav generování. Bez parametru jen počty podle stavu — ptá se na ně ukazatel
- * v liště, a to opakovaně, takže musí být co nejlevnější. S `?vypis=1` k tomu
- * přibude i výpis jednotlivých témat pro přehled generování.
+ * Generation status. Without a parameter only counts per state — the toolbar
+ * indicator asks for them repeatedly, so it must be as cheap as possible. With
+ * `?vypis=1` the list of individual topics for the generation overview is added.
  */
 export async function GET(request: Request) {
-  return sRozsahem(async (ucet) => {
+  return withScope(async (account) => {
     const detail = new URL(request.url).searchParams.get('vypis') === '1'
-    const counts = await countJobs(ucet)
+    const counts = await countJobs(account)
     if (!detail) return Response.json(counts)
-    return Response.json({ ...counts, jobs: await loadJobs(ucet) })
+    return Response.json({ ...counts, jobs: await loadJobs(account) })
   })
 }
 
-/** Zařadí materiály do fronty hromadného generování. */
+/** Enqueues materials for bulk generation. */
 export async function POST(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
+  return withScope(
+    async (account) => {
   const parsed = enqueueSchema.safeParse(await request.json())
   if (!parsed.success) {
-    return Response.json({ error: 'Požadavek nešel zpracovat. Obnov stránku a zkus to znovu.', detail: parsed.error.issues }, { status: 400 })
+    return Response.json({ error: t('api:invalidRequest'), detail: parsed.error.issues }, { status: 400 })
   }
   const input = parsed.data
 
-  const vybrana = await resolveTopicIds(ucet, input)
-  if (vybrana.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
+  const selected = await resolveTopicIds(account, input)
+  if (selected.length === 0) return Response.json({ enqueued: 0, skipped: 0 })
 
-  // Témata bez použitelného textu nemá smysl zařazovat — stejné pravidlo jako
-  // jinde: duplicitní ani ručně vyřazený materiál se nepočítá.
+  // Topics without usable text make no sense to enqueue — the same rule as
+  // elsewhere: neither a duplicate nor a manually excluded material counts.
   const withText = await db
     .selectDistinct({ id: materials.topicId })
     .from(materials)
     .where(
       and(
-        skola(ucet, materials),
-        inArray(materials.topicId, vybrana),
+        inSchool(account, materials),
+        inArray(materials.topicId, selected),
         isNull(materials.duplicateOfId),
         eq(materials.excluded, false),
       ),
     )
   const topicIds = withText.map((row) => row.id)
 
-  // Témata, která už otázky mají nebo čekají ve frontě, znovu nezařazujeme.
+  // Topics that already have questions or wait in the queue aren't enqueued again.
   const busy = new Set<string>()
-  // Doplňování se témat s otázkami týká ze všeho nejvíc, proto se u něj
-  // nepřeskakují.
+  // Topping up concerns topics with questions most of all, so they aren't
+  // skipped then.
   if (input.skipWithQuestions && input.mode !== 'target') {
     const withQuestions = await db
       .selectDistinct({ id: questions.topicId })
       .from(questions)
       .where(
-        and(skola(ucet, questions), isNotNull(questions.topicId), inArray(questions.topicId, topicIds)),
+        and(inSchool(account, questions), isNotNull(questions.topicId), inArray(questions.topicId, topicIds)),
       )
     for (const row of withQuestions) if (row.id) busy.add(row.id)
   }
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
     .from(generationJobs)
     .where(
       and(
-        skola(ucet, generationJobs),
+        inSchool(account, generationJobs),
         inArray(generationJobs.topicId, topicIds),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
@@ -95,8 +96,8 @@ export async function POST(request: Request) {
     await db.insert(generationJobs).values(
       toEnqueue.map((topicId) => ({
         id: newId(),
-        schoolId: ucet.schoolId,
-        requestedBy: ucet.userId,
+        schoolId: account.schoolId,
+        requestedBy: account.userId,
         topicId,
         params: { count: input.count, types: input.types, difficulty: input.difficulty, mode: input.mode },
       })),
@@ -105,23 +106,23 @@ export async function POST(request: Request) {
 
   return Response.json({ enqueued: toEnqueue.length, skipped: topicIds.length - toEnqueue.length })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
 /**
- * Vyprázdní frontu. Maže i běžící úlohy — po přerušeném běhu zůstávají viset
- * a bez toho by jejich témata šlo odblokovat jedině zásahem do databáze.
- * S `?rozsah=vse` zmizí i výpis hotových, když si ho chce učitelka uklidit.
+ * Empties the queue. Deletes running jobs too — after an interrupted run they
+ * stay hanging and their topics could otherwise only be unblocked in the database.
+ * With `?rozsah=vse` the list of finished jobs goes too, when the teacher wants it cleaned up.
  */
 export async function DELETE(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
-      const co = new URL(request.url).searchParams.get('rozsah') === 'vse' ? 'vse' : 'cekajici'
-      const removed = await clearJobs(ucet, co)
+  return withScope(
+    async (account) => {
+      const mode = new URL(request.url).searchParams.get('rozsah') === 'vse' ? 'vse' : 'cekajici'
+      const removed = await clearJobs(account, mode)
       return Response.json({ ok: true, removed })
     },
-    { zapis: true },
+    { write: true },
   )
 }
 
@@ -129,19 +130,19 @@ async function resolveTopicIds(
   scope: Scope,
   input: z.infer<typeof enqueueSchema>,
 ): Promise<string[]> {
-  // I výčet témat od prohlížeče se prožene školou: id se dá napsat jakékoli.
+  // Even a topic list from the browser is filtered by school: any id can be typed.
   if (input.topicIds?.length) {
     const rows = await db
       .select({ id: topics.id })
       .from(topics)
-      .where(and(skola(scope, topics), inArray(topics.id, input.topicIds)))
+      .where(and(inSchool(scope, topics), inArray(topics.id, input.topicIds)))
     return rows.map((row) => row.id)
   }
   if (input.gradeId) {
     const rows = await db
       .select({ id: topics.id })
       .from(topics)
-      .where(and(skola(scope, topics), eq(topics.gradeId, input.gradeId)))
+      .where(and(inSchool(scope, topics), eq(topics.gradeId, input.gradeId)))
     return rows.map((row) => row.id)
   }
   if (input.subjectId) {
@@ -149,7 +150,7 @@ async function resolveTopicIds(
       .select({ id: topics.id })
       .from(topics)
       .innerJoin(grades, eq(grades.id, topics.gradeId))
-      .where(and(skola(scope, topics), eq(grades.subjectId, input.subjectId)))
+      .where(and(inSchool(scope, topics), eq(grades.subjectId, input.subjectId)))
     return rows.map((row) => row.id)
   }
   return []

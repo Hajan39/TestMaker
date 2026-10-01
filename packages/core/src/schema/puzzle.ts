@@ -1,30 +1,31 @@
 import { z } from 'zod'
+import { t } from '../i18n'
 
 /**
- * Hlavolam — osmisměrka a tajenka.
+ * Puzzle — word search and cryptogram.
  *
- * Vstupem je vždycky dvojice slovo + nápověda, nikdy surový text: mřížku
- * skládá kód (viz `packages/core/src/puzzle`), model dodává jen slovní
- * zásobu. Tvar hlavolamu má jedinou definici tady, stejně jako otázka —
- * databáze, model i vykreslení se řídí tímhle schématem.
+ * The input is always a word + clue pair, never raw text: the grid is built
+ * by code (see `packages/core/src/puzzle`), the model only supplies the
+ * vocabulary. The puzzle shape has a single definition here, just like the
+ * question — the database, the model and rendering all follow this schema.
  */
 
 export const PUZZLE_KINDS = ['wordsearch', 'cryptogram'] as const
 export type PuzzleKind = (typeof PUZZLE_KINDS)[number]
 
-export const PUZZLE_KIND_LABELS: Record<PuzzleKind, string> = {
-  wordsearch: 'Osmisměrka',
-  cryptogram: 'Tajenka',
+/** Name of the puzzle kind shown to the teacher (and used in model prompts). */
+export function puzzleKindLabel(kind: PuzzleKind): string {
+  return t(`core:puzzleKinds.${kind}`)
 }
 
 /**
- * Meze zadání hlavolamu. Jsou vyvedené jako konstanty, aby se jich držel
- * i prompt pro model a formulář dílny — co model nebo učitelka napíše delší,
- * schéma stejně odmítne.
+ * Puzzle input limits. Exported as constants so that the model prompt and the
+ * workshop form stick to them too — anything longer the model or the teacher
+ * writes is rejected by the schema anyway.
  */
 export const PUZZLE_WORD_MIN = 2
 export const PUZZLE_WORD_MAX = 24
-/** Nejkratší nápověda tam, kde je povinná (tajenka). */
+/** Shortest clue where a clue is required (cryptogram). */
 export const PUZZLE_CLUE_MIN = 2
 export const PUZZLE_CLUE_MAX = 200
 export const PUZZLE_ENTRIES_MIN = 2
@@ -33,26 +34,27 @@ export const PUZZLE_PHRASE_MIN = 2
 export const PUZZLE_PHRASE_MAX = 120
 
 /**
- * Slovo do hlavolamu i s nápovědou, kterou žák dostane na papíře.
+ * Puzzle word with the clue the pupil gets on paper.
  *
- * Nápověda je tady nepovinná (chybějící = prázdná): osmisměrka tiskne slova
- * a nápovědu jen na přání, takže se slovo bez nápovědy nesmí zahodit. Tajenka
- * bez nápovědy luštit nejde — ta používá přísnější `cryptogramEntrySchema`.
+ * The clue is optional here (missing = empty): a word search prints words and
+ * clues only on request, so a word without a clue must not be dropped. A
+ * cryptogram cannot be solved without clues — it uses the stricter
+ * `cryptogramEntrySchema`.
  */
 export const puzzleEntrySchema = z.object({
   word: z.string().min(PUZZLE_WORD_MIN).max(PUZZLE_WORD_MAX),
-  /** Krátká školní nápověda; u osmisměrky se tiskne jen na přání. */
+  /** Short school clue; in a word search printed only on request. */
   clue: z.string().max(PUZZLE_CLUE_MAX).default(''),
 })
 
-/** Slovo do tajenky — nápověda je povinná, podle ní žák slovo doplňuje. */
+/** Cryptogram word — the clue is required, the pupil fills in the word from it. */
 export const cryptogramEntrySchema = puzzleEntrySchema.extend({
   clue: z.string().min(PUZZLE_CLUE_MIN).max(PUZZLE_CLUE_MAX),
 })
 
 export type PuzzleEntry = z.infer<typeof puzzleEntrySchema>
 
-/** Meze mřížky osmisměrky — menší se nedá vyplnit, větší se nevejde na stránku. */
+/** Word search grid limits — smaller cannot be filled, larger does not fit the page. */
 export const MIN_GRID_SIZE = 6
 export const MAX_GRID_SIZE = 20
 
@@ -60,23 +62,23 @@ export const wordSearchPayloadSchema = z.object({
   cols: z.number().int().min(MIN_GRID_SIZE).max(MAX_GRID_SIZE).default(12),
   rows: z.number().int().min(MIN_GRID_SIZE).max(MAX_GRID_SIZE).default(12),
   /**
-   * Losování je řízené seedem: táž slova a týž seed dají vždycky tutéž
-   * mřížku, takže se hlavolam dá po měsíci vytisknout znovu beze změny.
+   * Placement is seeded: the same words and the same seed always give the
+   * same grid, so the puzzle can be reprinted unchanged a month later.
    */
   seed: z.string().min(1).max(40).default('1'),
-  /** Vypsat pod mřížku i nápovědy, ne jen slova. */
+  /** List clues below the grid as well, not just the words. */
   showClues: z.boolean().default(false),
 })
 
 export const cryptogramPayloadSchema = z.object({
-  /** Věta, která se má složit z označených písmen. */
+  /** Sentence to be assembled from the marked letters. */
   phrase: z.string().min(PUZZLE_PHRASE_MIN).max(PUZZLE_PHRASE_MAX),
   seed: z.string().min(1).max(40).default('1'),
 })
 
 const baseFields = {
   title: z.string().min(1).max(200),
-  /** Pokyn pro žáka nad hlavolamem; prázdný = použije se výchozí podle druhu. */
+  /** Instruction for the pupil above the puzzle; empty = the default for the kind is used. */
   instructions: z.string().max(500).default(''),
 }
 
@@ -99,21 +101,19 @@ export type PuzzleContent = z.infer<typeof puzzleContentSchema>
 export type WordSearchContent = Extract<PuzzleContent, { kind: 'wordsearch' }>
 export type CryptogramContent = Extract<PuzzleContent, { kind: 'cryptogram' }>
 
-/** Výchozí pokyn pro žáka, když si učitelka žádný nenapsala. */
-export const DEFAULT_PUZZLE_INSTRUCTIONS: Record<PuzzleKind, string> = {
-  wordsearch:
-    'Najdi v mřížce všechna slova ze seznamu. Slova jsou schovaná ve všech osmi směrech, i pozpátku.',
-  cryptogram: 'Doplň slova podle nápověd. Z písmen ve vyznačených políčkách složíš tajenku.',
+/** Default instruction for the pupil when the teacher did not write one. */
+export function defaultPuzzleInstructions(kind: PuzzleKind): string {
+  return t(`core:puzzleInstructions.${kind}`)
 }
 
 export function puzzleInstructions(puzzle: PuzzleContent): string {
-  return puzzle.instructions.trim() || DEFAULT_PUZZLE_INSTRUCTIONS[puzzle.kind]
+  return puzzle.instructions.trim() || defaultPuzzleInstructions(puzzle.kind)
 }
 
-/** Metadata hlavolamu uloženého v databázi. */
+/** Metadata of a puzzle stored in the database. */
 export interface PuzzleMeta {
   id: string
-  /** Hlavolam vzniká z materiálů tématu a patří k němu. */
+  /** A puzzle is made from the topic's materials and belongs to it. */
   topicId: string | null
   createdAt: string
   updatedAt: string
@@ -121,7 +121,7 @@ export interface PuzzleMeta {
 
 export type Puzzle = PuzzleContent & PuzzleMeta
 
-/** Obsah hlavolamu na snímek do testu — zod zahodí metadata i cokoli navíc. */
+/** Puzzle content for a test snapshot — zod drops metadata and anything extra. */
 export function toPuzzleSnapshot(puzzle: PuzzleContent): PuzzleContent {
   return puzzleContentSchema.parse(puzzle)
 }
@@ -131,8 +131,8 @@ export function serializePuzzleSnapshot(puzzle: PuzzleContent): string {
 }
 
 /**
- * Snímek hlavolamu z uloženého JSON. Poškozený snímek vrací `null` — test se
- * kvůli jedné položce nesmí rozsypat, volající sáhne po živém hlavolamu.
+ * Puzzle snapshot from stored JSON. A corrupted snapshot returns `null` — the
+ * test must not fall apart because of one item; the caller uses the live puzzle.
  */
 export function parsePuzzleSnapshot(raw: string | null | undefined): PuzzleContent | null {
   if (!raw) return null

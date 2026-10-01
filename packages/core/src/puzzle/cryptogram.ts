@@ -1,42 +1,43 @@
 import type { PuzzleEntry } from '../schema/puzzle'
+import { t } from '../i18n'
 import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
 import { clueRevealsWord, splitPhrase, splitWord, type PuzzleProblem } from './letters'
 
 /**
- * Tajenka: žák doplní slova podle nápověd a z písmen ve vyznačených
- * políčkách přečte tajenou větu.
+ * Cryptogram: the pupil fills in words from the clues and reads the hidden
+ * phrase from the letters in the marked cells.
  *
- * Řádek tajenky odpovídá jednomu písmenu věty — kolik má věta písmen, tolik
- * je řádků a tolik je potřeba slov. Na které písmeno ve slově políčko
- * připadne, rozhoduje los řízený seedem, takže se tentýž hlavolam dá
- * vytisknout znovu stejně.
+ * Each row of the cryptogram stands for one letter of the phrase — as many
+ * letters as the phrase has, that many rows and that many words are needed.
+ * Which letter of the word gets the marked cell is drawn by a seeded random
+ * generator, so the same puzzle prints the same way again.
  *
- * Co se nepovede (na některé písmeno se nenajde slovo, slov je málo), se
- * hlásí v `problems` — tichá tajenka, ze které vyjde jiná věta, by se na
- * papíře poznala až u dětí.
+ * Whatever fails (no word for some letter, too few words) is reported in
+ * `problems` — a silent cryptogram that spells a different phrase would only
+ * be noticed by the children.
  */
 
 export interface CryptogramRow {
-  /** Pořadí řádku = pořadí písmene v tajence (od jedné). */
+  /** Row order = position of the letter in the phrase (from one). */
   number: number
   clue: string
-  /** Slovo tak, jak ho napsala učitelka. */
+  /** The word as the teacher wrote it. */
   word: string
-  /** Písmena slova po buňkách. */
+  /** The word's letters as cells. */
   letters: string[]
-  /** Které políčko řádku patří do tajenky (index do `letters`). */
+  /** Which cell of the row belongs to the phrase (index into `letters`). */
   markedIndex: number
-  /** Písmeno tajenky v tomhle řádku. */
+  /** The phrase letter in this row. */
   letter: string
 }
 
 export interface CryptogramResult {
-  /** Tajená věta tak, jak ji napsala učitelka. */
+  /** The hidden phrase as the teacher wrote it. */
   phrase: string
-  /** Věta po slovech a písmenech — tak se tiskne políčko vedle políčka. */
+  /** The phrase by words and letters — printed cell by cell like this. */
   phraseWords: string[][]
   rows: CryptogramRow[]
-  /** Slova, na která ve větě nezbylo místo. */
+  /** Words that found no place in the phrase. */
   unusedEntries: PuzzleEntry[]
   problems: PuzzleProblem[]
 }
@@ -47,7 +48,7 @@ export interface CryptogramInput {
   seed: string
 }
 
-/** Sestaví tajenku. Nic nevyhazuje — potíže vrací v `problems`. */
+/** Builds a cryptogram. Never throws — returns problems in `problems`. */
 export function buildCryptogram(input: CryptogramInput): CryptogramResult {
   const rand = seededRandom(hashSeed(`tajenka:${input.seed}:${input.phrase}`))
   const problems: PuzzleProblem[] = []
@@ -56,7 +57,7 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
   const letters = words.flat()
   if (phraseUnusable.length > 0) {
     problems.push({
-      message: `Tajenka „${input.phrase}" obsahuje znaky, které se do políček zapsat nedají (${phraseUnusable.join(' ')}), a v tajence by chyběly. Napiš čísla slovy, nebo je z věty vynech.`,
+      message: t('puzzles:problems.phraseUnusable', { phrase: input.phrase, chars: phraseUnusable.join(' ') }),
     })
   }
 
@@ -67,30 +68,30 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
     if (split.unusable.length > 0) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" obsahuje znaky, které se do políček zapsat nedají (${split.unusable.join(' ')}). Nech v něm jen písmena.`,
+        message: t('puzzles:problems.cellUnusable', { word: entry.word, chars: split.unusable.join(' ') }),
       })
     }
     if (split.letters.length < 2) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" je na tajenku příliš krátké — potřebuje aspoň dvě písmena.`,
+        message: t('puzzles:problems.cryptogramWordTooShort', { word: entry.word }),
       })
       continue
     }
     if (!entry.clue.trim()) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" nemá nápovědu; bez ní žák neví, co má do řádku napsat.`,
+        message: t('puzzles:problems.noClue', { word: entry.word }),
       })
       continue
     }
-    // Totéž slovo ve dvou řádcích by se u tabule nedalo odlišit — kterou
-    // nápovědu žák luští, by poznal jen podle pořadí.
+    // The same word in two rows could not be told apart at the board — the
+    // pupil would know which clue they are solving only by the order.
     const key = split.letters.join('')
     if (seen.has(key)) {
       problems.push({
         subject: entry.word,
-        message: `Slovo „${entry.word}" je v seznamu podruhé; do tajenky se použije jen jednou. Nahraď ho jiným slovem.`,
+        message: t('puzzles:problems.cryptogramDuplicate', { word: entry.word }),
       })
       continue
     }
@@ -98,34 +99,38 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
     if (clueRevealsWord(entry.word, entry.clue)) {
       problems.push({
         subject: entry.word,
-        message: `Nápověda ke slovu „${entry.word}" obsahuje samo slovo — žák ho jen opíše. Přepiš nápovědu tak, aby slovo neprozradila.`,
+        message: t('puzzles:problems.clueReveals', { word: entry.word }),
       })
     }
     usable.push({ entry, letters: split.letters })
   }
 
   if (letters.length === 0) {
-    problems.push({ message: 'Tajenka nemá žádné písmeno — napiš větu, která se má z políček složit.' })
+    problems.push({ message: t('puzzles:problems.noLetters') })
     return { phrase: input.phrase, phraseWords: words, rows: [], unusedEntries: usable.map((u) => u.entry), problems }
   }
 
   if (usable.length < letters.length) {
     problems.push({
-      message: `Tajenka „${input.phrase}" má ${letters.length} písmen, ale použitelných slov je jen ${usable.length}. Přidej slova, nebo zvol kratší větu.`,
+      message: t('puzzles:problems.notEnoughWords', {
+        phrase: input.phrase,
+        letters: letters.length,
+        words: usable.length,
+      }),
     })
   }
 
   /**
-   * Přiřazení slov k písmenům je párování v bipartitním grafu (písmeno —
-   * slovo, které to písmeno obsahuje). Hladový výběr by u české věty selhal
-   * i tam, kde řešení existuje: vzácné písmeno si vezme slovo, které mezitím
-   * spotřebovalo písmeno běžné. Proto se hledá největší párování rozšiřujícími
-   * cestami (Kuhnův algoritmus) — když se některé písmeno nespáruje, je to
-   * doopravdy nedostatek slov, ne smůla v pořadí.
+   * Assigning words to letters is a bipartite matching (letter — a word that
+   * contains it). A greedy choice would fail on a Czech phrase even where a
+   * solution exists: a rare letter needs a word that a common letter has
+   * already taken. So the maximum matching is found by augmenting paths
+   * (Kuhn's algorithm) — when a letter stays unmatched, there really are too
+   * few words, not bad luck in the order.
    *
-   * Pořadí kandidátů je zamíchané seedem, takže táž slova a týž seed dají
-   * vždycky tutéž tajenku, ale dvě tajenky nad stejným seznamem nevyjdou
-   * stejně.
+   * The candidate order is shuffled by the seed, so the same words and seed
+   * always give the same cryptogram, but two cryptograms over the same list
+   * come out differently.
    */
   const candidates = letters.map((letter) =>
     shuffled(
@@ -134,7 +139,7 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
     ),
   )
 
-  /** Které písmeno drží které slovo; −1 = slovo je volné. */
+  /** Which letter holds which word; −1 = the word is free. */
   const takenBy = new Array<number>(usable.length).fill(-1)
 
   function assign(letterIndex: number, visited: boolean[]): boolean {
@@ -150,8 +155,8 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
     return false
   }
 
-  // Písmena s nejmenším výběrem slov jdou první — rozšiřujících cest je pak
-  // potřeba nejmíň a výsledek nezávisí na pořadí písmen ve větě.
+  // Letters with the fewest candidate words go first — fewer augmenting paths
+  // are needed and the result does not depend on the letter order.
   const order = letters.map((_, i) => i).sort((a, b) => {
     const diff = (candidates[a] as number[]).length - (candidates[b] as number[]).length
     return diff !== 0 ? diff : a - b
@@ -163,7 +168,7 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
       const letter = letters[letterIndex] as string
       problems.push({
         subject: letter,
-        message: `Na písmeno „${letter}" (${letterIndex + 1}. v tajence) nezbylo žádné slovo. Přidej slovo, které tohle písmeno obsahuje.`,
+        message: t('puzzles:problems.letterUnmatched', { letter, position: letterIndex + 1 }),
       })
     }
   }
@@ -201,16 +206,16 @@ export function buildCryptogram(input: CryptogramInput): CryptogramResult {
 }
 
 /**
- * O kolik prázdných políček se řádek odsadí, aby vyznačená políčka stála
- * pod sebou v jednom sloupci. Tak se tajenka tiskne v učebnicích i v
- * časopisech: žák ji čte svisle, ne že by ji sbíral z rozházených políček.
+ * How many empty cells a row is indented by so the marked cells line up in
+ * one column. That is how cryptograms are printed in textbooks and magazines:
+ * the pupil reads it vertically instead of collecting it from scattered cells.
  */
 export function markedOffsets(rows: CryptogramRow[]): number[] {
   const maxLeft = rows.reduce((max, row) => Math.max(max, row.markedIndex), 0)
   return rows.map((row) => maxLeft - row.markedIndex)
 }
 
-/** Věta složená z označených písmen — tím se ověřuje, že tajenka vyjde. */
+/** The phrase spelled by the marked letters — used to verify the cryptogram works out. */
 export function readCryptogram(result: CryptogramResult): string {
   return result.rows.map((row) => row.letters[row.markedIndex] ?? '').join('')
 }

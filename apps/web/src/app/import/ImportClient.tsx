@@ -5,19 +5,8 @@ import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { groupForImport } from '@testmaker/core/extract'
 import { FileUp, FolderUp, Loader2, Undo2 } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  cn,
-  Input,
-  Progress,
-  plural,
-  pocet,
-  MATERIALY,
-  TEMATA,
-} from '@testmaker/ui'
+import { Badge, Button, Card, Checkbox, cn, Input, Progress } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 import {
   entriesFromInput,
   extractAll,
@@ -28,7 +17,7 @@ import {
   type FileEntry,
   type ImportDestination,
 } from '@/lib/importClient'
-import { IssueList, SKIP_LABELS } from '@/components/importIssues'
+import { IssueList, skipLabel } from '@/components/importIssues'
 import { errorMessage } from '@/lib/requestJson'
 
 type Phase = 'idle' | 'extracting' | 'preview' | 'uploading' | 'done'
@@ -38,20 +27,20 @@ interface Failure {
   reason: string
 }
 
-/** Předměty a jejich ročníky, jak už v knihovně jsou — pro našeptávání. */
+/** Subjects and their grades as they already are in the library — for suggestions. */
 export interface LibraryHint {
   subject: string
   grades: string[]
 }
 
-/** Jeden soubor v náhledu; `include` říká, jestli se má poslat. */
+/** One file in the preview; `include` says whether it is sent. */
 interface PreviewFile {
   key: string
   material: ExtractedMaterial
   include: boolean
 }
 
-/** Téma v náhledu — zařazení se dá přepsat, celé téma vynechat. */
+/** A topic in the preview — its filing can be overridden, the whole topic left out. */
 interface PreviewGroup {
   id: string
   subject: string
@@ -61,10 +50,10 @@ interface PreviewGroup {
   files: PreviewFile[]
 }
 
-/** Pod tímhle počtem znaků na otázky text nejspíš nestačí. */
+/** Below this many characters the text most likely isn't enough for questions. */
 const LOW_TEXT = 400
 
-/** Bez diakritiky a velikosti písmen — aby „PŘÍRODOPIS“ našlo „Přírodopis“. */
+/** Without diacritics and letter case — so "PŘÍRODOPIS" finds "Přírodopis". */
 function fold(value: string): string {
   return value
     .normalize('NFD')
@@ -93,13 +82,13 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     [library],
   )
 
-  /** Ročníky zvoleného předmětu; u neznámého předmětu všechny, co v knihovně jsou. */
+  /** Grades of the chosen subject; for an unknown subject all grades in the library. */
   function gradeHints(subject: string): string[] {
     const own = library.find((hint) => fold(hint.subject) === fold(subject))?.grades.filter(Boolean)
     return own && own.length > 0 ? own : allGrades
   }
 
-  /** Předmět, který se od napsaného liší jen velikostí písmen nebo diakritikou. */
+  /** A subject that differs from the typed one only by letter case or diacritics. */
   function nearDuplicateSubject(subject: string): string | null {
     if (!subject.trim()) return null
     const existing = allSubjects.find((name) => fold(name) === fold(subject))
@@ -123,7 +112,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     setFailed([])
 
     const { accepted, skipped: skippedFiles } = triageEntries(entries)
-    setSkipped(skippedFiles.map((item) => ({ ...item, reason: SKIP_LABELS[item.reason] ?? item.reason })))
+    setSkipped(skippedFiles.map((item) => ({ ...item, reason: skipLabel(item.reason) ?? item.reason })))
 
     if (accepted.length === 0) {
       setPhase('preview')
@@ -136,8 +125,8 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     const extracted: ExtractedMaterial[] = []
     const failures: Failure[] = []
     let done = 0
-    // Extrakce doběhne, ale soubor nemá žádný text (`status: 'skipped'` z
-    // `processFile`) — patří mezi přeskočené, jinak beze stopy zmizí.
+    // Extraction finishes but the file has no text (`status: 'skipped'` from
+    // `processFile`) — it belongs among the skipped, otherwise it vanishes without a trace.
     const emptySkips: Failure[] = []
 
     try {
@@ -146,16 +135,16 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         setProgress({ done, total: accepted.length })
         if (result.status === 'ok' && result.material) extracted.push(result.material)
         else if (result.status === 'error') {
-          failures.push({ relativePath: result.relativePath, reason: result.reason ?? 'chyba' })
+          failures.push({ relativePath: result.relativePath, reason: result.reason ?? t('library:import.errorReason') })
         } else if (result.status === 'skipped') {
           emptySkips.push({
             relativePath: result.relativePath,
-            reason: SKIP_LABELS[result.reason ?? ''] ?? 'soubor neobsahuje žádný text',
+            reason: skipLabel(result.reason ?? '') ?? t('library:importIssues.skip.emptyText'),
           })
         }
       })
     } catch (workerError) {
-      setError(errorMessage(workerError, 'Soubory se nepodařilo přečíst.'))
+      setError(errorMessage(workerError, t('library:import.readFailed')))
     }
 
     setGroups(toPreview(extracted))
@@ -192,6 +181,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         .filter((file) => file.include)
         .map((file) => ({
           ...file.material,
+          // Stored subject name for unfiled materials — a data value, not a UI text.
           subject: group.subject.trim() || 'Nezařazeno',
           grade: group.grade.trim() || null,
           topic: group.topic.trim() || file.material.topic,
@@ -206,7 +196,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         onProgress: (done, total) => setProgress({ done, total }),
       })
       setSummary(result)
-      // Kam pokračovat: první tři témata stačí, víc odkazů by byl seznam.
+      // Where to continue: the first three topics are enough, more links would be a list.
       const found = await Promise.all(
         ready
           .slice(0, 3)
@@ -220,15 +210,15 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       setPhase('done')
       router.refresh()
     } catch (uploadError) {
-      setError(errorMessage(uploadError, 'Soubory se nepodařilo uložit.'))
+      setError(errorMessage(uploadError, t('library:importClient.saveFailed')))
       setPhase('preview')
     }
   }
 
   const busy = phase === 'extracting' || phase === 'uploading'
 
-  // Zavření nebo obnovení stránky uprostřed čtení či ukládání souborů
-  // znamenalo ztrátu rozpracovaného importu bez varování.
+  // Closing or reloading the page mid-read or mid-save used to lose the
+  // import in progress without a warning.
   useEffect(() => {
     if (!busy) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -261,11 +251,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
           multiple
           className="hidden"
           data-testid="import-folder"
-          // @ts-expect-error nestandardní atribut pro výběr celé složky
+          // @ts-expect-error non-standard attribute for picking a whole folder
           webkitdirectory=""
           onChange={(event) => {
             void handleEntries(entriesFromInput(event.target.files))
-            // Bez vynulování by opětovný výběr téže složky nevyvolal `change`.
+            // Without the reset, picking the same folder again wouldn't fire `change`.
             event.target.value = ''
           }}
         />
@@ -284,26 +274,22 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         <FolderUp className="size-8 text-fg-muted" aria-hidden />
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button size="lg" disabled={busy} onClick={() => folderRef.current?.click()}>
-            Vybrat složku
+            {t('library:import.pickFolder')}
           </Button>
           <Button size="lg" variant="outline" disabled={busy} onClick={() => filesRef.current?.click()}>
             <FileUp className="size-4" aria-hidden />
-            Vybrat soubory
+            {t('library:import.pickFiles')}
           </Button>
         </div>
-        <p className="text-sm text-fg-soft">
-          Nebo sem soubory i celé složky přetáhni myší.
-        </p>
-        <p className="max-w-md text-sm text-fg-muted">
-          Podporováno: PDF, ODP, ODT, ODS, DOCX, HTML, TXT. Obrázky a staré .doc/.ppt se přeskočí.
-          Nic se neuloží dřív, než si zařazení v náhledu projdeš.
-        </p>
+        <p className="text-sm text-fg-soft">{t('library:import.dropHint')}</p>
+        <p className="max-w-md text-sm text-fg-muted">{t('library:import.supported')}</p>
 
         {busy ? (
           <div className="w-full max-w-md space-y-2">
             <p className="text-sm text-fg-soft">
               <Loader2 className="mr-2 inline size-4 animate-spin" />
-              {phase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
+              {phase === 'extracting' ? t('library:import.reading') : t('library:import.saving')}: {progress.done} /{' '}
+              {progress.total}
             </p>
             <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
           </div>
@@ -315,10 +301,10 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       {summary ? (
         <Card className="border-brand bg-brand-bg p-5">
           <p className="text-sm text-fg-soft">
-            Naimportováno {pocet(summary.imported, MATERIALY)}
-            {summary.duplicates > 0 ? `, ${summary.duplicates} už v knihovně bylo` : ''}.
+            {t('library:import.imported', { materials: t('library:count.materials', { count: summary.imported }) })}
+            {summary.duplicates > 0 ? t('library:import.alreadyInLibrary', { duplicates: summary.duplicates }) : ''}.
           </p>
-          <p className="mt-1 text-sm text-fg-muted">Kam chceš pokračovat?</p>
+          <p className="mt-1 text-sm text-fg-muted">{t('library:import.whereNext')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {destinations.map((destination) => (
               <Button
@@ -326,7 +312,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                 size="sm"
                 onClick={() => router.push(`/topics/${destination.topicId}`)}
               >
-                Téma {destination.topicName}
+                {t('library:import.topicLink', { name: destination.topicName })}
               </Button>
             ))}
             {[...new Map(destinations.filter((d) => d.gradeId).map((d) => [d.gradeId, d])).values()].map(
@@ -337,12 +323,12 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                   variant="outline"
                   onClick={() => router.push(`/tridy/${destination.gradeId}`)}
                 >
-                  Ročník {destination.gradeName || 'bez ročníku'}
+                  {t('library:import.gradeLink', { name: destination.gradeName || t('library:import.noGrade') })}
                 </Button>
               ),
             )}
             <Button size="sm" variant="ghost" onClick={() => router.push('/?vse=1')}>
-              Všechny třídy
+              {t('library:import.allClasses')}
             </Button>
           </div>
         </Card>
@@ -353,15 +339,15 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
           <Card className="sticky top-2 z-10 flex-row flex-wrap items-center justify-between gap-3 p-4">
             <div>
               <h2 className="text-sm font-semibold text-fg">
-                Náhled importu: {pocet(groups.length, TEMATA)}, {selected.length}{' '}
-                {plural(selected.length, 'soubor', 'soubory', 'souborů')}
+                {t('library:import.previewTitle', {
+                  topics: t('library:count.topics', { count: groups.length }),
+                  files: t('library:import.files', { count: selected.length }),
+                })}
               </h2>
-              <p className="mt-1 text-sm text-fg-muted">
-                Zkontroluj zařazení. Co se uloží, rozhoduje tlačítko níž — teď ještě v knihovně nic není.
-              </p>
+              <p className="mt-1 text-sm text-fg-muted">{t('library:import.previewHint')}</p>
             </div>
             <Button disabled={busy || selected.length === 0} onClick={() => void handleImport()}>
-              Importovat ({selected.length})
+              {t('library:import.importButton', { n: selected.length })}
             </Button>
           </Card>
 
@@ -376,26 +362,26 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
               >
                 <div className="flex flex-wrap items-end gap-3">
                   <Field
-                    label="Předmět"
+                    label={t('library:import.subject')}
                     value={group.subject}
-                    listId={`predmety-${group.id}`}
+                    listId={`subjects-${group.id}`}
                     options={allSubjects}
-                    placeholder="Doplň předmět"
+                    placeholder={t('library:import.subjectPlaceholder')}
                     invalid={!group.subject.trim()}
                     disabled={!group.include}
                     onChange={(value) => update(group.id, { subject: value })}
                   />
                   <Field
-                    label="Ročník"
+                    label={t('library:import.grade')}
                     value={group.grade}
-                    listId={`rocniky-${group.id}`}
+                    listId={`grades-${group.id}`}
                     options={gradeHints(group.subject)}
-                    placeholder="bez ročníku"
+                    placeholder={t('library:import.noGrade')}
                     disabled={!group.include}
                     onChange={(value) => update(group.id, { grade: value })}
                   />
                   <Field
-                    label="Téma"
+                    label={t('library:import.topic')}
                     value={group.topic}
                     className="min-w-56 flex-1"
                     disabled={!group.include}
@@ -407,25 +393,21 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                     onClick={() => update(group.id, { include: !group.include })}
                   >
                     {group.include ? (
-                      'Vynechat téma'
+                      t('library:import.excludeTopic')
                     ) : (
                       <>
                         <Undo2 className="size-4" aria-hidden />
-                        Vrátit zpět
+                        {t('library:import.restoreTopic')}
                       </>
                     )}
                   </Button>
                 </div>
 
                 {!group.subject.trim() && group.include ? (
-                  <p className="text-sm text-draft-fg">
-                    Předmět z cesty vyčíst nešel. Doplň ho, jinak téma skončí v „Nezařazeno“.
-                  </p>
+                  <p className="text-sm text-draft-fg">{t('library:import.subjectMissing')}</p>
                 ) : null}
                 {near ? (
-                  <p className="text-sm text-draft-fg">
-                    V knihovně už je „{near}“. Napiš to stejně, ať nevzniknou dva předměty.
-                  </p>
+                  <p className="text-sm text-draft-fg">{t('library:import.nearDuplicateSubject', { name: near })}</p>
                 ) : null}
 
                 <ul className="divide-y divide-line-soft text-sm">
@@ -434,29 +416,29 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                       <Checkbox
                         checked={file.include}
                         disabled={!group.include}
-                        aria-label={`Zahrnout ${file.material.fileName}`}
+                        aria-label={t('library:import.includeFile', { name: file.material.fileName })}
                         onCheckedChange={() => toggleFile(group.id, file.key)}
                       />
                       <span className={cn('font-medium text-fg-soft', !file.include && 'line-through')}>
                         {file.material.fileName}
                       </span>
-                      {/* U samostatného souboru je cesta jen jeho název — psát ho dvakrát nemá smysl. */}
+                      {/* For a standalone file the path is just its name — no point writing it twice. */}
                       {file.material.relativePath !== file.material.fileName ? (
                         <span className="text-fg-muted">{file.material.relativePath}</span>
                       ) : null}
                       <span className="ml-auto text-fg-muted">
-                        {file.material.text.length.toLocaleString('cs')} znaků
+                        {t('library:materialRow.chars', { chars: file.material.text.length.toLocaleString('cs') })}
                       </span>
                       {file.material.needsOcr ? (
-                        <Badge className="bg-draft-bg text-draft-fg">skoro bez textu – nejspíš sken</Badge>
+                        <Badge className="bg-draft-bg text-draft-fg">{t('library:import.needsOcr')}</Badge>
                       ) : file.material.text.length < LOW_TEXT ? (
-                        <Badge className="bg-draft-bg text-draft-fg">málo textu</Badge>
+                        <Badge className="bg-draft-bg text-draft-fg">{t('library:import.lowText')}</Badge>
                       ) : null}
                     </li>
                   ))}
                 </ul>
                 {chosen === 0 && group.include ? (
-                  <p className="text-sm text-fg-muted">Z tématu se neuloží nic — všechny řádky jsou vynechané.</p>
+                  <p className="text-sm text-fg-muted">{t('library:import.nothingSelected')}</p>
                 ) : null}
               </Card>
             )
@@ -465,18 +447,18 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       ) : null}
 
       {failed.length > 0 ? (
-        <IssueList title={`Nepodařilo se přečíst (${failed.length})`} items={failed} kind="danger" />
+        <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" />
       ) : null}
       {skipped.length > 0 ? (
-        <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} kind="neutral" />
+        <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" />
       ) : null}
     </div>
   )
 }
 
-/** Z extrahovaných materiálů udělá témata náhledu. */
+/** Turns extracted materials into preview topics. */
 function toPreview(materials: ExtractedMaterial[]): PreviewGroup[] {
-  const keyed = materials.map((material, index) => ({ ...material, key: `soubor-${index}` }))
+  const keyed = materials.map((material, index) => ({ ...material, key: `file-${index}` }))
   return groupForImport(keyed).map((group) => ({
     id: group.id,
     subject: group.subject,
@@ -487,7 +469,7 @@ function toPreview(materials: ExtractedMaterial[]): PreviewGroup[] {
   }))
 }
 
-/** Editovatelné políčko zařazení s našeptáváním z knihovny. */
+/** Editable filing field with suggestions from the library. */
 function Field({
   label,
   value,

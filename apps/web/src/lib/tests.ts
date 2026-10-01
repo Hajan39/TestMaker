@@ -35,49 +35,50 @@ import {
   type WorksheetRequest,
   type WorksheetTarget,
 } from '@testmaker/core/ai'
-import { skola, viditelnyTest, vlastni, type Scope } from './uzivatel'
+import { t } from '@testmaker/core/i18n'
+import { inSchool, visibleTest, ownedBy, type Scope } from './user'
 import { loadTopicSource } from './generation'
 import { newId } from './ids'
-import { zapisovatVolani } from './aiUsage'
+import { callRecorder } from './aiUsage'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
 
 /**
- * Písemka je soukromá: vidí ji autorka, a pokud ji nasdílí (`visibility`),
- * i kolegyně ze školy. Cizí písemka se proto tváří jako neexistující —
- * `null` místo odmítnutí, aby se z odpovědi nedalo vyčíst, že vůbec je.
+ * A test is private: its author sees it and, if she shares it (`visibility`),
+ * so do colleagues at the school. Someone else's test therefore behaves as
+ * missing — `null` instead of a refusal, so the response doesn't reveal it exists.
  */
 
 export interface TestQuery {
-  /** Hledá se v názvu a v popisu testu. */
+  /** Searches the test title and description. */
   search?: string
   templateId?: string
-  /** Třída, ze které test vznikl — filtr v přehledu testů. */
+  /** The grade the test came from — a filter in the test overview. */
   gradeId?: string
-  /** Písemky, nebo pracovní listy; bez udání písemky (přehled Testy). */
+  /** Written tests or worksheets; written tests when omitted (Tests overview). */
   kind?: TestKind
 }
 
 /**
- * Podmínky pro seznam testů. Hledá se v databázi, ne v prohlížeči — seznam
- * testů se dřív načítal celý bez omezení a loňskou písemku v něm nešlo najít
- * jinak než očima.
+ * Conditions for the test list. Searching happens in the database, not the
+ * browser — the list used to load in full with no limit and last year's test
+ * could only be found by eye.
  *
- * Na velikosti písmen nezáleží, protože `like` je v SQLite u ASCII necitlivé;
- * u písmen s háčky a čárkami rozlišuje („Řepa" nenajde „řepa"). Na názvy
- * testů, které píše učitelka sama, to stačí — banka otázek na tohle má vlastní
- * sloupec `search_text` s předem převedeným textem.
+ * Case is ignored because SQLite's `like` is case-insensitive for ASCII; for
+ * accented letters it is not ("Řepa" won't find "řepa"). That is enough for
+ * test titles the teacher types herself — the question bank has its own
+ * `search_text` column with pre-folded text for this.
  *
- * Procenta a podtržítka v hledaném textu jsou v `like` zástupné znaky, proto
- * se odzávorkují; jinak by „100 %" vrátilo všechno.
+ * Percent signs and underscores are `like` wildcards, so they are escaped;
+ * otherwise "100 %" would match everything.
  */
 export function testConditions(scope: Scope, query: TestQuery): SQL[] {
-  const viditelne = viditelnyTest(scope, tests)
-  const conditions: SQL[] = viditelne ? [viditelne] : []
+  const visible = visibleTest(scope, tests)
+  const conditions: SQL[] = visible ? [visible] : []
   conditions.push(eq(tests.kind, query.kind ?? 'pisemka'))
   const needle = query.search?.trim()
   if (needle) {
-    const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
+    const pattern = `%${needle.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
     const match = or(
       sql`${tests.title} like ${pattern} escape '\\'`,
       sql`coalesce(${tests.description}, '') like ${pattern} escape '\\'`,
@@ -91,14 +92,14 @@ export function testConditions(scope: Scope, query: TestQuery): SQL[] {
 
 export interface TestGradeOption {
   id: string
-  /** „Předmět · ročník", stejný tvar jako jinde v aplikaci. */
+  /** "Subject · grade", the same shape as elsewhere in the app. */
   label: string
 }
 
 /**
- * Nabídka tříd do filtru nad přehledem testů: jen ročníky, ve kterých je
- * aspoň jeden test viditelný přihlášené osobě. Ročník bez testu by ve filtru
- * ukazoval na prázdný seznam, proto se do nabídky nedostane.
+ * Grade options for the test overview filter: only grades with at least one
+ * test visible to the signed-in user. A grade without tests would point the
+ * filter at an empty list, so it is left out.
  */
 export async function loadTestGradeOptions(scope: Scope, kind: TestKind = 'pisemka'): Promise<TestGradeOption[]> {
   const rows = await db
@@ -106,7 +107,7 @@ export async function loadTestGradeOptions(scope: Scope, kind: TestKind = 'pisem
     .from(tests)
     .innerJoin(grades, eq(grades.id, tests.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(and(viditelnyTest(scope, tests), eq(tests.kind, kind)))
+    .where(and(visibleTest(scope, tests), eq(tests.kind, kind)))
     .orderBy(asc(subjects.position), asc(subjects.name), asc(grades.position), asc(grades.name))
   return rows.map((row) => ({ id: row.id, label: `${row.subjectName} · ${row.gradeName}` }))
 }
@@ -115,7 +116,7 @@ export async function loadTemplates(scope: Scope): Promise<Template[]> {
   const rows = await db
     .select()
     .from(templates)
-    .where(skola(scope, templates))
+    .where(inSchool(scope, templates))
     .orderBy(asc(templates.position), asc(templates.name))
   return rows.map((row) => ({
     id: row.id,
@@ -130,7 +131,7 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
   const [row] = await db
     .select()
     .from(tests)
-    .where(and(eq(tests.id, testId), viditelnyTest(scope, tests)))
+    .where(and(eq(tests.id, testId), visibleTest(scope, tests)))
     .limit(1)
   if (!row) return null
   return {
@@ -153,7 +154,7 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
   }
 }
 
-/** Jedna zkopírovaná položka testu — vše, co `createTestVariant` potřebuje dál upravit. */
+/** One copied test item — everything `createTestVariant` needs to adjust further. */
 export interface CopiedTestItem {
   id: string
   kind: TestItemRow['kind']
@@ -167,21 +168,21 @@ export interface CopyTestResult {
 }
 
 /**
- * Kopie hotového testu.
+ * Copy of a finished test.
  *
- * Loňskou písemku chce učitelka použít znovu, ne přepsat — proto kopie, a ne
- * úprava originálu. Přebírají se i **zmrazené snímky otázek**: kdyby se
- * pořizovaly znovu z banky, dostala by kopie dnešní znění otázek místo toho,
- * co se tehdy tisklo, a k loňské písemce by už nešlo vyrobit stejný klíč.
+ * The teacher wants to reuse last year's test, not overwrite it — hence a copy
+ * rather than editing the original. **Frozen question snapshots** are copied
+ * too: retaking them from the bank would give the copy today's wording instead
+ * of what was printed back then, and the same key could no longer be made.
  *
- * Kopírovat jde i nasdílená písemka kolegyně; kopie je pak moje a soukromá.
- * Vrací `null`, když zdrojový test není vidět (cizí, nebo neexistuje) —
- * volající si sám vybere, jestli z toho udělá 404, nebo ho beze slova
- * proklikne dál.
+ * A colleague's shared test can be copied too; the copy is then mine and
+ * private. Returns `null` when the source test is not visible (foreign or
+ * missing) — the caller decides whether that becomes a 404 or is silently
+ * passed over.
  *
- * `title` mění výchozí název kopie (`"<název> (kopie)"`) — verze písemky ho
- * potřebuje jiný (`"<název> – lehčí"`), a nejde ho spočítat dřív, než se
- * zdrojový test načte, proto je to funkce nad jeho názvem, ne hotový řetězec.
+ * `title` overrides the default copy title (`"<title> (kopie)"`) — a test
+ * version needs another one (`"<title> – lehčí"`), which can't be computed
+ * before the source is loaded, so it is a function of the title, not a string.
  */
 export async function copyTest(
   scope: Scope,
@@ -191,14 +192,14 @@ export async function copyTest(
   const [source] = await db
     .select()
     .from(tests)
-    .where(and(eq(tests.id, sourceId), viditelnyTest(scope, tests)))
+    .where(and(eq(tests.id, sourceId), visibleTest(scope, tests)))
     .limit(1)
   if (!source) return null
 
   const items = await db
     .select()
     .from(testItems)
-    .where(and(skola(scope, testItems), eq(testItems.testId, sourceId)))
+    .where(and(inSchool(scope, testItems), eq(testItems.testId, sourceId)))
     .orderBy(asc(testItems.position))
 
   const id = newId()
@@ -208,16 +209,16 @@ export async function copyTest(
     schoolId: scope.schoolId,
     ownerId: scope.userId,
     visibility: 'soukrome',
-    // Kopie listu zůstává listem i se zadáním — jinak by se objevila mezi písemkami.
+    // A worksheet copy stays a worksheet with its brief — otherwise it would show among tests.
     kind: source.kind,
     topicId: source.topicId,
     brief: source.brief,
-    title: options.title ? options.title(source.title) : `${source.title} (kopie)`,
+    title: options.title ? options.title(source.title) : t('tests:copyTitle', { title: source.title }),
     description: source.description,
     graded: source.graded,
     templateId: source.templateId,
-    // Ročník kopírovaného testu už při jeho uložení prošel ověřením proti
-    // škole; kopie ho přebírá beze změny stejně jako ostatní pole.
+    // The source's grade was already checked against the school when it was
+    // saved; the copy takes it unchanged like the other fields.
     gradeId: source.gradeId,
     header: source.header,
     variants: source.variants,
@@ -236,8 +237,8 @@ export async function copyTest(
     text: item.text,
     pointsOverride: item.pointsOverride,
     linesOverride: item.linesOverride,
-    // Snímek se přebírá tak, jak je — kopie musí vypadat jako originál,
-    // i když se otázka v bance mezitím změnila nebo úplně zmizela.
+    // The snapshot is taken as is — the copy must look like the original even
+    // if the bank question has since changed or disappeared.
     questionSnapshot: item.questionSnapshot,
     puzzleId: item.puzzleId,
     puzzleSnapshot: item.puzzleSnapshot,
@@ -254,23 +255,23 @@ export async function copyTest(
 }
 
 /**
- * Ověří `gradeId` proti škole volající — cizí nebo neexistující ročník se má
- * tiše uložit jako `null`, aby z odpovědi nešlo poznat, že ročník vůbec
- * (v jiné škole) existuje.
+ * Checks `gradeId` against the caller's school — a foreign or missing grade is
+ * silently stored as `null`, so the response doesn't reveal that the grade
+ * exists (in another school).
  */
 export async function resolveGradeId(scope: Scope, gradeId: string | null): Promise<string | null> {
   if (!gradeId) return null
   const [row] = await db
     .select({ id: grades.id })
     .from(grades)
-    .where(and(eq(grades.id, gradeId), skola(scope, grades)))
+    .where(and(eq(grades.id, gradeId), inSchool(scope, grades)))
     .limit(1)
   return row ? row.id : null
 }
 
 /**
- * Téma listu ověřené proti škole, i s ročníkem, který list od tématu
- * přebírá. Cizí nebo smazané téma vrací `null`.
+ * Worksheet topic checked against the school, with the grade the worksheet
+ * takes from it. A foreign or deleted topic returns `null`.
  */
 export async function resolveTopic(
   scope: Scope,
@@ -280,15 +281,14 @@ export async function resolveTopic(
   const [row] = await db
     .select({ id: topics.id, gradeId: topics.gradeId })
     .from(topics)
-    .where(and(eq(topics.id, topicId), skola(scope, topics)))
+    .where(and(eq(topics.id, topicId), inSchool(scope, topics)))
     .limit(1)
   return row ?? null
 }
 
 /**
- * Snímky otázek pro ukládaný test. Vznikají vždy na serveru z aktuálního
- * stavu banky — kdyby je posílal prohlížeč, dal by se obsah písemky
- * podvrhnout.
+ * Question snapshots for a test being saved. Always made on the server from
+ * the current bank — if the browser sent them, test content could be forged.
  */
 export async function buildQuestionSnapshots(
   scope: Scope,
@@ -300,23 +300,23 @@ export async function buildQuestionSnapshots(
   const rows = await db
     .select()
     .from(questions)
-    .where(and(skola(scope, questions), inArray(questions.id, ids)))
+    .where(and(inSchool(scope, questions), inArray(questions.id, ids)))
   const snapshots = new Map<string, string>()
   for (const row of rows) {
     try {
       snapshots.set(row.id, serializeQuestionSnapshot(toQuestion(row)))
     } catch {
-      // Otázka, která neprojde schématem (typicky starší data), se prostě
-      // nezmrazí — test se kvůli tomu uložit nesmí odmítnout a při
-      // vykreslení se sáhne po živé otázce.
+      // A question failing the schema (typically older data) is just not
+      // frozen — saving the test must not be refused for it, and rendering
+      // falls back to the live question.
     }
   }
   return snapshots
 }
 
 /**
- * Snímky hlavolamů pro ukládaný test — týž důvod jako u otázek: co se
- * zařadilo do písemky, nesmí se změnit pozdější úpravou v knihovně.
+ * Puzzle snapshots for a test being saved — same reason as for questions: what
+ * went into a test must not change through later edits in the library.
  */
 export async function buildPuzzleSnapshots(
   scope: Scope,
@@ -325,51 +325,51 @@ export async function buildPuzzleSnapshots(
   const ids = [...new Set(puzzleIds)]
   if (ids.length === 0) return new Map()
 
-  // Zmrazit jde jen vlastní hlavolam: bez téhle podmínky by si stačilo
-  // uhodnout cizí id a mít ho ve své písemce i ve svém PDF.
+  // Only an own puzzle can be frozen: without this, guessing a foreign id would
+  // be enough to have it in one's own test and PDF.
   const rows = await db
     .select()
     .from(puzzles)
-    .where(and(vlastni(scope, puzzles), inArray(puzzles.id, ids)))
+    .where(and(ownedBy(scope, puzzles), inArray(puzzles.id, ids)))
   const snapshots = new Map<string, string>()
   for (const row of rows) {
     try {
-      // `serializePuzzleSnapshot` si obsah přečte schématem, takže metadata
-      // (id, téma, časy) do snímku neprojdou.
+      // `serializePuzzleSnapshot` reads the content through the schema, so
+      // metadata (id, topic, timestamps) don't get into the snapshot.
       snapshots.set(row.id, serializePuzzleSnapshot(toPuzzle(row)))
     } catch {
-      // Hlavolam, který neprojde schématem, se nezmrazí — test se kvůli tomu
-      // uložit neodmítne a při vykreslení se sáhne po živém.
+      // A puzzle failing the schema is not frozen — saving is not refused for
+      // it, and rendering falls back to the live one.
     }
   }
   return snapshots
 }
 
 /**
- * Položky testu i s navázanými otázkami, seřazené podle pořadí. Otázka se
- * bere ze snímku pořízeného při uložení testu; živá otázka z banky se použije
- * jen tam, kde snímek chybí (starší testy) nebo je poškozený.
+ * Test items with their questions, in order. The question comes from the
+ * snapshot taken when the test was saved; the live bank question is used only
+ * where the snapshot is missing (older tests) or broken.
  */
 export async function loadTestItems(
   scope: Scope,
   testId: string,
   options: { ownerId?: string } = {},
 ): Promise<ResolvedTestItem[]> {
-  // Položky se čtou přes samotnou písemku, ne jen podle `testId`: kdo na ni
-  // nemá vidět, nedostane ani její obsah, i kdyby id uhodl.
+  // Items are read through the test itself, not just by `testId`: whoever may
+  // not see it doesn't get its content either, even with a guessed id.
   const rows = (
     await db
-      .select({ polozka: testItems })
+      .select({ item: testItems })
       .from(testItems)
       .innerJoin(tests, eq(tests.id, testItems.testId))
-      .where(and(eq(testItems.testId, testId), viditelnyTest(scope, tests)))
+      .where(and(eq(testItems.testId, testId), visibleTest(scope, tests)))
       .orderBy(asc(testItems.position))
-  ).map((row) => row.polozka)
+  ).map((row) => row.item)
 
-  // Náhrada za chybějící snímek se u otázky bere z celé školy (banka je
-  // společná), u hlavolamu ale jen od vlastníka písemky: nasdílený test by
-  // jinak ukázal cizí hlavolam v podobě, do jaké ho autorka mezitím upravila.
-  const vlastnikTestu = options.ownerId ?? scope.userId
+  // The fallback for a missing snapshot comes from the whole school for
+  // questions (the bank is shared), but only from the test owner for puzzles:
+  // a shared test would otherwise show a puzzle as its author has since edited it.
+  const testOwner = options.ownerId ?? scope.userId
 
   const questionIds = rows.map((row) => row.questionId).filter((id): id is string => Boolean(id))
   const questionRows =
@@ -377,7 +377,7 @@ export async function loadTestItems(
       ? await db
           .select()
           .from(questions)
-          .where(and(skola(scope, questions), inArray(questions.id, questionIds)))
+          .where(and(inSchool(scope, questions), inArray(questions.id, questionIds)))
       : []
   const byId = new Map(questionRows.map((row) => [row.id, toQuestion(row)]))
 
@@ -389,8 +389,8 @@ export async function loadTestItems(
           .from(puzzles)
           .where(
             and(
-              skola(scope, puzzles),
-              eq(puzzles.ownerId, vlastnikTestu),
+              inSchool(scope, puzzles),
+              eq(puzzles.ownerId, testOwner),
               inArray(puzzles.id, puzzleIds),
             ),
           )
@@ -414,7 +414,7 @@ export async function loadTestItems(
       puzzleSnapshot: row.puzzleSnapshot,
       content: row.content,
       needsCheck: row.needsCheck,
-      // Poškozený obsah dá `null` — položka se ukáže jako chybná, list žije dál.
+      // Broken content gives `null` — the item shows as broken, the worksheet lives on.
       ...(row.kind === 'table' ? { table: parseItemContent('table', row.content) } : {}),
       ...(row.kind === 'text' ? { textContent: parseItemContent('text', row.content) } : {}),
       ...resolveTestItemQuestion(row.questionSnapshot, live, row.id),
@@ -423,7 +423,7 @@ export async function loadTestItems(
   })
 }
 
-/** Obrázky použité v testu jako data URL — react-pdf je vkládá přímo. */
+/** Images used in the test as data URLs — react-pdf embeds them directly. */
 async function loadAssets(scope: Scope, items: ResolvedTestItem[]): Promise<Record<string, string>> {
   const ids = new Set<string>()
   for (const item of items) {
@@ -437,20 +437,20 @@ async function loadAssets(scope: Scope, items: ResolvedTestItem[]): Promise<Reco
   const rows = await db
     .select()
     .from(assets)
-    .where(and(skola(scope, assets), inArray(assets.id, [...ids])))
+    .where(and(inSchool(scope, assets), inArray(assets.id, [...ids])))
   return Object.fromEntries(
     rows.map((row) => [row.id, `data:${row.mimeType};base64,${Buffer.from(row.data).toString('base64')}`]),
   )
 }
 
 /**
- * Ve kterých viditelných testech otázky už jsou — pro štítek „V testu: …" a
- * filtr „Jen nepoužité v testu" na kartě otázky v tématu.
+ * Which visible tests already contain the questions — for the "V testu: …"
+ * label and the "Jen nepoužité v testu" filter on the topic question card.
  *
- * Cizí soukromý test kolegyně otázku prozradit nesmí (bod revize 1 v plánu),
- * proto se testy čtou přes `viditelnyTest`, ne přes pouhou příslušnost ke
- * škole. Test u téže otázky se uvádí jednou, i když v něm otázka figuruje
- * víckrát (rozcvička a pak znovu v jiné části).
+ * A colleague's private test must not reveal the question (review point 1 in
+ * the plan), so tests are read via `visibleTest`, not mere school membership.
+ * A test is listed once per question even if the question appears in it
+ * several times (a warm-up, then again in another part).
  */
 export async function loadTestUsageForQuestions(
   scope: Scope,
@@ -463,7 +463,7 @@ export async function loadTestUsageForQuestions(
     .select({ questionId: testItems.questionId, testId: tests.id, title: tests.title })
     .from(testItems)
     .innerJoin(tests, eq(tests.id, testItems.testId))
-    .where(and(inArray(testItems.questionId, ids), viditelnyTest(scope, tests)))
+    .where(and(inArray(testItems.questionId, ids), visibleTest(scope, tests)))
     .orderBy(desc(tests.updatedAt))
 
   const usage: Record<string, { testId: string; title: string }[]> = {}
@@ -478,7 +478,7 @@ export async function loadTestUsageForQuestions(
   return usage
 }
 
-/** Vše potřebné pro vykreslení testu do PDF. */
+/** Everything needed to render a test to PDF. */
 export async function loadRenderableTest(
   scope: Scope,
   testId: string,
@@ -490,7 +490,7 @@ export async function loadRenderableTest(
   const [templateRow] = await db
     .select()
     .from(templates)
-    .where(and(skola(scope, templates), eq(templates.id, test.templateId)))
+    .where(and(inSchool(scope, templates), eq(templates.id, test.templateId)))
     .limit(1)
   if (!templateRow) return null
 
@@ -512,18 +512,15 @@ export async function loadRenderableTest(
   }
 }
 
-/* ------------------------------------------------------- pracovní listy */
+/* ------------------------------------------------------- worksheets */
 
-/** Hláška pro téma, které mezi otevřením formuláře a odesláním zmizelo. */
-export const WORKSHEET_TOPIC_GONE_MESSAGE = 'Téma už v knihovně není, vyber jiné.'
-
-/** Z čeho list vzniká: téma z knihovny, nebo volné zadání. */
+/** What a worksheet is made from: a library topic or a free-form brief. */
 export type WorksheetSource = { topicId: string } | { title: string; gradeId: string | null }
 
 /**
- * Zadání pro model složené z tématu (materiály bez duplicit a vynechaných)
- * nebo z volného zadání. Cizí či smazané téma vrací `null`; cizí ročník
- * volného zadání se tiše zahodí.
+ * Model request built from a topic (materials without duplicates and skipped
+ * ones) or from a free-form brief. A foreign or deleted topic returns `null`;
+ * a foreign grade of a free-form brief is silently dropped.
  */
 export async function loadWorksheetRequest(
   scope: Scope,
@@ -553,7 +550,7 @@ export async function loadWorksheetRequest(
         .select({ gradeName: grades.name, subjectName: subjects.name })
         .from(grades)
         .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-        .where(and(eq(grades.id, gradeId), skola(scope, grades)))
+        .where(and(eq(grades.id, gradeId), inSchool(scope, grades)))
         .limit(1)
     : []
   return {
@@ -569,7 +566,7 @@ export async function loadWorksheetRequest(
   }
 }
 
-/** Položka od modelu v podobě řádku `test_items`. */
+/** A model item as a `test_items` row. */
 function worksheetItemRow(item: WorksheetItemDraft) {
   const base = { text: null, content: null, questionSnapshot: null, needsCheck: item.needsCheck }
   switch (item.kind) {
@@ -586,9 +583,9 @@ function worksheetItemRow(item: WorksheetItemDraft) {
 }
 
 /**
- * Vygeneruje list a uloží ho i s položkami jedním zápisem (`db.batch`),
- * takže při chybě nezůstane napůl uložený. Úlohy jdou jen do snímků položek,
- * do banky nikdy. Vrací `null`, když téma v knihovně není.
+ * Generates a worksheet and saves it with its items in one write (`db.batch`),
+ * so an error never leaves it half-saved. Tasks only go into item snapshots,
+ * never into the bank. Returns `null` when the topic is not in the library.
  */
 export async function createGeneratedWorksheet(
   scope: Scope,
@@ -598,9 +595,9 @@ export async function createGeneratedWorksheet(
   const loaded = await loadWorksheetRequest(scope, input.source, input)
   if (!loaded) return null
   const [template] = await loadTemplates(scope)
-  if (!template) throw new Error('Škola nemá žádnou šablonu pro tisk. Dej vědět správci, ať ji přidá, a pak to zkus znovu.')
+  if (!template) throw new Error(t('tests:api.schoolHasNoTemplate'))
 
-  const result = await generateWorksheet(loaded.request, { signal: options.signal, onCall: zapisovatVolani(scope, 'list') })
+  const result = await generateWorksheet(loaded.request, { signal: options.signal, onCall: callRecorder(scope, 'list') })
 
   const id = newId()
   const brief: WorksheetBrief = {
@@ -637,9 +634,9 @@ export async function createGeneratedWorksheet(
 }
 
 /**
- * Nová podoba jednoho kusu vlastního listu — z téhož zadání a materiálů
- * tématu. Cizí list i písemka vrací `null`. Nic neukládá: položku nahradí
- * editor a uloží se s listem.
+ * A new version of one item of an own worksheet — from the same brief and
+ * topic materials. A foreign worksheet or a written test returns `null`.
+ * Nothing is saved: the editor swaps the item and it is saved with the worksheet.
  */
 export async function regenerateWorksheetPart(
   scope: Scope,
@@ -651,18 +648,18 @@ export async function regenerateWorksheetPart(
   const [row] = await db
     .select({ title: tests.title, topicId: tests.topicId, gradeId: tests.gradeId, brief: tests.brief })
     .from(tests)
-    .where(and(eq(tests.id, testId), vlastni(scope, tests), eq(tests.kind, 'pracovni_list')))
+    .where(and(eq(tests.id, testId), ownedBy(scope, tests), eq(tests.kind, 'pracovni_list')))
     .limit(1)
   if (!row) return null
   const brief = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '' }
   const title = brief.title || row.title
-  // Smazané téma list nebere s sebou (`topic_id` se vyprázdní) — pak se
-  // přegeneruje jako volné zadání z názvu a ročníku.
+  // A deleted topic doesn't take the worksheet along (`topic_id` is cleared) —
+  // it is then regenerated as a free-form brief from title and grade.
   const loaded =
     (row.topicId ? await loadWorksheetRequest(scope, { topicId: row.topicId }, brief) : null) ??
     (await loadWorksheetRequest(scope, { title, gradeId: row.gradeId }, brief))
   return regenerateWorksheetItem(loaded!.request, target, existing, {
     signal: options.signal,
-    onCall: zapisovatVolani(scope, 'list'),
+    onCall: callRecorder(scope, 'list'),
   })
 }

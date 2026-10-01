@@ -1,39 +1,38 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { MainNav, type UcetVListe } from '@/components/MainNav'
-import { PravaProvider } from '@/components/Prava'
-import { roleMuzeSpravovat } from '@/lib/role'
+import { MainNav, type NavAccount } from '@/components/MainNav'
+import { PermissionsProvider } from '@/components/Permissions'
+import { roleCanManage } from '@/lib/role'
 
 /**
- * Stránky pro nepřihlášenou uživatelku (skupina tras `(auth)`). Navigaci
- * aplikace kolem nich nekreslíme: kdo není přihlášený, stejně nikam
- * neproklikne.
+ * Pages for signed-out users (route group `(auth)`). We draw no app
+ * navigation around them: someone not signed in cannot click anywhere anyway.
  *
- * Rozhoduje se podle cesty, ne podle skupiny tras: rozvržení skupiny je vždy
- * *uvnitř* kořenového, takže samo navigaci z kořene odebrat nedokáže. Druhá
- * možnost — přesunout i všechny ostatní trasy do skupiny `(app)` s vlastním
- * rozvržením — by znamenala hýbat soubory, na kterých se právě pracuje jinde.
+ * The decision is by path, not by route group: a group layout is always
+ * *inside* the root one, so it cannot remove the root navigation by itself.
+ * The alternative — moving all other routes into an `(app)` group with its
+ * own layout — would mean moving files that are being worked on elsewhere.
  */
-const BEZ_NAVIGACE = ['/login', '/zmena-hesla']
+const NO_NAVIGATION = ['/login', '/zmena-hesla']
 
 export function AppChrome({
   children,
-  ucet,
+  account,
 }: {
   children: React.ReactNode
-  /** Přihlášená osoba; bez přihlašování (lokální běh) `null`. */
-  ucet: UcetVListe | null
+  /** The signed-in person; `null` without sign-in (local run). */
+  account: NavAccount | null
 }) {
   const pathname = usePathname()
-  // Bez přihlašování (lokální běh) se pracuje pod správcem, tedy naplno.
-  const muzeMenit = ucet === null || ucet.role !== 'nahled'
-  const muzeSpravovat = ucet === null || roleMuzeSpravovat(ucet.role)
-  // Na přihlašovací stránce ani při vynucené změně hesla nemá lišta co dělat.
-  if (BEZ_NAVIGACE.includes(pathname)) return <>{children}</>
+  // Without sign-in (local run) work happens as a manager, i.e. with full rights.
+  const canEdit = account === null || account.role !== 'nahled'
+  const canManage = account === null || roleCanManage(account.role)
+  // The bar has no business on the login page or during a forced password change.
+  if (NO_NAVIGATION.includes(pathname)) return <>{children}</>
   return (
-    <PravaProvider muzeMenit={muzeMenit} muzeSpravovat={muzeSpravovat}>
-      <MainNav ucet={ucet}>{children}</MainNav>
-    </PravaProvider>
+    <PermissionsProvider canEdit={canEdit} canManage={canManage}>
+      <MainNav account={account}>{children}</MainNav>
+    </PermissionsProvider>
   )
 }

@@ -3,14 +3,13 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-/** Základ klíče v `localStorage` pro naposledy otevřenou třídu — bez uživatele. */
+/** Base of the `localStorage` key for the last opened class — without the user. */
 const LAST_CLASS_KEY_BASE = 'testmaker-last-class'
 
 /**
- * Klíč je na uživatele — bez toho by si sdílené zařízení (nebo lokální běh
- * bez přihlašování, kde `userId` je vždy stejné výchozí id) pletlo, kdo
- * naposledy kterou třídu otevřel, a přesměrovávalo by jednu učitelku na
- * třídu druhé.
+ * The key is per user — otherwise a shared device (or a local run without
+ * sign-in, where `userId` is always the same default id) would mix up who
+ * opened which class last and redirect one teacher to another's class.
  */
 function lastClassKey(userId: string): string {
   return `${LAST_CLASS_KEY_BASE}:${userId}`
@@ -18,7 +17,7 @@ function lastClassKey(userId: string): string {
 
 type RememberClassProps =
   | {
-      /** Stránka třídy nebo tématu: jen si zapamatuje, kde učitelka byla. */
+      /** Class or topic page: just remembers where the teacher was. */
       gradeId: string
       knownGradeIds?: undefined
       escape?: undefined
@@ -26,21 +25,21 @@ type RememberClassProps =
     }
   | {
       /**
-       * Úvod: přesměruje na zapamatovanou třídu, pokud ještě v knihovně je.
-       * `knownGradeIds` jsou id všech tříd, které úvod právě vykreslil —
-       * podle nich pozná, jestli zapamatovaná třída mezitím nezmizela.
+       * Home: redirects to the remembered class if it's still in the library.
+       * `knownGradeIds` are the ids of all classes home just rendered —
+       * they tell whether the remembered class has disappeared meanwhile.
        */
       gradeId?: undefined
       knownGradeIds: string[]
-      /** Odkaz „Všechny třídy“ (`/?vse=1`) přesměrování na tenhle jeden načtení potlačí. */
+      /** The "Všechny třídy" link (`/?vse=1`) suppresses the redirect for this one load. */
       escape: boolean
       userId: string
     }
 
 /**
- * Zapamatuje si naposledy otevřenou třídu (stránka třídy i tématu), a na
- * úvodu do ní rovnou přesměruje. Když je zapamatovaná třída mezitím smazaná,
- * úvod si to tiše zapomene a ukáže dlaždice, ne chybu.
+ * Remembers the last opened class (class page and topic page) and redirects
+ * to it from home. If the remembered class has been deleted meanwhile, home
+ * silently forgets it and shows the tiles, not an error.
  */
 export function RememberClass(props: RememberClassProps) {
   const gradeId = 'gradeId' in props ? props.gradeId : undefined
@@ -54,7 +53,7 @@ export function RememberClass(props: RememberClassProps) {
     try {
       localStorage.setItem(key, gradeId)
     } catch {
-      // Soukromé okno bez úložiště — prostě se nic nezapamatuje.
+      // Private window without storage — nothing gets remembered.
     }
   }, [gradeId, key])
 
@@ -66,12 +65,12 @@ export function RememberClass(props: RememberClassProps) {
       if (knownGradeIds.includes(stored)) {
         router.replace(`/tridy/${stored}`)
       } else {
-        // Třída mezitím zmizela (smazaný ročník) — zapamatovaný odkaz by
-        // vedl na 404, tak se radši rovnou zapomene.
+        // The class has gone (deleted grade) — the remembered link would lead
+        // to a 404, so it's forgotten right away.
         localStorage.removeItem(key)
       }
     } catch {
-      // Soukromé okno bez úložiště — nic se nenajde, dlaždice zůstanou.
+      // Private window without storage — nothing is found, the tiles stay.
     }
   }, [knownGradeIds, escape, router, key])
 

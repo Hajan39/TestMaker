@@ -1,7 +1,7 @@
 /**
- * pdf.js 6 volá `Uint8Array#toHex`, `toBase64` a `Uint8Array.fromBase64` (ES2025).
- * Node 24 a starší prohlížeče je nemají a pdf.js pak spadne na
- * „hashOriginal.toHex is not a function“. Doplní se jen to, co chybí.
+ * pdf.js 6 calls `Uint8Array#toHex`, `toBase64` and `Uint8Array.fromBase64` (ES2025).
+ * Node 24 and older browsers lack them and pdf.js then fails with
+ * "hashOriginal.toHex is not a function". Only what is missing is added.
  */
 type U8 = Uint8Array & {
   toHex?: () => string

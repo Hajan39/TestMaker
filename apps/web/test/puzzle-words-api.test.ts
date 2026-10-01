@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { generatePuzzleWords, PuzzleWordsRequest } from '@testmaker/core/ai'
 
 /**
- * API slov do hlavolamu. Skutečný model se nevolá: `generatePuzzleWords`
- * běží doopravdy (i s kontrolou slov proti materiálu), jen místo modelu
- * dostane podvržené volání, které vrátí `model.words`.
+ * Puzzle words API. The real model is never called: `generatePuzzleWords`
+ * runs for real (including checking words against the material), it only gets
+ * a stubbed call instead of the model that returns `model.words`.
  */
 
 const model = vi.hoisted(() => ({
@@ -52,7 +52,7 @@ beforeEach(() => {
 })
 
 describe('POST /api/puzzles/words', () => {
-  it('opraví diakritiku podle materiálu a vrátí počty', async () => {
+  it('fixes diacritics from the material and returns counts', async () => {
     const topicId = await topicWithText()
     model.words = [
       { word: 'zaludek', clue: 'Vak, ve kterém se potrava tráví kyselinou.' },
@@ -71,7 +71,7 @@ describe('POST /api/puzzles/words', () => {
     expect(data.stats).toEqual({ requested: 3, returned: 3, usable: 2, dropped: 1 })
   })
 
-  it('bez jediného použitelného slova vrátí varování, ne úspěch', async () => {
+  it('returns a warning, not success, without a single usable word', async () => {
     const topicId = await topicWithText()
     model.words = [{ word: 'radovzmena', clue: 'Vymyšlené slovo.' }]
     const response = await POST(jsonReq('/api/puzzles/words', 'POST', { topicId, kind: 'wordsearch', count: 5 }))
@@ -82,7 +82,7 @@ describe('POST /api/puzzles/words', () => {
     expect(data.error).toContain('Zkus to znovu')
   })
 
-  it('dogenerovaná slova se ke konceptu připíšou, nepřepíšou ho', async () => {
+  it('additional words are appended to the draft, not overwriting it', async () => {
     const topicId = await topicWithText()
     model.words = [{ word: 'žaludek', clue: 'Vak, ve kterém se potrava tráví.' }]
     await POST(jsonReq('/api/puzzles/words', 'POST', { topicId, kind: 'wordsearch', count: 2 }))
@@ -94,7 +94,7 @@ describe('POST /api/puzzles/words', () => {
     expect(entries.map((entry) => entry.word)).toEqual(['žaludek', 'dvanáctník'])
   })
 
-  it('větu tajenky předá modelu a slovo bez jejího písmena zahodí', async () => {
+  it('passes the cryptogram phrase to the model and drops a word without its letters', async () => {
     const topicId = await topicWithText()
     model.words = [
       { word: 'jícen', clue: 'Trubice mezi hltanem a trávicím vakem.' },
@@ -115,7 +115,7 @@ describe('POST /api/puzzles/words', () => {
     expect(data.missingLetters).toEqual(['E', 'D'])
   })
 
-  it('velikost mřížky určí nejdelší slovo', async () => {
+  it('the grid size sets the longest word', async () => {
     const topicId = await topicWithText()
     model.words = [
       { word: 'dvanáctník', clue: 'První část tenkého střeva.' },
@@ -129,7 +129,7 @@ describe('POST /api/puzzles/words', () => {
     expect(data.rejected[0]?.reason).toBe('je delší než 8 písmen')
   })
 
-  it('starý klient bez věty a mřížky projde jako dřív', async () => {
+  it('an old client without phrase and grid works as before', async () => {
     const topicId = await topicWithText()
     model.words = [{ word: 'žaludek', clue: 'Vak, ve kterém se potrava tráví.' }]
     const response = await POST(

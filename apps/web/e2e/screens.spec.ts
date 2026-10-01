@@ -2,15 +2,15 @@ import { expect, test, type Page } from '@playwright/test'
 import { testGradeQuery } from './fixtures'
 
 /**
- * Pořídí snímky hlavních obrazovek do `e2e/screenshots`, aby šlo posoudit vzhled,
- * který z kódu ani z HTML poznat nejde. Nespouští se v běžném běhu.
+ * Takes screenshots of the main screens into `e2e/screenshots` so the look,
+ * which neither the code nor the HTML reveals, can be judged. Not part of a normal run.
  *
- * Snímek sám o sobě nic netvrdí, proto se u každé obrazovky ještě ověří, že
- * se opravdu vykreslila: prázdná nebo rozbitá stránka by jinak skončila jako
- * hezky pojmenovaný obrázek ničeho.
+ * A screenshot asserts nothing by itself, so each screen is also checked to
+ * have actually rendered: an empty or broken page would otherwise end up as a
+ * nicely named picture of nothing.
  */
-test.describe('snímky obrazovek', () => {
-  test.skip(!process.env.SCREENSHOTS, 'spouští se jen s proměnnou SCREENSHOTS')
+test.describe('screenshots', () => {
+  test.skip(!process.env.SCREENSHOTS, 'runs only with the SCREENSHOTS variable')
 
   const shots = [
     { path: () => '/', name: 'knihovna', width: 1440 },
@@ -24,18 +24,18 @@ test.describe('snímky obrazovek', () => {
   ]
 
   for (const shot of shots) {
-    test(`snímek: ${shot.name}`, async ({ page }) => {
+    test(`screenshot: ${shot.name}`, async ({ page }) => {
       await page.setViewportSize({ width: shot.width, height: 900 })
       const response = await page.goto(await shot.path(page))
-      expect(response?.ok(), `${shot.name}: stránka se nenačetla`).toBe(true)
+      expect(response?.ok(), `${shot.name}: page did not load`).toBe(true)
       await page.waitForLoadState('networkidle')
 
-      // Stránka musí mít obsah — jinak by ze snímku byl hezky pojmenovaný
-      // obrázek ničeho. (Prvek `nextjs-portal` se na testy nehodí: vývojový
-      // overlay visí v DOM pořád, i když je všechno v pořádku.)
+      // The page must have content — otherwise the screenshot would be a nicely
+      // named picture of nothing. (`nextjs-portal` is useless for this: the dev
+      // overlay stays in the DOM even when everything is fine.)
       await expect(page.locator('main')).toBeVisible()
       const text = (await page.locator('main').innerText()).trim()
-      expect(text.length, `${shot.name}: obrazovka je prázdná`).toBeGreaterThan(20)
+      expect(text.length, `${shot.name}: screen is empty`).toBeGreaterThan(20)
 
       await page.screenshot({ path: `e2e/screenshots/${shot.name}.png`, fullPage: false })
     })

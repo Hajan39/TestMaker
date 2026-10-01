@@ -1,23 +1,28 @@
+import type { Metadata } from 'next'
+import { t } from '@testmaker/core/i18n'
 import { PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { loadPuzzleList, loadPuzzleTopics } from '@/lib/puzzles'
 import { loadTemplates } from '@/lib/tests'
 import { PuzzleWorkshop } from './PuzzleWorkshop'
-import { ucetStranky } from '@/lib/uzivatel'
+import { pageAccount } from '@/lib/user'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Hlavolamy – TestMaker' }
+
+export function generateMetadata(): Metadata {
+  return { title: t('puzzles:page.title') }
+}
 
 /**
- * Hlavolamy mají vlastní záložku: nejsou to otázky a do banky nepatří, ale
- * hotové se dají vytisknout na papír vedle písemky i zařadit do ní.
+ * Puzzles have their own tab: they are not questions and do not belong in the
+ * bank, but finished ones can be printed next to a test or added into it.
  */
 export default async function PuzzlesPage() {
-  const ucet = await ucetStranky()
+  const account = await pageAccount()
   const [topics, puzzles, templates] = await Promise.all([
-    loadPuzzleTopics(ucet),
-    loadPuzzleList(ucet),
-    loadTemplates(ucet),
+    loadPuzzleTopics(account),
+    loadPuzzleList(account),
+    loadTemplates(account),
   ])
 
   return (
@@ -25,9 +30,9 @@ export default async function PuzzlesPage() {
       <PuzzleWorkshop
         topics={topics}
         puzzles={puzzles}
-        // Náhled na obrazovce se kreslí do téhož listu jako písemka, proto
-        // potřebuje šablonu; první vestavěná stačí, hlavolam se jí liší jen
-        // okraji a písmem.
+        // The on-screen preview is drawn on the same sheet as a test, so it
+        // needs a template; the first built-in one will do, a puzzle differs
+        // from it only in margins and font.
         templateConfig={templates[0]?.config ?? null}
         aiConfigured={aiStatus().configured}
       />

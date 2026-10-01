@@ -1,15 +1,16 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import type { TestKind } from '@testmaker/core/schema'
+import { t } from '@testmaker/core/i18n'
 import { Button, Card, EmptyState, PageShell } from '@testmaker/ui'
 import { db, grades, questions, subjects, templates, testItems, tests, topics } from '@/db'
 import { loadTestGradeOptions, testConditions } from '@/lib/tests'
-import { skola, ucetStranky } from '@/lib/uzivatel'
+import { inSchool, pageAccount } from '@/lib/user'
 import { TestsTable } from './TestsTable'
 import { TestsFilters } from './TestsFilters'
 import { overviewPath } from './paths'
 
-/** Kolik položek se ukáže naráz, než se řekne o další. */
+/** How many items to show at once before offering more. */
 const PAGE_SIZE = 25
 
 export interface OverviewParams {
@@ -19,46 +20,47 @@ export interface OverviewParams {
   limit?: string
 }
 
-/** Texty, kterými se přehled písemek a přehled listů liší. */
-const TEXTS: Record<TestKind, { title: string; add: string; emptyTitle: string; emptyHint: string; create: string }> = {
-  pisemka: {
-    title: 'Testy',
-    add: 'Nový test',
-    emptyTitle: 'Zatím žádný test',
-    emptyHint: 'Vyber otázky z banky, poskládej test a stáhni ho jako PDF.',
-    create: 'Vytvořit test',
-  },
-  pracovni_list: {
-    title: 'Pracovní listy',
-    add: 'Nový pracovní list',
-    emptyTitle: 'Zatím žádný pracovní list',
-    emptyHint: 'Nech model připravit list k tématu nebo podle vlastního zadání a pak ho uprav jako písemku.',
-    create: 'Vytvořit pracovní list',
-  },
+/** Texts in which the test overview and the worksheet overview differ. */
+function overviewTexts(kind: TestKind) {
+  return kind === 'pracovni_list'
+    ? {
+        title: t('worksheets:overview.title'),
+        add: t('worksheets:overview.add'),
+        emptyTitle: t('worksheets:overview.emptyTitle'),
+        emptyHint: t('worksheets:overview.emptyHint'),
+        create: t('worksheets:overview.create'),
+      }
+    : {
+        title: t('tests:overview.title'),
+        add: t('tests:overview.add'),
+        emptyTitle: t('tests:overview.emptyTitle'),
+        emptyHint: t('tests:overview.emptyHint'),
+        create: t('tests:overview.create'),
+      }
 }
 
 /**
- * Přehled písemek, nebo pracovních listů — vlastní i nasdílené ve škole,
- * s hledáním a filtrem podle třídy. Oba přehledy jsou tentýž seznam, jen
- * s jiným druhem (`tests.kind`).
+ * Overview of written tests or worksheets — own ones and those shared in the
+ * school, with search and a grade filter. Both overviews are the same list,
+ * just with a different kind (`tests.kind`).
  */
 export async function TestsOverview({ kind, params }: { kind: TestKind; params: OverviewParams }) {
-  const text = TEXTS[kind]
+  const text = overviewTexts(kind)
   const basePath = overviewPath(kind)
   const search = params.q ?? ''
   const templateId = params.templateId ?? ''
   const limit = Math.min(Math.max(Number(params.limit) || PAGE_SIZE, PAGE_SIZE), 500)
 
-  const ucet = await ucetStranky()
-  const gradeOptions = await loadTestGradeOptions(ucet, kind)
-  // Cizí nebo už neplatná třída z odkazu se má chovat jako „Všechny třídy",
-  // ne jako filtr, na který nic nesedí.
-  const trida = params.trida && gradeOptions.some((grade) => grade.id === params.trida) ? params.trida : ''
+  const account = await pageAccount()
+  const gradeOptions = await loadTestGradeOptions(account, kind)
+  // A foreign or stale grade from a link behaves as "Všechny třídy" (all
+  // grades), not as a filter nothing matches.
+  const grade = params.trida && gradeOptions.some((grade) => grade.id === params.trida) ? params.trida : ''
 
-  const conditions = testConditions(ucet, {
+  const conditions = testConditions(account, {
     search,
     templateId: templateId || undefined,
-    gradeId: trida || undefined,
+    gradeId: grade || undefined,
     kind,
   })
   const where = conditions.length > 0 ? and(...conditions) : undefined
@@ -73,15 +75,15 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
         variants: tests.variants,
         updatedAt: tests.updatedAt,
         templateName: templates.name,
-        // Prázdné u testu bez třídy — `left join` na `grades`/`subjects` dá
-        // v tom případě samé `null`.
+        // Empty for a test without a grade — the `left join` on `grades`/`subjects`
+        // yields only `null` in that case.
         gradeLabel: sql<string | null>`
           case when ${grades.id} is not null then ${subjects.name} || ' · ' || ${grades.name} else null end
         `,
-        // Téma listu; smazané téma se vyprázdní a list se ukáže jako volné zadání.
+        // The worksheet topic; a deleted topic becomes empty and the worksheet shows as free-form.
         topicName: topics.name,
-        // Nasdílenou písemku kolegyně jde otevřít a zkopírovat, ne upravit či smazat.
-        mine: sql<boolean>`${tests.ownerId} = ${ucet.userId}`.mapWith(Boolean),
+        // A colleague's shared test can be opened and copied, not edited or deleted.
+        mine: sql<boolean>`${tests.ownerId} = ${account.userId}`.mapWith(Boolean),
         questionCount: sql<number>`(
           select count(*) from ${testItems}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'
@@ -90,9 +92,9 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
           select count(*) from ${testItems}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} != 'page_break'
         )`,
-        // Body stejně jako v editoru a v PDF: přednost má zmrazený snímek
-        // otázky, živá otázka z banky jen tam, kde snímek chybí. Rozbitý JSON
-        // by `json_extract` shodil celý dotaz, proto napřed `json_valid`.
+        // Points as in the editor and the PDF: the frozen question snapshot wins,
+        // the live bank question only where the snapshot is missing. Broken JSON
+        // would make `json_extract` fail the whole query, hence `json_valid` first.
         points: sql<number>`(
           select coalesce(sum(coalesce(
             ${testItems.pointsOverride},
@@ -121,18 +123,18 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
     db
       .select({ id: templates.id, name: templates.name })
       .from(templates)
-      .where(skola(ucet, templates))
+      .where(inSchool(account, templates))
       .orderBy(asc(templates.name)),
   ])
 
   const total = Number(totalRow?.value ?? 0)
-  const filtered = Boolean(search.trim()) || Boolean(templateId) || Boolean(trida)
+  const filtered = Boolean(search.trim()) || Boolean(templateId) || Boolean(grade)
 
-  /** Odkaz na tutéž stránku s vyšším limitem — další položky dotáhne server. */
+  /** Link to the same page with a higher limit — the server fetches more items. */
   const moreParams = new URLSearchParams()
   if (search.trim()) moreParams.set('q', search.trim())
   if (templateId) moreParams.set('templateId', templateId)
-  if (trida) moreParams.set('trida', trida)
+  if (grade) moreParams.set('trida', grade)
   moreParams.set('limit', String(limit + PAGE_SIZE))
 
   return (
@@ -164,18 +166,18 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
               search={search}
               templateId={templateId}
               templates={templateRows}
-              gradeId={trida}
+              gradeId={grade}
               grades={gradeOptions}
             />
 
             {rows.length === 0 ? (
               <div className="mt-4">
                 <EmptyState
-                  title="Filtru nic neodpovídá"
-                  hint="Zkus jiné slovo v názvu, jinou šablonu nebo třídu."
+                  title={t('tests:overview.noMatch.title')}
+                  hint={t('tests:overview.noMatch.hint')}
                   action={
                     <Link href={basePath}>
-                      <Button variant="outline">Zrušit filtry</Button>
+                      <Button variant="outline">{t('tests:overview.noMatch.clear')}</Button>
                     </Link>
                   }
                 />
@@ -187,7 +189,7 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
             {total > rows.length ? (
               <div className="mt-3 flex justify-center">
                 <Link href={`${basePath}?${moreParams.toString()}`} scroll={false}>
-                  <Button variant="outline">Načíst další ({total - rows.length})</Button>
+                  <Button variant="outline">{t('tests:overview.loadMore', { count: total - rows.length })}</Button>
                 </Link>
               </div>
             ) : null}

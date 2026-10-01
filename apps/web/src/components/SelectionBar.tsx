@@ -1,13 +1,15 @@
 'use client'
 
-import { BusyButton, Button, plural } from '@testmaker/ui'
+import { BusyButton, Button } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Lepivá lišta dole nad seznamem otázek tématu: kolik jich je vybraných a
- * kolik dají dohromady bodů, s tlačítkem na založení testu rovnou z výběru.
+ * Sticky bar below the topic's question list: how many are selected and how
+ * many points they add up to, with a button to create a test straight from
+ * the selection.
  *
- * `surface-chrome`, protože lišta je ovládací plocha nad obsahem, ne obsah
- * sám — stejně jako horní navigace.
+ * `surface-chrome`, because the bar is a control surface over the content,
+ * not content itself — just like the top navigation.
  */
 export function SelectionBar({
   count,
@@ -19,7 +21,7 @@ export function SelectionBar({
 }: {
   count: number
   points: number
-  /** Kolik z vybraných otázek aktuální filtr v seznamu schovává. */
+  /** How many of the selected questions the current list filter hides. */
   hiddenCount?: number
   busy: boolean
   onCreate: () => void
@@ -28,17 +30,17 @@ export function SelectionBar({
   return (
     <div className="surface-chrome sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-inner)] border border-line bg-surface px-4 py-3">
       <span className="text-sm font-medium text-fg">
-        Vybráno {count} · {points} {plural(points, 'bod', 'body', 'bodů')}
+        {t('library:selectionBar.selected', { selected: count })} · {t('library:selectionBar.points', { count: points })}
         {hiddenCount > 0 ? (
-          <span className="text-fg-muted"> ({hiddenCount} skryté filtrem)</span>
+          <span className="text-fg-muted"> {t('library:selectionBar.hiddenByFilter', { count: hiddenCount })}</span>
         ) : null}
       </span>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" disabled={busy} onClick={onClear}>
-          Zrušit výběr
+          {t('library:selectionBar.clear')}
         </Button>
-        <BusyButton size="sm" busy={busy} busyLabel="Vytvářím…" onClick={onCreate}>
-          Vytvořit test
+        <BusyButton size="sm" busy={busy} busyLabel={t('library:selectionBar.creating')} onClick={onCreate}>
+          {t('library:selectionBar.createTest')}
         </BusyButton>
       </div>
     </div>

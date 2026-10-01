@@ -10,16 +10,17 @@ import {
   type QuestionType,
 } from '@testmaker/core/schema'
 import { assets, db, grades, materials, questions, testItems, topics, type QuestionRow } from '@/db'
-import { skola, type Scope } from './uzivatel'
+import { inSchool, type Scope } from './user'
 import { newId } from './ids'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Banka je společná pro celou školu: schvaluje a opravuje kdokoli, kdo smí
- * měnit obsah. Co společné není, je škola sama — rozsah proto chodí jako
- * první parametr a bez něj se dotaz nedá napsat.
+ * The bank is shared by the whole school: anyone allowed to change content
+ * approves and fixes questions. What isn't shared is the school itself — the
+ * scope is therefore the first parameter and no query can be written without it.
  */
 
-/** Řádek z databáze na doménovou otázku. */
+/** Database row to domain question. */
 export function toQuestion(row: QuestionRow): Question {
   return {
     id: row.id,
@@ -48,30 +49,30 @@ export interface QuestionFilter {
   limit?: number
 }
 
-/** Kolik otázek `loadQuestions` vrátí, když si volající neřekne jinak. */
+/** How many questions `loadQuestions` returns unless the caller says otherwise. */
 export const QUESTION_LIST_LIMIT = 500
 
 export interface QuestionList {
   items: Question[]
   /**
-   * Otázek bylo víc, než se vešlo do limitu — vrácený seznam tedy není úplný.
-   * Volající to musí dát najevo: mlčky useknutý seznam vypadá jako všechny
-   * otázky a učitelka by marně hledala tu, která v něm prostě není.
+   * There were more questions than the limit — the returned list is incomplete.
+   * The caller must show it: a silently truncated list looks like all the
+   * questions and the teacher would search in vain for one that just isn't there.
    */
   truncated: boolean
-  /** Limit, o který se seznam usekl — do hlášky pro učitelku. */
+  /** The limit the list was cut at — for the teacher-facing message. */
   limit: number
 }
 
 export async function loadQuestions(scope: Scope, filter: QuestionFilter = {}): Promise<QuestionList> {
   const limit = filter.limit ?? QUESTION_LIST_LIMIT
-  const conditions: SQL[] = [skola(scope, questions)]
+  const conditions: SQL[] = [inSchool(scope, questions)]
   if (filter.topicIds?.length) conditions.push(inArray(questions.topicId, filter.topicIds))
   if (filter.types?.length) conditions.push(inArray(questions.type, filter.types))
   if (filter.statuses?.length) conditions.push(inArray(questions.status, filter.statuses))
   if (filter.materialId) conditions.push(eq(questions.materialId, filter.materialId))
 
-  // O jednu navíc: podle toho se pozná, že seznam není úplný.
+  // One extra: tells whether the list is incomplete.
   const rows = await db
     .select()
     .from(questions)
@@ -91,47 +92,46 @@ export async function loadQuestions(scope: Scope, filter: QuestionFilter = {}): 
   }
 }
 
-/** Veškerý text otázky pro fulltextové hledání. */
+/** All question text for full-text search. */
 export function questionText(question: Question): string {
   return JSON.stringify(question.payload)
 }
 
 /**
- * Obsah sloupce `questions.search_text`: všechen text otázky malými písmeny.
+ * Content of the `questions.search_text` column: all question text in lower case.
  *
- * Malá písmena se dělají tady v JavaScriptu, ne až v dotazu — `lower()`
- * v SQLite umí jen ASCII a hledání podle „řeka“ by minulo otázku, která má
- * v zadání „Řeka“. Uloží se proto rovnou převedené a hledá se nad tím.
+ * Lower-casing happens here in JavaScript, not in the query — SQLite's `lower()`
+ * only handles ASCII and a search for "řeka" would miss a question whose prompt
+ * has "Řeka". So the folded text is stored and searched directly.
  */
 export function searchTextFor(content: { payload: unknown; explanation?: string | null }): string {
   return `${JSON.stringify(content.payload)} ${content.explanation ?? ''}`.toLocaleLowerCase('cs')
 }
 
 /**
- * Podmínka hledání nad `search_text`. Procenta a podtržítka v hledaném textu
- * jsou v `LIKE` zástupné znaky — kdo hledá „50 %", nechce dostat všechno.
+ * Search condition over `search_text`. Percent signs and underscores in the
+ * search text are `LIKE` wildcards — searching for "50 %" shouldn't match everything.
  */
 export function searchCondition(search: string): SQL | null {
   const needle = search.trim().toLocaleLowerCase('cs')
   if (!needle) return null
-  const pattern = `%${needle.replace(/[\\%_]/g, (znak) => `\\${znak}`)}%`
+  const pattern = `%${needle.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
   return sql`${questions.searchText} like ${pattern} escape '\\'`
 }
 
-/** Zadání otázky pro výpis v seznamu. */
+/** Question prompt for list display. */
 export function questionPrompt(question: { payload: unknown }): string {
   const payload = question.payload as { prompt?: string; text?: string }
-  return payload.prompt || payload.text?.slice(0, 160) || '(bez zadání)'
+  return payload.prompt || payload.text?.slice(0, 160) || t('library:questions.noPrompt')
 }
 
 /**
- * Zadání otázek tématu pro seznam „těmhle se vyhni" v promptu.
+ * Prompts of the topic's questions for the "avoid these" list in the prompt.
  *
- * Bere se přesně tolik, kolik se do promptu vejde (`AI_SETTINGS.avoidLimit`), a od těch
- * nejnovějších: právě jim se model musí vyhnout nejvíc, protože z nich se
- * naposledy generovalo. Dřív se načítalo osmdesát otázek bez řazení, takže
- * o výběru rozhodovalo pořadí řádků v databázi, a prompt pak seznam ořezával
- * podruhé.
+ * Takes exactly as many as fit in the prompt (`AI_SETTINGS.avoidLimit`), newest
+ * first: those are what the model must avoid most, since they were generated
+ * last. Previously eighty questions were loaded unordered, so the database row
+ * order decided the selection, and the prompt then trimmed the list a second time.
  */
 export async function loadAvoidPrompts(
   scope: Scope,
@@ -141,13 +141,13 @@ export async function loadAvoidPrompts(
   const rows = await db
     .select({ payload: questions.payload })
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.topicId, topicId)))
+    .where(and(inSchool(scope, questions), eq(questions.topicId, topicId)))
     .orderBy(desc(questions.createdAt), desc(questions.id))
     .limit(limit)
   return rows.map((row) => questionPrompt(row))
 }
 
-/** Jedna verze kořenové otázky, jak ji potřebuje karta otázky v přehledu. */
+/** One version of a root question, as the question card in the overview needs it. */
 export interface VariantLink {
   id: string
   difficulty: 1 | 2 | 3
@@ -155,12 +155,12 @@ export interface VariantLink {
 }
 
 /**
- * Verze (lehčí/těžší) otázek zadaných v `questionIds`, podle kořene.
+ * Versions (easier/harder) of the questions in `questionIds`, grouped by root.
  *
- * Otázka může být sama kořenem svých verzí i mít verze cizí — proto se ptá na
- * `variantOf` napříč celou otázkou, ne jen na to, čí je `questionIds` sama.
- * Karta otázky nad kořenem pak vidí všechny své verze pohromadě, ať se dívá
- * na kořen nebo na jednu z jeho verzí.
+ * A question can be the root of its own versions and also a version of another
+ * — so `variantOf` is queried across the whole question, not just whose
+ * `questionIds` it is. The card over a root then sees all its versions together,
+ * whether it shows the root or one of its versions.
  */
 export async function loadVariantLinks(
   scope: Scope,
@@ -170,7 +170,7 @@ export async function loadVariantLinks(
   const rows = await db
     .select({ id: questions.id, variantOf: questions.variantOf, difficulty: questions.difficulty, status: questions.status })
     .from(questions)
-    .where(and(skola(scope, questions), inArray(questions.variantOf, questionIds)))
+    .where(and(inSchool(scope, questions), inArray(questions.variantOf, questionIds)))
 
   const result: Record<string, VariantLink[]> = {}
   for (const row of rows) {
@@ -182,17 +182,18 @@ export async function loadVariantLinks(
 }
 
 /**
- * Materiály tématu podle názvu souboru, pro dohledání původu otázky.
+ * The topic's materials by file name, for tracing a question's origin.
  *
- * Generování běží nad celým tématem, takže volající materiál nezná — jediné,
- * co o původu otázky víme, je název souboru z dokladu (`evidence.fileName`,
- * záhlaví `=== … ===` ve zdrojovém textu). Vazba je přitom potřeba: když se
- * materiál přesune do jiného tématu, mají s ním odejít i jeho otázky.
+ * Generation runs over the whole topic, so the caller doesn't know the material
+ * — the only thing we know about a question's origin is the file name from its
+ * evidence (`evidence.fileName`, the `=== … ===` header in the source text). The
+ * link is needed though: when a material moves to another topic, its questions
+ * must move with it.
  *
- * Název souboru se smí v tématu opakovat (tentýž název na jiné cestě). Takový
- * název se do mapy nedostane vůbec: přiřadit otázku k jednomu ze dvou stejně
- * pojmenovaných materiálů by byla hádanka, a přesunout ji podle špatného
- * tipu je horší, než ji nechat být.
+ * A file name may repeat within a topic (same name on another path). Such a
+ * name never enters the map: assigning the question to one of two identically
+ * named materials would be a guess, and moving it on a wrong guess is worse
+ * than leaving it alone.
  */
 async function materialsByFileName(
   scope: Scope,
@@ -201,7 +202,7 @@ async function materialsByFileName(
   const rows = await db
     .select({ id: materials.id, fileName: materials.fileName })
     .from(materials)
-    .where(and(skola(scope, materials), eq(materials.topicId, topicId)))
+    .where(and(inSchool(scope, materials), eq(materials.topicId, topicId)))
 
   const byName = new Map<string, string | null>()
   for (const row of rows) byName.set(row.fileName, byName.has(row.fileName) ? null : row.id)
@@ -216,12 +217,12 @@ export async function insertQuestions(
     materialId?: string | null
     source?: 'ai' | 'manual'
     status?: QuestionStatus
-    /** Kořen, jehož je vkládaná otázka lehčí nebo těžší verzí. */
+    /** Root of which the inserted question is an easier or harder version. */
     variantOf?: string | null
   },
 ): Promise<string[]> {
   if (items.length === 0) return []
-  // Materiál od volajícího má přednost; jinak se hledá podle dokladu původu.
+  // The caller's material wins; otherwise it is looked up from the evidence.
   const byName =
     context.materialId === undefined && items.some((item) => item.evidence)
       ? await materialsByFileName(scope, context.topicId)
@@ -232,14 +233,14 @@ export async function insertQuestions(
     return {
       id: newId(),
       schoolId: scope.schoolId,
-      // Kdo otázku nechal vzniknout. U běhu z fronty je to zadavatelka úlohy,
-      // ne ten, kdo zrovna otevřel okno.
+      // Who caused the question to be created. For a queued run that's the
+      // job's requester, not whoever happens to have the window open.
       createdBy: scope.userId,
       topicId: context.topicId,
       variantOf: context.variantOf ?? null,
-      // Podle `item.evidence`, ne podle `evidence`: bez citace se doklad
-      // normalizuje na null, ale název souboru v něm pořád je a na dohledání
-      // materiálu stačí.
+      // From `item.evidence`, not `evidence`: without a quote the evidence is
+      // normalised to null, but the file name is still in it and is enough to
+      // find the material.
       materialId: context.materialId ?? (item.evidence ? (byName.get(item.evidence.fileName) ?? null) : null),
       type: item.type,
       payload: item.payload,
@@ -249,8 +250,8 @@ export async function insertQuestions(
       explanation: item.explanation ?? null,
       searchText: searchTextFor(item),
       source: context.source ?? 'ai',
-      // Schvalování konceptů zmizelo — otázka je rovnou použitelná. `draft`
-      // zůstává v `QuestionStatus` jen kvůli starším řádkům a návratu migrace.
+      // Draft approval is gone — the question is usable right away. `draft`
+      // stays in `QuestionStatus` only for older rows and the migration rollback.
       status: context.status ?? 'approved',
       sourceFile: evidence?.fileName ?? null,
       sourceQuote: evidence?.quote ?? null,
@@ -260,7 +261,7 @@ export async function insertQuestions(
   return rows.map((row) => row.id)
 }
 
-/** Přílohy (`assets`), na které se odkazuje zadání otázky nebo její přílohové bloky. */
+/** Assets referenced by the question prompt or its asset blocks. */
 function referencedAssetIds(row: {
   type: QuestionRow['type']
   payload: QuestionRow['payload']
@@ -278,15 +279,16 @@ function referencedAssetIds(row: {
 }
 
 /**
- * Smaže otázky a uvolněné přílohy (`assets`), na které se odkazovaly jejich
- * bloky nebo payload typu `label_image` — jinak by obrázek zůstal v databázi
- * navždy i po smazání jediné otázky, která ho používala.
+ * Deletes questions and freed assets referenced by their blocks or a
+ * `label_image` payload — otherwise the image would stay in the database
+ * forever even after the only question using it was deleted.
  *
- * `test_items.question_id` na smazanou otázku odkazuje s `onDelete: 'set null'`
- * — položka v hotovém testu se tím neztratí, protože co je na papíře, drží
- * `question_snapshot`. Proto se do kontroly použití počítají i přílohy
- * odkazované ze zmrazených snímků, ne jen z živých otázek — jinak by smazání
- * otázky z banky vzalo obrázek i testu, který si ji zamrazil.
+ * `test_items.question_id` references the deleted question with
+ * `onDelete: 'set null'` — the item in a finished test isn't lost, because
+ * what's on paper is held by `question_snapshot`. That's why the usage check
+ * also counts assets referenced from frozen snapshots, not just live questions
+ * — otherwise deleting a question from the bank would take the image from a
+ * test that froze it too.
  */
 export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Promise<void> {
   if (ids.length === 0) return
@@ -294,38 +296,38 @@ export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Pr
   const targets = await db
     .select({ id: questions.id, type: questions.type, payload: questions.payload, blocks: questions.blocks })
     .from(questions)
-    .where(and(skola(scope, questions), inArray(questions.id, ids)))
+    .where(and(inSchool(scope, questions), inArray(questions.id, ids)))
 
   const candidateAssetIds = new Set<string>()
   for (const row of targets) {
     for (const assetId of referencedAssetIds(row)) candidateAssetIds.add(assetId)
   }
 
-  // Maže se jen to, co skutečně patří téhle škole — cizí id se tiše přeskočí.
-  const mazane = targets.map((row) => row.id)
-  if (mazane.length === 0) return
-  await db.delete(questions).where(inArray(questions.id, mazane))
+  // Only what really belongs to this school is deleted — foreign ids are silently skipped.
+  const deletedIds = targets.map((row) => row.id)
+  if (deletedIds.length === 0) return
+  await db.delete(questions).where(inArray(questions.id, deletedIds))
 
   if (candidateAssetIds.size === 0) return
 
   const remaining = await db
     .select({ type: questions.type, payload: questions.payload, blocks: questions.blocks })
     .from(questions)
-    .where(skola(scope, questions))
+    .where(inSchool(scope, questions))
   for (const row of remaining) {
     for (const assetId of referencedAssetIds(row)) candidateAssetIds.delete(assetId)
   }
 
   /*
-   * Zmrazené snímky se čtou napříč všemi učitelkami školy, ne jen svoje:
-   * kdyby se obrázek smazal jen proto, že ho drží cizí už vytištěná písemka,
-   * zmizel by jí ze zadání. Je to jediné místo, kde se do cizích testů sahá,
-   * a nevychází z něj nic než identifikátory příloh.
+   * Frozen snapshots are read across all teachers of the school, not just
+   * one's own: if an image were deleted only because someone else's already
+   * printed test holds it, it would vanish from that test. This is the only
+   * place that reaches into other people's tests, and nothing but asset ids comes out of it.
    */
   const snapshotRows = await db
     .select({ questionSnapshot: testItems.questionSnapshot })
     .from(testItems)
-    .where(skola(scope, testItems))
+    .where(inSchool(scope, testItems))
   for (const row of snapshotRows) {
     const snapshot = parseQuestionSnapshot(row.questionSnapshot)
     if (!snapshot) continue
@@ -337,10 +339,10 @@ export async function deleteQuestionsWithAssets(scope: Scope, ids: string[]): Pr
 }
 
 /**
- * Filtr pro stránkovanou frontu (`GET /api/questions` — dnes hlavně panel
- * „Smazané" v tématu). Na rozdíl od `QuestionFilter` výš míří na jedno patro
- * knihovny (téma, ročník, předmět), ne na výčet témat — seznam témat celého
- * předmětu by se do adresy nevešel.
+ * Filter for the paged queue (`GET /api/questions` — today mainly the
+ * "Smazané" panel in a topic). Unlike `QuestionFilter` above it targets one
+ * library level (topic, grade, subject), not a list of topics — the topic list
+ * of a whole subject wouldn't fit in the URL.
  */
 export interface QuestionQuery {
   statuses?: QuestionStatus[]
@@ -348,26 +350,26 @@ export interface QuestionQuery {
   topicId?: string
   gradeId?: string
   subjectId?: string
-  /** Hledaný text; porovnává se se sloupcem `search_text`. */
+  /** Search text; compared against the `search_text` column. */
   search?: string
 }
 
-/** Kolik otázek se v jedné stránce fronty načte, když si volající neřekne jinak. */
+/** How many questions one queue page loads unless the caller says otherwise. */
 export const QUESTION_PAGE_SIZE = 20
 
 export interface QuestionCursor {
-  /** Hodnota řadicího sloupce poslední přečtené položky — `createdAt` (výchozí
-   *  řazení) nebo `reviewedAt`/`createdAt` u řazení „Smazané" od nejnovějších. */
+  /** Sort column value of the last item read — `createdAt` (default order)
+   *  or `reviewedAt`/`createdAt` for the newest-first "Smazané" order. */
   at: string
   id: string
 }
 
 /**
- * Kurzor je poslední přečtená dvojice (řadicí sloupec, id) v base64. Stránkuje
- * se kurzorem, ne offsetem: schválením otázka z výsledku vypadne a offset by
- * o tolik položek přeskočil dál — učitelka by je nikdy neuviděla.
+ * The cursor is the last read pair (sort column, id) in base64. Paging uses a
+ * cursor, not an offset: approving a question drops it from the result and an
+ * offset would skip that many items — the teacher would never see them.
  *
- * Oddělovačem je svislítko: v čase ve tvaru ISO ani v id (nanoid) se nevyskytuje.
+ * The separator is a pipe: it never occurs in an ISO timestamp or an id (nanoid).
  */
 export function encodeCursor(cursor: QuestionCursor): string {
   return Buffer.from(`${cursor.at}|${cursor.id}`, 'utf8').toString('base64url')
@@ -380,9 +382,9 @@ export function decodeCursor(value: string | null | undefined): QuestionCursor |
   return { at, id }
 }
 
-/** Podmínky filtru; patro knihovny nad tématem se řeší poddotazem nad `topics`. */
+/** Filter conditions; library levels above the topic use a subquery over `topics`. */
 function queryConditions(scope: Scope, query: QuestionQuery): SQL[] {
-  const conditions: SQL[] = [skola(scope, questions)]
+  const conditions: SQL[] = [inSchool(scope, questions)]
   if (query.statuses?.length) conditions.push(inArray(questions.status, query.statuses))
   if (query.types?.length) conditions.push(inArray(questions.type, query.types))
   if (query.topicId) conditions.push(eq(questions.topicId, query.topicId))
@@ -393,7 +395,7 @@ function queryConditions(scope: Scope, query: QuestionQuery): SQL[] {
         db
           .select({ id: topics.id })
           .from(topics)
-          .where(and(skola(scope, topics), eq(topics.gradeId, query.gradeId))),
+          .where(and(inSchool(scope, topics), eq(topics.gradeId, query.gradeId))),
       ),
     )
   }
@@ -405,7 +407,7 @@ function queryConditions(scope: Scope, query: QuestionQuery): SQL[] {
           .select({ id: topics.id })
           .from(topics)
           .innerJoin(grades, eq(grades.id, topics.gradeId))
-          .where(and(skola(scope, topics), eq(grades.subjectId, query.subjectId))),
+          .where(and(inSchool(scope, topics), eq(grades.subjectId, query.subjectId))),
       ),
     )
   }
@@ -416,7 +418,7 @@ function queryConditions(scope: Scope, query: QuestionQuery): SQL[] {
   return conditions
 }
 
-/** Kolik otázek filtru odpovídá — číslo „zbývá" nad frontou. */
+/** How many questions match the filter — the "remaining" number above the queue. */
 export async function countQuestions(scope: Scope, query: QuestionQuery = {}): Promise<number> {
   const conditions = queryConditions(scope, query)
   const [row] = await db
@@ -427,14 +429,13 @@ export async function countQuestions(scope: Scope, query: QuestionQuery = {}): P
 }
 
 /**
- * Jedna stránka fronty. Řadí se podle `createdAt` a `id` vzestupně (výchozí),
- * dvojice je jednoznačná (v jedné milisekundě může vzniknout otázek víc
- * najednou), takže se při posunu kurzorem žádná otázka nezopakuje ani
- * nevynechá.
+ * One queue page. Sorted by `createdAt` and `id` ascending (default); the pair
+ * is unique (several questions can be created in one millisecond), so moving
+ * the cursor never repeats or skips a question.
  *
- * `order: 'desc'` řadí od nejnovějších podle toho, kdy se s otázkou naposledy
- * něco dělo (`reviewedAt`, u otázek bez zásahu `createdAt`) — používá to panel
- * „Smazané" v tématu, kde má být nahoře to, co učitelka smazala jako poslední.
+ * `order: 'desc'` sorts newest first by when something last happened to the
+ * question (`reviewedAt`, or `createdAt` for untouched questions) — used by the
+ * "Smazané" panel in a topic, where what the teacher deleted last belongs on top.
  */
 export async function loadQuestionPage(
   scope: Scope,
@@ -445,9 +446,9 @@ export async function loadQuestionPage(
   const order = options.order ?? 'asc'
   const conditions = queryConditions(scope, query)
 
-  // Vzestupné řazení (fronta) stojí čistě na `createdAt`; sestupné (panel
-  // „Smazané") na okamžiku poslední změny stavu, s `createdAt` jako náhradou
-  // pro otázky, které ještě žádný zásah nemají.
+  // Ascending order (queue) relies purely on `createdAt`; descending ("Smazané"
+  // panel) on the moment of the last status change, with `createdAt` as a
+  // fallback for questions nobody has touched yet.
   const sortColumn: SQL<string> =
     order === 'desc'
       ? sql<string>`coalesce(${questions.reviewedAt}, ${questions.createdAt})`
@@ -462,7 +463,7 @@ export async function loadQuestionPage(
     if (after) conditions.push(after)
   }
 
-  // O jednu navíc: podle toho se pozná, jestli má smysl nabízet další stránku.
+  // One extra: tells whether offering another page makes sense.
   const rows = await db
     .select()
     .from(questions)
@@ -483,10 +484,10 @@ export async function loadQuestionPage(
 }
 
 /**
- * Hromadná změna stavu celého tématu. Posílat tisíc identifikátorů jen proto,
- * aby se schválilo jedno téma, nemá smysl — sem jde jen id tématu a výchozí
- * stav. Vrací id skutečně změněných otázek, aby šlo akci vzít zpět přesně:
- * otázky, které v cílovém stavu byly už předtím, se vracet nesmějí.
+ * Bulk status change of a whole topic. Sending a thousand ids just to approve
+ * one topic makes no sense — only the topic id and the source status go here.
+ * Returns the ids of the questions actually changed so the action can be undone
+ * precisely: questions already in the target status must not be reverted.
  */
 export async function setStatusForTopic(
   scope: Scope,
@@ -495,7 +496,7 @@ export async function setStatusForTopic(
   to: QuestionStatus,
 ): Promise<string[]> {
   const where = and(
-    skola(scope, questions),
+    inSchool(scope, questions),
     eq(questions.topicId, topicId),
     eq(questions.status, from),
   )

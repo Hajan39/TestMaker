@@ -2,15 +2,15 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QuestionContent } from '@testmaker/core/schema'
 import type { generateQuestions } from '@testmaker/core/ai'
-import { UCET } from './helpers'
+import { ACCOUNT } from './helpers'
 
 /**
- * Běh jedné úlohy z fronty. Model se sem nikdy nesmí zavolat doopravdy —
- * `@testmaker/core/ai` je proto podvržený a `generateQuestions` vrací hotovou
- * otázku. Kdyby modul kdokoli obešel, test spadne na tom, že se nevolala atrapa.
+ * Running one job from the queue. The model must never really be called here —
+ * `@testmaker/core/ai` is mocked and `generateQuestions` returns a ready question.
+ * If anyone bypassed the module, the test fails because the fake wasn't called.
  */
 
-const OTAZKA: QuestionContent = {
+const QUESTION: QuestionContent = {
   type: 'single_choice',
   payload: { prompt: 'Kde probíhá fotosyntéza?', options: ['V kořenech', 'V listech'], correctIndex: 1 },
   blocks: [],
@@ -19,7 +19,7 @@ const OTAZKA: QuestionContent = {
 }
 
 const model = vi.hoisted(() => ({
-  /** Co má podvržené generování udělat; jednotlivé testy si to přenastaví. */
+  /** What the fake generation should do; individual tests override it. */
   impl: null as null | typeof generateQuestions,
   calls: 0,
 }))
@@ -49,7 +49,7 @@ const TEXT = 'Fotosyntéza probíhá v chloroplastech zelených rostlin a vznik�
 
 const PARAMS: GenerationJobParams = { count: 1, types: ['single_choice'], difficulty: 2, mode: 'add' }
 
-/** Úloha ve frontě nad tématem s dost dlouhým materiálem. */
+/** A queued job over a topic with a long enough material. */
 async function queueJob(
   options: { status?: 'queued' | 'running'; startedAt?: string | null; text?: string } = {},
 ): Promise<{ jobId: string; topicId: string }> {
@@ -58,8 +58,8 @@ async function queueJob(
   const jobId = newId()
   await db.insert(generationJobs).values({
     id: jobId,
-    schoolId: UCET.schoolId,
-    requestedBy: UCET.userId,
+    schoolId: ACCOUNT.schoolId,
+    requestedBy: ACCOUNT.userId,
     topicId,
     params: PARAMS,
     status: options.status ?? 'queued',
@@ -77,11 +77,11 @@ beforeEach(async () => {
   aiConfigured = true
   model.calls = 0
   model.impl = async (_request, options) => {
-    // Skutečné generování ukládá otázky průběžně přes `onBatch`; atrapa se
-    // musí chovat stejně, jinak by úloha skončila s nulou vytvořených otázek.
-    await options?.onBatch?.([OTAZKA], { model: 'google:gemini-flash-latest' })
+    // Real generation saves questions as it goes via `onBatch`; the fake must
+    // behave the same, otherwise the job would end with zero questions created.
+    await options?.onBatch?.([QUESTION], { model: 'google:gemini-flash-latest' })
     return {
-      questions: [OTAZKA],
+      questions: [QUESTION],
       rejected: [],
       chunks: 1,
       failedCalls: [],
@@ -91,8 +91,8 @@ beforeEach(async () => {
   await db.delete(generationJobs)
 })
 
-describe('zpracování úlohy z fronty', () => {
-  it('bez nastaveného modelu odpoví 503 a nic nezpracuje', async () => {
+describe('processing a queued job', () => {
+  it('without a configured model responds 503 and processes nothing', async () => {
     aiConfigured = false
     await queueJob()
 
@@ -101,12 +101,12 @@ describe('zpracování úlohy z fronty', () => {
     expect(model.calls).toBe(0)
   })
 
-  it('prázdná fronta není chyba', async () => {
+  it('an empty queue is not an error', async () => {
     const body = (await (await POST()).json()) as { processed: boolean; remaining: number }
     expect(body).toMatchObject({ processed: false, remaining: 0 })
   })
 
-  it('vezme nejstarší čekající úlohu, dokončí ji a zapíše počet otázek', async () => {
+  it('takes the oldest queued job, finishes it and records the question count', async () => {
     const { jobId } = await queueJob()
 
     const body = (await (await POST()).json()) as { processed: boolean; created: number; remaining: number }
@@ -119,25 +119,25 @@ describe('zpracování úlohy z fronty', () => {
     expect(job?.finishedAt).toBeTruthy()
   })
 
-  it('volání modelu z fronty se zapíše bez uživatele', async () => {
+  it('a model call from the queue is recorded without a user', async () => {
     const { aiCalls } = await import('@/db')
     await db.delete(aiCalls)
-    const puvodni = model.impl!
+    const original = model.impl!
     model.impl = async (request, options) => {
       options?.onCall?.({ model: 'google:a', outcome: 'ok', inputTokens: 1, outputTokens: 2, durationMs: 3 })
-      return puvodni(request, options)
+      return original(request, options)
     }
     await queueJob()
     await POST()
 
     await vi.waitFor(async () => {
       expect(await db.select().from(aiCalls)).toMatchObject([
-        { schoolId: UCET.schoolId, userId: null, task: 'otazky', model: 'google:a' },
+        { schoolId: ACCOUNT.schoolId, userId: null, task: 'otazky', model: 'google:a' },
       ])
     })
   })
 
-  it('zbývající úlohy se počítají, ať rozhraní ví, že má volat znovu', async () => {
+  it('remaining jobs are counted so the UI knows to call again', async () => {
     await queueJob()
     await queueJob()
 
@@ -145,7 +145,7 @@ describe('zpracování úlohy z fronty', () => {
     expect(body.remaining).toBe(1)
   })
 
-  it('selhání modelu skončí u úlohy českou hláškou, ne pádem', async () => {
+  it('a model failure ends the job with a user-facing message, not a crash', async () => {
     const { jobId } = await queueJob()
     model.impl = async () => {
       throw new Error('You exceeded your current quota, please check your plan')
@@ -160,7 +160,7 @@ describe('zpracování úlohy z fronty', () => {
     expect(job?.error).toBeTruthy()
   })
 
-  it('téma bez dost textu skončí chybou u úlohy, model se nevolá', async () => {
+  it('a topic without enough text ends the job with an error, the model is not called', async () => {
     const { jobId } = await queueJob({ text: 'Krátký text.' })
 
     const body = (await (await POST()).json()) as { error: string }
@@ -169,7 +169,7 @@ describe('zpracování úlohy z fronty', () => {
     expect((await jobRow(jobId))?.status).toBe('error')
   })
 
-  it('plánovač (GET) zpracuje úlohu stejně jako rozhraní (POST)', async () => {
+  it('the scheduler (GET) processes a job just like the UI (POST)', async () => {
     const { jobId } = await queueJob()
 
     const body = (await (await GET()).json()) as { processed: boolean }
@@ -178,24 +178,24 @@ describe('zpracování úlohy z fronty', () => {
   })
 })
 
-describe('zaseknuté úlohy', () => {
-  it('úloha běžící déle než limit se vrátí mezi čekající a hned zpracuje', async () => {
-    const davno = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const { jobId } = await queueJob({ status: 'running', startedAt: davno })
+describe('stuck jobs', () => {
+  it('a job running longer than the limit is requeued and processed right away', async () => {
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { jobId } = await queueJob({ status: 'running', startedAt: longAgo })
 
     const body = (await (await POST()).json()) as { revived?: number; processed: boolean }
     expect(body.processed).toBe(true)
     expect((await jobRow(jobId))?.status).toBe('done')
   })
 
-  it('běžící úloha bez času spuštění se taky vrátí — po pádu se téma nesmí zablokovat navždy', async () => {
+  it('a running job without a start time is requeued too — a crash must not block the topic forever', async () => {
     const { jobId } = await queueJob({ status: 'running', startedAt: null })
 
     await POST()
     expect((await jobRow(jobId))?.status).toBe('done')
   })
 
-  it('čerstvě běžící úloha se nesahá — právě se na ní pracuje', async () => {
+  it('a freshly running job is left alone — it is being worked on', async () => {
     const { jobId } = await queueJob({ status: 'running', startedAt: new Date().toISOString() })
 
     const body = (await (await POST()).json()) as { processed: boolean; revived: number }

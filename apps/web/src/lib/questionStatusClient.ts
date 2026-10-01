@@ -2,11 +2,12 @@
 
 import type { QuestionStatus } from '@testmaker/core/schema'
 import { planUndo } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Smazání otázky je jen změna stavu na `rejected` — otázka zmizí ze seznamů
- * i z výběru do testu, ale dá se vrátit. Uložené testy ji tisknou dál ze
- * svého snímku, takže je smazání nepoškodí.
+ * Deleting a question only changes its status to `rejected` — it disappears
+ * from the lists and from test selection, but can be restored. Saved tests
+ * keep printing it from their snapshot, so deleting does not break them.
  */
 async function writeStatus(ids: string[], status: QuestionStatus): Promise<void> {
   if (ids.length === 0) return
@@ -15,10 +16,10 @@ async function writeStatus(ids: string[], status: QuestionStatus): Promise<void>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ids, status }),
   })
-  if (!response.ok) throw new Error('Změnu se nepodařilo uložit. Zkus to prosím znovu.')
+  if (!response.ok) throw new Error(t('library:questionStatus.saveFailed'))
 }
 
-/** Smaže otázky a vrátí jejich stavy před smazáním (pro „Vrátit zpět"). */
+/** Deletes questions and returns their statuses from before the deletion (for „Vrátit zpět"). */
 export async function rejectQuestions(
   questions: { id: string; status: QuestionStatus }[],
 ): Promise<[string, QuestionStatus][]> {
@@ -27,7 +28,7 @@ export async function rejectQuestions(
   return previous
 }
 
-/** Vrátí otázkám stavy, které měly před smazáním (mohly se lišit). */
+/** Restores the statuses questions had before deletion (they may have differed). */
 export async function restoreStatuses(previous: [string, QuestionStatus][]): Promise<void> {
   for (const step of planUndo(previous)) await writeStatus(step.ids, step.status)
 }

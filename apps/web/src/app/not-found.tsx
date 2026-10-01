@@ -1,19 +1,21 @@
 import Link from 'next/link'
 import { Button, EmptyState } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Obecná 404 pro adresy mimo témata a třídy (ty mají vlastní, konkrétnější
- * hlášku) — třeba překlep v adrese nebo starý odkaz na zrušenou stránku.
+ * Generic 404 for addresses outside topics and classes (those have their own,
+ * more specific message) — e.g. a typo in the address or an old link to a
+ * removed page.
  */
 export default function NotFound() {
   return (
     <div className="p-5">
       <EmptyState
-        title="Stránka neexistuje"
-        hint="Adresa je nejspíš neplatná nebo stránka mezitím zmizela."
+        title={t('auth:shell.notFoundTitle')}
+        hint={t('auth:shell.notFoundHint')}
         action={
           <Link href="/">
-            <Button>Domů</Button>
+            <Button>{t('common:actions.home')}</Button>
           </Link>
         }
       />

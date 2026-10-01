@@ -1,0 +1,76 @@
+{
+  "errors": {
+    "quotaExceeded": "Vyčerpaný limit modelu. U bezplatných tarifů se limit počítá na den — zkus to znovu zítra, případně dej vědět správci.",
+    "overloaded": "Model je právě přetížený. Zkus to za chvíli znovu, případně dej vědět správci.",
+    "accessDenied": "Generování teď nefunguje — přístup k modelu není v pořádku. Zkus to později, případně dej vědět správci.",
+    "modelUnavailable": "Generování teď nefunguje — nastavený model už není k dispozici. Zkus to později, případně dej vědět správci.",
+    "aborted": "Generování bylo přerušeno.",
+    "badShape": "Model odpověděl v jiném tvaru, než aplikace čeká. Zkus to znovu; když se to opakuje, dej vědět správci.",
+    "network": "Nepodařilo se spojit s modelem. Zkontroluj připojení k internetu a zkus to za chvíli znovu.",
+    "unknown": "Generování se nepovedlo kvůli neočekávané chybě modelu. Zkus to za chvíli znovu; když se to opakuje, dej vědět správci."
+  },
+  "setup": {
+    "notConfigured": "Generování není nastavené. Do .env.local přidej do AI_MODELS položku poskytovatel:model a k ní klíč (GOOGLE_GENERATIVE_AI_API_KEY, OPENROUTER_API_KEY nebo ANTHROPIC_API_KEY).",
+    "legacyVariable": "Proměnná {{name}} už se nepoužívá — model nastav v AI_MODELS (viz .env.example).",
+    "unknownProvider": "Položka „{{item}}\" v AI_MODELS nemá známého poskytovatele ({{providers}}).",
+    "missingKey": "K položce „{{item}}\" chybí klíč {{keyEnv}}.",
+    "emptyLadder": "V AI_MODELS není žádná položka poskytovatel:model.",
+    "noModel": "Žádný model není nastavený. Doplň do .env.local klíč a případně AI_MODELS."
+  },
+  "questions": {
+    "evidenceNotFound": "citace v evidence se v materiálu nenašla",
+    "referencesSource": "otázka odkazuje na materiál místo toho, aby stála sama"
+  },
+  "questionFile": {
+    "invalidJson": "Soubor není platný JSON. Nech ho v Claude Code zapsat znovu příkazem /otazky.",
+    "missingList": "V souboru chybí seznam otázek („questions\").",
+    "questionPath": "otázka",
+    "labelImageUnsupported": "popis obrázku se ze souboru nahrát nedá",
+    "duplicate": "stejná otázka už v tématu nebo v souboru je"
+  },
+  "puzzleWords": {
+    "wordCount_one": "{{count}} slovo",
+    "wordCount_few": "{{count}} slova",
+    "wordCount_other": "{{count}} slov",
+    "warnings": {
+      "noWords": "Model nevrátil žádné slovo.",
+      "noneUsable": "Model vrátil {{words}}, ale žádné se do hlavolamu nehodí.",
+      "noneUsableWithReasons": "Model vrátil {{words}}, ale žádné se do hlavolamu nehodí ({{reasons}}).",
+      "retryHint": "Zkus to znovu, případně zkontroluj, že téma má materiály s textem, nebo slova dopiš ručně.",
+      "fewUsable": "Použitelných slov je jen {{usable}} z {{requested}}. Když je potřebuješ víc, nech dogenerovat další, nebo je dopiš ručně.",
+      "missingLetters": "Na písmena tajenky {{letters}} zatím chybí slovo. Nech dogenerovat další slova, dopiš je ručně, nebo zvol jinou větu."
+    },
+    "rejected": {
+      "multipleWords": "je to víc slov, do hlavolamu patří jedno",
+      "unusableChars": "obsahuje znaky, které se do políček nezapíšou ({{chars}})",
+      "notInMaterial": "v materiálu se nenašlo",
+      "tooShort_one": "je kratší než {{count}} písmeno",
+      "tooShort_few": "je kratší než {{count}} písmena",
+      "tooShort_other": "je kratší než {{count}} písmen",
+      "tooLong_one": "je delší než {{count}} písmeno",
+      "tooLong_few": "je delší než {{count}} písmena",
+      "tooLong_other": "je delší než {{count}} písmen",
+      "notNominative": "není v 1. pádě jednotného čísla",
+      "missingClue": "chybí nápověda",
+      "clueTooLong_one": "nápověda je delší než {{count}} znak",
+      "clueTooLong_few": "nápověda je delší než {{count}} znaky",
+      "clueTooLong_other": "nápověda je delší než {{count}} znaků",
+      "clueReveals": "nápověda prozrazuje hledané slovo",
+      "alreadyInPuzzle": "už v hlavolamu je",
+      "duplicate": "je v seznamu podruhé",
+      "sameClue": "má stejnou nápovědu jako jiné slovo",
+      "noPhraseLetter": "neobsahuje žádné písmeno tajenky"
+    },
+    "adjusted": {
+      "fixedFromMaterial": "opraveno podle materiálu z „{{word}}\"",
+      "clueTrimmed": "nápověda zkrácena"
+    }
+  },
+  "worksheet": {
+    "tooFew": "Model nevrátil dost použitelných položek na pracovní list. Zkus to znovu, případně uprav pokyn (třeba méně druhů položek) nebo přidej vlastní text.",
+    "itemFailed": "Model nevrátil položku v pořádku. Zkus přegenerování znovu, nebo položku uprav ručně.",
+    "dropped_one": "({{count}} položka byla vadná a vynechala se.)",
+    "dropped_few": "({{count}} položky byly vadné a vynechaly se.)",
+    "dropped_other": "({{count}} položek bylo vadných a vynechalo se.)"
+  }
+}

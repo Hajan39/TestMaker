@@ -3,83 +3,83 @@ import { describe, expect, it } from 'vitest'
 import { db, generationJobs, type GenerationJobParams } from '@/db'
 import { claimTopic, isTopicBusy, releaseTopic } from '@/lib/generation'
 import { newId } from '@/lib/ids'
-import { seedTopic, UCET } from './helpers'
+import { seedTopic, ACCOUNT } from './helpers'
 
 /**
- * Rezervace tématu pro generování. Dvě generování nad týmž tématem naráz by
- * pracovala se stejným seznamem „těmhle otázkám se vyhni" a vyrobila duplicity,
- * takže tématu smí patřit vždycky jen jedna rezervace.
+ * Claiming a topic for generation. Two generations over the same topic at once
+ * would work with the same "avoid these questions" list and produce duplicates,
+ * so a topic may only ever have one claim.
  */
 
 async function jobsOf(topicId: string) {
   return db.select().from(generationJobs).where(eq(generationJobs.topicId, topicId))
 }
 
-describe('rezervace tématu', () => {
-  it('první zabrání projde a založí běžící úlohu', async () => {
+describe('topic claim', () => {
+  it('the first claim succeeds and creates a running job', async () => {
     const { topicId } = await seedTopic()
 
-    const jobId = await claimTopic(UCET, topicId)
+    const jobId = await claimTopic(ACCOUNT, topicId)
 
     expect(jobId).toBeTruthy()
     const [job] = await jobsOf(topicId)
     expect(job).toMatchObject({ id: jobId, status: 'running' })
     expect(job?.startedAt).toBeTruthy()
-    expect(await isTopicBusy(UCET, topicId)).toMatchObject({ kdo: expect.any(String) })
+    expect(await isTopicBusy(ACCOUNT, topicId)).toMatchObject({ who: expect.any(String) })
   })
 
-  it('druhé zabrání téhož tématu neprojde a nic po sobě nenechá', async () => {
+  it('a second claim of the same topic fails and leaves nothing behind', async () => {
     const { topicId } = await seedTopic()
-    await claimTopic(UCET, topicId)
+    await claimTopic(ACCOUNT, topicId)
 
-    expect(await claimTopic(UCET, topicId)).toBeNull()
+    expect(await claimTopic(ACCOUNT, topicId)).toBeNull()
     expect(await jobsOf(topicId)).toHaveLength(1)
   })
 
-  it('téma čekající ve frontě se taky nedá zabrat', async () => {
+  it('a topic waiting in the queue cannot be claimed either', async () => {
     const { topicId } = await seedTopic()
     await db
       .insert(generationJobs)
-      .values({ id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'queued' })
+      .values({ id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'queued' })
 
-    expect(await claimTopic(UCET, topicId)).toBeNull()
+    expect(await claimTopic(ACCOUNT, topicId)).toBeNull()
   })
 
-  it('po uvolnění jde téma zabrat znovu', async () => {
+  it('after release the topic can be claimed again', async () => {
     const { topicId } = await seedTopic()
-    const jobId = await claimTopic(UCET, topicId)
+    const jobId = await claimTopic(ACCOUNT, topicId)
     await releaseTopic(jobId!, { created: 3 })
 
-    expect(await isTopicBusy(UCET, topicId)).toBeNull()
-    expect(await claimTopic(UCET, topicId)).toBeTruthy()
+    expect(await isTopicBusy(ACCOUNT, topicId)).toBeNull()
+    expect(await claimTopic(ACCOUNT, topicId)).toBeTruthy()
   })
 
-  it('hotová ani chybná úloha další generování neblokuje', async () => {
+  it('neither a finished nor a failed job blocks further generation', async () => {
     const { topicId } = await seedTopic()
     await db.insert(generationJobs).values([
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
-      { id: newId(), schoolId: UCET.schoolId, requestedBy: UCET.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
 
-    expect(await claimTopic(UCET, topicId)).toBeTruthy()
+    expect(await claimTopic(ACCOUNT, topicId)).toBeTruthy()
   })
 
-  it('souběžná zabrání téhož tématu vyhraje právě jedno', async () => {
+  it('of concurrent claims of the same topic exactly one wins', async () => {
     const { topicId } = await seedTopic()
 
-    // Rezervace je jeden příkaz `insert … where not exists`, takže ani takhle
-    // se nemůže stát, že si téma zaberou dva běhy naráz.
-    const vysledky = await Promise.all(Array.from({ length: 5 }, () => claimTopic(UCET, topicId)))
+    // The claim is a single `insert … where not exists` statement, so even
+    // like this two runs can never claim the topic at once.
+    const results = await Promise.all(Array.from({ length: 5 }, () => claimTopic(ACCOUNT, topicId)))
 
-    expect(vysledky.filter(Boolean)).toHaveLength(1)
+    expect(results.filter(Boolean)).toHaveLength(1)
     expect(await jobsOf(topicId)).toHaveLength(1)
   })
 
-  it('různá témata se navzájem neblokují', async () => {
-    const prvni = await seedTopic()
-    const druhe = await seedTopic()
+  it('different topics do not block each other', async () => {
+    const first = await seedTopic()
+    const second = await seedTopic()
 
-    expect(await claimTopic(UCET, prvni.topicId)).toBeTruthy()
-    expect(await claimTopic(UCET, druhe.topicId)).toBeTruthy()
+    expect(await claimTopic(ACCOUNT, first.topicId)).toBeTruthy()
+    expect(await claimTopic(ACCOUNT, second.topicId)).toBeTruthy()
   })
 })

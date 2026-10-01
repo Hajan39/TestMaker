@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
 /**
- * Role `nahled`: čte a tiskne, ale nic nemění. Brána zapisující požadavky
- * zastaví tak jako tak — tady se ověřuje ta srozumitelnější polovina, tedy
- * že rozhraní nenabízí tlačítka, která by stejně skončila odmítnutím.
+ * The `nahled` role: reads and prints but changes nothing. The gateway stops
+ * writing requests either way — this verifies the more understandable half,
+ * that the UI does not offer buttons that would end in a rejection anyway.
  */
 test.use({ storageState: 'e2e/.auth/nahled.json' })
 
@@ -14,12 +14,12 @@ test.beforeEach(({ baseURL }) => {
   )
 })
 
-test('náhled si knihovnu prohlíží, ale nic v ní nezaloží ani nesmaže', async ({ page }) => {
+test('preview browses the library but creates and deletes nothing in it', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
 
-  // Import, generování a banka otázek zmizely z lišty úplně (nejen náhledu) —
-  // import a generování zůstávají jako stránky, banka se zrušila docela.
+  // Import, generation and the question bank are gone from the bar entirely (not only
+  // for preview) — import and generation remain as pages, the bank was removed altogether.
   await expect(page.getByRole('link', { name: 'Import materiálů' })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Generování', exact: true })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Banka otázek' })).toHaveCount(0)
@@ -27,53 +27,53 @@ test('náhled si knihovnu prohlíží, ale nic v ní nezaloží ani nesmaže', a
 
   await expect(page.getByRole('button', { name: 'Založit předmět' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
-  // Import a nový test jsou taky akce ke změně — na úvodu se náhledu
-  // nenabízejí, byť stránky `/import` a `/tests/new` samy zůstávají.
+  // Import and a new test are also changing actions — the home page does not offer
+  // them to preview, although the `/import` and `/tests/new` pages themselves remain.
   await expect(page.getByRole('button', { name: 'Hromadný import' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Nový test' })).toHaveCount(0)
 })
 
-test('zápis odmítne i server, ne jen skryté tlačítko', async ({ page }) => {
-  const odpoved = await page.request.post('/api/library', {
+test('the server rejects the write too, not just a hidden button', async ({ page }) => {
+  const response = await page.request.post('/api/library', {
     data: { kind: 'subject', name: 'Náhled sem nesmí' },
   })
-  expect(odpoved.status()).toBe(403)
+  expect(response.status()).toBe(403)
 })
 
-test('do správy se náhled nedostane', async ({ page }) => {
+test('preview does not get into management', async ({ page }) => {
   await page.goto('/sprava')
-  // Brána ho vrátí na úvodní obrazovku.
+  // The gateway sends it back to the home screen.
   await expect(page).toHaveURL(/\/$/)
 })
 
 /**
- * Otázky v tématu jako karty (viz `tema-otazky.spec.ts`): karty vidí,
- * ale žádné tlačítko, které by je měnilo, se mu nenabízí.
+ * Questions in a topic as cards (see `topic-questions.spec.ts`): it sees the cards,
+ * but no button that would change them is offered.
  *
- * Vlastní zkušební téma pro tenhle soubor — založí ho učitelka ve vlastním
- * kontextu (náhled sám zapisovat nesmí), náhled si stránku jen přečte.
+ * A dedicated test topic for this file — a teacher creates it in her own context
+ * (preview may not write itself), preview only reads the page.
  */
-const TEMA_SUBJECT = 'E2E KONTROLA'
-const TEMA_GRADE = 'E2E otázky tématu'
-const TEMA_TOPIC = 'Otázky v tématu jako karty'
-const TEMA_TEXT =
+const TOPIC_SUBJECT = 'E2E KONTROLA'
+const TOPIC_GRADE = 'E2E otázky tématu'
+const TOPIC_NAME = 'Otázky v tématu jako karty'
+const TOPIC_TEXT =
   'Koloběh látek v přírodě propojuje živé organismy s neživým prostředím prostřednictvím výměny látek a energie. '.repeat(
     12,
   )
 
-async function ensureTemaOtazky(request: APIRequestContext): Promise<string> {
+async function ensureTopicQuestions(request: APIRequestContext): Promise<string> {
   const imported = await request.post('/api/materials', {
     data: {
       materials: [
         {
-          relativePath: `${TEMA_SUBJECT}/${TEMA_GRADE}/${TEMA_TOPIC}.txt`,
-          fileName: `${TEMA_TOPIC}.txt`,
-          subject: TEMA_SUBJECT,
-          grade: TEMA_GRADE,
-          topic: TEMA_TOPIC,
+          relativePath: `${TOPIC_SUBJECT}/${TOPIC_GRADE}/${TOPIC_NAME}.txt`,
+          fileName: `${TOPIC_NAME}.txt`,
+          subject: TOPIC_SUBJECT,
+          grade: TOPIC_GRADE,
+          topic: TOPIC_NAME,
           mimeType: 'text/plain',
-          sizeBytes: TEMA_TEXT.length,
-          text: TEMA_TEXT,
+          sizeBytes: TOPIC_TEXT.length,
+          text: TOPIC_TEXT,
           pageCount: null,
           needsOcr: false,
           contentHash: 'e2e-tema-otazky-v1',
@@ -83,26 +83,26 @@ async function ensureTemaOtazky(request: APIRequestContext): Promise<string> {
   })
   expect(imported.ok(), 'zkušební materiál se nepodařilo naimportovat').toBe(true)
 
-  const found = await request.get(`/api/library/search?q=${encodeURIComponent(TEMA_TOPIC)}`)
+  const found = await request.get(`/api/library/search?q=${encodeURIComponent(TOPIC_NAME)}`)
   expect(found.ok()).toBe(true)
   const { results } = (await found.json()) as { results: { topicId: string; topicName: string }[] }
-  const topic = results.find((result) => result.topicName.includes(TEMA_TOPIC))
-  expect(topic, `zkušební téma „${TEMA_TOPIC}“ se v knihovně nenašlo`).toBeTruthy()
+  const topic = results.find((result) => result.topicName.includes(TOPIC_NAME))
+  expect(topic, `zkušební téma „${TOPIC_NAME}“ se v knihovně nenašlo`).toBeTruthy()
   return topic!.topicId
 }
 
-test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by je měnilo', async ({
+test('preview sees question cards in a topic but no button that would change them', async ({
   page,
   browser,
   baseURL,
 }) => {
-  // Náhled sám nesmí zapisovat — téma i otázku pro něj založí učitelka
-  // ve vlastním kontextu, náhled si pak jen otevře stránku ke čtení.
-  const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+  // Preview may not write itself — a teacher creates the topic and question for it
+  // in her own context, preview then only opens the page to read.
+  const writer = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
   let topicId: string
   try {
-    topicId = await ensureTemaOtazky(pisatel.request)
-    const created = await pisatel.request.post('/api/questions', {
+    topicId = await ensureTopicQuestions(writer.request)
+    const created = await writer.request.post('/api/questions', {
       data: {
         topicId,
         question: {
@@ -116,106 +116,106 @@ test('náhled vidí karty otázek v tématu, ale žádné tlačítko, které by 
     })
     expect(created.ok(), 'zkušební otázku se nepodařilo založit').toBe(true)
   } finally {
-    await pisatel.close()
+    await writer.close()
   }
 
   await page.goto(`/topics/${topicId}`)
 
-  // `exact: true` je tu podstatné: „Upravit téma“ i „Smazat téma“ jinak
-  // vyhoví i hledání „Upravit“/„Smazat“ podřetězcem a test by mlčky
-  // procházel, i kdyby karta svoje tlačítko skutečně nabízela.
+  // `exact: true` matters here: "Upravit téma" and "Smazat téma" would otherwise
+  // satisfy a substring search for "Upravit"/"Smazat" and the test would silently
+  // pass even if the card really offered its button.
   await expect(page.locator('li[data-question-id]').first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Nová otázka', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Upravit', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Přegenerovat', exact: true })).toHaveCount(0)
-  // Šipka vedle „Přegenerovat" nese i „Lehčí verze"/„Těžší verze" — celé menu
-  // je pryč, tvorbu verzí tedy nahled nemá odkud spustit.
+  // The arrow next to "Přegenerovat" also carries "Lehčí verze"/"Těžší verze" — the
+  // whole menu is gone, so preview has nowhere to start creating variants from.
   await expect(page.getByRole('button', { name: 'Přegenerovat s důvodem' })).toHaveCount(0)
 
-  // Zaškrtávátko „Vybrat do testu“ a lišta výběru jsou taky akce ke změně —
-  // náhled do banky nic nepřidává, ani do ní vybírat otázky nemá jak.
+  // The "Vybrat do testu" checkbox and the selection bar are also changing actions —
+  // preview adds nothing to the bank and has no way to select questions in it.
   await expect(page.getByRole('checkbox', { name: 'Vybrat do testu' })).toHaveCount(0)
   await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
 
-  // Přepínač „Smazané“ vede k obnovení otázky — taky akce ke změně, kterou
-  // náhled nemá.
+  // The "Smazané" toggle leads to restoring a question — also a changing action
+  // preview does not have.
   await expect(page.getByRole('button', { name: /^Smazané \(\d+\)$/ })).toHaveCount(0)
 })
 
 /**
- * Stránka třídy (viz `tridy.spec.ts`): náhled vidí témata, ale žádné
- * tlačítko, které by třídu nebo její témata měnilo.
+ * The grade page (see `grades.spec.ts`): preview sees the topics, but no button
+ * that would change the grade or its topics.
  *
- * Vlastní zkušební třída pro tenhle test — založí ji učitelka ve vlastním
- * kontextu, náhled si stránku jen přečte.
+ * A dedicated test grade for this test — a teacher creates it in her own context,
+ * preview only reads the page.
  */
-test('náhled vidí témata třídy, ale žádné tlačítko, které by ji měnilo', async ({
+test('preview sees the topics of a grade but no button that would change it', async ({
   page,
   browser,
   baseURL,
 }) => {
-  const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+  const writer = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
   let gradeId: string
   let gradeName: string
   try {
-    const subject = await pisatel.request.post('/api/library', {
+    const subject = await writer.request.post('/api/library', {
       data: { kind: 'subject', name: `E2E NAHLED TRIDA ${Date.now()}` },
     })
     expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
     const { id: subjectId } = (await subject.json()) as { id: string }
 
     gradeName = `Náhledový ročník ${Date.now()}`
-    const grade = await pisatel.request.post('/api/library', {
+    const grade = await writer.request.post('/api/library', {
       data: { kind: 'grade', name: gradeName, parentId: subjectId },
     })
     expect(grade.ok(), 'zkušební ročník se nepodařilo založit').toBe(true)
     gradeId = (await grade.json()).id as string
 
-    const topic = await pisatel.request.post('/api/library', {
+    const topic = await writer.request.post('/api/library', {
       data: { kind: 'topic', name: 'Téma pro náhled', parentId: gradeId },
     })
     expect(topic.ok(), 'zkušební téma se nepodařilo založit').toBe(true)
   } finally {
-    await pisatel.close()
+    await writer.close()
   }
 
   await page.goto(`/tridy/${gradeId}`)
   await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
-  // Téma je teď vidět dvakrát — v prostředním sloupci i na dlaždici v obsahu —
-  // hledá se proto jen v obsahové ploše.
-  const obsah = page.getByRole('region', { name: 'Obsah třídy' })
-  await expect(obsah.getByText('Téma pro náhled', { exact: true })).toBeVisible()
+  // The topic is now visible twice — in the middle column and on a tile in the
+  // content — so the search is limited to the content area.
+  const content = page.getByRole('region', { name: 'Obsah třídy' })
+  await expect(content.getByText('Téma pro náhled', { exact: true })).toBeVisible()
 
   await expect(page.getByRole('button', { name: 'Přidat téma' })).toHaveCount(0)
   await expect(page.getByLabel('Přesunout téma do jiného ročníku')).toHaveCount(0)
-  // „Vygenerovat pro celou třídu" je popisek tlačítka až uvnitř panelu
-  // hromadného generování — celý panel i jeho spouštěč zmizí zároveň.
+  // "Vygenerovat pro celou třídu" is a button label only inside the bulk generation
+  // panel — the whole panel and its trigger disappear together.
   await expect(page.getByRole('button', { name: 'Hromadné generování' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Přejmenovat/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat ročník' })).toHaveCount(0)
 })
 
 /**
- * Pruh materiálů (viz `tema-materialy.spec.ts`): náhled ho vidí, ale bez
- * nahrávání, přepínače „Použít pro generování“, mazání a „Upravit téma“ —
- * to všechno jsou akce ke změně, které mu brána i tak odmítne.
+ * The materials strip (see `topic-materials.spec.ts`): preview sees it, but without
+ * uploading, the "Použít pro generování" toggle, deleting and "Upravit téma" —
+ * all changing actions the gateway would reject anyway.
  */
-test('náhled vidí pruh materiálů, ale bez nahrávání, přepínače a mazání', async ({ page, browser, baseURL }) => {
-  // Náhled sám nesmí zapisovat — téma pro něj založí učitelka ve vlastním
-  // kontextu, náhled si pak jen otevře stránku ke čtení.
-  const pisatel = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
+test('preview sees the materials strip without uploading, toggle and deleting', async ({ page, browser, baseURL }) => {
+  // Preview may not write itself — a teacher creates the topic for it in her own
+  // context, preview then only opens the page to read.
+  const writer = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json', baseURL })
   let topicId: string
   try {
-    topicId = await ensureTemaOtazky(pisatel.request)
+    topicId = await ensureTopicQuestions(writer.request)
   } finally {
-    await pisatel.close()
+    await writer.close()
   }
 
   await page.goto(`/topics/${topicId}`)
   await page.getByRole('button', { name: /^Materiály/ }).click()
 
-  await expect(page.getByText(`${TEMA_TOPIC}.txt`)).toBeVisible()
+  await expect(page.getByText(`${TOPIC_NAME}.txt`)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Nahrát materiály' })).toHaveCount(0)
   await expect(page.getByRole('checkbox', { name: /Použít pro generování/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0)
@@ -223,15 +223,15 @@ test('náhled vidí pruh materiálů, ale bez nahrávání, přepínače a mazá
 })
 
 /**
- * Mazání v knihovně (`DELETE /api/library`) smí jen správce — ucitelka smí
- * měnit obsah (přejmenovat, přesunout, generovat), ale tlačítka „Smazat
- * ročník"/„Smazat téma"/„Smazat předmět" se jí vůbec nenabízejí, jinak by
- * narazila na tichou 403 (viz `DeleteFromLibrary`).
+ * Deleting in the library (`DELETE /api/library`) is for managers only — a teacher may
+ * change content (rename, move, generate), but the "Smazat ročník"/"Smazat téma"/
+ * "Smazat předmět" buttons are not offered to her at all, otherwise she would hit
+ * a silent 403 (see `DeleteFromLibrary`).
  */
-test.describe('ucitelka nemaže v knihovně — to smí jen správce', () => {
+test.describe('a teacher does not delete in the library — only a manager may', () => {
   test.use({ storageState: 'e2e/.auth/ucitelkaA.json' })
 
-  test('stránka třídy ucitelce nenabídne „Smazat ročník"', async ({ page, request }) => {
+  test('the grade page does not offer Smazat ročník to a teacher', async ({ page, request }) => {
     const subject = await request.post('/api/library', {
       data: { kind: 'subject', name: `E2E UCITELKA MAZANI ${Date.now()}` },
     })
@@ -248,21 +248,21 @@ test.describe('ucitelka nemaže v knihovně — to smí jen správce', () => {
     await page.goto(`/tridy/${gradeId}`)
     await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Smazat ročník' })).toHaveCount(0)
-    // Ostatní akce ke změně (přejmenování, přidání tématu) jí zůstávají.
+    // Other changing actions (renaming, adding a topic) stay available to her.
     await expect(page.getByRole('button', { name: 'Přidat téma' })).toBeVisible()
   })
 
-  test('úvod ucitelce nenabídne „Smazat předmět"', async ({ page, request }) => {
+  test('the home page does not offer Smazat předmět to a teacher', async ({ page, request }) => {
     const subjectName = `E2E UCITELKA PREDMET ${Date.now()}`
     const subject = await request.post('/api/library', { data: { kind: 'subject', name: subjectName } })
     expect(subject.ok(), 'zkušební předmět se nepodařilo založit').toBe(true)
 
     await page.goto('/?vse=1')
-    // Jméno předmětu je teď vidět i v postranním panelu — hledá se proto
-    // jen v obsahové ploše, kde je nadpisem sekce.
+    // The subject name is now visible in the side panel too — so the search is
+    // limited to the content area, where it is a section heading.
     await expect(page.getByRole('heading', { name: subjectName })).toBeVisible()
     await expect(page.getByRole('button', { name: /Smazat předmět/ })).toHaveCount(0)
-    // Přejmenovat a přidat ročník ucitelce zůstávají — jen mazání je pryč.
+    // Renaming and adding a grade stay available to the teacher — only deleting is gone.
     await expect(page.getByRole('button', { name: /Založit předmět/ })).toBeVisible()
   })
 })

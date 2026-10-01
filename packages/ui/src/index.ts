@@ -32,11 +32,9 @@ export {
 export { Toaster } from './ui/sonner'
 export { toast } from 'sonner'
 export { planUndo } from './undoStatus'
-export { plural, pocet, OTAZKY, TEMATA, TEMAT_Z, MATERIALY, MATERIALY_Z, ROCNIKY } from './plural'
-export type { PluralForms } from './plural'
 export type { UndoStatus, UndoStep } from './undoStatus'
 
-// Doménové komponenty přibudou v dalších úkolech.
+// Domain components.
 export { QuestionPreview } from './QuestionPreview'
 export { PaperQuestion } from './PaperQuestion'
 export { PaperPuzzle } from './PaperPuzzle'

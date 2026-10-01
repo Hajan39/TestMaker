@@ -13,40 +13,41 @@ import {
   DropdownMenuTrigger,
   toast,
 } from '@testmaker/ui'
-import { ROLE_LABELS, type Role } from '@/lib/role'
+import { t } from '@testmaker/core/i18n'
+import type { Role } from '@/lib/role'
 
 /**
- * Kdo je přihlášený a odhlášení. Ve sborovně se u jednoho počítače vystřídá
- * víc lidí, takže jméno musí být vidět dřív, než někdo začne pracovat pod
- * cizím účtem.
+ * Who is signed in, and signing out. In the staff room several people take
+ * turns at one computer, so the name must be visible before someone starts
+ * working under another person's account.
  */
 export function UserMenu({
-  jmeno,
+  name,
   role,
   email,
-  maHeslo,
+  hasPassword,
 }: {
-  jmeno: string
+  name: string
   role: Role
   email: string
-  /** Účet jen přes Google heslo nemá — změna hesla by vždycky skončila „nesouhlasí“. */
-  maHeslo: boolean
+  /** A Google-only account has no password — changing it would always end with "does not match". */
+  hasPassword: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
-  async function odhlasit() {
+  async function signOutEverywhere() {
     setBusy(true)
     try {
       const response = await fetch('/api/logout', { method: 'POST' })
       if (!response.ok) throw new Error()
     } catch {
-      // U sdíleného počítače je horší myslet si, že jsem odhlášená, a nebýt.
-      toast.error('Odhlášení se nepovedlo, zkus to znovu.')
+      // On a shared computer it is worse to think you are signed out and not be.
+      toast.error(t('auth:signOut.failed'))
       setBusy(false)
       return
     }
-    // `replace`, ať se odhlášená uživatelka nevrátí zpátky tlačítkem prohlížeče.
+    // `replace`, so the signed-out user cannot come back with the browser's back button.
     router.replace('/login')
     router.refresh()
   }
@@ -56,32 +57,32 @@ export function UserMenu({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-1.5">
           <UserRound className="size-4" />
-          <span className="max-w-40 truncate">{jmeno}</span>
+          <span className="max-w-40 truncate">{name}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <span className="block truncate text-sm text-fg">{email}</span>
-          <span className="block text-xs text-fg-muted">{ROLE_LABELS[role]}</span>
-          {maHeslo ? null : (
-            <span className="mt-1 block text-xs text-fg-muted">Přihlašuješ se přes Google, heslo nemáš.</span>
+          <span className="block text-xs text-fg-muted">{t(`admin:roles.${role}`)}</span>
+          {hasPassword ? null : (
+            <span className="mt-1 block text-xs text-fg-muted">{t('auth:userMenu.googleOnly')}</span>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {maHeslo ? (
-          <DropdownMenuItem onSelect={() => router.push('/zmena-hesla')}>Změnit heslo</DropdownMenuItem>
+        {hasPassword ? (
+          <DropdownMenuItem onSelect={() => router.push('/zmena-hesla')}>{t('auth:userMenu.changePassword')}</DropdownMenuItem>
         ) : null}
         <DropdownMenuItem
           disabled={busy}
           onSelect={(event) => {
-            // Nabídka zůstane otevřená, dokud odhlášení neskončí — jinak by
-            // chyba přišla, až by nebylo vidět, k čemu patří.
+            // The menu stays open until signing out finishes — otherwise an
+            // error would arrive when it is no longer clear what it belongs to.
             event.preventDefault()
-            void odhlasit()
+            void signOutEverywhere()
           }}
         >
           <LogOut className="size-4" />
-          {busy ? 'Odhlašuji…' : 'Odhlásit se'}
+          {busy ? t('auth:signOut.busy') : t('auth:signOut.action')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

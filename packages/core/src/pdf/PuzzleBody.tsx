@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Text, View } from '@react-pdf/renderer'
+import { t } from '../i18n'
 import type { PuzzleContent, PuzzleEntry } from '../schema/puzzle'
 import { buildPuzzle, describePlacement, solutionGrid, type BuiltPuzzle } from '../puzzle/index'
 import {
@@ -15,35 +16,36 @@ import { sanitizeText } from './text'
 export { cellSize } from './layout'
 
 /**
- * Hlavolam na papíře — mřížka osmisměrky se seznamem slov, nebo řádky
- * tajenky s políčky.
+ * A puzzle on paper — a word search grid with the word list, or cryptogram
+ * rows with boxes.
  *
- * Mřížku nikdy nesestavuje tenhle soubor: bere ji hotovou z `puzzle/`
- * (`buildPuzzle`), takže náhled na obrazovce (`PaperPuzzle` v `packages/ui`)
- * i tisk vycházejí z téhož výpočtu a nemůžou se rozejít. Rozměry (buňky,
- * políčka, sloupce) jsou v `layout.ts`, odkud je bere i odhad výšky.
+ * This file never builds the grid: it takes it ready-made from `puzzle/`
+ * (`buildPuzzle`), so the on-screen preview (`PaperPuzzle` in `packages/ui`)
+ * and the print come from the same computation and cannot diverge. Dimensions
+ * (cells, boxes, columns) are in `layout.ts`, where the height estimate reads
+ * them too.
  *
- * `solved` vykreslí totéž jako klíč pro učitelku: v mřížce zůstanou jen
- * písmena hledaných slov, u tajenky se políčka vyplní.
+ * `solved` renders the same as the teacher's key: only the letters of the
+ * hidden words stay in the grid; cryptogram boxes are filled in.
  *
- * Zalamování přes stránky: nerozdělitelná je jen hlavička (`head` — nadpis
- * a pokyn) spolu s mřížkou, resp. s políčky tajenky. Seznam slov, řádky
- * doplňovačky a otázky se smí přelomit na další stranu, vždy ale po celých
- * řádcích. Kdyby byl nerozdělitelný celý hlavolam a byl vyšší než strana,
- * react-pdf ho nepřesune, ale slisuje — překrývající se text a slitá mřížka.
+ * Page breaking: only the head (`head` — title and instructions) together
+ * with the grid (or the cryptogram boxes) is unbreakable. The word list, the
+ * crossword rows and the clues may break onto the next page, but always by
+ * whole rows. If the whole puzzle were unbreakable and taller than a page,
+ * react-pdf would not move it but squash it — overlapping text and a mashed grid.
  */
 
 /**
- * Písmeno v buňce má vždycky `lineHeight: 1`. Řádkování šablony (1,4 a víc)
- * se dědí i sem a v buňce vysoké 14 pt se řádek s ním nevejde — písmeno se
- * pak neořízne, ale úplně zmizí a mřížka se vytiskne prázdná.
+ * A letter in a cell always has `lineHeight: 1`. The template line height
+ * (1.4 and more) is inherited here too and a line with it does not fit a
+ * 14 pt cell — the letter is not clipped but vanishes and the grid prints empty.
  */
 const CELL_BORDER = '0.5pt solid #444'
 const MARKED_BORDER = '1.4pt solid #111'
-/** Políčko tajenky, na které žádný řádek nepřipadl — vytiskne se vyplněné. */
+/** Cryptogram box with no row assigned — printed pre-filled. */
 const GIVEN_BACKGROUND = '#f0f0f0'
 
-/** Velikost písma popisků a seznamů pod hlavolamem. */
+/** Font size of labels and lists below the puzzle. */
 export const PUZZLE_TEXT_SIZE = 9
 
 export function PuzzleBody({
@@ -54,18 +56,18 @@ export function PuzzleBody({
   spacingBefore = 0,
 }: {
   puzzle: PuzzleContent
-  /** Hotový hlavolam; když se nepředá, spočítá se z obsahu. */
+  /** Prebuilt puzzle; computed from the content when not passed. */
   built?: BuiltPuzzle
   solved?: boolean
-  /** Nadpis a pokyn; tisknou se nerozdělitelně spolu s mřížkou. */
+  /** Title and instructions; printed unbreakably together with the grid. */
   head?: ReactNode
-  /** Mezera nad hlavolamem. */
+  /** Space above the puzzle. */
   spacingBefore?: number
 }) {
-  // Vrací se plochý seznam bloků, ne jeden obalový `View`. React-pdf přesune
-  // nerozdělitelný blok na další stranu jen tehdy, když má před sebou
-  // sourozence; zanořený jako první potomek obalu by ho místo toho rozřízl
-  // a slisoval. Bloky proto musí být přímými potomky stránky.
+  // Returns a flat list of blocks, not one wrapping `View`. React-pdf moves an
+  // unbreakable block to the next page only when it has a preceding sibling;
+  // nested as the first child of a wrapper it would cut and squash it instead.
+  // The blocks must therefore be direct children of the page.
   if (built.kind === 'wordsearch') {
     const result = built.wordSearch
     const size = cellSize(result.cols)
@@ -109,7 +111,7 @@ export function PuzzleBody({
               )),
               ...result.unplaced.map((word, i) => (
                 <Text key={`x-${i}`} style={{ fontSize: 8, color: '#a33' }}>
-                  {sanitizeText(`${word}: v mřížce není`)}
+                  {sanitizeText(t('pdf:puzzle.notInGrid', { word }))}
                 </Text>
               )),
             ]
@@ -127,7 +129,7 @@ export function PuzzleBody({
       <View wrap={false} style={{ marginTop: spacingBefore }}>
         {head}
         <View style={{ marginTop: 6, marginBottom: 8 }}>
-          <Text style={{ fontSize: PUZZLE_TEXT_SIZE, marginBottom: 3 }}>Tajenka:</Text>
+          <Text style={{ fontSize: PUZZLE_TEXT_SIZE, marginBottom: 3 }}>{t('pdf:puzzle.phrase')}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
             {cryptogramPhraseCells(result).map((word, w) => (
               <View key={w} style={{ flexDirection: 'row', marginRight: 8, marginBottom: 2 }}>
@@ -146,7 +148,7 @@ export function PuzzleBody({
       </View>
 
       <Text style={{ fontSize: PUZZLE_TEXT_SIZE, marginBottom: 3 }} minPresenceAhead={boxSize + 3}>
-        Doplňovačka:
+        {t('pdf:puzzle.crossword')}
       </Text>
       {result.rows.map((row, rowIndex) => (
         <View
@@ -186,7 +188,7 @@ export function PuzzleBody({
       ))}
 
       <Text style={{ fontSize: PUZZLE_TEXT_SIZE, marginBottom: 3 }} minPresenceAhead={14}>
-        Otázky:
+        {t('pdf:puzzle.clues')}
       </Text>
       {result.rows.map((row) => (
         <View
@@ -202,7 +204,7 @@ export function PuzzleBody({
   )
 }
 
-/** Seznam slov po řádcích o třech sloupcích; každý řádek je nerozdělitelný. */
+/** Word list in rows of three columns; each row is unbreakable. */
 function wordListRows(entries: PuzzleEntry[]): PuzzleEntry[][] {
   const rows: PuzzleEntry[][] = []
   for (let i = 0; i < entries.length; i += WORD_LIST_COLUMNS) rows.push(entries.slice(i, i + WORD_LIST_COLUMNS))

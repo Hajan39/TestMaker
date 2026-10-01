@@ -2,7 +2,7 @@ import { generateText } from 'ai'
 import { describe, expect, it } from 'vitest'
 import { generateQuestions, type ModelCall } from '../src/ai/generate'
 import {
-  AI_NOT_CONFIGURED_MESSAGE,
+  aiNotConfiguredMessage,
   describeAiConfig,
   describeAiSetup,
   getModel,
@@ -12,11 +12,11 @@ import {
 import type { QuestionContent } from '../src/schema/question'
 
 /**
- * Žebříček modelů. Žádný test tady nesmí volat skutečný model — volání se
- * podstrkuje přes `callModel`, takže se nespotřebuje ani kousek limitu.
+ * Model ladder. No test here may call a real model — calls are faked via
+ * `callModel`, so not a bit of quota is used.
  */
 
-const ZADANI = {
+const REQUEST = {
   text: 'Koloběh vody v přírodě zahrnuje výpar, srážky a odtok. '.repeat(20),
   topicName: 'Koloběh vody',
   subjectName: 'Přírodopis',
@@ -25,152 +25,152 @@ const ZADANI = {
   difficulty: 2 as const,
 }
 
-/** Použitelná otázka, ať se dávka neodmítne na validaci. */
-function otazka(poradi: number): QuestionContent {
+/** A usable question, so the batch is not rejected by validation. */
+function question(order: number): QuestionContent {
   return {
     type: 'short_answer',
-    payload: { prompt: `Otázka číslo ${poradi}?`, answer: 'odpověď', acceptedAnswers: [] },
+    payload: { prompt: `Otázka číslo ${order}?`, answer: 'odpověď', acceptedAnswers: [] },
     blocks: [],
     points: 1,
     difficulty: 2,
   }
 }
 
-const VYCERPANY_LIMIT = 'You exceeded your current quota, please check your plan and billing details.'
-const CHYBNY_KLIC = 'Anthropic API key is missing.'
+const LIMIT_EXHAUSTED = 'You exceeded your current quota, please check your plan and billing details.'
+const WRONG_KEY = 'Anthropic API key is missing.'
 
 /**
- * Podvržené volání modelu: pro každý model říká, co se má stát. Zaznamenává,
- * kolikrát se na který model sáhlo.
+ * Fake model call: says for each model what should happen. Records how many
+ * times each model was called.
  */
-function podvrzenyModel(chovani: Record<string, 'odpovi' | string>): {
+function spoofedModel(behavior: Record<string, 'odpovi' | string>): {
   call: ModelCall
-  volani: string[]
+  calls: string[]
 } {
-  const volani: string[] = []
-  let poradi = 0
+  const calls: string[] = []
+  let order = 0
   const call: ModelCall = async ({ config }) => {
     const key = describeAiConfig(config)
-    volani.push(key)
-    const reakce = chovani[key]
-    if (reakce !== 'odpovi') throw new Error(reakce ?? 'neznámý model')
-    // Dávka po pěti otázkách jako ve skutečném generování.
-    return { questions: Array.from({ length: 5 }, () => otazka(++poradi)) }
+    calls.push(key)
+    const reaction = behavior[key]
+    if (reaction !== 'odpovi') throw new Error(reaction ?? 'neznámý model')
+    // Batches of five questions, as in real generation.
+    return { questions: Array.from({ length: 5 }, () => question(++order)) }
   }
-  return { call, volani }
+  return { call, calls }
 }
 
-const PRVNI = { provider: 'google', model: 'a' } as const
-const DRUHY = { provider: 'google', model: 'b' } as const
+const FIRST = { provider: 'google', model: 'a' } as const
+const SECOND = { provider: 'google', model: 'b' } as const
 
-describe('přepnutí na další model při vyčerpaném limitu', () => {
-  it('hotové dávky zůstanou a zbytek dogeneruje další model', async () => {
-    let volanoPoprve = true
-    const ulozeno: { pocet: number; model: string }[] = []
-    let poradi = 0
+describe('switching to the next model when quota runs out', () => {
+  it('finished batches stay and the next model generates the rest', async () => {
+    let calledFirstTime = true
+    const saved: { count: number; model: string }[] = []
+    let order = 0
 
     const call: ModelCall = async ({ config }) => {
       const key = describeAiConfig(config)
-      // Prvnímu modelu dojde limit až po první dávce — jako u ostrého běhu,
-      // kde se denní kvóta vyčerpá uprostřed tématu.
+      // The first model runs out of quota only after the first batch — as in a
+      // real run, where the daily quota runs out in the middle of a topic.
       if (key === 'google:a') {
-        if (volanoPoprve) {
-          volanoPoprve = false
-          return { questions: Array.from({ length: 5 }, () => otazka(++poradi)) }
+        if (calledFirstTime) {
+          calledFirstTime = false
+          return { questions: Array.from({ length: 5 }, () => question(++order)) }
         }
-        throw new Error(VYCERPANY_LIMIT)
+        throw new Error(LIMIT_EXHAUSTED)
       }
-      return { questions: Array.from({ length: 5 }, () => otazka(++poradi)) }
+      return { questions: Array.from({ length: 5 }, () => question(++order)) }
     }
 
     const result = await generateQuestions(
-      { ...ZADANI, count: 10, types: [...ZADANI.types] },
+      { ...REQUEST, count: 10, types: [...REQUEST.types] },
       {
-        models: [PRVNI, DRUHY],
+        models: [FIRST, SECOND],
         callModel: call,
         onBatch: (batch, info) => {
-          ulozeno.push({ pocet: batch.length, model: info.model })
+          saved.push({ count: batch.length, model: info.model })
         },
       },
     )
 
     expect(result.questions).toHaveLength(10)
-    // Práce prvního modelu se nezahodila.
-    expect(ulozeno).toEqual([
-      { pocet: 5, model: 'google:a' },
-      { pocet: 5, model: 'google:b' },
+    // The first model's work was not discarded.
+    expect(saved).toEqual([
+      { count: 5, model: 'google:a' },
+      { count: 5, model: 'google:b' },
     ])
-    // V jednom tématu se míchaly modely a je to vidět ve výsledku.
+    // Models were mixed within one topic and the result shows it.
     expect(result.models).toEqual(['google:a', 'google:b'])
   })
 
-  it('vyčerpaný model se do konce běhu už nezkouší', async () => {
-    const { call, volani } = podvrzenyModel({ 'google:a': VYCERPANY_LIMIT, 'google:b': 'odpovi' })
+  it('an exhausted model is not tried again until the end of the run', async () => {
+    const { call, calls } = spoofedModel({ 'google:a': LIMIT_EXHAUSTED, 'google:b': 'odpovi' })
 
     const result = await generateQuestions(
-      { ...ZADANI, count: 15, types: [...ZADANI.types] },
-      { models: [PRVNI, DRUHY], callModel: call },
+      { ...REQUEST, count: 15, types: [...REQUEST.types] },
+      { models: [FIRST, SECOND], callModel: call },
     )
 
     expect(result.questions).toHaveLength(15)
-    // Tři dávky, ale na vyčerpaný model se sáhlo jen jednou.
-    expect(volani.filter((m) => m === 'google:a')).toHaveLength(1)
-    expect(volani.filter((m) => m === 'google:b')).toHaveLength(3)
+    // Three batches, but the exhausted model was called only once.
+    expect(calls.filter((m) => m === 'google:a')).toHaveLength(1)
+    expect(calls.filter((m) => m === 'google:b')).toHaveLength(3)
     expect(result.models).toEqual(['google:b'])
   })
 
-  it('u chyby, která není na opakování, se další model nezkouší', async () => {
-    const { call, volani } = podvrzenyModel({ 'google:a': CHYBNY_KLIC, 'google:b': 'odpovi' })
+  it('for an error not worth retrying, the next model is not tried', async () => {
+    const { call, calls } = spoofedModel({ 'google:a': WRONG_KEY, 'google:b': 'odpovi' })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { models: [PRVNI, DRUHY], callModel: call }),
+      generateQuestions({ ...REQUEST, count: 10, types: [...REQUEST.types] }, { models: [FIRST, SECOND], callModel: call }),
     ).rejects.toThrow(/API key/)
 
-    expect(volani).toEqual(['google:a'])
+    expect(calls).toEqual(['google:a'])
   })
 
-  it('když dojde celý žebříček, propadne chyba posledního modelu nahoru', async () => {
-    const { call, volani } = podvrzenyModel({ 'google:a': VYCERPANY_LIMIT, 'google:b': VYCERPANY_LIMIT })
+  it('when the whole ladder is exhausted, the last model\'s error propagates up', async () => {
+    const { call, calls } = spoofedModel({ 'google:a': LIMIT_EXHAUSTED, 'google:b': LIMIT_EXHAUSTED })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 10, types: [...ZADANI.types] }, { models: [PRVNI, DRUHY], callModel: call }),
+      generateQuestions({ ...REQUEST, count: 10, types: [...REQUEST.types] }, { models: [FIRST, SECOND], callModel: call }),
     ).rejects.toThrow(/quota/)
 
-    expect(volani).toEqual(['google:a', 'google:b'])
+    expect(calls).toEqual(['google:a', 'google:b'])
   })
 
-  it('jediný model bez žebříčku se chová jako dřív: chyba rovnou padá', async () => {
-    const { call, volani } = podvrzenyModel({ 'google:a': VYCERPANY_LIMIT })
+  it('a single model without a ladder behaves as before: the error is thrown right away', async () => {
+    const { call, calls } = spoofedModel({ 'google:a': LIMIT_EXHAUSTED })
 
     await expect(
-      generateQuestions({ ...ZADANI, count: 5, types: [...ZADANI.types] }, { models: [PRVNI], callModel: call }),
+      generateQuestions({ ...REQUEST, count: 5, types: [...REQUEST.types] }, { models: [FIRST], callModel: call }),
     ).rejects.toThrow(/quota/)
 
-    expect(volani).toEqual(['google:a'])
+    expect(calls).toEqual(['google:a'])
   })
 })
 
-describe('žebříček bez modelů', () => {
-  it('bez jediného modelu skončí srozumitelnou chybou', async () => {
+describe('ladder without models', () => {
+  it('without a single model it ends with an understandable error', async () => {
     await expect(
-      generateQuestions({ ...ZADANI, count: 1, types: [...ZADANI.types] }, { models: [] }),
+      generateQuestions({ ...REQUEST, count: 1, types: [...REQUEST.types] }, { models: [] }),
     ).rejects.toThrow(/Žádný model/)
   })
 })
 
-describe('žebříček modelů z prostředí', () => {
-  it('bez AI_MODELS použije výchozí Gemini, když je klíč', () => {
+describe('model ladder from the environment', () => {
+  it('without AI_MODELS it uses the default Gemini when the key is set', () => {
     expect(readAiLadder({ GOOGLE_GENERATIVE_AI_API_KEY: 'g' })).toEqual([
       { provider: 'google', model: 'gemini-flash-latest' },
     ])
   })
 
-  it('bez jediného klíče je generování vypnuté a nic nespadne', () => {
+  it('without a single key generation is disabled and nothing crashes', () => {
     expect(readAiLadder({})).toEqual([])
     expect(isAiConfigured({})).toBe(false)
   })
 
-  it('drží pořadí z AI_MODELS a přeskočí poskytovatele bez klíče', () => {
+  it('keeps the AI_MODELS order and skips providers without a key', () => {
     const env = {
       AI_MODELS: 'anthropic:claude-haiku-4-5, google:gemini-flash-latest, openrouter:deepseek/deepseek-chat',
       GOOGLE_GENERATIVE_AI_API_KEY: 'g',
@@ -182,13 +182,13 @@ describe('žebříček modelů z prostředí', () => {
     ])
   })
 
-  it('dvojtečku v názvu modelu nerozdělí', () => {
+  it('does not split a colon in the model name', () => {
     expect(readAiLadder({ AI_MODELS: 'openrouter:vendor/model:free', OPENROUTER_API_KEY: 'o' })).toEqual([
       { provider: 'openrouter', model: 'vendor/model:free' },
     ])
   })
 
-  it('neznámého poskytovatele a položku bez předpony vynechá, zbytek funguje', () => {
+  it('skips an unknown provider and an item without a prefix, the rest works', () => {
     const env = {
       AI_MODELS: 'ollama:qwen3:14b, gemini-flash-latest, google:gemini-flash-lite-latest',
       GOOGLE_GENERATIVE_AI_API_KEY: 'g',
@@ -196,14 +196,14 @@ describe('žebříček modelů z prostředí', () => {
     expect(readAiLadder(env)).toEqual([{ provider: 'google', model: 'gemini-flash-lite-latest' }])
   })
 
-  it('stejný model zařadí jen jednou', () => {
+  it('adds the same model only once', () => {
     const env = { AI_MODELS: 'google:a, google:a', GOOGLE_GENERATIVE_AI_API_KEY: 'g' }
     expect(readAiLadder(env)).toHaveLength(1)
   })
 })
 
-describe('sestavení modelu', () => {
-  it('OpenRouter míří na openrouter.ai s klíčem z prostředí', async () => {
+describe('building the model', () => {
+  it('OpenRouter targets openrouter.ai with the key from the environment', async () => {
     let url = ''
     let auth = ''
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -218,182 +218,182 @@ describe('sestavení modelu', () => {
   })
 })
 
-describe('typy otázek pro AI', () => {
-  it('úloha se starým typem z fronty generuje jen povolené typy', async () => {
-    const prompty: string[] = []
+describe('question types for AI', () => {
+  it('a queued job with an old type generates only allowed types', async () => {
+    const prompts: string[] = []
     const call: ModelCall = async ({ prompt }) => {
-      prompty.push(prompt)
-      return { questions: [otazka(prompty.length)] }
+      prompts.push(prompt)
+      return { questions: [question(prompts.length)] }
     }
-    await generateQuestions({ ...ZADANI, count: 2, types: ['table_fill', 'short_answer'] }, { models: [PRVNI], callModel: call })
-    expect(prompty.join('\n')).not.toContain('table_fill')
-    expect(prompty.join('\n')).toContain('short_answer')
+    await generateQuestions({ ...REQUEST, count: 2, types: ['table_fill', 'short_answer'] }, { models: [FIRST], callModel: call })
+    expect(prompts.join('\n')).not.toContain('table_fill')
+    expect(prompts.join('\n')).toContain('short_answer')
   })
 
-  it('bez jediného povoleného typu použije všechny povolené', async () => {
-    const prompty: string[] = []
+  it('without a single allowed type it uses all allowed ones', async () => {
+    const prompts: string[] = []
     const call: ModelCall = async ({ prompt }) => {
-      prompty.push(prompt)
-      return { questions: [otazka(prompty.length)] }
+      prompts.push(prompt)
+      return { questions: [question(prompts.length)] }
     }
-    await generateQuestions({ ...ZADANI, count: 3, types: ['table_fill'] }, { models: [PRVNI], callModel: call })
-    expect(prompty.join('\n')).not.toContain('table_fill')
-    expect(prompty.join('\n')).toContain('single_choice')
+    await generateQuestions({ ...REQUEST, count: 3, types: ['table_fill'] }, { models: [FIRST], callModel: call })
+    expect(prompts.join('\n')).not.toContain('table_fill')
+    expect(prompts.join('\n')).toContain('single_choice')
   })
 })
 
-describe('kontrola citace při generování', () => {
-  it('otázku s citací, která v materiálu není, zahodí a ostatní ponechá', async () => {
+describe('quote check during generation', () => {
+  it('drops a question whose quote is not in the material and keeps the others', async () => {
     const call: ModelCall = async () => ({
       questions: [
-        { ...otazka(1), evidence: { fileName: 'x', quote: 'Koloběh vody v přírodě zahrnuje výpar' } },
-        { ...otazka(2), evidence: { fileName: 'x', quote: 'Voda vře při sto stupních.' } },
+        { ...question(1), evidence: { fileName: 'x', quote: 'Koloběh vody v přírodě zahrnuje výpar' } },
+        { ...question(2), evidence: { fileName: 'x', quote: 'Voda vře při sto stupních.' } },
       ],
     })
-    const vysledek = await generateQuestions(
-      { ...ZADANI, count: 2, types: [...ZADANI.types] },
-      { models: [PRVNI], callModel: call },
+    const result = await generateQuestions(
+      { ...REQUEST, count: 2, types: [...REQUEST.types] },
+      { models: [FIRST], callModel: call },
     )
-    expect(vysledek.questions.map((q) => (q.payload as { prompt: string }).prompt)).toEqual(['Otázka číslo 1?'])
-    expect(vysledek.rejected[0]?.errors).toContain('citace v evidence se v materiálu nenašla')
+    expect(result.questions.map((q) => (q.payload as { prompt: string }).prompt)).toEqual(['Otázka číslo 1?'])
+    expect(result.rejected[0]?.errors).toContain('citace v evidence se v materiálu nenašla')
   })
 })
 
-describe('duplicity', () => {
-  it('stejné zadání lišící se velikostí písmen a interpunkcí uloží jen jednou', async () => {
-    const zneni = ['Co je výpar?', 'co je výpar', 'Co je  výpar ?']
+describe('duplicates', () => {
+  it('saves a prompt differing only in case and punctuation just once', async () => {
+    const wording = ['Co je výpar?', 'co je výpar', 'Co je  výpar ?']
     const call: ModelCall = async () => ({
-      questions: zneni.map(
+      questions: wording.map(
         (prompt) =>
-          ({ ...otazka(0), payload: { prompt, answer: 'odpověď', acceptedAnswers: [] } }) as QuestionContent,
+          ({ ...question(0), payload: { prompt, answer: 'odpověď', acceptedAnswers: [] } }) as QuestionContent,
       ),
     })
-    const vysledek = await generateQuestions(
-      { ...ZADANI, count: 3, types: [...ZADANI.types] },
-      { models: [PRVNI], callModel: call },
+    const result = await generateQuestions(
+      { ...REQUEST, count: 3, types: [...REQUEST.types] },
+      { models: [FIRST], callModel: call },
     )
-    expect(vysledek.questions).toHaveLength(1)
+    expect(result.questions).toHaveLength(1)
   })
 
-  it('otázku, která už v tématu je, znovu neuloží', async () => {
+  it('does not save again a question already in the topic', async () => {
     const call: ModelCall = async () => ({
       questions: [
-        { ...otazka(0), payload: { prompt: 'Co je výpar?', answer: 'odpověď', acceptedAnswers: [] } } as QuestionContent,
+        { ...question(0), payload: { prompt: 'Co je výpar?', answer: 'odpověď', acceptedAnswers: [] } } as QuestionContent,
       ],
     })
-    const vysledek = await generateQuestions(
-      { ...ZADANI, count: 1, types: [...ZADANI.types], avoid: ['co je VÝPAR'] },
-      { models: [PRVNI], callModel: call },
+    const result = await generateQuestions(
+      { ...REQUEST, count: 1, types: [...REQUEST.types], avoid: ['co je VÝPAR'] },
+      { models: [FIRST], callModel: call },
     )
-    expect(vysledek.questions).toHaveLength(0)
+    expect(result.questions).toHaveLength(0)
   })
 })
 
 /**
- * Téma o `pocet` souborech; každý soubor je vlastní úsek (nové záhlaví vždy
- * začíná nový úsek), takže se dá z promptu poznat, který úsek model dostal.
+ * A topic of `count` files; each file is its own chunk (a new header always
+ * starts a new chunk), so the prompt shows which chunk the model got.
  */
-function temaOSouborech(pocet: number): string {
+function topicAboutFiles(count: number): string {
   return Array.from(
-    { length: pocet },
+    { length: count },
     (_, i) => `=== soubor${i}.txt ===\n${`Kapitola číslo ${i} vypráví o vodě a jejím koloběhu v přírodě. `.repeat(25)}`,
   ).join('\n\n')
 }
 
-/** Které soubory (úseky) se v promptech objevily. */
-function souboryVPromptech(prompty: string[]): number[] {
-  return [...new Set(prompty.flatMap((p) => [...p.matchAll(/=== soubor(\d+)\.txt ===/g)].map((m) => Number(m[1]))))].sort(
+/** Which files (chunks) appeared in the prompts. */
+function filesInPrompts(prompts: string[]): number[] {
+  return [...new Set(prompts.flatMap((p) => [...p.matchAll(/=== soubor(\d+)\.txt ===/g)].map((m) => Number(m[1]))))].sort(
     (a, b) => a - b,
   )
 }
 
-function zaznamovyModel(): { call: ModelCall; prompty: string[] } {
-  const prompty: string[] = []
-  let poradi = 0
+function recordingModel(): { call: ModelCall; prompts: string[] } {
+  const prompts: string[] = []
+  let order = 0
   const call: ModelCall = async ({ prompt }) => {
-    prompty.push(prompt)
-    // Vrátí přesně tolik otázek, kolik si prompt řekl — jako poslušný model.
-    const pocet = Number(/Vytvoř přesně (\d+) otázek/.exec(prompt)?.[1] ?? 0)
-    return { questions: Array.from({ length: pocet }, () => otazka(++poradi)) }
+    prompts.push(prompt)
+    // Returns exactly as many questions as the prompt asked for — like an obedient model.
+    const count = Number(/Vytvoř přesně (\d+) otázek/.exec(prompt)?.[1] ?? 0)
+    return { questions: Array.from({ length: count }, () => question(++order)) }
   }
-  return { call, prompty }
+  return { call, prompts }
 }
 
-describe('výběr úseků při generování', () => {
-  it('deset otázek z třiceti úseků stojí jen dvě volání modelu', async () => {
-    const { call, prompty } = zaznamovyModel()
-    const vysledek = await generateQuestions(
-      { ...ZADANI, text: temaOSouborech(30), count: 10, types: [...ZADANI.types] },
-      { models: [PRVNI], callModel: call },
+describe('chunk selection during generation', () => {
+  it('ten questions from thirty chunks cost only two model calls', async () => {
+    const { call, prompts } = recordingModel()
+    const result = await generateQuestions(
+      { ...REQUEST, text: topicAboutFiles(30), count: 10, types: [...REQUEST.types] },
+      { models: [FIRST], callModel: call },
     )
-    expect(prompty).toHaveLength(2)
-    expect(vysledek.questions).toHaveLength(10)
-    // Dvě volání, ale ze dvou různých míst materiálu.
-    expect(souboryVPromptech(prompty)).toHaveLength(2)
+    expect(prompts).toHaveLength(2)
+    expect(result.questions).toHaveLength(10)
+    // Two calls, but from two different places in the material.
+    expect(filesInPrompts(prompts)).toHaveLength(2)
   })
 
-  it('náhrada s citací ze třetího úseku dostane právě třetí úsek', async () => {
-    const { call, prompty } = zaznamovyModel()
+  it('a replacement quoting the third chunk gets exactly the third chunk', async () => {
+    const { call, prompts } = recordingModel()
     await generateQuestions(
       {
-        ...ZADANI,
-        text: temaOSouborech(10),
+        ...REQUEST,
+        text: topicAboutFiles(10),
         count: 1,
-        types: [...ZADANI.types],
+        types: [...REQUEST.types],
         focus: 'Kapitola číslo 2 vypráví o vodě',
       },
-      { models: [PRVNI], callModel: call },
+      { models: [FIRST], callModel: call },
     )
-    expect(souboryVPromptech(prompty)).toEqual([2])
+    expect(filesInPrompts(prompts)).toEqual([2])
   })
 
-  it('náhrada s citací, která v materiálu není, dostane úsek podle posunu', async () => {
-    const { call, prompty } = zaznamovyModel()
+  it('a replacement with a quote not in the material gets a chunk by the shift', async () => {
+    const { call, prompts } = recordingModel()
     await generateQuestions(
       {
-        ...ZADANI,
-        text: temaOSouborech(10),
+        ...REQUEST,
+        text: topicAboutFiles(10),
         count: 1,
-        types: [...ZADANI.types],
+        types: [...REQUEST.types],
         focus: 'Tahle věta v materiálu vůbec není.',
         avoid: ['a', 'b', 'c'],
       },
-      { models: [PRVNI], callModel: call },
+      { models: [FIRST], callModel: call },
     )
-    expect(souboryVPromptech(prompty)).toEqual([3])
+    expect(filesInPrompts(prompts)).toEqual([3])
   })
 
-  it('dvě doplnění s jinou délkou seznamu „vyhni se" berou jiné úseky', async () => {
-    const prvni = zaznamovyModel()
+  it('two top-ups with different "avoid" list lengths take different chunks', async () => {
+    const first = recordingModel()
     await generateQuestions(
-      { ...ZADANI, text: temaOSouborech(30), count: 10, types: [...ZADANI.types] },
-      { models: [PRVNI], callModel: prvni.call },
+      { ...REQUEST, text: topicAboutFiles(30), count: 10, types: [...REQUEST.types] },
+      { models: [FIRST], callModel: first.call },
     )
-    const druhy = zaznamovyModel()
+    const second = recordingModel()
     await generateQuestions(
       {
-        ...ZADANI,
-        text: temaOSouborech(30),
+        ...REQUEST,
+        text: topicAboutFiles(30),
         count: 10,
-        types: [...ZADANI.types],
+        types: [...REQUEST.types],
         avoid: Array.from({ length: 10 }, (_, i) => `Existující otázka ${i}?`),
       },
-      { models: [PRVNI], callModel: druhy.call },
+      { models: [FIRST], callModel: second.call },
     )
-    const a = souboryVPromptech(prvni.prompty)
-    const b = souboryVPromptech(druhy.prompty)
+    const a = filesInPrompts(first.prompts)
+    const b = filesInPrompts(second.prompts)
     expect(a).not.toEqual(b)
   })
 })
 
-describe('popis nastavení modelů', () => {
-  it('funkční nastavení nemá žádné problémy', () => {
+describe('model setup description', () => {
+  it('a working setup has no problems', () => {
     const setup = describeAiSetup({ AI_MODELS: 'google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
     expect(setup.ladder).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
     expect(setup.problems).toEqual([])
   })
 
-  it('staré proměnné pojmenuje a pošle do AI_MODELS', () => {
+  it('names legacy variables and points to AI_MODELS', () => {
     const setup = describeAiSetup({ AI_PROVIDER: 'ollama', OLLAMA_BASE_URL: 'http://x', ANTHROPIC_AUTH_TOKEN: '' })
     expect(setup.ladder).toEqual([])
     expect(setup.problems).toContain(
@@ -402,11 +402,11 @@ describe('popis nastavení modelů', () => {
     expect(setup.problems).toContain(
       'Proměnná OLLAMA_BASE_URL už se nepoužívá — model nastav v AI_MODELS (viz .env.example).',
     )
-    // Prázdná proměnná se nepočítá — nic nenastavuje.
+    // An empty variable does not count — it sets nothing.
     expect(setup.problems.join('\n')).not.toContain('ANTHROPIC_AUTH_TOKEN')
   })
 
-  it('položku s neznámým poskytovatelem nebo bez předpony ukáže', () => {
+  it('reports an item with an unknown provider or without a prefix', () => {
     const setup = describeAiSetup({ AI_MODELS: 'ollama:qwen3:14b, gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
     expect(setup.problems).toEqual([
       'Položka „ollama:qwen3:14b" v AI_MODELS nemá známého poskytovatele (google, openrouter, anthropic).',
@@ -414,33 +414,33 @@ describe('popis nastavení modelů', () => {
     ])
   })
 
-  it('položku bez klíče ukáže i s názvem proměnné pro klíč', () => {
+  it('reports an item without a key including the key variable name', () => {
     const setup = describeAiSetup({ AI_MODELS: 'anthropic:claude-haiku-4-5, google:gemini-flash-latest', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
     expect(setup.ladder).toEqual([{ provider: 'google', model: 'gemini-flash-latest' }])
     expect(setup.problems).toEqual(['K položce „anthropic:claude-haiku-4-5" chybí klíč ANTHROPIC_API_KEY.'])
   })
 
-  it('bez AI_MODELS i bez klíče řekne, že chybí klíč k výchozímu modelu', () => {
+  it('without AI_MODELS and without a key it says the default model\'s key is missing', () => {
     expect(describeAiSetup({}).problems).toEqual([
       'K položce „google:gemini-flash-latest" chybí klíč GOOGLE_GENERATIVE_AI_API_KEY.',
     ])
   })
 
-  it('AI_MODELS jen s oddělovači ohlásí, že v něm nic není', () => {
+  it('AI_MODELS with only separators reports that it is empty', () => {
     const setup = describeAiSetup({ AI_MODELS: ' , ', GOOGLE_GENERATIVE_AI_API_KEY: 'g' })
     expect(setup.ladder).toEqual([])
     expect(setup.problems).toEqual(['V AI_MODELS není žádná položka poskytovatel:model.'])
   })
 
-  it('žebříček je týž jako z readAiLadder', () => {
+  it('the ladder is the same as from readAiLadder', () => {
     const env = { AI_MODELS: 'google:a, google:a, openrouter:b', GOOGLE_GENERATIVE_AI_API_KEY: 'g', OPENROUTER_API_KEY: 'o' }
     expect(describeAiSetup(env).ladder).toEqual(readAiLadder(env))
   })
 
-  it('hláška pro nenastavené generování říká, co doplnit', () => {
-    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('AI_MODELS')
-    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('GOOGLE_GENERATIVE_AI_API_KEY')
-    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('OPENROUTER_API_KEY')
-    expect(AI_NOT_CONFIGURED_MESSAGE).toContain('ANTHROPIC_API_KEY')
+  it('the message for unconfigured generation says what to add', () => {
+    expect(aiNotConfiguredMessage()).toContain('AI_MODELS')
+    expect(aiNotConfiguredMessage()).toContain('GOOGLE_GENERATIVE_AI_API_KEY')
+    expect(aiNotConfiguredMessage()).toContain('OPENROUTER_API_KEY')
+    expect(aiNotConfiguredMessage()).toContain('ANTHROPIC_API_KEY')
   })
 })

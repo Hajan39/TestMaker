@@ -5,9 +5,9 @@ import { ChevronDown, FileUp, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
-import { useMuzeMenit } from '@/components/Prava'
+import { useCanEdit } from '@/components/Permissions'
 import { MaterialRow, type GroupMaterial } from '@/components/MaterialRow'
-import { IssueList, SKIP_LABELS, type IssueItem } from '@/components/importIssues'
+import { IssueList, skipLabel, type IssueItem } from '@/components/importIssues'
 import {
   entriesFromInput,
   extractAll,
@@ -34,17 +34,15 @@ import {
   Card,
   Input,
   Label,
-  MATERIALY,
   Progress,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  plural,
-  pocet,
   toast,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 export type { GroupMaterial } from '@/components/MaterialRow'
 
@@ -52,26 +50,26 @@ type UploadPhase = 'idle' | 'extracting' | 'uploading'
 
 export interface MaterialsStripHandle {
   /**
-   * Otevře nahrávání souborů zvenčí — z prázdného stavu tématu, kde pruh sám
-   * není vidět (`EmptyState` v `TopicWorkspace` ho nahrazuje).
+   * Opens the file upload from outside — from the topic's empty state, where
+   * the strip itself isn't visible (`EmptyState` in `TopicWorkspace` replaces it).
    */
   openUpload: () => void
   /**
-   * Přetažení souboru mimo vlastní zónu pruhu — `TopicWorkspace` přebírá
-   * přetažení nad celou plochou tématu (jinak by ho prohlížeč otevřel jako
-   * novou stránku) a posílá ho sem, jako by dopadlo přímo do zóny.
+   * A file dropped outside the strip's own zone — `TopicWorkspace` catches
+   * drops over the whole topic area (otherwise the browser would open the file
+   * as a new page) and forwards them here as if dropped into the zone.
    */
   handleExternalDrop: (dataTransfer: DataTransfer) => void
 }
 
 /**
- * Pruh materiálů jednoho tématu. Nahrávání souborů rovnou sem, přepnutí
- * „Použít pro generování", smazání a — v režimu „Upravit téma" — přejmenování,
- * přesun mezi tématy, sloučení a smazání celého tématu.
+ * The materials strip of one topic. Upload files straight here, toggle
+ * "Použít pro generování", delete and — in "Upravit téma" mode — rename, move
+ * between topics, merge and delete the whole topic.
  *
- * Všechno se tu jmenuje „téma" — navigace, dlaždice i filtry mluví o tématu a
- * druhé jméno („skupina") pro touž věc vedlo k tomu, že si učitelka před
- * „Smazat skupinu" nebyla jistá, jestli maže totéž, co jinde téma.
+ * Everything here is called "téma" — navigation, tiles and filters all talk
+ * about a topic, and a second name ("skupina") for the same thing left the
+ * teacher unsure whether "Smazat skupinu" deleted the same thing as a topic elsewhere.
  */
 export const MaterialsStrip = forwardRef<
   MaterialsStripHandle,
@@ -79,17 +77,17 @@ export const MaterialsStrip = forwardRef<
     topicId: string
     topicName: string
     materials: GroupMaterial[]
-    /** Karta generování v tématu podle tohodle zakazuje tlačítko, dokud se soubory nahrávají. */
+    /** The topic's generation card uses this to disable its button while files upload. */
     onBusyChange?: (busy: boolean) => void
   }
 >(function MaterialsStrip({ topicId, topicName, materials, onBusyChange }, ref) {
   const router = useRouter()
-  const muzeMenit = useMuzeMenit()
+  const canEdit = useCanEdit()
   const filesRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(topicName)
-  // Přejmenování nadpisem tématu (`InlineName`) mění `topicName` zvenčí —
-  // bez převzetí by tlačítko Uložit vrátilo starý název zpátky.
+  // Renaming via the topic heading (`InlineName`) changes `topicName` from
+  // outside — without adopting it, the Save button would restore the old name.
   const [lastTopicName, setLastTopicName] = useState(topicName)
   if (topicName !== lastTopicName) {
     setLastTopicName(topicName)
@@ -102,15 +100,15 @@ export const MaterialsStrip = forwardRef<
   const [addingGrade, setAddingGrade] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
   const [mergeOpen, setMergeOpen] = useState(false)
-  // Nabídky sourozeneckých témat a ročníků se dotahují až při otevření
-  // úprav. Než dojdou, jsou rozbalovací seznamy prázdné — kdyby zůstaly
-  // ovladatelné, otevřely by se do prázdna a vypadalo by to jako chyba.
+  // Sibling topic and grade options load only when editing opens. Until they
+  // arrive the dropdowns are empty — if they stayed usable they would open
+  // empty and look like a bug.
   const [optionsReady, setOptionsReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
-  // Sbalený, jakmile v tématu materiály jsou — na obrazovce jde hlavně o
-  // otázky. Bez materiálů se rovnou ukazuje nahrávací plocha, ať učitelka
-  // hned ví, kudy začít.
+  // Collapsed once the topic has materials — the screen is mainly about
+  // questions. Without materials the upload area shows right away, so the
+  // teacher knows where to start.
   const [open, setOpen] = useState(materials.length === 0)
   const [error, setError] = useState<string | null>(null)
 
@@ -134,14 +132,14 @@ export const MaterialsStrip = forwardRef<
 
   const uploadBusy = uploadPhase !== 'idle'
 
-  // Karta generování v tématu tlačítko zakáže, dokud se soubory nahrávají —
-  // jinak by šlo spustit generování nad textem, který ještě není celý uložený.
+  // The topic's generation card disables its button while files upload —
+  // otherwise generation could start over text that isn't fully saved yet.
   useEffect(() => {
     onBusyChange?.(uploadBusy)
   }, [uploadBusy, onBusyChange])
 
-  // Zavření nebo obnovení stránky uprostřed čtení či ukládání souborů
-  // znamenalo ztrátu rozpracovaného nahrávání bez varování.
+  // Closing or reloading the page mid-read or mid-save used to lose the
+  // upload in progress without a warning.
   useEffect(() => {
     if (!uploadBusy) return
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -151,9 +149,9 @@ export const MaterialsStrip = forwardRef<
 
   useEffect(() => {
     if (!manage) return
-    // Shození příznaku patří k přepnutí do úprav, ne sem: stav se nemá měnit
-    // synchronně v efektu (React to hlásí jako řetězení překreslení).
-    const failure = 'Nabídku témat a ročníků se nepodařilo načíst.'
+    // Resetting the flag belongs to switching into edit mode, not here: state
+    // shouldn't change synchronously in an effect (React reports cascading renders).
+    const failure = t('library:materialsStrip.optionsLoadFailed')
     void Promise.all([
       requestJson<{ topics: { id: string; name: string }[] }>(
         `/api/topics?siblingsOf=${encodeURIComponent(topicId)}`,
@@ -170,23 +168,23 @@ export const MaterialsStrip = forwardRef<
       }),
     ])
       .catch((loadError: unknown) =>
-        setError(`${errorMessage(loadError, failure)} Klikni na Hotovo a otevři úpravy znovu.`),
+        setError(`${errorMessage(loadError, failure)} ${t('library:materialsStrip.optionsLoadHint')}`),
       )
       .finally(() => setOptionsReady(true))
   }, [manage, topicId])
 
-  /** Uloží změnu tématu a ohlásí ji; vrací, jestli se to povedlo. Chybu ukáže v pruhu. */
+  /** Saves a topic change and announces it; returns whether it worked. Shows errors in the strip. */
   async function call(method: string, body: unknown, success: string): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      // Server odmítne třeba přesun souboru tam, kde tentýž obsah už je.
-      // Bez téhle hlášky to vypadalo, že se prostě nic nestalo.
-      await requestJson('/api/topics', jsonBody(method, body), 'Změnu se nepodařilo uložit.')
+      // The server refuses e.g. moving a file where the same content already is.
+      // Without this message it looked like nothing happened.
+      await requestJson('/api/topics', jsonBody(method, body), t('library:materialsStrip.saveFailed'))
       toast.success(success)
       return true
     } catch (callError) {
-      setError(errorMessage(callError, 'Změnu se nepodařilo uložit.'))
+      setError(errorMessage(callError, t('library:materialsStrip.saveFailed')))
       return false
     } finally {
       setBusy(false)
@@ -198,21 +196,26 @@ export const MaterialsStrip = forwardRef<
   }
 
   async function merge() {
-    const targetName = siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? 'vybraného tématu'
-    const merged = await call('POST', { sourceId: topicId, targetId: mergeTarget }, `Téma sloučeno do „${targetName}“.`)
+    const targetName =
+      siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? t('library:materialsStrip.selectedTopic')
+    const merged = await call(
+      'POST',
+      { sourceId: topicId, targetId: mergeTarget },
+      t('library:materialsStrip.merged', { name: targetName }),
+    )
     setMergeOpen(false)
-    // Sloučené téma zaniklo — obnovení téže stránky by skončilo na „nenalezeno“.
+    // The merged topic is gone — reloading the same page would end on "not found".
     if (merged) router.push(`/topics/${mergeTarget}`)
   }
 
-  /** Extrahuje soubory v prohlížeči a nahraje je rovnou do tohoto tématu. */
+  /** Extracts files in the browser and uploads them straight into this topic. */
   async function handleFiles(entries: FileEntry[]) {
     if (entries.length === 0) return
     setError(null)
     setOpen(true)
 
     const { accepted, skipped: skippedFiles } = triageEntries(entries)
-    setSkipped(skippedFiles.map((item) => ({ ...item, reason: SKIP_LABELS[item.reason] ?? item.reason })))
+    setSkipped(skippedFiles.map((item) => ({ ...item, reason: skipLabel(item.reason) ?? item.reason })))
     setFailed([])
 
     if (accepted.length === 0) return
@@ -222,9 +225,9 @@ export const MaterialsStrip = forwardRef<
 
     const extracted: ExtractedMaterial[] = []
     const failures: IssueItem[] = []
-    // Extrakce doběhne, ale soubor nemá žádný text (`status: 'skipped'` z
-    // `processFile`) — patří mezi přeskočené vedle těch, co se vyřadily už
-    // podle přípony, jinak takový soubor beze stopy zmizí.
+    // Extraction finishes but the file has no text (`status: 'skipped'` from
+    // `processFile`) — it belongs among the skipped next to those dropped by
+    // extension, otherwise such a file vanishes without a trace.
     const emptySkips: IssueItem[] = []
     let done = 0
 
@@ -234,16 +237,16 @@ export const MaterialsStrip = forwardRef<
         setProgress({ done, total: accepted.length })
         if (result.status === 'ok' && result.material) extracted.push(result.material)
         else if (result.status === 'error') {
-          failures.push({ relativePath: result.relativePath, reason: result.reason ?? 'chyba' })
+          failures.push({ relativePath: result.relativePath, reason: result.reason ?? t('library:import.errorReason') })
         } else if (result.status === 'skipped') {
           emptySkips.push({
             relativePath: result.relativePath,
-            reason: SKIP_LABELS[result.reason ?? ''] ?? 'soubor neobsahuje žádný text',
+            reason: skipLabel(result.reason ?? '') ?? t('library:importIssues.skip.emptyText'),
           })
         }
       })
     } catch (workerError) {
-      setError(errorMessage(workerError, 'Soubory se nepodařilo přečíst.'))
+      setError(errorMessage(workerError, t('library:import.readFailed')))
     }
     setFailed(failures)
     if (emptySkips.length > 0) setSkipped((current) => [...current, ...emptySkips])
@@ -261,25 +264,25 @@ export const MaterialsStrip = forwardRef<
         onProgress: (uploadDone, uploadTotal) => setProgress({ done: uploadDone, total: uploadTotal }),
       })
       toast.success(uploadSummaryMessage(result))
-      // Sken bez textové vrstvy se do knihovny uloží (učitelka ho třeba
-      // nahradí lepší verzí), ale otázky z něj nikdy nevzniknou — na to má
-      // upozornit hned, ne až u zaškrtávátka v pruhu.
+      // A scan without a text layer is saved to the library (the teacher may
+      // replace it with a better version), but no questions ever come from it —
+      // say so right away, not only at the strip's checkbox.
       for (const material of extracted) {
         if (material.needsOcr) {
-          toast(`„${material.fileName}" je nejspíš sken bez textu — otázky z něj nevzniknou.`)
+          toast(t('library:materialsStrip.scanWarning', { name: material.fileName }))
         }
       }
       router.refresh()
     } catch (uploadError) {
-      setError(errorMessage(uploadError, 'Soubory se nepodařilo uložit.'))
+      setError(errorMessage(uploadError, t('library:importClient.saveFailed')))
     } finally {
       setUploadPhase('idle')
     }
   }
 
-  // Do generování nejde duplicitní obsah, materiál ručně vyřazený ani sken
-  // bez textové vrstvy — všechno se v hlavičce sečte jedním číslem, ať se
-  // počty nemusí luštit dva.
+  // Duplicate content, manually excluded materials and scans without a text
+  // layer don't feed generation — the header sums them into one number so
+  // there aren't two counts to decipher.
   const active = materials.filter(isUsableMaterial)
   const skippedCount = materials.length - active.length
 
@@ -293,15 +296,13 @@ export const MaterialsStrip = forwardRef<
           onClick={() => setOpen(!open)}
         >
           <ChevronDown className={cn('size-4 transition-transform', open ? '' : '-rotate-90')} aria-hidden />
-          Materiály{' '}
+          {t('library:materialsStrip.title')}{' '}
           <span className="font-normal text-fg-muted">
             {active.length}
-            {skippedCount > 0
-              ? ` + ${skippedCount} ${plural(skippedCount, 'vynechaný', 'vynechané', 'vynechaných')}`
-              : ''}
+            {skippedCount > 0 ? t('library:materialsStrip.skippedSuffix', { count: skippedCount }) : ''}
           </span>
         </button>
-        {muzeMenit ? (
+        {canEdit ? (
           <Button
             size="sm"
             variant="ghost"
@@ -313,7 +314,7 @@ export const MaterialsStrip = forwardRef<
               setManage(!manage)
             }}
           >
-            {manage ? 'Hotovo' : 'Upravit téma'}
+            {manage ? t('common:actions.done') : t('library:materialsStrip.editTopic')}
           </Button>
         ) : null}
       </div>
@@ -322,7 +323,7 @@ export const MaterialsStrip = forwardRef<
 
       {open ? (
         <div className="mt-2 space-y-3">
-          {muzeMenit ? (
+          {canEdit ? (
             <div
               className={cn(
                 'flex flex-col items-center gap-2 rounded-md border border-dashed border-line-soft p-4 text-center transition-colors',
@@ -335,9 +336,9 @@ export const MaterialsStrip = forwardRef<
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => {
                 event.preventDefault()
-                // Vlastní zóna přetažení soubor zpracuje sama — nesmí probublat
-                // do obslužné rutiny na celé ploše tématu, jinak by se tentýž
-                // soubor nahrál dvakrát.
+                // The strip's own drop zone handles the file itself — it must not
+                // bubble up to the handler over the whole topic area, or the same
+                // file would upload twice.
                 event.stopPropagation()
                 setDragging(false)
                 if (uploadBusy) return
@@ -357,25 +358,30 @@ export const MaterialsStrip = forwardRef<
               />
               <Button size="sm" variant="outline" disabled={uploadBusy} onClick={() => filesRef.current?.click()}>
                 <FileUp className="size-4" aria-hidden />
-                Nahrát materiály
+                {t('library:materialsStrip.upload')}
               </Button>
-              <p className="text-xs text-fg-muted">Nebo sem soubory přetáhni myší.</p>
+              <p className="text-xs text-fg-muted">{t('library:materialsStrip.dropHint')}</p>
 
               {uploadBusy ? (
                 <div className="w-full max-w-sm space-y-1">
                   <p className="text-xs text-fg-soft">
                     <Loader2 className="mr-1 inline size-3.5 animate-spin" />
-                    {uploadPhase === 'extracting' ? 'Čtu soubory' : 'Ukládám'}: {progress.done} / {progress.total}
+                    {uploadPhase === 'extracting' ? t('library:import.reading') : t('library:import.saving')}:{' '}
+                    {progress.done} / {progress.total}
                   </p>
                   <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
-                  <p className="text-xs text-fg-muted">Nechte stránku otevřenou, než se soubory nahrají.</p>
+                  <p className="text-xs text-fg-muted">{t('library:materialsStrip.keepOpen')}</p>
                 </div>
               ) : null}
             </div>
           ) : null}
 
-          {failed.length > 0 ? <IssueList title={`Nepodařilo se přečíst (${failed.length})`} items={failed} kind="danger" /> : null}
-          {skipped.length > 0 ? <IssueList title={`Přeskočeno (${skipped.length})`} items={skipped} kind="neutral" /> : null}
+          {failed.length > 0 ? (
+            <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" />
+          ) : null}
+          {skipped.length > 0 ? (
+            <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" />
+          ) : null}
 
           {materials.length > 0 ? (
             <ul className="space-y-1 text-sm">
@@ -392,7 +398,11 @@ export const MaterialsStrip = forwardRef<
                     void update(
                       'PUT',
                       { materialId: material.id, topicId: target },
-                      `Materiál přesunut do „${siblings.find((sibling) => sibling.id === target)?.name ?? 'vybraného tématu'}“.`,
+                      t('library:materialsStrip.moved', {
+                        name:
+                          siblings.find((sibling) => sibling.id === target)?.name ??
+                          t('library:materialsStrip.selectedTopic'),
+                      }),
                     )
                   }
                 />
@@ -405,27 +415,27 @@ export const MaterialsStrip = forwardRef<
       {open && manage ? (
         <div className="mt-4 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="topic-group-name">Název tématu</Label>
+            <Label htmlFor="topic-group-name">{t('library:materialsStrip.topicName')}</Label>
             <div className="flex gap-2">
               <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
               <BusyButton
                 size="sm"
                 variant="outline"
                 busy={busy}
-                busyLabel="Ukládám…"
+                busyLabel={t('common:actions.saving')}
                 disabled={!name.trim() || name === topicName}
-                onClick={() => void update('PATCH', { id: topicId, name }, 'Téma přejmenováno.')}
+                onClick={() => void update('PATCH', { id: topicId, name }, t('library:materialsStrip.renamed'))}
               >
-                Uložit
+                {t('common:actions.save')}
               </BusyButton>
             </div>
           </div>
           <div>
-            <Label htmlFor="topic-group-grade">Ročník</Label>
+            <Label htmlFor="topic-group-grade">{t('library:import.grade')}</Label>
             <Select
-              value={addingGrade ? 'novy' : currentGrade === '' ? 'bez-rocniku' : currentGrade}
+              value={addingGrade ? 'new-grade' : currentGrade === '' ? 'no-grade' : currentGrade}
               onValueChange={(value) => {
-                if (value === 'novy') {
+                if (value === 'new-grade') {
                   setAddingGrade(true)
                   setNewGrade('')
                   return
@@ -433,16 +443,18 @@ export const MaterialsStrip = forwardRef<
                 setAddingGrade(false)
                 void update(
                   'PATCH',
-                  { id: topicId, gradeName: value === 'bez-rocniku' ? '' : value },
-                  value === 'bez-rocniku' ? 'Téma přeřazeno mezi témata bez ročníku.' : `Téma přeřazeno do ročníku ${value}.`,
+                  { id: topicId, gradeName: value === 'no-grade' ? '' : value },
+                  value === 'no-grade'
+                    ? t('library:materialsStrip.movedToNoGrade')
+                    : t('library:materialsStrip.movedToGrade', { grade: value }),
                 )
               }}
             >
               <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady || busy}>
-                {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám ročníky…</span>}
+                {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialsStrip.loadingGrades')}</span>}
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="bez-rocniku">Bez ročníku</SelectItem>
+                <SelectItem value="no-grade">{t('library:materialsStrip.noGrade')}</SelectItem>
                 {gradeOptions
                   .filter((grade) => grade.name !== '')
                   .map((grade) => (
@@ -450,15 +462,15 @@ export const MaterialsStrip = forwardRef<
                       {grade.name}
                     </SelectItem>
                   ))}
-                <SelectItem value="novy">Jiný ročník…</SelectItem>
+                <SelectItem value="new-grade">{t('library:materialsStrip.otherGrade')}</SelectItem>
               </SelectContent>
             </Select>
 
             {addingGrade ? (
               <div className="mt-2 flex gap-2">
                 <Input
-                  aria-label="Název nového ročníku"
-                  placeholder="Např. 8. ročník"
+                  aria-label={t('library:materialsStrip.newGradeName')}
+                  placeholder={t('library:materialsStrip.newGradePlaceholder')}
                   value={newGrade}
                   onChange={(event) => setNewGrade(event.target.value)}
                 />
@@ -466,32 +478,33 @@ export const MaterialsStrip = forwardRef<
                   size="sm"
                   variant="outline"
                   busy={busy}
-                  busyLabel="Přeřazuji…"
+                  busyLabel={t('library:materialsStrip.regrading')}
                   disabled={!newGrade.trim()}
                   onClick={() => {
                     setAddingGrade(false)
-                    void update('PATCH', { id: topicId, gradeName: newGrade }, `Téma přeřazeno do ročníku ${newGrade.trim()}.`)
+                    void update(
+                      'PATCH',
+                      { id: topicId, gradeName: newGrade },
+                      t('library:materialsStrip.movedToGrade', { grade: newGrade.trim() }),
+                    )
                   }}
                 >
-                  Přeřadit
+                  {t('library:materialsStrip.regrade')}
                 </BusyButton>
               </div>
             ) : null}
 
-            <p className="mt-1 text-xs text-fg-muted">
-              Přeřadí celé téma i s materiály a otázkami do zvoleného ročníku téhož předmětu.
-              Ročník, který ještě neexistuje, se založí.
-            </p>
+            <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.regradeHint')}</p>
           </div>
           <div>
-            <Label htmlFor="topic-group-merge-target">Sloučit do jiného tématu</Label>
+            <Label htmlFor="topic-group-merge-target">{t('library:materialsStrip.mergeLabel')}</Label>
             <div className="flex gap-2">
-              <Select value={mergeTarget || 'zadna'} onValueChange={(value) => setMergeTarget(value === 'zadna' ? '' : value)}>
+              <Select value={mergeTarget || 'none'} onValueChange={(value) => setMergeTarget(value === 'none' ? '' : value)}>
                 <SelectTrigger id="topic-group-merge-target" className="w-full" disabled={!optionsReady}>
-                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">Načítám témata…</span>}
+                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialRow.loadingTopics')}</span>}
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="zadna">Vyber téma…</SelectItem>
+                  <SelectItem value="none">{t('library:materialsStrip.pickTopic')}</SelectItem>
                   {siblings.map((sibling) => (
                     <SelectItem key={sibling.id} value={sibling.id}>
                       {sibling.name}
@@ -499,31 +512,31 @@ export const MaterialsStrip = forwardRef<
                   ))}
                 </SelectContent>
               </Select>
-              {/* Sloučení je nevratné: téma zmizí a materiály, které cíl už má,
-                  se zahodí — proto se ptá stejně jako mazání. */}
+              {/* Merging is irreversible: the topic disappears and materials the
+                  target already has are discarded — so it asks just like delete. */}
               <AlertDialog open={mergeOpen} onOpenChange={(next) => !busy && setMergeOpen(next)}>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" variant="outline" disabled={!mergeTarget || busy}>
-                    Sloučit
+                    {t('library:materialsStrip.merge')}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
-                      Sloučit „{topicName}“ do „{siblings.find((sibling) => sibling.id === mergeTarget)?.name}“?
+                      {t('library:materialsStrip.mergeTitle', {
+                        source: topicName,
+                        target: siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? '',
+                      })}
                     </AlertDialogTitle>
                     <AlertDialogDescription asChild>
                       <div className="space-y-2">
-                        <p>
-                          Materiály i otázky se přesunou do vybraného tématu a téma „{topicName}“ zmizí.
-                          Materiály se stejným obsahem, jaký cílové téma už má, se smažou.
-                        </p>
-                        <p className="text-fg-muted">Akci nejde vrátit zpět.</p>
+                        <p>{t('library:materialsStrip.mergeDescription', { name: topicName })}</p>
+                        <p className="text-fg-muted">{t('library:materialsStrip.irreversible')}</p>
                       </div>
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel disabled={busy}>Zrušit</AlertDialogCancel>
+                    <AlertDialogCancel disabled={busy}>{t('common:actions.cancel')}</AlertDialogCancel>
                     <AlertDialogAction
                       disabled={busy}
                       aria-busy={busy || undefined}
@@ -532,21 +545,17 @@ export const MaterialsStrip = forwardRef<
                         void merge()
                       }}
                     >
-                      {busy ? 'Slučuji…' : 'Sloučit'}
+                      {busy ? t('library:materialsStrip.merging') : t('library:materialsStrip.merge')}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-            <p className="mt-1 text-xs text-fg-muted">
-              Materiály i otázky se přesunou do vybraného tématu, toto zanikne.
-            </p>
+            <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.mergeHint')}</p>
           </div>
           <div className="sm:col-span-2 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
-            <p className="text-xs text-fg-muted">
-              Smazání tématu odstraní i jeho materiály a otázky. Soubory na disku zůstanou.
-            </p>
-            <DeleteFromLibrary kind="topic" id={topicId} label="Smazat téma" redirectTo="/" />
+            <p className="text-xs text-fg-muted">{t('library:materialsStrip.deleteHint')}</p>
+            <DeleteFromLibrary kind="topic" id={topicId} label={t('library:materialsStrip.deleteTopic')} redirectTo="/" />
           </div>
         </div>
       ) : null}
@@ -555,16 +564,19 @@ export const MaterialsStrip = forwardRef<
 })
 
 /**
- * Hláška po nahrání do tématu. Když se nenaimportovalo nic (všechny soubory
- * v tématu už byly), obecná věta o duplicitách by zněla, že se nestalo nic —
- * proto má vlastní znění. Sloveso se skloňuje podle počtu duplicit, ať
- * nevznikne „1 už v tématu bylo“.
+ * Message after uploading into a topic. When nothing was imported (all files
+ * were already in the topic), the general duplicates sentence would sound like
+ * nothing happened — so it has its own wording. The verb agrees with the
+ * duplicate count, so it never reads "1 už v tématu bylo".
  */
 function uploadSummaryMessage(result: { imported: number; duplicates: number }): string {
-  if (result.imported === 0) return 'Všechny soubory už v tématu byly.'
+  if (result.imported === 0) return t('library:materialsStrip.allAlreadyInTopic')
+  const materials = t('library:count.materials', { count: result.imported })
   if (result.duplicates > 0) {
-    const bylo = plural(result.duplicates, 'byl', 'byly', 'bylo')
-    return `Nahráno ${pocet(result.imported, MATERIALY)} (${result.duplicates} už v tématu ${bylo}).`
+    return t('library:materialsStrip.uploadedWithDuplicates', {
+      materials,
+      duplicates: t('library:materialsStrip.duplicatesInTopic', { count: result.duplicates }),
+    })
   }
-  return `Nahráno ${pocet(result.imported, MATERIALY)}.`
+  return t('library:materialsStrip.uploaded', { materials })
 }

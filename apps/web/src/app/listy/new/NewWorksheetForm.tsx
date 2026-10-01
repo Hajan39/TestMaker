@@ -19,9 +19,10 @@ import {
   Textarea,
 } from '@testmaker/ui'
 import { emptyHeader } from '@/components/test-builder/defaults'
-import { errorMessage, jsonBody, requestJson, SERVER_TROUBLE } from '@/lib/requestJson'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { t } from '@testmaker/core/i18n'
 
-/** Položka „Bez ročníku“ — Select neumí prázdnou hodnotu jako položku. */
+/** The "Bez ročníku" (no grade) option — Select cannot use an empty value as an item. */
 const NO_GRADE = 'bez-rocniku'
 
 export interface WorksheetSubject {
@@ -33,10 +34,10 @@ export interface WorksheetSubject {
 type Source = 'topic' | 'free'
 
 /**
- * Formulář „Nový pracovní list“. List vzniká z tématu knihovny, nebo
- * z volného zadání (název a ročník); k obojímu jde připsat pokyn a vložit
- * vlastní text. Bez nastaveného modelu se generování nenabízí a zbývá
- * prázdný list k ručnímu vyplnění.
+ * The "Nový pracovní list" form. A worksheet is made from a library topic or
+ * from a free-form brief (title and grade); both accept an instruction and
+ * pasted own text. Without a configured model generation is not offered and
+ * only an empty worksheet to fill in by hand remains.
  */
 export function NewWorksheetForm({
   subjects,
@@ -45,10 +46,10 @@ export function NewWorksheetForm({
   limits,
 }: {
   subjects: WorksheetSubject[]
-  /** Šablona prázdného listu — první podle pořadí, jako u nové písemky. */
+  /** Template of an empty worksheet — the first in order, as for a new test. */
   templateId: string
   ai: { configured: boolean; problems: string[] }
-  /** Meze pokynu a vlastního textu z `AI_SETTINGS.worksheet` — hlídá je i server. */
+  /** Limits of the instruction and own text from `AI_SETTINGS.worksheet` — the server enforces them too. */
   limits: { instructionsMax: number; ownTextMax: number }
 }) {
   const router = useRouter()
@@ -62,8 +63,8 @@ export function NewWorksheetForm({
   const [ownText, setOwnText] = useState('')
   const [busy, setBusy] = useState<'generate' | 'blank' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Odešla učitelka jinam v aplikaci, než list doběhl? Pak ji zpátky nepřesouvat.
-  // Nastavuje se i při připojení: React ve vývoji efekt spustí, uklidí a spustí znovu.
+  // Did the teacher move elsewhere in the app before the worksheet finished? Then don't pull her back.
+  // Also set on mount: in development React runs the effect, cleans up and runs it again.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -72,8 +73,8 @@ export function NewWorksheetForm({
     }
   }, [])
 
-  // Server list dogeneruje i po zavření stránky, ale učitelka by o výsledku
-  // nevěděla — proto se odchod během generování nejdřív ověří.
+  // The server finishes the worksheet even after the page closes, but the teacher
+  // would not learn the outcome — so leaving during generation asks first.
   useEffect(() => {
     if (busy !== 'generate') return
     const warn = (event: BeforeUnloadEvent) => {
@@ -89,17 +90,17 @@ export function NewWorksheetForm({
   const topic = grade?.topics.find((item) => item.id === topicId)
   const allGrades = subjects.flatMap((item) => item.grades.map((g) => ({ id: g.id, label: `${item.name} · ${g.name}` })))
 
-  /** Co chybí k odeslání; `null`, když je zadání úplné. */
+  /** What is missing to submit; `null` when the brief is complete. */
   function missing(): string | null {
-    if (source === 'topic' && !topic) return 'Vyber předmět, ročník a téma.'
-    if (source === 'free' && !title.trim()) return 'Napiš, o čem má list být.'
+    if (source === 'topic' && !topic) return t('worksheets:new.missingTopic')
+    if (source === 'free' && !title.trim()) return t('worksheets:new.missingTitle')
     return null
   }
 
   async function post(url: string, body: unknown): Promise<{ id: string; dropped?: number }> {
-    const failure = 'List se nepodařilo založit.'
+    const failure = t('worksheets:new.createFailed')
     const data = await requestJson<{ id: string; dropped: number }>(url, jsonBody('POST', body), failure)
-    if (!data.id) throw new Error(`${failure} ${SERVER_TROUBLE}`)
+    if (!data.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
     return { id: data.id, dropped: data.dropped }
   }
 
@@ -137,29 +138,29 @@ export function NewWorksheetForm({
         router.push(`/listy/${id}`)
       }
     } catch (runError) {
-      setError(errorMessage(runError, 'List se nepodařilo založit.'))
+      setError(errorMessage(runError, t('worksheets:new.createFailed')))
       setBusy(null)
     }
   }
 
   return (
     <div className="max-w-2xl space-y-5">
-      <h1 className="ui-page-title">Nový pracovní list</h1>
+      <h1 className="ui-page-title">{t('worksheets:new.title')}</h1>
 
       <Card className="space-y-5 p-5">
         <Tabs value={source} onValueChange={(value) => setSource(value as Source)}>
           <TabsList>
-            <TabsTrigger value="topic">Téma z knihovny</TabsTrigger>
-            <TabsTrigger value="free">Volné zadání</TabsTrigger>
+            <TabsTrigger value="topic">{t('worksheets:new.fromTopic')}</TabsTrigger>
+            <TabsTrigger value="free">{t('worksheets:new.free')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="topic" className="mt-4">
             {subjects.length === 0 ? (
-              <p className="text-sm text-fg-muted">Knihovna je zatím prázdná. Použij volné zadání.</p>
+              <p className="text-sm text-fg-muted">{t('worksheets:new.emptyLibrary')}</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <Label htmlFor="list-subject">Předmět</Label>
+                  <Label htmlFor="list-subject">{t('worksheets:new.subject')}</Label>
                   <Select
                     value={subjectId}
                     onValueChange={(value) => {
@@ -169,7 +170,7 @@ export function NewWorksheetForm({
                     }}
                   >
                     <SelectTrigger id="list-subject" className="w-full">
-                      <SelectValue placeholder="Vyber předmět" />
+                      <SelectValue placeholder={t('worksheets:new.pickSubject')} />
                     </SelectTrigger>
                     <SelectContent>
                       {subjects.map((item) => (
@@ -181,7 +182,7 @@ export function NewWorksheetForm({
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="list-grade">Ročník</Label>
+                  <Label htmlFor="list-grade">{t('worksheets:new.grade')}</Label>
                   <Select
                     value={gradeId}
                     disabled={!subject}
@@ -191,7 +192,7 @@ export function NewWorksheetForm({
                     }}
                   >
                     <SelectTrigger id="list-grade" className="w-full">
-                      <SelectValue placeholder="Vyber ročník" />
+                      <SelectValue placeholder={t('worksheets:new.pickGrade')} />
                     </SelectTrigger>
                     <SelectContent>
                       {subject?.grades.map((item) => (
@@ -203,10 +204,10 @@ export function NewWorksheetForm({
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="list-topic">Téma</Label>
+                  <Label htmlFor="list-topic">{t('worksheets:new.topic')}</Label>
                   <Select value={topicId} disabled={!grade} onValueChange={setTopicId}>
                     <SelectTrigger id="list-topic" className="w-full">
-                      <SelectValue placeholder="Vyber téma" />
+                      <SelectValue placeholder={t('worksheets:new.pickTopic')} />
                     </SelectTrigger>
                     <SelectContent>
                       {grade?.topics.map((item) => (
@@ -224,27 +225,27 @@ export function NewWorksheetForm({
           <TabsContent value="free" className="mt-4">
             <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
               <div>
-                <Label htmlFor="list-title">O čem má list být</Label>
+                <Label htmlFor="list-title">{t('worksheets:new.about')}</Label>
                 <Input
                   id="list-title"
                   value={title}
                   maxLength={200}
-                  placeholder="Např. Vánoce v Evropě"
+                  placeholder={t('worksheets:new.aboutPlaceholder')}
                   onChange={(event) => setTitle(event.target.value)}
                 />
               </div>
               <div>
-                <Label htmlFor="list-free-grade">Ročník</Label>
+                <Label htmlFor="list-free-grade">{t('worksheets:new.grade')}</Label>
                 <Select
                   value={freeGradeId}
                   onValueChange={(value) => setFreeGradeId(value === NO_GRADE ? '' : value)}
                 >
                   <SelectTrigger id="list-free-grade" className="w-full">
-                    <SelectValue placeholder="Bez ročníku" />
+                    <SelectValue placeholder={t('worksheets:new.noGrade')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* Jednou vybraný ročník jde vrátit zpátky na žádný. */}
-                    <SelectItem value={NO_GRADE}>Bez ročníku</SelectItem>
+                    {/* A grade once picked can be reset back to none. */}
+                    <SelectItem value={NO_GRADE}>{t('worksheets:new.noGrade')}</SelectItem>
                     {allGrades.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.label}
@@ -258,32 +259,32 @@ export function NewWorksheetForm({
         </Tabs>
 
         <div>
-          <Label htmlFor="list-instructions">Pokyn pro model (nepovinné)</Label>
+          <Label htmlFor="list-instructions">{t('worksheets:new.instructions')}</Label>
           <Input
             id="list-instructions"
             value={instructions}
             maxLength={limits.instructionsMax}
-            placeholder="Např. víc tabulek, jeden fun fact, na 20 minut"
+            placeholder={t('worksheets:new.instructionsPlaceholder')}
             onChange={(event) => setInstructions(event.target.value)}
           />
         </div>
 
         <div>
-          <Label htmlFor="list-own-text">Vlastní text (nepovinné)</Label>
+          <Label htmlFor="list-own-text">{t('worksheets:new.ownText')}</Label>
           <Textarea
             id="list-own-text"
             value={ownText}
             maxLength={limits.ownTextMax}
             rows={5}
-            placeholder="Sem můžeš vložit text, ze kterého má list vycházet — třeba úryvek z učebnice."
+            placeholder={t('worksheets:new.ownTextPlaceholder')}
             onChange={(event) => setOwnText(event.target.value)}
           />
         </div>
 
         {!ai.configured ? (
-          // Bez modelu se generování nenabízí vůbec — tlačítko by skončilo chybou.
+          // Without a model generation is not offered at all — the button would only fail.
           <div className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft">
-            <p>Generování listu není nastavené, takže ho model připravit nemůže. Založ prázdný list a vyplň ho ručně.</p>
+            <p>{t('worksheets:new.notConfigured')}</p>
             {ai.problems.length > 0 ? (
               <ul className="mt-1 list-disc pl-5 text-fg-muted">
                 {ai.problems.map((problem) => (
@@ -297,17 +298,17 @@ export function NewWorksheetForm({
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {busy === 'generate' ? (
           <p className="text-sm text-fg-muted" role="status">
-            List se připravuje. Když stránku opustíš, dokončí se i tak a najdeš ho v přehledu pracovních listů.
+            {t('worksheets:new.generating')}
           </p>
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={busy !== null} onClick={() => void run('blank')}>
-            {busy === 'blank' ? 'Zakládám…' : 'Založit prázdný list'}
+            {busy === 'blank' ? t('worksheets:new.creating') : t('worksheets:new.createBlank')}
           </Button>
           {ai.configured ? (
             <Button disabled={busy !== null} onClick={() => void run('generate')}>
-              {busy === 'generate' ? 'Generuji list… (může to trvat minutu)' : 'Vygenerovat'}
+              {busy === 'generate' ? t('worksheets:new.generatingButton') : t('worksheets:new.generate')}
             </Button>
           ) : null}
         </div>

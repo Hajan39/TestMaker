@@ -1,14 +1,15 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { t } from '@testmaker/core/i18n'
 import { db, users } from '@/db'
-import { overitHeslo } from '@/lib/heslo'
+import { verifyPassword } from '@/lib/password'
 import {
   LOGIN_MAX_ATTEMPTS,
   authMode,
   clearLoginAttempts,
   recordLoginAttempt,
 } from '@/lib/session'
-import { zalozitRelaci, zapsatAudit } from '@/lib/uzivatel'
+import { createSession, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
@@ -17,86 +18,84 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200),
 })
 
-/** Zdržení po chybném hesle: zpomalí zkoušení a uživatelka si ho nevšimne. */
+/** Delay after a wrong password: slows guessing and the user won't notice it. */
 const WRONG_PASSWORD_DELAY_MS = 400
 
-/** Po kolika chybných pokusech se účet sám na chvíli zavře. */
-const ZAMEK_PO_POKUSECH = 10
-const ZAMEK_MINUT = 15
+/** After how many failed attempts the account locks itself for a while. */
+const LOCK_AFTER_ATTEMPTS = 10
+const LOCK_MINUTES = 15
 
 export async function POST(request: Request) {
   if (authMode() === 'chybne-nastaveno') {
-    return Response.json({ error: 'Přihlašování není nastavené — chybí AUTH_SECRET.' }, { status: 503 })
+    return Response.json({ error: t('auth:login.missingSecret') }, { status: 503 })
   }
 
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'neznámá-adresa'
 
   const parsed = loginSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
-    return Response.json({ error: 'Vyplňte e-mail i heslo.' }, { status: 400 })
+    return Response.json({ error: t('auth:login.fillBoth') }, { status: 400 })
   }
   const email = parsed.data.email.trim().toLowerCase()
 
-  // Klíčem je dvojice účtu a adresy: ve sborovně chodí všichni z jedné IP
-  // a samotná adresa by je zamykala navzájem.
+  // The key is the account and address pair: everyone in the staff room comes
+  // from one IP and the address alone would lock them out of each other.
   const attempt = recordLoginAttempt(`${email}|${ip}`)
   if (!attempt.allowed) {
     return Response.json(
       {
-        error: `Příliš mnoho pokusů o přihlášení. Zkuste to znovu za ${Math.ceil(attempt.retryAfterSeconds / 60)} min.`,
+        error: t('auth:login.tooManyAttempts', { minutes: Math.ceil(attempt.retryAfterSeconds / 60) }),
       },
       { status: 429, headers: { 'retry-after': String(attempt.retryAfterSeconds) } },
     )
   }
 
-  const [ucet] = await db.select().from(users).where(eq(users.email, email)).limit(1)
+  const [account] = await db.select().from(users).where(eq(users.email, email)).limit(1)
 
-  const ted = Date.now()
-  if (ucet?.lockedUntil && Date.parse(ucet.lockedUntil) > ted) {
-    const minut = Math.max(1, Math.ceil((Date.parse(ucet.lockedUntil) - ted) / 60000))
-    await zapsatAudit({
-      schoolId: ucet.schoolId,
-      userId: ucet.id,
+  const now = Date.now()
+  if (account?.lockedUntil && Date.parse(account.lockedUntil) > now) {
+    const minutes = Math.max(1, Math.ceil((Date.parse(account.lockedUntil) - now) / 60000))
+    await writeAudit({
+      schoolId: account.schoolId,
+      userId: account.id,
       action: 'prihlaseni-zamceno',
       severity: 'chyba',
       ip,
     })
     return Response.json(
-      { error: `Účet je po chybných pokusech dočasně zamčený. Zkuste to za ${minut} min.` },
+      { error: t('auth:login.locked', { minutes }) },
       { status: 429 },
     )
   }
 
-  const heslo = await overitHeslo(parsed.data.password, ucet?.passwordHash ?? null)
-  if (!ucet || !heslo) {
+  const password = await verifyPassword(parsed.data.password, account?.passwordHash ?? null)
+  if (!account || !password) {
     await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS))
-    if (ucet) await zapsatNeuspech(ucet.id, ucet.schoolId, ucet.failedLogins, ip)
+    if (account) await recordFailure(account.id, account.schoolId, account.failedLogins, ip)
     return Response.json(
       {
         error:
           attempt.remaining <= 3
-            ? `E-mail nebo heslo nesouhlasí. Zbývající pokusy: ${attempt.remaining} z ${LOGIN_MAX_ATTEMPTS}.`
-            : 'E-mail nebo heslo nesouhlasí.',
+            ? t('auth:login.wrongCredentialsRemaining', { remaining: attempt.remaining, max: LOGIN_MAX_ATTEMPTS })
+            : t('auth:login.wrongCredentials'),
       },
       { status: 401 },
     )
   }
 
-  if (ucet.status !== 'aktivni') {
-    await zapsatAudit({
-      schoolId: ucet.schoolId,
-      userId: ucet.id,
+  if (account.status !== 'aktivni') {
+    await writeAudit({
+      schoolId: account.schoolId,
+      userId: account.id,
       action: 'prihlaseni-neaktivni-ucet',
-      detail: { status: ucet.status },
+      detail: { status: account.status },
       severity: 'chyba',
       ip,
     })
     return Response.json(
       {
         error:
-          ucet.status === 'ceka'
-            ? 'Účet zatím nemá přidělenou roli. Požádejte správce o schválení.'
-            : 'Účet je zablokovaný. Obraťte se na správce.',
+          account.status === 'ceka' ? t('auth:account.pending') : t('auth:account.blocked'),
       },
       { status: 403 },
     )
@@ -104,40 +103,40 @@ export async function POST(request: Request) {
 
   clearLoginAttempts(`${email}|${ip}`)
 
-  const cookie = await zalozitRelaci(ucet.id, { ip, userAgent: request.headers.get('user-agent') })
-  await zapsatAudit({ schoolId: ucet.schoolId, userId: ucet.id, action: 'prihlaseni', ip })
+  const cookie = await createSession(account.id, { ip, userAgent: request.headers.get('user-agent') })
+  await writeAudit({ schoolId: account.schoolId, userId: account.id, action: 'prihlaseni', ip })
 
   const response = Response.json({
     ok: true,
-    mustChangePassword: ucet.mustChangePassword,
+    mustChangePassword: account.mustChangePassword,
   })
   response.headers.append('set-cookie', cookie)
   return response
 }
 
 /**
- * Trvalé počítadlo u účtu. Počítadlo v paměti procesu je jen první brzda —
- * na serverless má každá instance funkce vlastní paměť, takže by se dalo
- * obejít prostým čekáním na jinou instanci.
+ * Persistent counter on the account. The in-process counter is only a first
+ * brake — on serverless each function instance has its own memory, so it
+ * could be bypassed by simply waiting for another instance.
  */
-async function zapsatNeuspech(
+async function recordFailure(
   userId: string,
   schoolId: string,
-  dosavadni: number,
+  previous: number,
   ip: string,
 ): Promise<void> {
-  const pocet = dosavadni + 1
-  const zamek =
-    pocet >= ZAMEK_PO_POKUSECH ? new Date(Date.now() + ZAMEK_MINUT * 60_000).toISOString() : null
+  const count = previous + 1
+  const lock =
+    count >= LOCK_AFTER_ATTEMPTS ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString() : null
   await db
     .update(users)
-    .set({ failedLogins: pocet, lockedUntil: zamek })
+    .set({ failedLogins: count, lockedUntil: lock })
     .where(and(eq(users.id, userId)))
-  await zapsatAudit({
+  await writeAudit({
     schoolId,
     userId,
     action: 'prihlaseni-chybne-heslo',
-    detail: { pocet },
+    detail: { pocet: count },
     severity: 'chyba',
     ip,
   })

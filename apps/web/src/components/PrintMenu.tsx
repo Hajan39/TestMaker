@@ -14,23 +14,24 @@ import {
   printPdf,
   toast,
 } from '@testmaker/ui'
+import { t } from '@testmaker/core/i18n'
 
 /**
- * Tisk a stažení testu na jednom místě.
+ * Printing and downloading a test in one place.
  *
- * Dřív se „Vytisknout" ve skladači a „Vytisknout" v seznamu testů chovaly
- * každé jinak: skladač přikládal klíč správných odpovědí (nastavení „Přiložit
- * klíč" bylo ve výchozím stavu zapnuté), seznam ho nepřikládal nikdy. Učitelka
- * podle popisku nepoznala, co jí z tiskárny vyleze — a v horším případě
- * rozdala dětem řešení.
+ * "Vytisknout" in the builder and "Vytisknout" in the test list used to behave
+ * differently: the builder attached the answer key (the "Přiložit klíč" setting
+ * was on by default), the list never did. The teacher could not tell from the
+ * label what would come out of the printer — and at worst handed the solutions
+ * to the pupils.
  *
- * Proto jsou akce jen dvě a jmenují se podle toho, pro koho ten papír je:
- * **Zadání pro žáky** (bez klíče) a **Klíč pro mě** (s klíčem). Obojí jde
- * vytisknout i stáhnout, u varianty A i B. Obě místa v aplikaci berou tenhle
- * seznam odsud, aby se jim popisky nemohly znovu rozejít.
+ * So there are only two actions, named after who the paper is for:
+ * **Zadání pro žáky** (without key) and **Klíč pro mě** (with key). Both can be
+ * printed or downloaded, for variant A and B. Both places in the app take this
+ * list from here so their labels cannot drift apart again.
  */
 
-/** Jedna položka nabídky: co se stane, jak se to jmenuje a co ukázat při čekání. */
+/** One menu item: what happens, what it is called and what to show while waiting. */
 export interface PrintAction {
   key: string
   label: string
@@ -38,45 +39,45 @@ export interface PrintAction {
   run: () => Promise<void>
 }
 
-/** Adresa vykreslení PDF; `key=1` přiloží klíč správných odpovědí. */
+/** PDF render URL; `key=1` appends the answer key. */
 function pdfHref(testId: string, variant: 'A' | 'B', withKey: boolean): string {
   return `/api/tests/${testId}/pdf?variant=${variant}${withKey ? '&key=1' : ''}`
 }
 
 /**
- * Akce rozdělené po variantách. U testu s jedinou variantou se varianta do
- * popisků nepíše (není z čeho vybírat); u dvou variant ano, aby byl každý
- * popisek jednoznačný.
+ * Actions grouped by variant. With a single variant the variant is left out of
+ * the labels (nothing to choose from); with two it is included so every label
+ * is unambiguous.
  */
 export function printGroups(testId: string, variants: number): { variant: 'A' | 'B'; actions: PrintAction[] }[] {
   const list: ('A' | 'B')[] = variants === 2 ? ['A', 'B'] : ['A']
   return list.map((variant) => {
-    const suffix = variants === 2 ? `, varianta ${variant}` : ''
+    const suffix = variants === 2 ? t('tests:print.variantSuffix', { variant }) : ''
     return {
       variant,
       actions: [
         {
           key: `print-zadani-${variant}`,
-          label: `Vytisknout zadání pro žáky${suffix}`,
-          busyLabel: 'Připravuji tisk…',
+          label: t('tests:print.printStudents', { suffix }),
+          busyLabel: t('tests:print.preparingPrint'),
           run: () => printPdf(pdfHref(testId, variant, false)),
         },
         {
           key: `print-klic-${variant}`,
-          label: `Vytisknout klíč pro mě${suffix}`,
-          busyLabel: 'Připravuji tisk…',
+          label: t('tests:print.printKey', { suffix }),
+          busyLabel: t('tests:print.preparingPrint'),
           run: () => printPdf(pdfHref(testId, variant, true)),
         },
         {
           key: `pdf-zadani-${variant}`,
-          label: `Stáhnout zadání pro žáky${suffix}`,
-          busyLabel: 'Připravuji PDF…',
+          label: t('tests:print.downloadStudents', { suffix }),
+          busyLabel: t('tests:print.preparingPdf'),
           run: () => downloadPdf(pdfHref(testId, variant, false)),
         },
         {
           key: `pdf-klic-${variant}`,
-          label: `Stáhnout klíč pro mě${suffix}`,
-          busyLabel: 'Připravuji PDF…',
+          label: t('tests:print.downloadKey', { suffix }),
+          busyLabel: t('tests:print.preparingPdf'),
           run: () => downloadPdf(pdfHref(testId, variant, true)),
         },
       ],
@@ -85,9 +86,9 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
 }
 
 /**
- * Položky do už existující rozbalovací nabídky (seznam testů má v téže nabídce
- * ještě Upravit a Smazat). Čekání a chybu si řeší volající — ví, kde je na ně
- * ve svém rozvržení místo.
+ * Items for an existing dropdown (the test list has Edit and Delete in the
+ * same menu). The caller handles waiting and errors — it knows where they fit
+ * in its layout.
  */
 export function PrintMenuItems({
   testId,
@@ -118,13 +119,14 @@ export function PrintMenuItems({
 }
 
 /**
- * Samostatná nabídka do lišty skladače — včetně čekání a chybové hlášky.
+ * Standalone menu for the builder bar — including waiting and the error message.
  *
- * PDF vzniká na serveru z uložené podoby. S neuloženými změnami by se
- * vytiskla starší verze, než jakou učitelka vidí — tisk proto počká na uložení.
+ * The PDF is rendered on the server from the saved state. With unsaved changes
+ * an older version than the one the teacher sees would print — so printing
+ * waits for a save.
  */
 export function PrintMenu({ testId, variants, dirty = false }: { testId: string; variants: number; dirty?: boolean }) {
-  // Vykreslení PDF trvá vteřiny; bez tohohle se po kliknutí zdánlivě nic nestalo.
+  // Rendering the PDF takes seconds; without this the click seemed to do nothing.
   const [work, setWork] = useState<string | null>(null)
 
   function run(action: PrintAction) {
@@ -146,14 +148,14 @@ export function PrintMenu({ testId, variants, dirty = false }: { testId: string;
                 {work}
               </>
             ) : (
-              'Tisk a PDF'
+              t('tests:print.menu')
             )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className={dirty ? 'max-w-xs' : undefined}>
           {dirty ? (
             <DropdownMenuLabel className="text-xs font-normal text-fg-soft">
-              Nejdřív ulož změny — tiskne se uložená podoba.
+              {t('tests:print.saveFirst')}
             </DropdownMenuLabel>
           ) : null}
           <PrintMenuItems testId={testId} variants={variants} disabled={dirty} onRun={run} />

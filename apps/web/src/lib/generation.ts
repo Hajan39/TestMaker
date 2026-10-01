@@ -20,22 +20,23 @@ import {
   users,
   type QuestionRow,
 } from '@/db'
-import { zapisovatVolani } from '@/lib/aiUsage'
-import { skola, type Scope } from '@/lib/uzivatel'
+import { callRecorder } from '@/lib/aiUsage'
+import { inSchool, type Scope } from '@/lib/user'
 import { newId } from '@/lib/ids'
 import { MIN_GENERATE_CHARS } from '@/lib/materials'
 import { loadActivePromptRules } from '@/lib/promptRules'
 import { insertQuestions, loadAvoidPrompts, questionPrompt, toQuestion } from './questions'
+import { t } from '@testmaker/core/i18n'
 
 export interface GenerateParams {
   count: number
   types: QuestionType[]
   difficulty: 1 | 2 | 3 | 'mix'
   /**
-   * `add` = vytvoř `count` nových otázek.
-   * `target` = doplň téma tak, aby v něm bylo dohromady `count` otázek.
-   * Doplňování je to, co učitelka chce u tématu, kde už něco má: část otázek
-   * zamítne a potřebuje dorovnat počet, ne začínat znovu.
+   * `add` = create `count` new questions.
+   * `target` = top the topic up so it holds `count` questions in total.
+   * Topping up is what the teacher wants for a topic that already has some:
+   * she rejects part of the questions and needs to restore the count, not start over.
    */
   mode?: 'add' | 'target'
 }
@@ -48,9 +49,9 @@ export const DEFAULT_GENERATE_PARAMS: GenerateParams = {
 }
 
 /**
- * Kolik otázek se má v tomhle běhu opravdu vytvořit. U doplňování se počítají
- * jen otázky, které v tématu zůstaly použitelné — zamítnuté se do počtu
- * nepočítají, jinak by doplnění nikdy nic nevytvořilo.
+ * How many questions this run should actually create. When topping up, only
+ * questions still usable in the topic count — rejected ones don't, otherwise
+ * a top-up would never create anything.
  */
 export async function resolveCount(
   scope: Scope,
@@ -62,7 +63,7 @@ export async function resolveCount(
     .select({ value: sql<number>`count(*)` })
     .from(questions)
     .where(
-      and(skola(scope, questions), eq(questions.topicId, topicId), ne(questions.status, 'rejected')),
+      and(inSchool(scope, questions), eq(questions.topicId, topicId), ne(questions.status, 'rejected')),
     )
   return Math.max(0, params.count - Number(row?.value ?? 0))
 }
@@ -70,39 +71,38 @@ export async function resolveCount(
 export interface GenerateOutcome {
   created: number
   rejected: number
-  /** Volání, ze kterých nešlo použít nic. */
+  /** Calls that yielded nothing usable. */
   failedCalls: number
   topicId: string
-  /** Z kolika materiálů se generovalo. */
+  /** How many materials the generation used. */
   sources: number
   /**
-   * Modely, které otázky vyrobily (`poskytovatel:model`). Víc než jeden
-   * znamená, že se v tématu při vyčerpaném limitu přepnulo dál v žebříčku —
-   * kvalita se mezi modely liší, takže to musí být z hlášky poznat.
+   * Models that produced the questions (`provider:model`). More than one
+   * means the ladder moved on after a quota ran out — quality differs between
+   * models, so the message must make that visible.
    */
   models: string[]
 }
 
 /**
- * Zabere téma pro generování. Dvě generování nad týmž tématem naráz o sobě
- * nevědí — seznam „těmhle otázkám se vyhni" si každé načte na začátku, takže
- * by spolehlivě vyrobila duplicity. Rezervace se vede v téže tabulce jako
- * fronta, aby se hromadné generování a ruční spuštění viděly navzájem.
+ * Claims a topic for generation. Two simultaneous generations over the same
+ * topic don't know about each other — each loads the "avoid these questions"
+ * list at the start, so they would reliably produce duplicates. The claim lives
+ * in the same table as the queue so bulk and manual runs see each other.
  *
- * Vrací id rezervace, nebo `null`, když už téma někdo zpracovává.
- */
-/**
- * Zámek je na téma, ne na učitelku: knihovna je společná a dvě generování nad
- * týmž tématem naráz by do ní nasypala tytéž otázky.
+ * The lock is per topic, not per teacher: the library is shared and two runs
+ * over one topic would pour the same questions into it.
+ *
+ * Returns the claim id, or `null` when someone is already processing the topic.
  */
 export async function claimTopic(scope: Scope, topicId: string): Promise<string | null> {
   const id = newId()
   const startedAt = new Date().toISOString()
 
-  // Celá rezervace je jeden příkaz: `insert … select … where not exists`.
-  // Čtení a zápis ve dvou krocích nad Turso atomické nejsou — mezi ně se vejde
-  // druhé generování a obě si téma zaberou. Jeden příkaz zapisuje pod zámkem
-  // databáze, takže podmínku vyhodnotí právě jeden z nich.
+  // The whole claim is one statement: `insert … select … where not exists`.
+  // A read and a write in two steps aren't atomic on Turso — a second run fits
+  // in between and both claim the topic. A single statement writes under the
+  // database lock, so exactly one of them satisfies the condition.
   const claimed = await db.all<{ id: string }>(sql`
     insert into ${generationJobs} (id, school_id, requested_by, topic_id, params, status, started_at)
     select ${id}, ${scope.schoolId}, ${scope.userId}, ${topicId},
@@ -117,7 +117,7 @@ export async function claimTopic(scope: Scope, topicId: string): Promise<string 
   return claimed.length > 0 ? id : null
 }
 
-/** Uvolní rezervaci tématu a zapíše, jak generování dopadlo. */
+/** Releases the topic claim and records how the generation ended. */
 export async function releaseTopic(
   jobId: string,
   outcome: { created?: number; error?: string } = {},
@@ -133,7 +133,7 @@ export async function releaseTopic(
     .where(eq(generationJobs.id, jobId))
 }
 
-/** Text celé skupiny materiálů jednoho tématu, s hlavičkami podle souborů. */
+/** Text of a topic's whole material group, with a header per file. */
 export async function loadTopicSource(
   scope: Scope,
   topicId: string,
@@ -149,19 +149,19 @@ export async function loadTopicSource(
     .from(topics)
     .innerJoin(grades, eq(grades.id, topics.gradeId))
     .innerJoin(subjects, eq(subjects.id, grades.subjectId))
-    .where(and(skola(scope, topics), eq(topics.id, topicId)))
+    .where(and(inSchool(scope, topics), eq(topics.id, topicId)))
     .limit(1)
   if (!meta) return null
 
-  // Duplicitní exporty téhož obsahu a ručně vynechané materiály do zdroje
-  // nepatří — duplicita by otázky zdvojila, vynechaný materiál do generování
-  // učitelka záměrně nechce pustit.
+  // Duplicate exports of the same content and manually excluded materials don't
+  // belong in the source — a duplicate would double the questions, and an
+  // excluded material is one the teacher deliberately keeps out.
   const rows = await db
     .select({ fileName: materials.fileName, text: materials.text })
     .from(materials)
     .where(
       and(
-        skola(scope, materials),
+        inSchool(scope, materials),
         eq(materials.topicId, topicId),
         isNull(materials.duplicateOfId),
         eq(materials.excluded, false),
@@ -178,9 +178,9 @@ export async function loadTopicSource(
 }
 
 /**
- * Vygeneruje otázky z celé skupiny materiálů jednoho tématu.
- * Jeden soubor často na písemku nestačí a generování po souborech vede
- * k opakujícím se otázkám, proto je vstupem vždy celé téma.
+ * Generates questions from a topic's whole material group.
+ * One file is often not enough for a test and generating per file leads to
+ * repeated questions, so the input is always the whole topic.
  */
 export async function generateForTopic(
   scope: Scope,
@@ -190,16 +190,16 @@ export async function generateForTopic(
     signal?: AbortSignal
     onProgress?: (done: number, total: number) => void
     /**
-     * Zavolá se po každé uložené dávce otázek. Generování trvá i deset minut
-     * a jediné, co učitelce řekne, že se opravdu něco děje, jsou otázky, které
-     * mezitím přibyly — proto putují ven rovnou, ne až na konci.
+     * Called after each saved batch of questions. Generation can take ten
+     * minutes and the only sign for the teacher that something is happening
+     * is the questions that have appeared — so they go out right away, not at the end.
      */
     onSaved?: (info: { created: number; questions: Question[] }) => void | Promise<void>
-    /** Podvržené generování pro testy; v aplikaci se nepředává. */
+    /** Fake generation for tests; the app never passes it. */
     generate?: typeof generateQuestions
     /**
-     * Kam zapsat volání modelu do přehledu použití AI. Výchozí je přihlášená
-     * osoba z `scope`; fronta předává záznam bez uživatele.
+     * Where to record model calls for the AI usage overview. Defaults to the
+     * signed-in person from `scope`; the queue passes a recorder without a user.
      */
     onCall?: AiCallListener
   } = {},
@@ -210,15 +210,15 @@ export async function generateForTopic(
   }
 
   const source = await loadTopicSource(scope, topicId)
-  if (!source) throw new Error('Téma nenalezeno')
+  if (!source) throw new Error(t('generation:generation.topicNotFound'))
   if (source.text.trim().length < MIN_GENERATE_CHARS) {
-    throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
+    throw new Error(t('generation:generation.tooLittleText'))
   }
 
   const avoid = await loadAvoidPrompts(scope, topicId)
   const schoolRules = await loadActivePromptRules(scope)
 
-  // Ukládáme po dávkách. Kdyby volání modelu v půlce selhalo, zůstane hotová práce.
+  // Save batch by batch. If a model call fails midway, finished work stays.
   let created = 0
   const generate = options.generate ?? generateQuestions
   const result = await generate(
@@ -235,25 +235,24 @@ export async function generateForTopic(
     },
     {
       signal: options.signal,
-      onCall: options.onCall ?? zapisovatVolani(scope, 'otazky'),
+      onCall: options.onCall ?? callRecorder(scope, 'otazky'),
       onChunk: options.onProgress,
       onBatch: async (batch, info) => {
         const ids = await insertQuestions(scope, batch, { topicId, source: 'ai' })
-        // Který model otázku vyrobil, se ukládá jen do databáze pro pozdější
-        // porovnání kvality — v rozhraní se nikde nezobrazuje. Zapisuje se
-        // zvlášť, aby `insertQuestions` zůstalo o obsahu otázky, ne o tom,
-        // odkud přišla.
+        // The producing model is stored only in the database for later quality
+        // comparison — the UI never shows it. Written separately so
+        // `insertQuestions` stays about question content, not its origin.
         if (ids.length > 0) await db.update(questions).set({ model: info.model }).where(inArray(questions.id, ids))
         created += batch.length
 
-        // Hotové otázky ven ještě za běhu — ale jen když o ně někdo stojí,
-        // aby se ve frontě (kde je nikdo nečte) nedělal dotaz navíc.
+        // Send finished questions out while running — but only when someone
+        // wants them, so the queue (where nobody reads them) skips the extra query.
         if (options.onSaved && ids.length > 0) {
           const rows = await db
             .select()
             .from(questions)
-            .where(and(skola(scope, questions), inArray(questions.id, ids)))
-          // Pořadí z databáze není zaručené; vracíme dávku tak, jak vznikla.
+            .where(and(inSchool(scope, questions), inArray(questions.id, ids)))
+          // Database order isn't guaranteed; return the batch in creation order.
           const byId = new Map(rows.map((row) => [row.id, toQuestion(row)]))
           await options.onSaved({
             created,
@@ -278,41 +277,38 @@ export async function generateForTopic(
 }
 
 /**
- * Běží nad tématem právě dávkové generování? Náhrada jedné otázky si téma
- * nerezervuje (`claimTopic`) — kvůli jedné otázce by zablokovala celé téma na
- * několik minut. Čte ale rezervaci cizí: kdyby se náhrada trefila doprostřed
- * dávky, obě volání by pracovala se stejným seznamem „těmhle se vyhni".
+ * Is a batch generation running over the topic right now? Replacing a single
+ * question doesn't claim the topic (`claimTopic`) — it would block the whole
+ * topic for minutes over one question. It does read other claims: a replacement
+ * landing mid-batch would work from the same "avoid these" list.
  */
-export async function isTopicBusy(scope: Scope, topicId: string): Promise<{ kdo: string } | null> {
+export async function isTopicBusy(scope: Scope, topicId: string): Promise<{ who: string } | null> {
   const [running] = await db
-    .select({ id: generationJobs.id, kdo: users.name })
+    .select({ id: generationJobs.id, who: users.name })
     .from(generationJobs)
     .innerJoin(users, eq(users.id, generationJobs.requestedBy))
     .where(
       and(
-        skola(scope, generationJobs),
+        inSchool(scope, generationJobs),
         eq(generationJobs.topicId, topicId),
         inArray(generationJobs.status, ['queued', 'running']),
       ),
     )
     .limit(1)
-  return running ? { kdo: running.kdo } : null
+  return running ? { who: running.who } : null
 }
 
-export const TOPIC_BUSY_MESSAGE =
-  'Nad tímhle tématem právě běží generování. Počkej, než doběhne, a zkus to znovu.'
-
-/** Hláška i se jménem — bez něj vypadá zablokované téma jako porucha. */
-export function topicBusyMessage(kdo: string): string {
-  return `Nad tímhle tématem právě generuje ${kdo}. Počkej, než to doběhne, a zkus to znovu.`
+/** Message including the name — without it a blocked topic looks like a fault. */
+export function topicBusyMessage(who: string): string {
+  return t('generation:generation.topicBusy', { who })
 }
 
-/** Obtížnost do rozsahu 1–3 — posun od důvodu ji nesmí přehoupnout mimo stupnici. */
+/** Difficulty clamped to 1–3 — the shift from a reason must not push it off the scale. */
 function clampDifficulty(value: number): 1 | 2 | 3 {
   return Math.min(3, Math.max(1, value)) as 1 | 2 | 3
 }
 
-/** Společný podklad pro přegenerování i verzi otázky. */
+/** Shared groundwork for regenerating a question and for a variant. */
 interface RegenerationContext {
   original: QuestionRow
   topicId: string
@@ -322,33 +318,33 @@ interface RegenerationContext {
 }
 
 /**
- * Načte otázku a vše, co potřebuje generování náhrady i verze: kontrolu, že
- * otázka patří k tématu a téma zrovna nezpracovává dávkové generování, že jde
- * o typ, který model umí, i podklady pro prompt (zdrojový text, seznam
- * „vyhni se", pravidla školy). Sdíleno mezi `regenerateQuestion` a
- * `createVariant`, aby se tahle sada kontrol neopakovala na dvou místech.
+ * Loads the question and everything a replacement or variant needs: checks that
+ * the question belongs to a topic not being batch-generated, that the model can
+ * produce its type, and the prompt inputs (source text, "avoid" list, school
+ * rules). Shared by `regenerateQuestion` and `createVariant` so the checks
+ * aren't repeated in two places.
  */
 async function loadRegenerationContext(scope: Scope, questionId: string): Promise<RegenerationContext> {
   const [original] = await db
     .select()
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.id, questionId)))
+    .where(and(inSchool(scope, questions), eq(questions.id, questionId)))
     .limit(1)
-  if (!original) throw new Error('Otázka nenalezena')
-  if (!original.topicId) throw new Error('Otázka nepatří k žádnému tématu, nemá se z čeho generovat náhrada')
+  if (!original) throw new Error(t('generation:generation.questionNotFound'))
+  if (!original.topicId) throw new Error(t('generation:generation.questionWithoutTopic'))
 
   const topicId = original.topicId
   const busy = await isTopicBusy(scope, topicId)
-  if (busy) throw new Error(topicBusyMessage(busy.kdo))
+  if (busy) throw new Error(topicBusyMessage(busy.who))
 
   if (!AI_QUESTION_TYPES.includes(original.type as (typeof AI_QUESTION_TYPES)[number])) {
-    throw new Error('Tenhle typ otázky model generovat neumí, uprav ji prosím ručně')
+    throw new Error(t('generation:generation.typeNotGeneratable'))
   }
 
   const source = await loadTopicSource(scope, topicId)
-  if (!source) throw new Error('Téma nenalezeno')
+  if (!source) throw new Error(t('generation:generation.topicNotFound'))
   if (source.text.trim().length < MIN_GENERATE_CHARS) {
-    throw new Error('Materiály tématu obsahují příliš málo textu na generování otázek')
+    throw new Error(t('generation:generation.tooLittleText'))
   }
 
   const avoid = await loadAvoidPrompts(scope, topicId)
@@ -358,22 +354,22 @@ async function loadRegenerationContext(scope: Scope, questionId: string): Promis
 }
 
 /**
- * Nahradí jednu otázku novou od modelu.
+ * Replaces one question with a new one from the model.
  *
- * Pořadí je to podstatné: nejdřív musí náhrada vzniknout, teprve pak se
- * původní otázka označí jako zamítnutá. Když model selže nebo vrátí něco
- * nepoužitelného, nezmění se v databázi nic a volající dostane českou hlášku
- * (`describeAiError`) — jinak by po nepovedeném pokusu zůstalo v tématu o
- * jednu otázku míň a učitelka by nevěděla, kam se poděla.
+ * Order matters: the replacement must exist first, only then is the original
+ * marked rejected. When the model fails or returns something unusable, nothing
+ * changes in the database and the caller gets a user-facing message
+ * (`describeAiError`) — otherwise a failed attempt would leave the topic one
+ * question short and the teacher wouldn't know where it went.
  *
- * `generate` se dá podstrčit v testech; v aplikaci se nepředává.
+ * `generate` can be injected in tests; the app never passes it.
  *
- * `reason` volí, proč se otázka nahrazuje: nese nápovědu do promptu a u
- * „moc těžká"/„moc lehká" i posun obtížnosti náhrady (ořezaný na 1–3). `note`
- * je volná poznámka učitelky navíc k důvodu. Oboje je nepovinné — přegenerování
- * jedním kliknutím beze změny funguje dál. Po úspěšné náhradě vznikne řádek
- * `questionFeedback` i bez důvodu — jinak by nešlo spočítat, jaký podíl
- * otázek od kterého modelu učitelky nakonec přegenerují.
+ * `reason` says why the question is replaced: it carries a prompt hint and, for
+ * "too hard"/"too easy", a difficulty shift of the replacement (clamped to 1–3).
+ * `note` is the teacher's free-text note on top. Both are optional — one-click
+ * regeneration keeps working. A successful replacement always creates a
+ * `questionFeedback` row, even without a reason — otherwise we couldn't compute
+ * what share of each model's questions teachers end up regenerating.
  */
 export async function regenerateQuestion(
   scope: Scope,
@@ -388,9 +384,9 @@ export async function regenerateQuestion(
   const { original, topicId, source, avoid, schoolRules } = await loadRegenerationContext(scope, questionId)
   const type = original.type
 
-  // Důvod dodává modelu nápovědu do promptu a u „moc těžká"/„moc lehká" i
-  // posouvá obtížnost náhrady — ořezanou zpátky na 1–3, aby se nepřehoupla
-  // mimo stupnici (moc lehká otázka obtížnosti 3 zůstane na 3, ne na 4).
+  // The reason gives the model a prompt hint and, for "too hard"/"too easy",
+  // shifts the replacement's difficulty — clamped back to 1–3 so it stays on
+  // the scale (a too-easy question at difficulty 3 stays at 3, not 4).
   const reasonInfo = options.reason ? REGENERATE_REASONS[options.reason] : undefined
   const originalDifficulty = (original.difficulty as 1 | 2 | 3) ?? 2
   const difficulty = reasonInfo ? clampDifficulty(originalDifficulty + reasonInfo.shift) : originalDifficulty
@@ -407,22 +403,22 @@ export async function regenerateQuestion(
       difficulty,
       avoid,
       schoolRules,
-      // Náhrada vzniká z pasáže, o kterou se opírala původní otázka — jinak
-      // by model dostal vždy první úsek tématu, ať šlo o cokoli.
+      // The replacement comes from the passage the original relied on —
+      // otherwise the model would always get the topic's first chunk.
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
       ...(reasonInfo ? { replacementReason: { hint: reasonInfo.hint, note: options.note } } : {}),
     },
-    { signal: options.signal, onCall: zapisovatVolani(scope, 'otazky') },
+    { signal: options.signal, onCall: callRecorder(scope, 'otazky') },
   )
 
   const replacement = result.questions[0]
   if (!replacement) {
-    throw new Error('Model nevrátil použitelnou náhradu. Zkus to prosím znovu.')
+    throw new Error(t('generation:generation.noReplacement'))
   }
 
-  // Až teď — náhrada je na světě, původní otázka může odejít.
+  // Only now — the replacement exists, the original may go.
   const [replacementId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai' })
-  // Model jen do databáze, stejně jako u dávkového generování (v rozhraní nikde).
+  // Model goes to the database only, as with batch generation (never in the UI).
   const usedModel = result.models[0]
   if (replacementId && usedModel) {
     await db.update(questions).set({ model: usedModel }).where(eq(questions.id, replacementId))
@@ -430,13 +426,13 @@ export async function regenerateQuestion(
   await db
     .update(questions)
     .set({ status: 'rejected', reviewedBy: scope.userId, reviewedAt: new Date().toISOString() })
-    .where(and(skola(scope, questions), eq(questions.id, questionId)))
+    .where(and(inSchool(scope, questions), eq(questions.id, questionId)))
 
-  // Zpětná vazba vzniká vždycky, i bez důvodu — jinak by nešlo spočítat podíl
-  // přegenerovaných otázek podle modelu, který je vytvořil. Výjimka je vlastní
-  // (`manual`) otázka: tu nenapsal žádný model, takže by řádek jen zašuměl
-  // přehled „AI kvalita" pod „neznámý model", aniž by o kvalitě nějakého
-  // modelu vypovídal.
+  // Feedback is always recorded, even without a reason — otherwise we couldn't
+  // compute the share of regenerated questions per producing model. The
+  // exception is a hand-written (`manual`) question: no model wrote it, so the
+  // row would only add noise to the "AI quality" overview under "unknown model"
+  // without saying anything about any model's quality.
   if (original.source === 'ai') {
     await db.insert(questionFeedback).values({
       id: newId(),
@@ -453,27 +449,27 @@ export async function regenerateQuestion(
   const [row] = await db
     .select()
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.id, replacementId!)))
+    .where(and(inSchool(scope, questions), eq(questions.id, replacementId!)))
     .limit(1)
-  if (!row) throw new Error('Náhradu se nepodařilo uložit')
+  if (!row) throw new Error(t('generation:generation.replacementSaveFailed'))
   return toQuestion(row)
 }
 
-/** Hláška, když už není kam obtížnost verze posunout. */
+/** Message when the variant's difficulty can't move any further. */
 export function variantDifficultyLimitMessage(direction: 'easier' | 'harder'): string {
-  return direction === 'easier' ? 'Otázka je už nejlehčí.' : 'Otázka je už nejtěžší.'
+  return direction === 'easier' ? t('generation:variant.limitEasier') : t('generation:variant.limitHarder')
 }
 
 /**
- * Vytvoří lehčí nebo těžší verzi otázky na stejnou látku — ne totéž jinými
- * slovy. Na rozdíl od `regenerateQuestion` originál nezamítá a nezakládá
- * zpětnou vazbu: verze je otázka navíc vedle původní, ne její náhrada.
+ * Creates an easier or harder version of a question on the same content — not
+ * the same thing reworded. Unlike `regenerateQuestion` it doesn't reject the
+ * original or record feedback: a variant is an extra question, not a replacement.
  *
- * Kořen verze je `original.variantOf ?? original.id` — lehčí verze těžší
- * verze se naváže na *původní* otázku, ne do řetězu, aby karta otázky mohla
- * nabídnout všechny verze kořene pohromadě (`loadVariantLinks`).
+ * The variant's root is `original.variantOf ?? original.id` — an easier version
+ * of a harder version links to the *original* question, not into a chain, so
+ * the question card can offer all the root's versions together (`loadVariantLinks`).
  *
- * `generate` se dá podstrčit v testech; v aplikaci se nepředává.
+ * `generate` can be injected in tests; the app never passes it.
  */
 export async function createVariant(
   scope: Scope,
@@ -502,24 +498,24 @@ export async function createVariant(
       difficulty: targetDifficulty as 1 | 2 | 3,
       avoid,
       schoolRules,
-      // Verze vzniká ze stejné pasáže jako originál — stejná látka, jiná otázka.
+      // The variant comes from the same passage as the original — same content, different question.
       ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
       variantOf: { direction, originalPrompt: questionPrompt(original) },
     },
-    { signal: options.signal, onCall: zapisovatVolani(scope, 'otazky') },
+    { signal: options.signal, onCall: callRecorder(scope, 'otazky') },
   )
 
   const generated = result.questions[0]
   if (!generated) {
-    throw new Error('Model nevrátil použitelnou verzi. Zkus to prosím znovu.')
+    throw new Error(t('generation:generation.noVariant'))
   }
-  // Obtížnost se ukládá ta, o kterou se žádalo, ne ta, kterou model napsal —
-  // model ji občas vrátí nepozměněnou a „lehčí verze" by pak v bance stála
-  // na stejném stupni jako originál.
+  // Store the requested difficulty, not the one the model wrote — the model
+  // sometimes returns it unchanged and the "easier version" would then sit at
+  // the same level as the original in the bank.
   const variant = { ...generated, difficulty: targetDifficulty as 1 | 2 | 3 }
 
-  // Kořen je předchůdce, ne otázka sama — verze verze se váže na kořen, jinak
-  // by se verze skládaly do řetězu.
+  // The root is the ancestor, not the question itself — a variant of a variant
+  // links to the root, otherwise variants would form a chain.
   const root = original.variantOf ?? original.id
   const [variantId] = await insertQuestions(scope, [variant], { topicId, source: 'ai', variantOf: root })
   const usedModel = result.models[0]
@@ -530,8 +526,8 @@ export async function createVariant(
   const [row] = await db
     .select()
     .from(questions)
-    .where(and(skola(scope, questions), eq(questions.id, variantId!)))
+    .where(and(inSchool(scope, questions), eq(questions.id, variantId!)))
     .limit(1)
-  if (!row) throw new Error('Verzi se nepodařilo uložit')
+  if (!row) throw new Error(t('generation:generation.variantSaveFailed'))
   return toQuestion(row)
 }

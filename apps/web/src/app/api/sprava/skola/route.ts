@@ -1,29 +1,30 @@
-import { ROLE_SPRAVY } from '@/lib/role'
-import { upravitSkolu, zmenySkolySchema } from '@/lib/skoly'
-import { sRozsahem, zapsatAudit } from '@/lib/uzivatel'
+import { t } from '@testmaker/core/i18n'
+import { MANAGEMENT_ROLES } from '@/lib/role'
+import { updateSchool, schoolChangesSchema } from '@/lib/schools'
+import { withScope, writeAudit } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
-/** Správce upraví školu, ve které pracuje: název, doménu Google, automatické přiřazení. */
+/** A manager edits the school they work in: name, Google domain, automatic joining. */
 export async function PATCH(request: Request) {
-  return sRozsahem(
-    async (ucet) => {
-      const parsed = zmenySkolySchema.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return Response.json({ error: 'Neplatná data' }, { status: 400 })
+  return withScope(
+    async (account) => {
+      const parsed = schoolChangesSchema.safeParse(await request.json().catch(() => null))
+      if (!parsed.success) return Response.json({ error: t('admin:errors.invalidData') }, { status: 400 })
 
-      const vysledek = await upravitSkolu(ucet, ucet.schoolId, parsed.data)
-      if (!vysledek.ok) return Response.json({ error: vysledek.chyba }, { status: vysledek.status })
+      const result = await updateSchool(account, account.schoolId, parsed.data)
+      if (!result.ok) return Response.json({ error: result.error }, { status: result.status })
 
-      await zapsatAudit({
-        schoolId: ucet.schoolId,
-        userId: ucet.userId,
+      await writeAudit({
+        schoolId: account.schoolId,
+        userId: account.userId,
         action: 'skola-upravena',
         entity: 'school',
-        entityId: ucet.schoolId,
+        entityId: account.schoolId,
         detail: parsed.data,
       })
       return Response.json({ ok: true })
     },
-    { role: ROLE_SPRAVY },
+    { role: MANAGEMENT_ROLES },
   )
 }
