@@ -175,6 +175,20 @@ describe('generating a worksheet', () => {
     expect(`${seen.system}`).toContain('fromMaterials')
   })
 
+  it('keeps to the materials by default and may invent only when allowed', async () => {
+    const strict: { prompt?: string } = {}
+    await generateWorksheet(REQUEST, { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, strict) })
+    expect(strict.prompt).toContain('Vycházej výhradně z dodaného textu')
+
+    const free: { prompt?: string } = {}
+    await generateWorksheet(
+      { ...REQUEST, onlyMaterials: false },
+      { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, free) },
+    )
+    expect(free.prompt).toContain('vymyšlené situace')
+    expect(free.prompt).not.toContain('Vycházej výhradně z dodaného textu')
+  })
+
   it('trims long materials to the budget', async () => {
     const seen: { prompt?: string } = {}
     const longText = `=== a.txt ===\n${'Věta o plicích. '.repeat(10_000)}`

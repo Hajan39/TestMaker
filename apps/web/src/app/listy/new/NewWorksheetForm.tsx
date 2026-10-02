@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Button,
   Card,
+  Checkbox,
   Input,
   Label,
   Select,
@@ -61,6 +62,7 @@ export function NewWorksheetForm({
   const [freeGradeId, setFreeGradeId] = useState('')
   const [instructions, setInstructions] = useState('')
   const [ownText, setOwnText] = useState('')
+  const [onlyMaterials, setOnlyMaterials] = useState(true)
   const [busy, setBusy] = useState<'generate' | 'blank' | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Did the teacher move elsewhere in the app before the worksheet finished? Then don't pull her back.
@@ -109,7 +111,7 @@ export function NewWorksheetForm({
     if (problem) return setError(problem)
     setError(null)
     setBusy(kind)
-    const brief = { instructions: instructions.trim(), ownText: ownText.trim() }
+    const brief = { instructions: instructions.trim(), ownText: ownText.trim(), onlyMaterials }
     try {
       if (kind === 'generate') {
         const { id, dropped } = await post(
@@ -279,6 +281,14 @@ export function NewWorksheetForm({
             placeholder={t('worksheets:new.ownTextPlaceholder')}
             onChange={(event) => setOwnText(event.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={onlyMaterials} onCheckedChange={(checked) => setOnlyMaterials(checked === true)} />
+            {t('worksheets:new.onlyMaterials')}
+          </label>
+          <p className="mt-1 text-xs text-fg-muted">{t('worksheets:new.onlyMaterialsHint')}</p>
         </div>
 
         {!ai.configured ? (

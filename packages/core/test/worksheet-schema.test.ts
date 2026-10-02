@@ -68,8 +68,9 @@ describe('worksheet brief', () => {
       title: 'Sopky',
       instructions: 'víc tabulek',
       ownText: '',
+      onlyMaterials: true,
     })
-    expect(parseWorksheetBrief('jen pokyn')).toEqual({ title: '', instructions: 'jen pokyn', ownText: '' })
+    expect(parseWorksheetBrief('jen pokyn')).toEqual({ title: '', instructions: 'jen pokyn', ownText: '', onlyMaterials: true })
     expect(parseWorksheetBrief(null)).toBeNull()
   })
 })

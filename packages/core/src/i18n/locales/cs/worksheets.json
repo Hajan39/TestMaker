@@ -78,6 +78,8 @@
     "instructionsPlaceholder": "Např. víc tabulek, jeden fun fact, na 20 minut",
     "ownText": "Vlastní text (nepovinné)",
     "ownTextPlaceholder": "Sem můžeš vložit text, ze kterého má list vycházet — třeba úryvek z učebnice.",
+    "onlyMaterials": "Vycházet jen z materiálů",
+    "onlyMaterialsHint": "Když volbu vypneš, model smí přidat vlastní příklady, příběhy a obecné znalosti k tématu. Takové položky označí „ověř“, ať je zkontroluješ.",
     "notConfigured": "Generování listu není nastavené, takže ho model připravit nemůže. Založ prázdný list a vyplň ho ručně.",
     "generating": "List se připravuje. Když stránku opustíš, dokončí se i tak a najdeš ho v přehledu pracovních listů.",
     "creating": "Zakládám…",

@@ -87,6 +87,12 @@ export const worksheetBriefSchema = z.object({
   title: z.string(),
   instructions: z.string().default(''),
   ownText: z.string().default(''),
+  /**
+   * Only the supplied text (materials, own text) may be used. When off, the
+   * model may add general knowledge, examples and made-up situations — such
+   * items get the "ověř" flag.
+   */
+  onlyMaterials: z.boolean().default(true),
 })
 export type WorksheetBrief = z.infer<typeof worksheetBriefSchema>
 
@@ -99,7 +105,7 @@ export function parseWorksheetBrief(raw: string | null | undefined): WorksheetBr
   } catch {
     // Not JSON — taken as a plain instruction below.
   }
-  return { title: '', instructions: raw, ownText: '' }
+  return { title: '', instructions: raw, ownText: '', onlyMaterials: true }
 }
 
 export const testHeaderConfigSchema = z.object({

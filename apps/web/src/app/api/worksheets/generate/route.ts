@@ -14,6 +14,8 @@ const brief = {
   instructions: z.string().max(S.instructionsMax).default(''),
   /** Own text pasted into the brief — text only, files are never sent to the server. */
   ownText: z.string().max(S.ownTextMax).default(''),
+  /** Keep to the supplied text; `false` lets the model add its own examples and knowledge. */
+  onlyMaterials: z.boolean().default(true),
 }
 
 const bodySchema = z.discriminatedUnion('source', [
@@ -59,6 +61,7 @@ export async function POST(request: Request) {
           source,
           instructions: body.instructions.trim(),
           ownText: body.ownText.trim(),
+          onlyMaterials: body.onlyMaterials,
         })
         if (!result) return Response.json({ error: t('worksheets:api.topicGone') }, { status: 404 })
         return Response.json(result)

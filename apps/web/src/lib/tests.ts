@@ -526,7 +526,7 @@ export type WorksheetSource = { topicId: string } | { title: string; gradeId: st
 export async function loadWorksheetRequest(
   scope: Scope,
   source: WorksheetSource,
-  brief: { instructions: string; ownText: string },
+  brief: { instructions: string; ownText: string; onlyMaterials?: boolean },
 ): Promise<{ request: WorksheetRequest; topicId: string | null; gradeId: string | null } | null> {
   if ('topicId' in source) {
     const topic = await resolveTopic(scope, source.topicId)
@@ -590,7 +590,7 @@ function worksheetItemRow(item: WorksheetItemDraft) {
  */
 export async function createGeneratedWorksheet(
   scope: Scope,
-  input: { source: WorksheetSource; instructions: string; ownText: string },
+  input: { source: WorksheetSource; instructions: string; ownText: string; onlyMaterials: boolean },
   options: { signal?: AbortSignal } = {},
 ): Promise<{ id: string; dropped: number; models: string[] } | null> {
   const loaded = await loadWorksheetRequest(scope, input.source, input)
@@ -605,6 +605,7 @@ export async function createGeneratedWorksheet(
     title: loaded.request.title,
     instructions: input.instructions,
     ownText: input.ownText,
+    onlyMaterials: input.onlyMaterials,
   }
   await db.batch([
     db.insert(tests).values({
@@ -652,7 +653,7 @@ export async function regenerateWorksheetPart(
     .where(and(eq(tests.id, testId), ownedBy(scope, tests), eq(tests.kind, 'pracovni_list')))
     .limit(1)
   if (!row) return null
-  const brief = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '' }
+  const brief = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '', onlyMaterials: true }
   const title = brief.title || row.title
   // A deleted topic doesn't take the worksheet along (`topic_id` is cleared) —
   // it is then regenerated as a free-form brief from title and grade.

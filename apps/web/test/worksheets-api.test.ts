@@ -100,7 +100,7 @@ describe('POST /api/worksheets/generate', () => {
 
     const test = await loadTest((await import('./helpers')).ACCOUNT, id)
     expect(test).toMatchObject({ kind: 'pracovni_list', graded: false, topicId, gradeId, title: 'Sopky a zemětřesení' })
-    expect(JSON.parse(test!.brief!)).toEqual({ title: 'Sopky', instructions: 'víc tabulek', ownText: '' })
+    expect(JSON.parse(test!.brief!)).toEqual({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: true })
 
     const items = await loadTestItems((await import('./helpers')).ACCOUNT, id)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'text', 'table', 'question'])

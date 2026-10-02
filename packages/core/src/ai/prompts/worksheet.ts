@@ -20,6 +20,12 @@ export interface WorksheetRequest {
   ownText: string
   /** Teacher's instruction ("víc tabulek, jeden fun fact, na 20 minut"); may be empty. */
   instructions: string
+  /**
+   * Keep strictly to the supplied text (the default). When `false`, the model
+   * may add general knowledge, its own examples and made-up situations.
+   * Without any supplied text it has no effect.
+   */
+  onlyMaterials?: boolean
 }
 
 /** Kind of item being regenerated; for a task also its type. */
@@ -87,6 +93,18 @@ function sourceSections(request: WorksheetRequest, materials: string): string[] 
     sections.push(
       '',
       'K tématu nemáš žádný text. Pracuj jen z názvu a ročníku a u všech položek uveď `fromMaterials: false`.',
+    )
+  } else if (request.onlyMaterials === false) {
+    sections.push(
+      '',
+      'Dodaný text je základ, ale nemusíš se ho držet doslova: smíš přidat obecné znalosti k tématu, vlastní',
+      'příklady, příběhy a vymyšlené situace (slovní úlohy, modelové příklady). Takové položky označ `fromMaterials: false`.',
+    )
+  } else {
+    sections.push(
+      '',
+      'Vycházej výhradně z dodaného textu. Nepřidávej znalosti, fakta ani příklady, které v něm nejsou —',
+      'každá položka musí jít doložit dodaným textem a má `fromMaterials: true`.',
     )
   }
   return sections
