@@ -281,6 +281,34 @@ export function TestBuilder({
     setDraft((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
+  // Key of the item whose question is being reloaded from the bank.
+  const [reloading, setReloading] = useState<string | null>(null)
+
+  /**
+   * Replaces the frozen question of an item with the current bank version.
+   * Only the preview changes here; dropping the item id makes the next save
+   * take a fresh snapshot on the server, as for a newly added question.
+   */
+  async function reloadQuestion(key: string) {
+    const item = draft.find((candidate) => candidate.key === key)
+    if (!item?.questionId) return
+    setReloading(key)
+    try {
+      const data = await requestJson<{ question: Question }>(
+        `/api/questions/${encodeURIComponent(item.questionId)}`,
+        undefined,
+        t('tests:page.reloadFailed'),
+      )
+      if (!data.question) throw new Error(t('tests:page.reloadFailed'))
+      patchItem(key, { question: data.question, questionEdited: false, id: null, reloaded: true })
+      toast.success(t('tests:page.reloaded'))
+    } catch (reloadError) {
+      toast.error(errorMessage(reloadError, t('tests:page.reloadFailed')))
+    } finally {
+      setReloading(null)
+    }
+  }
+
   /* --------------------------------------------------- worksheet */
 
   // Worksheet task editor: `key` of the edited item, or the slot for a new one.
@@ -424,6 +452,8 @@ export function TestBuilder({
           table: item.table,
           textContent: item.textContent,
           needsCheck: item.needsCheck,
+          // A reloaded question changes what prints even though nothing else did.
+          reloaded: item.reloaded ?? false,
           // A worksheet task lives only in its item — editing it changes the worksheet.
           question: worksheet && !item.questionId ? item.question : null,
         })),
@@ -571,6 +601,8 @@ export function TestBuilder({
       onRemove={removeItem}
       onPatch={patchItem}
       onAdd={addStructural}
+      onReloadQuestion={readOnly || worksheet ? undefined : (key) => void reloadQuestion(key)}
+      reloading={reloading}
       worksheet={
         worksheet
           ? {

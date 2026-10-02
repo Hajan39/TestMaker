@@ -64,6 +64,8 @@ export function TestPage({
   onRemove,
   onPatch,
   onAdd,
+  onReloadQuestion,
+  reloading = null,
   worksheet,
 }: {
   items: DraftItem[]
@@ -78,6 +80,10 @@ export function TestPage({
   onPatch: (key: string, patch: Partial<DraftItem>) => void
   /** `index` is where the item goes (0 = very top); without it, at the end. */
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
+  /** Reloads an edited question from the bank; absent where the test cannot be changed. */
+  onReloadQuestion?: (key: string) => void
+  /** Key of the item currently being reloaded. */
+  reloading?: string | null
   /** Worksheet controls; absent for a written test. */
   worksheet?: WorksheetControls
 }) {
@@ -266,6 +272,8 @@ export function TestPage({
                             onToggleAnswer={toggleAnswer}
                             onRemove={onRemove}
                             onPatch={onPatch}
+                            onReloadQuestion={onReloadQuestion}
+                            reloading={reloading === item.key}
                             worksheet={worksheet}
                           />
                         </Fragment>
@@ -379,6 +387,8 @@ function PageRow({
   onToggleAnswer,
   onRemove,
   onPatch,
+  onReloadQuestion,
+  reloading,
   worksheet,
 }: {
   worksheet?: WorksheetControls
@@ -392,6 +402,8 @@ function PageRow({
   onToggleAnswer: (key: string) => void
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
+  onReloadQuestion?: (key: string) => void
+  reloading: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.key })
   const config = template.config
@@ -410,7 +422,7 @@ function PageRow({
       className="group/row relative list-none rounded-[var(--radius-inner)] outline-offset-4 hover:outline hover:outline-line focus-within:outline focus-within:outline-line"
     >
       {/* Margin controls. They stay in the keyboard flow even when invisible. */}
-      <div className="absolute -top-3 right-0 z-10 flex items-center gap-1 rounded-[var(--radius-inner)] border border-line bg-surface px-1 py-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
+      <div className="absolute -top-3 right-0 z-10 flex items-center gap-1 rounded-[var(--radius-inner)] border border-line bg-surface px-1 py-0.5 text-fg opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
         <button
           type="button"
           className="cursor-grab touch-none px-1 text-fg-muted active:cursor-grabbing"
@@ -510,7 +522,21 @@ function PageRow({
           {item.questionMissing ? (
             <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionMissing')}</Badge>
           ) : item.questionEdited ? (
-            <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionEdited')}</Badge>
+            <>
+              <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionEdited')}</Badge>
+              {onReloadQuestion ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-xs text-fg"
+                  disabled={reloading}
+                  aria-busy={reloading || undefined}
+                  onClick={() => onReloadQuestion(item.key)}
+                >
+                  {reloading ? t('tests:page.reloadingQuestion') : t('tests:page.reloadQuestion')}
+                </Button>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}

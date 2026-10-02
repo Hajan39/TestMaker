@@ -36,6 +36,8 @@ export interface DraftItem {
   questionEdited?: boolean
   /** The question is no longer in the bank; the test only holds its snapshot. */
   questionMissing?: boolean
+  /** Reloaded from the bank; the next save freezes the current version. */
+  reloaded?: boolean
 }
 
 /** What a worksheet can add on top of a written test. */

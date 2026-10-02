@@ -40,6 +40,16 @@ export function toQuestion(row: QuestionRow): Question {
   } as Question
 }
 
+/** One question of the school's bank; a foreign or missing one is `null`. */
+export async function loadQuestion(scope: Scope, id: string): Promise<Question | null> {
+  const [row] = await db
+    .select()
+    .from(questions)
+    .where(and(inSchool(scope, questions), eq(questions.id, id)))
+    .limit(1)
+  return row ? toQuestion(row) : null
+}
+
 export interface QuestionFilter {
   topicIds?: string[]
   types?: QuestionType[]
