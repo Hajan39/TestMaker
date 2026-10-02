@@ -9,6 +9,7 @@ import { inSchool, pageAccount } from '@/lib/user'
 import { TestsTable } from './TestsTable'
 import { TestsFilters } from './TestsFilters'
 import { overviewPath } from './paths'
+import { KindMark } from '@/components/KindMark'
 
 /** How many items to show at once before offering more. */
 const PAGE_SIZE = 25
@@ -141,7 +142,8 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
     <PageShell>
       <div className="space-y-5">
         <div className="flex items-center justify-between">
-          <h1 className="ui-page-title">
+          <h1 className="ui-page-title flex items-center gap-2">
+            <KindMark kind={kind} />
             {text.title} ({total})
           </h1>
           <Link href={`${basePath}/new`}>

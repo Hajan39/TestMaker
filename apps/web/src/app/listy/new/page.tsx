@@ -5,6 +5,7 @@ import { EmptyState, PageShell } from '@testmaker/ui'
 import { aiStatus } from '@/lib/ai'
 import { loadLibraryTree } from '@/lib/library'
 import { loadTemplates } from '@/lib/tests'
+import { defaultTemplateId } from '@/components/test-builder/defaults'
 import { pageAccount } from '@/lib/user'
 import { NewWorksheetForm, type WorksheetSubject } from './NewWorksheetForm'
 
@@ -39,7 +40,7 @@ export default async function NewWorksheetPage() {
     <PageShell>
       <NewWorksheetForm
         subjects={subjects}
-        templateId={templates[0]?.id ?? ''}
+        templateId={defaultTemplateId(templates, 'pracovni_list')}
         ai={{ configured, problems }}
         limits={{ instructionsMax: AI_SETTINGS.worksheet.instructionsMax, ownTextMax: AI_SETTINGS.worksheet.ownTextMax }}
       />

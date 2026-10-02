@@ -92,7 +92,10 @@ export function MainNav({
         <Link
           href={item.href === '/' ? '/?vse=1' : item.href}
           aria-current={active ? 'page' : undefined}
+          className="inline-flex items-center gap-1.5"
         >
+          {/* Worksheets keep their colour in the bar too. */}
+          {item.href === '/listy' ? <span aria-hidden className="size-2 rounded-full bg-worksheet" /> : null}
           {item.label}
         </Link>
       )}

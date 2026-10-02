@@ -23,6 +23,7 @@ import { t } from '@testmaker/core/i18n'
 import type { TestKind } from '@testmaker/core/schema'
 import { testPath } from './paths'
 import { formatDate } from '@testmaker/core/dates'
+import { KindMark } from '@/components/KindMark'
 
 export interface TestRowData {
   id: string
@@ -219,8 +220,9 @@ function TestBadges({ row }: { row: TestRowData }) {
 export function TestRow({ row }: { row: TestRowData }) {
   return (
     <tr>
-      <td className="py-2 pr-4">
-        <Link href={testPath(row.kind, row.id)} className="font-medium text-fg hover:text-brand">
+      <td className={row.kind === 'pracovni_list' ? 'border-l-2 border-worksheet py-2 pr-4 pl-2' : 'py-2 pr-4'}>
+        <Link href={testPath(row.kind, row.id)} className="inline-flex items-center gap-1.5 font-medium text-fg hover:text-brand">
+          <KindMark kind={row.kind} />
           {row.title}
         </Link>
         <TestBadges row={row} />

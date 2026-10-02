@@ -5,6 +5,7 @@ import {
   parseWorksheetBrief,
   tableItemContentSchema,
   templateConfigSchema,
+  templatesFor,
   textItemContentSchema,
 } from '../src/schema'
 
@@ -78,8 +79,33 @@ describe('worksheet brief', () => {
 describe('fun fact box in the template', () => {
   it('has a default look, so existing templates work unchanged', () => {
     expect(templateConfigSchema.parse({}).funFact).toEqual({ label: 'Věděli jste?', border: true, shaded: true })
-    for (const template of BUILT_IN_TEMPLATES) {
+    // Templates without their own label (all but the playful worksheets) keep the default one.
+    for (const template of BUILT_IN_TEMPLATES.filter((item) => !item.slug.startsWith('list-'))) {
       expect(templateConfigSchema.parse(template.config).funFact.label).toBe('Věděli jste?')
     }
   })
 })
+
+describe('template themes', () => {
+  it('a template without a theme keeps the plain look of a written test', () => {
+    const plain = templateConfigSchema.parse({})
+    expect(plain.kind).toBe('pisemka')
+    expect(plain.theme).toMatchObject({ accent: '#111111', accentSoft: '#f0f0f0', sectionBanner: false, numberBadge: false, decoration: 'none' })
+  })
+
+  it('there are at least three playful worksheet templates, each with its own colour and decoration', () => {
+    const playful = BUILT_IN_TEMPLATES.filter((item) => item.config.kind === 'pracovni_list' && item.config.theme.numberBadge)
+    expect(playful.length).toBeGreaterThanOrEqual(3)
+    expect(new Set(playful.map((item) => item.config.theme.accent)).size).toBe(playful.length)
+    expect(playful.every((item) => item.config.theme.decoration !== 'none')).toBe(true)
+  })
+
+  it('a worksheet is offered worksheet templates first, a test only test ones', () => {
+    const templates = BUILT_IN_TEMPLATES.map((item) => ({ id: item.slug, config: item.config }))
+    expect(templatesFor(templates, 'pracovni_list')[0]?.id).toBe('list-slunicko')
+    expect(templatesFor(templates, 'pisemka').map((item) => item.id)).toEqual(['klasicka', 'kompaktni'])
+    // An older worksheet printed with a test template keeps it on offer.
+    expect(templatesFor(templates, 'pracovni_list', 'klasicka').map((item) => item.id)).toContain('klasicka')
+  })
+})
+

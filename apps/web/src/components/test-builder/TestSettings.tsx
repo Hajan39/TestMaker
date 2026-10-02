@@ -1,6 +1,6 @@
 'use client'
 
-import type { Template } from '@testmaker/core/schema'
+import { templatesFor, type Template } from '@testmaker/core/schema'
 import {
   Button,
   Checkbox,
@@ -120,7 +120,7 @@ export function TestSettings({
           <div>
             <Label>{t('tests:settings.template')}</Label>
             <div className="grid grid-cols-2 gap-3">
-              {templates.map((template) => (
+              {templatesFor(templates, worksheet ? 'pracovni_list' : 'pisemka', value.templateId).map((template) => (
                 <button
                   key={template.id}
                   type="button"

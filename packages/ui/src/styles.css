@@ -49,6 +49,12 @@
      approved a green track across the full width would look like done. */
   --color-track: #e4e6eb;
 
+  /* Worksheets — their own playful colour, so a worksheet is never mistaken
+     for a written test (overview, rows, builder, navigation). Violet: apart
+     from the brand green and the amber draft status. */
+  --color-worksheet: #7048e8;
+  --color-worksheet-bg: #f0ebff;
+
   /* Draft status */
   --color-draft-bg: #fdefd6;
   --color-draft-fg: #8a5a06;
@@ -92,6 +98,9 @@
     --color-brand-fg: #08130f;
 
     --color-track: #2b2f37;
+
+    --color-worksheet: #9c84ff;
+    --color-worksheet-bg: #241c40;
 
     --color-draft-bg: #3a2c11;
     --color-draft-fg: #f0c579;

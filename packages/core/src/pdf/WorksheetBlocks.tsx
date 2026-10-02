@@ -1,5 +1,5 @@
 import { Text, View } from '@react-pdf/renderer'
-import type { TemplateConfig } from '../schema/template'
+import { DEFAULT_THEME, type TemplateConfig } from '../schema/template'
 import type { TableItemContent, TextItemVariant } from '../schema/test'
 import { WORKSHEET_LAYOUT as L } from './layout'
 import { sanitizeText } from './text'
@@ -15,17 +15,21 @@ export function TextBlock({ text, variant, config }: { text: string; variant: Te
     return <Text style={{ marginTop: L.textSpacing }}>{sanitizeText(text)}</Text>
   }
   const { label, border, shaded } = config.funFact
+  const { theme } = config
+  // A themed template frames the fun fact in its accent; a plain one keeps the grey box.
+  const themed = theme.accent !== DEFAULT_THEME.accent
   return (
     <View
       style={{
         marginTop: L.blockSpacing,
         padding: L.funFactPadding,
-        border: border ? '1pt solid #444' : undefined,
-        backgroundColor: shaded ? '#f0f0f0' : undefined,
+        border: border ? `1pt solid ${themed ? theme.accent : '#444'}` : undefined,
+        backgroundColor: shaded ? theme.accentSoft : undefined,
+        borderRadius: theme.radius,
       }}
       wrap={false}
     >
-      {label ? <Text style={{ fontWeight: 'bold' }}>{sanitizeText(label)}</Text> : null}
+      {label ? <Text style={{ fontWeight: 'bold', color: themed ? theme.accent : undefined }}>{sanitizeText(label)}</Text> : null}
       <Text>{sanitizeText(text)}</Text>
     </View>
   )
@@ -36,7 +40,16 @@ export function TextBlock({ text, variant, config }: { text: string; variant: Te
  * following page (`fixed` inside a wrapping container). Empty cells are tall
  * enough for handwriting; in the key (`solved`) they hold the correct answer.
  */
-export function TableBlock({ table, solved = false }: { table: TableItemContent; solved?: boolean }) {
+export function TableBlock({
+  table,
+  solved = false,
+  shade = DEFAULT_THEME.accentSoft,
+}: {
+  table: TableItemContent
+  solved?: boolean
+  /** Header fill — the template's soft accent. */
+  shade?: string
+}) {
   const columns = table.header.length
   const cell = (last: boolean) => ({
     flex: 1,
@@ -46,7 +59,7 @@ export function TableBlock({ table, solved = false }: { table: TableItemContent;
   return (
     <View style={{ marginTop: L.blockSpacing }}>
       {table.caption ? <Text style={{ fontWeight: 'bold' }}>{sanitizeText(table.caption)}</Text> : null}
-      <View fixed style={{ flexDirection: 'row', border: LIGHT, backgroundColor: '#f0f0f0' }}>
+      <View fixed style={{ flexDirection: 'row', border: LIGHT, backgroundColor: shade }}>
         {table.header.map((title, c) => (
           <View key={c} style={cell(c === columns - 1)}>
             <Text style={{ fontWeight: 'bold' }}>{sanitizeText(title)}</Text>

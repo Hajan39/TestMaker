@@ -229,7 +229,13 @@ export function TestPage({
       </div>
 
       {template ? (
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-outer)] bg-surface-muted p-3">
+        // A worksheet lies on its own colour, so it is never mistaken for a test.
+        <div
+          className={
+            'mt-3 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-outer)] p-3 ' +
+            (worksheet ? 'bg-worksheet-bg' : 'bg-surface-muted')
+          }
+        >
           <DndContext
             id={dndId}
             sensors={sensors}
@@ -579,6 +585,7 @@ function PageRow({
             points={config.showPoints && graded ? (item.pointsOverride ?? question.points) : null}
             lines={item.linesOverride}
             style={resolveQuestionStyle(config, question.type)}
+            theme={config.theme}
           />
           {revealed ? (
             // Off the paper, in another colour: a note for the teacher, not the pupils.
@@ -619,7 +626,7 @@ function PageRow({
         )
       ) : item.kind === 'table' ? (
         item.table ? (
-          <TableItemEditor table={item.table} onChange={(table) => onPatch(item.key, { table })} />
+          <TableItemEditor table={item.table} shade={config.theme.accentSoft} onChange={(table) => onPatch(item.key, { table })} />
         ) : (
           <BrokenItem />
         )
@@ -632,12 +639,25 @@ function PageRow({
       ) : item.kind === 'heading' ? (
         <div
           className="text-paper-fg"
-          style={{
-            marginTop: pt(config.sectionStyle.spacingBefore),
-            marginBottom: pt(4),
-            paddingBottom: pt(2),
-            borderBottom: config.sectionStyle.rule ? '1px solid var(--color-paper-fg)' : undefined,
-          }}
+          style={
+            config.theme.sectionBanner
+              ? // A playful worksheet: the heading is a band in the accent colour, as in the PDF.
+                {
+                  marginTop: pt(config.sectionStyle.spacingBefore),
+                  marginBottom: pt(6),
+                  padding: `${pt(3)} ${pt(8)}`,
+                  borderRadius: pt(config.theme.radius),
+                  backgroundColor: config.theme.accent,
+                  color: '#ffffff',
+                }
+              : {
+                  marginTop: pt(config.sectionStyle.spacingBefore),
+                  marginBottom: pt(4),
+                  paddingBottom: pt(2),
+                  color: config.theme.accent,
+                  borderBottom: config.sectionStyle.rule ? `1px solid ${config.theme.accent}` : undefined,
+                }
+          }
         >
           <input
             className="w-full bg-transparent font-bold outline-none placeholder:opacity-40"

@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  DEFAULT_THEME,
   TABLE_MAX_COLUMNS,
   TABLE_MAX_ROWS,
   type TableItemContent,
@@ -61,14 +62,21 @@ export function TextItemEditor({
   if (variant === 'text') return <div style={{ marginTop: pt(8) }}>{field}</div>
   return (
     <div
-      className={
-        'text-paper-fg ' +
-        (config.funFact.border ? 'border border-paper-fg ' : '') +
-        (config.funFact.shaded ? 'bg-paper-shade' : '')
-      }
-      style={{ marginTop: pt(10), padding: pt(6) }}
+      className={'text-paper-fg ' + (config.funFact.border ? 'border border-paper-fg ' : '')}
+      style={{
+        marginTop: pt(10),
+        padding: pt(6),
+        borderRadius: pt(config.theme.radius),
+        // Template colours, as the PDF prints them (`TextBlock`).
+        borderColor: config.theme.accent === DEFAULT_THEME.accent ? undefined : config.theme.accent,
+        backgroundColor: config.funFact.shaded ? config.theme.accentSoft : undefined,
+      }}
     >
-      {config.funFact.label ? <p className="font-bold">{config.funFact.label}</p> : null}
+      {config.funFact.label ? (
+        <p className="font-bold" style={{ color: config.theme.accent === DEFAULT_THEME.accent ? undefined : config.theme.accent }}>
+          {config.funFact.label}
+        </p>
+      ) : null}
       {field}
     </div>
   )
@@ -79,7 +87,16 @@ export function TextItemEditor({
  * vyplnění" (blank to fill in) toggle (its text is then the key answer); rows
  * and columns are added and removed within the schema limits.
  */
-export function TableItemEditor({ table, onChange }: { table: TableItemContent; onChange: (table: TableItemContent) => void }) {
+export function TableItemEditor({
+  table,
+  shade,
+  onChange,
+}: {
+  table: TableItemContent
+  /** Header fill from the template (`theme.accentSoft`). */
+  shade?: string
+  onChange: (table: TableItemContent) => void
+}) {
   const columns = table.header.length
 
   function setHeader(index: number, value: string) {
@@ -124,7 +141,7 @@ export function TableItemEditor({ table, onChange }: { table: TableItemContent; 
       />
       <table className="w-full table-fixed border-collapse">
         <thead>
-          <tr className="bg-paper-shade">
+          <tr className="bg-paper-shade" style={shade ? { backgroundColor: shade } : undefined}>
             {table.header.map((title, c) => (
               <th key={c} className="border border-paper-line p-1 text-left">
                 <input

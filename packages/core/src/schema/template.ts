@@ -54,7 +54,44 @@ export const questionStyleSchema = z.object({
   boxed: z.boolean().default(false),
 })
 
+/** What a template is for — the builder offers worksheet templates only for worksheets. */
+export const TEMPLATE_KINDS = ['pisemka', 'pracovni_list'] as const
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number]
+
+const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i)
+
+/** Page decorations drawn in the margins (`pdf/decorations.ts`). */
+export const DECORATIONS = ['none', 'dots', 'waves', 'stars'] as const
+
+/**
+ * Colours and shapes of the sheet. The defaults are the plain black-and-grey
+ * look of a written test, so templates without a theme print exactly as
+ * before; worksheet templates make it colourful and playful.
+ */
+export const templateThemeSchema = z.object({
+  /** Title, section headings, number badges, fun fact frame. */
+  accent: hexColor.default('#111111'),
+  /** Soft fill: table headers, fun fact box, decorations. */
+  accentSoft: hexColor.default('#f0f0f0'),
+  /** Frame of boxed questions. */
+  border: hexColor.default('#999999'),
+  /** Corner radius of boxes in points. */
+  radius: z.number().min(0).max(14).default(0),
+  /** Section heading as a filled band in the accent colour with white text. */
+  sectionBanner: z.boolean().default(false),
+  /** Question number in a filled circle instead of plain text. */
+  numberBadge: z.boolean().default(false),
+  decoration: z.enum(DECORATIONS).default('none'),
+})
+export type TemplateTheme = z.infer<typeof templateThemeSchema>
+
+/** The plain look of a written test. */
+export const DEFAULT_THEME: TemplateTheme = templateThemeSchema.parse({})
+
 export const templateConfigSchema = z.object({
+  /** Which documents the template is for. Older templates are for written tests. */
+  kind: z.enum(TEMPLATE_KINDS).default('pisemka'),
+  theme: templateThemeSchema.prefault({}),
   page: pageStyleSchema.prefault({}),
   header: headerStyleSchema.prefault({}),
   /** Question numbering style. */
@@ -96,6 +133,21 @@ export interface Template {
   description: string | null
   config: TemplateConfig
   builtIn: boolean
+}
+
+/**
+ * Templates offered for a document kind, in their order. The template the
+ * document already uses stays on offer even if it is of the other kind (an
+ * older worksheet printed with a test template); without any template of
+ * the kind, all are offered rather than none.
+ */
+export function templatesFor<T extends Pick<Template, 'id' | 'config'>>(
+  templates: T[],
+  kind: TemplateKind,
+  currentId?: string | null,
+): T[] {
+  const matching = templates.filter((template) => template.config.kind === kind || template.id === currentId)
+  return matching.some((template) => template.config.kind === kind) ? matching : templates
 }
 
 /** Returns the effective style for the given question type (default + override). */

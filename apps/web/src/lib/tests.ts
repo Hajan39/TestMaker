@@ -9,6 +9,7 @@ import {
   serializeQuestionSnapshot,
   serializePuzzleSnapshot,
   templateConfigSchema,
+  templatesFor,
   type RenderableTest,
   type ResolvedTestItem,
   type Template,
@@ -597,7 +598,8 @@ export async function createGeneratedWorksheet(
 ): Promise<{ id: string; dropped: number; models: string[] } | null> {
   const loaded = await loadWorksheetRequest(scope, input.source, input)
   if (!loaded) return null
-  const [template] = await loadTemplates(scope)
+  // A worksheet gets the first worksheet template (a playful one), not a test layout.
+  const [template] = templatesFor(await loadTemplates(scope), 'pracovni_list')
   if (!template) throw new Error(t('tests:api.schoolHasNoTemplate'))
 
   const result = await generateWorksheet(loaded.request, { signal: options.signal, onCall: callRecorder(scope, 'list') })

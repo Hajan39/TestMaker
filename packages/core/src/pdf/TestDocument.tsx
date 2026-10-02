@@ -1,12 +1,12 @@
-import { Document, Page, Text, View } from '@react-pdf/renderer'
+import { Circle, Document, Page, Path, Svg, Text, View } from '@react-pdf/renderer'
 import { t } from '../i18n'
 import type { Question } from '../schema/question'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
-import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
+import { resolveQuestionStyle, type TemplateConfig, type TemplateTheme } from '../schema/template'
 import { itemQuestion, type RenderableTest, type ResolvedTestItem } from '../schema/test'
 import { formatAnswer } from './answerKey'
 import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
-import { formatPoints, puzzleForVariant } from './layout'
+import { decorationColor, decorationShapes, formatPoints, PAGE_HEIGHT, PAGE_WIDTH, puzzleForVariant } from './layout'
 import { QuestionBody } from './QuestionBody'
 import { PuzzleBody } from './PuzzleBody'
 import { TableBlock, TextBlock } from './WorksheetBlocks'
@@ -55,6 +55,7 @@ export function TestDocument({ test, template, items, variant, withKey, filled =
           color: '#111',
         }}
       >
+        <PageDecoration theme={config.theme} />
         {config.header.show ? (
           <Header test={test} config={config} totalPoints={total} variant={variant} />
         ) : null}
@@ -95,19 +96,41 @@ export function TestDocument({ test, template, items, variant, withKey, filled =
             )
           }
           if (item.kind === 'heading') {
-            return (
+            const { theme } = config
+            const headingText = sanitizeText(
+              config.sectionStyle.uppercase ? (item.text ?? '').toUpperCase() : (item.text ?? ''),
+            )
+            return theme.sectionBanner ? (
+              // A playful worksheet: the heading is a band in the accent colour.
+              <View
+                key={item.id}
+                style={{
+                  marginTop: config.sectionStyle.spacingBefore,
+                  marginBottom: 6,
+                  backgroundColor: theme.accent,
+                  borderRadius: theme.radius,
+                  paddingVertical: 3,
+                  paddingHorizontal: 8,
+                }}
+                wrap={false}
+              >
+                <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold', color: '#ffffff' }}>
+                  {headingText}
+                </Text>
+              </View>
+            ) : (
               <View
                 key={item.id}
                 style={{
                   marginTop: config.sectionStyle.spacingBefore,
                   marginBottom: 4,
-                  borderBottom: config.sectionStyle.rule ? '1pt solid #111' : undefined,
+                  borderBottom: config.sectionStyle.rule ? `1pt solid ${theme.accent}` : undefined,
                   paddingBottom: 2,
                 }}
                 wrap={false}
               >
-                <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold' }}>
-                  {sanitizeText(config.sectionStyle.uppercase ? (item.text ?? '').toUpperCase() : (item.text ?? ''))}
+                <Text style={{ fontSize: config.sectionStyle.fontSize, fontWeight: 'bold', color: theme.accent }}>
+                  {headingText}
                 </Text>
               </View>
             )
@@ -128,7 +151,9 @@ export function TestDocument({ test, template, items, variant, withKey, filled =
           }
           if (item.kind === 'table') {
             // A broken table is skipped; the editor shows it as invalid.
-            return item.table ? <TableBlock key={item.id} table={item.table} solved={filled} /> : null
+            return item.table ? (
+              <TableBlock key={item.id} table={item.table} solved={filled} shade={config.theme.accentSoft} />
+            ) : null
           }
           if (item.kind === 'page_break') return <View key={item.id} break />
           return null
@@ -183,6 +208,7 @@ function Header({
               fontSize: config.header.title.fontSize,
               fontWeight: 'bold',
               textAlign: config.header.title.align,
+              color: config.theme.accent,
             }}
           >
             {sanitizeText(config.header.title.uppercase ? test.title.toUpperCase() : test.title)}
@@ -242,7 +268,7 @@ function Header({
       ) : null}
 
       {config.header.rule ? (
-        <View style={{ borderBottom: '1pt solid #111', marginTop: 2 }} />
+        <View style={{ borderBottom: `1pt solid ${config.theme.accent}`, marginTop: 2 }} />
       ) : null}
     </View>
   )
@@ -277,13 +303,31 @@ function QuestionView({
     <View
       style={{
         marginTop: style.spacingBefore,
-        border: style.boxed ? LIGHT : undefined,
+        border: style.boxed ? `0.8pt solid ${config.theme.border}` : undefined,
+        borderRadius: style.boxed ? config.theme.radius : 0,
         padding: style.boxed ? 6 : 0,
       }}
       wrap={question.type === 'open'}
     >
       <View style={{ flexDirection: 'row' }}>
-        {label ? <Text style={{ fontWeight: 'bold', marginRight: 5 }}>{label}</Text> : null}
+        {label && config.theme.numberBadge ? (
+          // The number in a filled circle — the label without its punctuation.
+          <View
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              backgroundColor: config.theme.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 6,
+            }}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 8.5, lineHeight: 1 }}>{String(index + 1)}</Text>
+          </View>
+        ) : label ? (
+          <Text style={{ fontWeight: 'bold', marginRight: 5 }}>{label}</Text>
+        ) : null}
         <Text style={{ flex: 1, fontWeight: 'bold' }}>{sanitizeText(prompt)}</Text>
         {showPoints ? (
           <Text style={{ fontSize: 8, color: '#555', marginLeft: 6 }}>
@@ -482,5 +526,28 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B' | null; testTitle: 
         }
       />
     </View>
+  )
+}
+
+/** Shapes in the page margins of a playful template, repeated on every page. */
+function PageDecoration({ theme }: { theme: TemplateTheme }) {
+  const shapes = decorationShapes(theme.decoration)
+  if (shapes.length === 0) return null
+  return (
+    <Svg
+      fixed
+      width={PAGE_WIDTH}
+      height={PAGE_HEIGHT}
+      viewBox={`0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}`}
+      style={{ position: 'absolute', top: 0, left: 0 }}
+    >
+      {shapes.map((shape, i) =>
+        shape.kind === 'circle' ? (
+          <Circle key={i} cx={shape.cx} cy={shape.cy} r={shape.r} fill={decorationColor(theme, shape.tone)} />
+        ) : (
+          <Path key={i} d={shape.d} fill={decorationColor(theme, shape.tone)} />
+        ),
+      )}
+    </Svg>
   )
 }

@@ -19,6 +19,10 @@ tloušťky) žijí v `packages/ui/src/styles.css` a odtud se importují do webu 
 nová barva se nepřidává napřímo v komponentě, ale jako token tady, jinak vzniknou
 v aplikaci dvě různá zelená a nikdo nepozná, které je to „správné".
 
+Pracovní listy mají v rozhraní vlastní barvu `--color-worksheet` (ikona
+`KindMark`, tečka v liště, proužek u řádku, podklad sestavování), aby se
+nepletly s písemkami.
+
 Značková zelená se jmenuje `--color-brand`, ne `accent`. Jméno `accent` patří
 shadcn/ui a znamená u něj jen tiché podbarvení plochy při najetí myší — kdo si
 ta dvě jména splete, zezelenají mu všechna najetí myší v aplikaci.
@@ -75,6 +79,11 @@ Databáze i model se řídí týmž schématem; nikde se nezavádí druhá defin
 
 **Šablony jsou data.** PDF vykresluje jeden generický renderer řízený
 `TemplateConfig`. Nový vzhled se přidává jako nastavení, ne jako nová komponenta.
+Šablona má `kind` (písemka / pracovní list — sestavování nabízí jen šablony
+svého druhu) a `theme` (barvy, zaoblení, pásové nadpisy, čísla v kolečku,
+dekorace okrajů). Výchozí `theme` je černobílá písemka; barvy tématu jsou
+data šablony a tisknou se, proto smějí být na papíře i v náhledu přímo.
+Dekorace kreslí PDF i náhled z jednoho seznamu `pdf/decorations.ts`.
 
 **Vykreslení PDF patří do core.** `renderTestToBuffer` v `packages/core/src/pdf/node.ts`
 provádí registraci fontů i render nad touž instancí `@react-pdf/renderer`.

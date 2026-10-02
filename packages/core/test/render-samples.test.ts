@@ -281,3 +281,35 @@ it.runIf(process.env.RENDER_SAMPLES)('generates a worksheet sample', async () =>
   )
   await checkSample(path, ['Věděli jste?', 'Doplň tabulku orgánů', 'funkce 12'])
 })
+
+it.runIf(process.env.RENDER_SAMPLES)('generates the playful worksheet templates', async () => {
+  mkdirSync(OUT, { recursive: true })
+  const questions = makeItems().filter((item) => item.kind === 'question').slice(0, 4)
+  const [heading, ...rest] = makeWorksheetItems(4)
+  const items: ResolvedTestItem[] = [
+    heading!,
+    ...rest,
+    ...questions.map((item, i) => ({ ...item, id: `w-q-${i}`, questionId: null })),
+    { ...heading!, id: 'w-h2', text: 'Procvičování' },
+  ]
+  for (const [slug, label] of [
+    ['list-slunicko', 'Věděli jste?'],
+    ['list-louka', 'Zajímavost'],
+    ['list-vesmir', 'Víš, že'],
+  ] as const) {
+    const path = resolve(OUT, `${slug}.pdf`)
+    await renderToFile(
+      createElement(TestDocument, {
+        test: makeTest({ graded: false, kind: 'pracovni_list', variants: 1, title: 'Pracovní list – dýchání' }),
+        template: makeTemplate(slug),
+        items,
+        variant: 'A',
+        withKey: false,
+        assets: {},
+      }) as never,
+      path,
+    )
+    await checkSample(path, [label, 'Procvičování'])
+  }
+})
+

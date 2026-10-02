@@ -41,7 +41,7 @@ export function QuestionBody({ question, style, config, variant, assets, linesOv
   return (
     <View>
       {question.blocks.map((block, i) => (
-        <BlockView key={i} block={block} assets={assets} />
+        <BlockView key={i} block={block} assets={assets} shade={config.theme.accentSoft} />
       ))}
       <AnswerArea
         question={question}
@@ -56,7 +56,7 @@ export function QuestionBody({ question, style, config, variant, assets, linesOv
   )
 }
 
-function BlockView({ block, assets }: { block: Block; assets: Record<string, string> }) {
+function BlockView({ block, assets, shade }: { block: Block; assets: Record<string, string>; shade: string }) {
   if (block.kind === 'image') {
     const src = assets[block.assetId]
     return (
@@ -98,7 +98,7 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
                   padding: 4,
                   minHeight: 16,
                   borderRight: c < row.length - 1 ? LIGHT : undefined,
-                  backgroundColor: cell.header ? '#f0f0f0' : undefined,
+                  backgroundColor: cell.header ? shade : undefined,
                 }}
               >
                 <Text style={{ fontWeight: cell.header ? 'bold' : 'normal' }}>
@@ -161,7 +161,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride, f
     case 'true_false':
       return (
         <View style={{ marginTop: 6, border: LIGHT }}>
-          <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderBottom: LIGHT }}>
+          <View style={{ flexDirection: 'row', backgroundColor: config.theme.accentSoft, borderBottom: LIGHT }}>
             <View style={{ flex: 1, padding: 4 }}>
               <Text style={{ fontWeight: 'bold' }}>{t('pdf:question.statement')}</Text>
             </View>
@@ -286,7 +286,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride, f
       const blankNumbers = tableBlankNumbers(question.payload.rows)
       return (
         <View style={{ marginTop: 6, border: LIGHT }}>
-          <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderBottom: LIGHT }}>
+          <View style={{ flexDirection: 'row', backgroundColor: config.theme.accentSoft, borderBottom: LIGHT }}>
             {question.payload.headers.map((header, i) => (
               <View
                 key={i}

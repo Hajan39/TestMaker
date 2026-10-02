@@ -1,6 +1,6 @@
 import type { Block } from '@testmaker/core/schema'
-import type { Question, QuestionContent, QuestionStyle } from '@testmaker/core/schema'
-import { answerLines } from '@testmaker/core/schema'
+import type { Question, QuestionContent, QuestionStyle, TemplateTheme } from '@testmaker/core/schema'
+import { answerLines, DEFAULT_THEME } from '@testmaker/core/schema'
 import { displayOrder, formatPoints, LETTERS, numberedBlanks, tableBlankNumbers } from '@testmaker/core/pdf/layout'
 import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
@@ -46,6 +46,7 @@ export function PaperQuestion({
   lines,
   style,
   variant = 'A',
+  theme = DEFAULT_THEME,
   className,
 }: {
   question: Question | QuestionContent
@@ -58,6 +59,8 @@ export function PaperQuestion({
   /** Style from the template; missing values fall back to defaults. */
   style?: Partial<QuestionStyle>
   variant?: 'A' | 'B'
+  /** Colours and shapes of the template (`config.theme`); the plain look without it. */
+  theme?: TemplateTheme
   className?: string
 }) {
   const resolved: QuestionStyle = { ...DEFAULT_STYLE, ...style }
@@ -68,12 +71,31 @@ export function PaperQuestion({
       className={cn('text-paper-fg', className)}
       style={{
         marginTop: pt(resolved.spacingBefore),
-        border: resolved.boxed ? `1px solid var(--color-paper-line)` : undefined,
+        border: resolved.boxed ? `1px solid ${theme === DEFAULT_THEME ? 'var(--color-paper-line)' : theme.border}` : undefined,
+        borderRadius: resolved.boxed ? pt(theme.radius) : undefined,
         padding: resolved.boxed ? pt(6) : undefined,
+        // Table header rows take the template's soft colour (see `bg-paper-shade` below).
+        ['--color-paper-shade' as string]: theme.accentSoft,
       }}
     >
       <div className="flex items-start">
-        {label ? <span className="font-bold" style={{ marginRight: pt(5) }}>{label}</span> : null}
+        {label && theme.numberBadge ? (
+          <span
+            className="inline-flex shrink-0 items-center justify-center rounded-full font-bold"
+            style={{
+              width: pt(16),
+              height: pt(16),
+              marginRight: pt(6),
+              fontSize: pt(8.5),
+              backgroundColor: theme.accent,
+              color: '#ffffff',
+            }}
+          >
+            {label.replace(/\D+$/, '')}
+          </span>
+        ) : label ? (
+          <span className="font-bold" style={{ marginRight: pt(5) }}>{label}</span>
+        ) : null}
         <span className="min-w-0 flex-1 font-bold break-words">{prompt}</span>
         {points != null ? (
           <span className="shrink-0 opacity-70" style={{ fontSize: pt(8), marginLeft: pt(6) }}>

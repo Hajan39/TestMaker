@@ -37,6 +37,7 @@ import {
   type WorksheetAddKind,
 } from '@/components/test-builder/types'
 import { defaultTemplateId, emptyHeader } from '@/components/test-builder/defaults'
+import { KindMark } from '@/components/KindMark'
 
 /** Default text of a newly inserted structural item. */
 function structuralText(kind: 'heading' | 'instruction' | 'page_break'): string | null {
@@ -104,7 +105,7 @@ export function TestBuilder({
     title: test?.title ?? '',
     description: test?.description ?? '',
     graded: test?.graded ?? true,
-    templateId: test?.templateId ?? defaultTemplateId(templates),
+    templateId: test?.templateId ?? defaultTemplateId(templates, kind),
     header: test?.header ?? emptyHeader(),
     variants: test?.variants ?? 1,
     // The key is no longer set on the test but chosen at print time ("Zadání
@@ -672,7 +673,8 @@ export function TestBuilder({
         {/* The title is not just another setting: without it the test can't be
             saved, so it belongs in plain sight in the header, not in a panel. */}
         <div className="min-w-0 flex-1 basis-64">
-          <h1 className="ui-page-title">
+          <h1 className="ui-page-title flex items-center gap-2">
+            <KindMark kind={kind} />
             {worksheet ? t('worksheets:builder.editTitle') : test ? t('tests:builder.editTitle') : t('tests:builder.newTitle')}
           </h1>
           {gradeLabel || backTopic ? (

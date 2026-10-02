@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { TemplateConfig, TestHeaderConfig } from '@testmaker/core/schema'
-import { formatPoints } from '@testmaker/core/pdf/layout'
+import { decorationColor, decorationShapes, formatPoints, PAGE_HEIGHT } from '@testmaker/core/pdf/layout'
 import { t } from '@testmaker/core/i18n'
 import { cn } from './cn'
 
@@ -51,7 +51,7 @@ export function PaperSheet({
       <div
         data-slot="paper-sheet"
         className={cn(
-          'flex w-full flex-col border border-paper-line bg-paper text-paper-fg shadow-sm',
+          'relative flex w-full flex-col overflow-hidden border border-paper-line bg-paper text-paper-fg shadow-sm',
           className,
         )}
         style={{
@@ -70,11 +70,12 @@ export function PaperSheet({
           paddingRight: pt(mm(config.page.marginRightMm)),
         }}
       >
-        <div className={cn('min-w-0 flex-1', bodyClassName)}>{children}</div>
+        <PaperDecoration config={config} />
+        <div className={cn('relative min-w-0 flex-1', bodyClassName)}>{children}</div>
         {config.footer && (footerLeft || footerRight) ? (
           <div
             data-slot="paper-footer"
-            className="flex shrink-0 justify-between gap-2 opacity-60"
+            className="relative flex shrink-0 justify-between gap-2 opacity-60"
             style={{ fontSize: pt(8), paddingTop: pt(8) }}
           >
             <span className="truncate">{footerLeft}</span>
@@ -83,6 +84,27 @@ export function PaperSheet({
         ) : null}
       </div>
     </div>
+  )
+}
+
+/** The margin shapes of a playful template — the same list the PDF draws (`decorationShapes`). */
+function PaperDecoration({ config }: { config: TemplateConfig }) {
+  const shapes = decorationShapes(config.theme.decoration)
+  if (shapes.length === 0) return null
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 top-0 w-full"
+      viewBox={`0 0 ${PAGE_WIDTH_PT} ${PAGE_HEIGHT}`}
+    >
+      {shapes.map((shape, i) =>
+        shape.kind === 'circle' ? (
+          <circle key={i} cx={shape.cx} cy={shape.cy} r={shape.r} fill={decorationColor(config.theme, shape.tone)} />
+        ) : (
+          <path key={i} d={shape.d} fill={decorationColor(config.theme, shape.tone)} />
+        ),
+      )}
+    </svg>
   )
 }
 
@@ -132,6 +154,8 @@ export function PaperHeader({
             style={{
               fontSize: pt(config.header.title.fontSize),
               textAlign: config.header.title.align,
+              // Template data like the PDF — the sheet stays paper in dark mode too.
+              color: config.theme.accent,
             }}
           >
             {title
@@ -191,7 +215,7 @@ export function PaperHeader({
       ) : null}
 
       {config.header.rule ? (
-        <div className="border-b border-paper-fg" style={{ marginTop: pt(2) }} />
+        <div className="border-b" style={{ marginTop: pt(2), borderColor: config.theme.accent }} />
       ) : null}
     </div>
   )
