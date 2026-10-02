@@ -35,12 +35,19 @@
   "questionStatus": {
     "saveFailed": "Změnu se nepodařilo uložit. Zkus to prosím znovu."
   },
+  "cart": {
+    "mixedTitle_one": "Nový test",
+    "mixedTitle_few": "Test ze {{count}} témat",
+    "mixedTitle_other": "Test z {{count}} témat"
+  },
   "selectionBar": {
     "selected": "Vybráno {{selected}}",
     "points_one": "{{count}} bod",
     "points_few": "{{count}} body",
     "points_other": "{{count}} bodů",
-    "hiddenByFilter": "({{count}} skryté filtrem)",
+    "topics_one": "z {{count}} tématu",
+    "topics_few": "ze {{count}} témat",
+    "topics_other": "z {{count}} témat",
     "clear": "Zrušit výběr",
     "creating": "Vytvářím…",
     "createTest": "Vytvořit test"

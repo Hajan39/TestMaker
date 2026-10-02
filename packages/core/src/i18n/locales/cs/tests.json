@@ -238,6 +238,8 @@
     "reloadingQuestion": "Načítám…",
     "reloadFailed": "Otázku se nepodařilo načíst. Zkus to znovu.",
     "reloaded": "Otázka je načtená z banky — po uložení se vytiskne nová verze.",
+    "editInBankTitle": "Upravit otázku v bance",
+    "editedInBank": "Otázka je upravená v bance i v testu — test ještě ulož.",
     "sampleAnswer": "Vzorová odpověď (netiskne se): ",
     "puzzleGone": "Hlavolam už není k dispozici — odeber ho z písemky.",
     "questionGone": "Otázka už není k dispozici — odeber ji z písemky.",

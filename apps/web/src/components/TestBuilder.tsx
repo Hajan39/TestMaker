@@ -283,6 +283,53 @@ export function TestBuilder({
 
   // Key of the item whose question is being reloaded from the bank.
   const [reloading, setReloading] = useState<string | null>(null)
+  // Bank question opened for editing from the test, with the item it came from.
+  const [bankEdit, setBankEdit] = useState<{ key: string; question: Question } | null>(null)
+
+  async function fetchBankQuestion(questionId: string): Promise<Question> {
+    const data = await requestJson<{ question: Question }>(
+      `/api/questions/${encodeURIComponent(questionId)}`,
+      undefined,
+      t('tests:page.reloadFailed'),
+    )
+    if (!data.question) throw new Error(t('tests:page.reloadFailed'))
+    return data.question
+  }
+
+  /**
+   * Opens the bank question for editing — the current bank version, not the
+   * frozen one, so saving cannot undo edits made in the bank meanwhile.
+   */
+  async function editBankQuestion(key: string) {
+    const item = draft.find((candidate) => candidate.key === key)
+    if (!item?.questionId) return
+    setReloading(key)
+    try {
+      setBankEdit({ key, question: await fetchBankQuestion(item.questionId) })
+    } catch (loadError) {
+      toast.error(errorMessage(loadError, t('tests:page.reloadFailed')))
+    } finally {
+      setReloading(null)
+    }
+  }
+
+  /** After a bank edit every item with that question takes the new version. */
+  async function afterBankEdit(questionId: string) {
+    setBankEdit(null)
+    try {
+      const question = await fetchBankQuestion(questionId)
+      setDraft((current) =>
+        current.map((item) =>
+          item.questionId === questionId && item.kind === 'question'
+            ? { ...item, question, questionEdited: false, id: null, reloaded: true }
+            : item,
+        ),
+      )
+      toast.success(t('tests:page.editedInBank'))
+    } catch (reloadError) {
+      toast.error(errorMessage(reloadError, t('tests:page.reloadFailed')))
+    }
+  }
 
   /**
    * Replaces the frozen question of an item with the current bank version.
@@ -294,13 +341,8 @@ export function TestBuilder({
     if (!item?.questionId) return
     setReloading(key)
     try {
-      const data = await requestJson<{ question: Question }>(
-        `/api/questions/${encodeURIComponent(item.questionId)}`,
-        undefined,
-        t('tests:page.reloadFailed'),
-      )
-      if (!data.question) throw new Error(t('tests:page.reloadFailed'))
-      patchItem(key, { question: data.question, questionEdited: false, id: null, reloaded: true })
+      const question = await fetchBankQuestion(item.questionId)
+      patchItem(key, { question, questionEdited: false, id: null, reloaded: true })
       toast.success(t('tests:page.reloaded'))
     } catch (reloadError) {
       toast.error(errorMessage(reloadError, t('tests:page.reloadFailed')))
@@ -602,6 +644,7 @@ export function TestBuilder({
       onPatch={patchItem}
       onAdd={addStructural}
       onReloadQuestion={readOnly || worksheet ? undefined : (key) => void reloadQuestion(key)}
+      onEditBankQuestion={readOnly || worksheet || role === 'nahled' ? undefined : (key) => void editBankQuestion(key)}
       reloading={reloading}
       worksheet={
         worksheet
@@ -726,6 +769,16 @@ export function TestBuilder({
           onClose={() => setQuestionDialog(null)}
           onSaved={() => setQuestionDialog(null)}
           onSubmit={submitQuestion}
+        />
+      ) : null}
+
+      {bankEdit ? (
+        <QuestionEditor
+          topicId={bankEdit.question.topicId ?? ''}
+          question={bankEdit.question}
+          title={t('tests:page.editInBankTitle')}
+          onClose={() => setBankEdit(null)}
+          onSaved={() => void afterBankEdit(bankEdit.question.id)}
         />
       ) : null}
 

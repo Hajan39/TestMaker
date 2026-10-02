@@ -19,11 +19,9 @@ import {
 } from '@testmaker/ui'
 import { QuestionEditorForm } from '@/components/QuestionEditor'
 import { QuestionCard } from '@/components/QuestionCard'
-import { SelectionBar } from '@/components/SelectionBar'
+import { useQuestionCart } from '@/components/QuestionCart'
 import { useCanEdit } from '@/components/Permissions'
 import { rejectQuestions, restoreStatuses } from '@/lib/questionStatusClient'
-import { emptyHeader } from '@/components/test-builder/defaults'
-import { newId } from '@/lib/ids'
 import { errorMessage } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
 
@@ -136,11 +134,9 @@ export const TopicQuestions = forwardRef<
     return () => window.clearTimeout(timeout)
   }, [highlight])
   const [filters, setFilters] = useState<Filters>({ type: '', difficulty: '', onlyUnused: false })
-  // Questions checked for a new test. A deleted (or regenerated) card drops out
-  // of the selection by itself — the selection only counts questions that
-  // still exist (`active`), so this set need not handle removal.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [creatingTest, setCreatingTest] = useState(false)
+  // Questions checked for a new test live in the cart shared across topics
+  // (`QuestionCart`) — the teacher may pick here, go to another topic and go on.
+  const cart = useQuestionCart()
   // Deleted questions separately: `null` means "not loaded yet" — they are
   // only requested once the toggle is switched on, so they are not loaded
   // needlessly every time the teacher opens the topic.
@@ -274,71 +270,27 @@ export const TopicQuestions = forwardRef<
     setFilters({ type: '', difficulty: '', onlyUnused: false })
   }
 
-  /**
-   * Selected questions that still exist, in list order (`active`) — not in
-   * the order they were checked. A deleted or regenerated card thus drops out
-   * of the selection and the points total by itself, just by leaving `active`.
-   */
-  const selectedQuestions = useMemo(
-    () => active.filter((question) => selectedIds.has(question.id)),
-    [active, selectedIds],
-  )
-  const selectedPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
-  // How many selected questions the current filter hides — without it,
-  // turning on a filter would look like the selection shrank by itself, even
-  // though the questions stayed selected, just not visible.
-  const hiddenSelectedCount = useMemo(() => {
-    const visibleIds = new Set(visible.map((question) => question.id))
-    return selectedQuestions.filter((question) => !visibleIds.has(question.id)).length
-  }, [visible, selectedQuestions])
+  // A deleted or regenerated card drops out of the cart by itself, and edited
+  // points show in the bar right away.
+  useEffect(() => {
+    cart.prune(topic.id, new Set(active.map((question) => question.id)))
+    cart.syncPoints(new Map(active.map((question) => [question.id, question.points])))
+    // `cart` changes with every pick; only the topic's questions matter here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, topic.id])
 
-  function toggleSelection(questionId: string) {
-    setSelectedIds((current) => {
-      const next = new Set(current)
-      if (next.has(questionId)) next.delete(questionId)
-      else next.add(questionId)
-      return next
-    })
-  }
-
-  /** A new test straight from the topic's selected questions — named after the topic. */
-  async function createTestFromSelection() {
-    if (selectedQuestions.length === 0) return
-    setCreatingTest(true)
-    try {
-      const response = await fetch('/api/tests', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          title: topic.name,
-          templateId: defaultTemplateId,
-          header: { ...emptyHeader(), subject: topic.subjectName },
-          gradeId: topic.gradeId,
-          items: selectedQuestions.map((question) => ({
-            id: newId(),
-            kind: 'question',
-            questionId: question.id,
-            puzzleId: null,
-            text: null,
-            pointsOverride: null,
-            linesOverride: null,
-          })),
-        }),
-      })
-      if (!response.ok) {
-        const detail = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(detail.error ?? t('library:topicQuestions.createTestFailedStatus', { status: response.status }))
-      }
-      const result = (await response.json()) as { id: string }
-      // `refresh()` before `push()`: without it this topic page stays in the
-      // history with its old state (without the „V testu“ badge) and going back
-      // shows it out of date.
-      router.refresh()
-      router.push(`/tests/${result.id}?tema=${topic.id}`)
-    } catch (error) {
-      toast.error(errorMessage(error, t('library:topicQuestions.createTestFailed')))
-      setCreatingTest(false)
-    }
+  function toggleSelection(question: Question) {
+    cart.toggle(
+      {
+        id: question.id,
+        points: question.points,
+        topicId: topic.id,
+        topicName: topic.name,
+        gradeId: topic.gradeId,
+        subjectName: topic.subjectName,
+      },
+      defaultTemplateId,
+    )
   }
 
   /** Deleting without asking — it can be undone right away, hence no confirmation dialog. */
@@ -616,7 +568,7 @@ export const TopicQuestions = forwardRef<
                 question={question}
                 editing={editingId === question.id}
                 canEdit={canEdit}
-                selected={selectedIds.has(question.id)}
+                selected={cart.has(question.id)}
                 busy={busyIds.has(question.id)}
                 usage={usage[question.id]}
                 versions={versionsFor(question)}
@@ -626,7 +578,7 @@ export const TopicQuestions = forwardRef<
                   setEditingId(null)
                   router.refresh()
                 }}
-                onToggleSelect={() => toggleSelection(question.id)}
+                onToggleSelect={() => toggleSelection(question)}
                 onRegenerateDone={() => setHiddenIds((current) => new Set(current).add(question.id))}
                 onVariantCreated={(created) => {
                   setFreshVersions((current) => [created, ...current])
@@ -640,16 +592,6 @@ export const TopicQuestions = forwardRef<
         </ul>
       )}
 
-      {selectedQuestions.length > 0 ? (
-        <SelectionBar
-          count={selectedQuestions.length}
-          points={selectedPoints}
-          hiddenCount={hiddenSelectedCount}
-          busy={creatingTest}
-          onCreate={() => void createTestFromSelection()}
-          onClear={() => setSelectedIds(new Set())}
-        />
-      ) : null}
 
       {showDeleted && canEdit ? (
         <div ref={deletedPanelRef} className="mt-4 border-t border-line-soft pt-3">

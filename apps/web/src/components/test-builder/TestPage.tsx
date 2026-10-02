@@ -65,6 +65,7 @@ export function TestPage({
   onPatch,
   onAdd,
   onReloadQuestion,
+  onEditBankQuestion,
   reloading = null,
   worksheet,
 }: {
@@ -82,6 +83,8 @@ export function TestPage({
   onAdd: (kind: 'heading' | 'instruction' | 'page_break', index?: number) => void
   /** Reloads an edited question from the bank; absent where the test cannot be changed. */
   onReloadQuestion?: (key: string) => void
+  /** Opens the bank question of an item for editing; absent where the bank cannot be changed. */
+  onEditBankQuestion?: (key: string) => void
   /** Key of the item currently being reloaded. */
   reloading?: string | null
   /** Worksheet controls; absent for a written test. */
@@ -273,6 +276,7 @@ export function TestPage({
                             onRemove={onRemove}
                             onPatch={onPatch}
                             onReloadQuestion={onReloadQuestion}
+                            onEditBankQuestion={onEditBankQuestion}
                             reloading={reloading === item.key}
                             worksheet={worksheet}
                           />
@@ -388,6 +392,7 @@ function PageRow({
   onRemove,
   onPatch,
   onReloadQuestion,
+  onEditBankQuestion,
   reloading,
   worksheet,
 }: {
@@ -403,6 +408,7 @@ function PageRow({
   onRemove: (key: string) => void
   onPatch: (key: string, patch: Partial<DraftItem>) => void
   onReloadQuestion?: (key: string) => void
+  onEditBankQuestion?: (key: string) => void
   reloading: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.key })
@@ -476,6 +482,17 @@ function PageRow({
         ) : null}
         {worksheet && item.kind === 'question' ? (
           <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => worksheet.onEditQuestion(item.key)}>
+            {t('common:actions.edit')}
+          </Button>
+        ) : onEditBankQuestion && item.kind === 'question' && item.questionId && !item.questionMissing ? (
+          // Edits the question in the bank — the test then takes the new version.
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            disabled={reloading}
+            onClick={() => onEditBankQuestion(item.key)}
+          >
             {t('common:actions.edit')}
           </Button>
         ) : null}

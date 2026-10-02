@@ -116,7 +116,7 @@ test.describe('picking questions for a test', () => {
     await expect(page).toHaveURL(new RegExp(`tema=${topicId}`))
 
     // Regression test: `router.refresh()` must run before `router.push()`
-    // (`TopicQuestions.createTestFromSelection`) — otherwise the topic page stays
+    // (`QuestionCart` bar) — otherwise the topic page stays
     // in history with the old state (without the "V testu" badge) and going
     // back shows it stale.
     await page.goBack()
@@ -125,14 +125,13 @@ test.describe('picking questions for a test', () => {
     await page.goForward()
     await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
 
-    // The outline has both questions in the order they stood in the topic list
-    // from the top — newest first, so C (added last) is above A.
+    // The outline has both questions in the order they were picked — A first, then C.
     const rows = page.locator('[data-slot="paper-sheet"] ol > li')
     await expect(rows.filter({ hasText: a })).toHaveCount(1)
     await expect(rows.filter({ hasText: c })).toHaveCount(1)
     const indexA = await rows.filter({ hasText: a }).first().evaluate((el) => Array.from(el.parentElement!.children).indexOf(el))
     const indexC = await rows.filter({ hasText: c }).first().evaluate((el) => Array.from(el.parentElement!.children).indexOf(el))
-    expect(indexC).toBeLessThan(indexA)
+    expect(indexA).toBeLessThan(indexC)
 
     // Test name = topic name.
     await expect(page.getByLabel('Název písemky')).toHaveValue(/Výběr otázek do testu/)
@@ -235,6 +234,53 @@ test.describe('picking questions for a test', () => {
     await expect(bankOtherGrade).toBeVisible()
     await bankOtherGrade.click()
     await expect(page.getByText(promptOther)).toBeVisible()
+  })
+
+  test('questions picked in two topics go into one test, which can edit them in the bank', async ({ page }) => {
+    const stamp = Date.now()
+    const firstTopicId = await ensureTopic(page.request, `${TOPIC} košík jedna ${stamp}`, `${GRADE} košík ${stamp}`)
+    const secondTopicId = await ensureTopic(page.request, `${TOPIC} košík dva ${stamp}`, `${GRADE} košík ${stamp}`)
+    const first = `Košík první ${stamp}`
+    const second = `Košík druhá ${stamp}`
+    await addQuestion(page.request, firstTopicId, first, 2)
+    const secondId = await addQuestion(page.request, secondTopicId, second, 3)
+
+    await page.goto(`/topics/${firstTopicId}`)
+    await page.locator('li[data-question-id]', { hasText: first }).getByRole('checkbox', { name: 'Vybrat do testu' }).click()
+    await expect(page.getByText('Vybráno 1 · 2 body')).toBeVisible()
+
+    // Another topic: the pick from the first one stays in the bar.
+    await page.goto(`/topics/${secondTopicId}`)
+    await expect(page.getByText('Vybráno 1 · 2 body')).toBeVisible()
+    await page.locator('li[data-question-id]', { hasText: second }).getByRole('checkbox', { name: 'Vybrat do testu' }).click()
+    await expect(page.getByText(/Vybráno 2 · 5 bodů · ze 2 témat/)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Vytvořit test' }).click()
+    await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
+    const outline = page.locator('[data-slot="paper-sheet"] ol')
+    await expect(outline.getByText(first)).toBeVisible()
+    await expect(outline.getByText(second)).toBeVisible()
+    await expect(page.getByLabel('Název písemky')).toHaveValue('Test ze 2 témat')
+
+    // Editing from the test changes the bank question and the test takes it.
+    const edited = `${second} — opraveno`
+    const row = page.locator('[data-slot="paper-sheet"] ol > li', { hasText: second })
+    await row.hover()
+    await row.getByRole('button', { name: 'Upravit' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Zadání').fill(edited)
+    await dialog.getByRole('button', { name: 'Uložit' }).click()
+    await expect(outline.getByText(edited)).toBeVisible()
+    await page.getByRole('button', { name: 'Uložit', exact: true }).click()
+    await expect(page.getByText('Uloženo')).toBeVisible()
+    await page.reload()
+    await expect(page.locator('[data-slot="paper-sheet"] ol').getByText(edited)).toBeVisible()
+    const bank = await page.request.get(`/api/questions/${secondId}`)
+    expect(((await bank.json()) as { question: { payload: { prompt: string } } }).question.payload.prompt).toBe(edited)
+
+    // The cart is empty again after creating the test.
+    await page.goto(`/topics/${firstTopicId}`)
+    await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
   })
 
   test('"Zrušit výběr" hides the bar', async ({ page }) => {

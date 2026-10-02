@@ -4,9 +4,9 @@ import { BusyButton, Button } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 
 /**
- * Sticky bar below the topic's question list: how many are selected and how
- * many points they add up to, with a button to create a test straight from
- * the selection.
+ * Bar at the bottom of the screen with the questions picked for a new test
+ * (`QuestionCart`): how many, from how many topics and how many points, with
+ * a button to create a test from them.
  *
  * `surface-chrome`, because the bar is a control surface over the content,
  * not content itself — just like the top navigation.
@@ -14,25 +14,25 @@ import { t } from '@testmaker/core/i18n'
 export function SelectionBar({
   count,
   points,
-  hiddenCount = 0,
+  topicCount = 1,
   busy,
   onCreate,
   onClear,
 }: {
   count: number
   points: number
-  /** How many of the selected questions the current list filter hides. */
-  hiddenCount?: number
+  /** How many topics the questions come from. */
+  topicCount?: number
   busy: boolean
   onCreate: () => void
   onClear: () => void
 }) {
   return (
-    <div className="surface-chrome sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-inner)] border border-line bg-surface px-4 py-3">
+    <div className="surface-chrome flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-inner)] border border-line bg-surface px-4 py-3">
       <span className="text-sm font-medium text-fg">
         {t('library:selectionBar.selected', { selected: count })} · {t('library:selectionBar.points', { count: points })}
-        {hiddenCount > 0 ? (
-          <span className="text-fg-muted"> {t('library:selectionBar.hiddenByFilter', { count: hiddenCount })}</span>
+        {topicCount > 1 ? (
+          <span className="text-fg-muted"> · {t('library:selectionBar.topics', { count: topicCount })}</span>
         ) : null}
       </span>
       <div className="flex items-center gap-2">
