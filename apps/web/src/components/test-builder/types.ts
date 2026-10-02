@@ -21,6 +21,8 @@ export interface DraftItem {
   pointsOverride: number | null
   /** Override of the number of answer lines; empty = per the question. */
   linesOverride: number | null
+  /** Leave out the word bank of a fill-in-the-blank question in this test. */
+  wordBankHidden?: boolean
   question: Question | null
   /** Set on items of kind `puzzle` — a puzzle included in the test. */
   puzzleId: string | null

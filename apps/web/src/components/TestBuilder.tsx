@@ -122,6 +122,7 @@ export function TestBuilder({
       text: item.text,
       pointsOverride: item.pointsOverride,
       linesOverride: item.linesOverride ?? null,
+      wordBankHidden: item.wordBankHidden ?? false,
       question: item.question ?? null,
       questionEdited: item.questionEdited,
       questionMissing: item.questionMissing,
@@ -491,6 +492,7 @@ export function TestBuilder({
           text: item.text,
           pointsOverride: item.pointsOverride,
           linesOverride: item.linesOverride,
+          wordBankHidden: item.wordBankHidden ?? false,
           table: item.table,
           textContent: item.textContent,
           needsCheck: item.needsCheck,
@@ -586,6 +588,7 @@ export function TestBuilder({
         text: item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
+        wordBankHidden: item.wordBankHidden ?? false,
         content: item.kind === 'table' ? item.table : item.kind === 'text' ? item.textContent : undefined,
         needsCheck: item.needsCheck,
         // A worksheet task is not in the bank — its content goes with the item snapshot.

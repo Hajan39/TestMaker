@@ -1,0 +1,1 @@
+ALTER TABLE `test_items` ADD `word_bank_hidden` integer DEFAULT false NOT NULL;

@@ -237,6 +237,7 @@ export async function copyTest(
     text: item.text,
     pointsOverride: item.pointsOverride,
     linesOverride: item.linesOverride,
+    wordBankHidden: item.wordBankHidden,
     // The snapshot is taken as is — the copy must look like the original even
     // if the bank question has since changed or disappeared.
     questionSnapshot: item.questionSnapshot,
@@ -409,6 +410,7 @@ export async function loadTestItems(
       text: row.text,
       pointsOverride: row.pointsOverride,
       linesOverride: row.linesOverride,
+      wordBankHidden: row.wordBankHidden,
       questionSnapshot: row.questionSnapshot,
       puzzleId: row.puzzleId,
       puzzleSnapshot: row.puzzleSnapshot,

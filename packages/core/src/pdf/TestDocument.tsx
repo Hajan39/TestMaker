@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import type { Question } from '../schema/question'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
-import type { RenderableTest, ResolvedTestItem } from '../schema/test'
+import { itemQuestion, type RenderableTest, type ResolvedTestItem } from '../schema/test'
 import { formatAnswer } from './answerKey'
 import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
 import { formatPoints, puzzleForVariant } from './layout'
@@ -21,7 +21,11 @@ export function TestDocument({ test, template, items, variant, withKey, filled =
   const config = template.config
   // A puzzle in variant B gets a different seed — grid and key then use the same one.
   const ordered = buildVariant(items, variant, test.id).map((item) =>
-    item.kind === 'puzzle' && item.puzzle ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) } : item,
+    item.kind === 'puzzle' && item.puzzle
+      ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) }
+      : item.kind === 'question' && item.question
+        ? { ...item, question: itemQuestion(item.question, item) }
+        : item,
   )
   const questions = ordered.filter((i) => i.kind === 'question' && i.question)
   const total = questions.reduce(

@@ -39,6 +39,8 @@ const itemSchema = z.object({
   pointsOverride: z.number().nullable().default(null),
   /** Number of answer lines for this test only; empty = per the question. */
   linesOverride: z.number().int().min(1).max(30).nullable().default(null),
+  /** Leave out the word bank of a fill-in-the-blank question in this test. */
+  wordBankHidden: z.boolean().default(false),
   /** Content of a `text` item (variant) or `table` item (grid); validated by the core schema. */
   content: z.unknown().optional(),
   /** The "ověř" (verify) flag on a worksheet item. */
@@ -371,6 +373,7 @@ async function itemRows(
         needsCheck: item.needsCheck,
         pointsOverride: item.pointsOverride,
         linesOverride: item.kind === 'question' ? item.linesOverride : null,
+        wordBankHidden: item.kind === 'question' && item.wordBankHidden,
         // The snapshot is taken once, when the question is added to the test. An
         // item already in the test keeps the original — otherwise re-saving
         // (say, to fix the title) would overwrite an already printed test with

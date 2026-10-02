@@ -139,6 +139,11 @@ export interface TestItem {
    */
   linesOverride?: number | null
   /**
+   * The word bank of a fill-in-the-blank question is left out in this test —
+   * the teacher wants the pupils to come up with the words themselves.
+   */
+  wordBankHidden?: boolean
+  /**
    * Frozen question content as JSON, as it was when the test was saved.
    * Missing only for tests created before snapshots were introduced.
    */
@@ -169,6 +174,19 @@ export function answerLines(
   if (linesOverride && linesOverride > 0) return linesOverride
   const payload = question.payload as { lines?: number }
   return typeof payload.lines === 'number' ? payload.lines : 1
+}
+
+/**
+ * The question as this test prints it: item settings that change the
+ * content (a hidden word bank) applied to the question. The PDF, its page
+ * estimate and the builder's paper all read the question through here.
+ */
+export function itemQuestion<Q extends { type: string; payload: unknown }>(
+  question: Q,
+  item: { wordBankHidden?: boolean },
+): Q {
+  if (!item.wordBankHidden || question.type !== 'fill_blank') return question
+  return { ...question, payload: { ...(question.payload as object), wordBank: [] } }
 }
 
 /* ------------------------------------------------- question snapshot in a test */

@@ -19,9 +19,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { paginate } from '@testmaker/core/pdf/estimate'
 import { formatAnswer, questionLabel } from '@testmaker/core/pdf/layout'
-import { resolveQuestionStyle, type ResolvedTestItem, type Template, type TestHeaderConfig } from '@testmaker/core/schema'
+import { itemQuestion, resolveQuestionStyle, type ResolvedTestItem, type Template, type TestHeaderConfig } from '@testmaker/core/schema'
 import { Fragment, useId, useMemo, useState } from 'react'
 import {
+  Checkbox,
   Badge,
   Button,
   Card,
@@ -111,6 +112,7 @@ export function TestPage({
         text: item.text,
         pointsOverride: item.pointsOverride,
         linesOverride: item.linesOverride,
+        wordBankHidden: item.wordBankHidden,
         question: item.question,
         // Without the puzzle content the estimate would give it zero height and
         // the preview would have fewer pages than the PDF.
@@ -469,6 +471,17 @@ function PageRow({
             />
           </label>
         ) : null}
+        {item.kind === 'question' && question?.type === 'fill_blank' && question.payload.wordBank.length > 0 ? (
+          // Whether the pupils get the words on offer depends on the test, not the question.
+          <label className="flex items-center gap-1 text-xs text-fg-muted">
+            <Checkbox
+              className="size-3.5"
+              checked={!item.wordBankHidden}
+              onCheckedChange={(checked) => onPatch(item.key, { wordBankHidden: checked !== true })}
+            />
+            {t('tests:page.wordBank')}
+          </label>
+        ) : null}
         {item.kind === 'question' && question ? (
           <Button
             size="sm"
@@ -561,7 +574,7 @@ function PageRow({
       {item.kind === 'question' && question ? (
         <>
           <PaperQuestion
-            question={question}
+            question={itemQuestion(question, item)}
             label={number === null ? undefined : questionLabel(number, config.numbering)}
             points={config.showPoints && graded ? (item.pointsOverride ?? question.points) : null}
             lines={item.linesOverride}

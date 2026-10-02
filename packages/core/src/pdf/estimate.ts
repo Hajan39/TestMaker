@@ -1,5 +1,5 @@
 import type { Block } from '../schema/blocks'
-import { answerLines, type ResolvedTestItem } from '../schema/test'
+import { answerLines, itemQuestion, type ResolvedTestItem } from '../schema/test'
 import { resolveQuestionStyle, type TemplateConfig } from '../schema/template'
 import { buildPuzzle } from '../puzzle/index'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
@@ -329,7 +329,7 @@ function rawEstimateHeight(item: ResolvedTestItem, config: TemplateConfig): numb
     return 12 + promptLines(item.text ?? '') * line
   }
 
-  const question = item.question
+  const question = item.question ? itemQuestion(item.question, item) : null
   if (!question) return 0
 
   const style = resolveQuestionStyle(config, question.type)

@@ -664,6 +664,8 @@ export const testItems = sqliteTable(
      * ten-minute quiz. Empty = whatever the question itself has.
      */
     linesOverride: integer('lines_override'),
+    /** The word bank of a fill-in-the-blank question is not printed in this test. */
+    wordBankHidden: integer('word_bank_hidden', { mode: 'boolean' }).notNull().default(false),
     /**
      * Frozen question content (JSON per `questionSnapshotSchema`) as it was
      * when the question was added to the test. Rendering, preview and key read
