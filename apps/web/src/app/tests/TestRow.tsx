@@ -50,7 +50,7 @@ export interface TestRowData {
  * questions. Delete is in it, in red and with confirmation; it cannot be hit by
  * accident.
  */
-function TestActions({ row }: { row: TestRowData }) {
+export function TestActions({ row }: { row: TestRowData }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -196,7 +196,7 @@ function TestActions({ row }: { row: TestRowData }) {
  * Test badges: graded / ungraded, optionally variants A/B. A worksheet is never
  * graded — its badge says what it was made from.
  */
-function TestBadges({ row }: { row: TestRowData }) {
+export function TestBadges({ row }: { row: TestRowData }) {
   if (row.kind === 'pracovni_list') {
     return (
       <div className="mt-1 flex flex-wrap gap-1">
@@ -216,37 +216,6 @@ function TestBadges({ row }: { row: TestRowData }) {
   )
 }
 
-/** One row of the test table: summary and actions (open, download, delete). */
-export function TestRow({ row }: { row: TestRowData }) {
-  return (
-    <tr>
-      <td className={row.kind === 'pracovni_list' ? 'border-l-2 border-worksheet py-2 pr-4 pl-2' : 'py-2 pr-4'}>
-        <Link href={testPath(row.kind, row.id)} className="inline-flex items-center gap-1.5 font-medium text-fg hover:text-brand">
-          <KindMark kind={row.kind} />
-          {row.title}
-        </Link>
-        <TestBadges row={row} />
-      </td>
-      {row.kind === 'pracovni_list' ? (
-        <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.itemCount}</td>
-      ) : (
-        <>
-          <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.questionCount}</td>
-          <td className="ui-numeric py-2 pr-4 text-fg-soft">{row.points}</td>
-        </>
-      )}
-      <td className="py-2 pr-4 text-fg-soft">{row.templateName}</td>
-      <td className="py-2 pr-4 text-fg-soft">{row.gradeLabel ?? ''}</td>
-      <td className="py-2 pr-4 text-fg-muted">
-        {formatDate(row.updatedAt)}
-      </td>
-      <td className="py-2 pr-0 text-right">
-        <TestActions row={row} />
-      </td>
-    </tr>
-  )
-}
-
 /**
  * The same test as a card — the phone layout. In a table at 390 px the points
  * column and the whole action menu would sit off screen and nothing could be
@@ -254,13 +223,19 @@ export function TestRow({ row }: { row: TestRowData }) {
  */
 export function TestCard({ row }: { row: TestRowData }) {
   return (
-    <li className="rounded-[var(--radius-inner)] border border-line-soft p-3">
+    <li
+      className={
+        'rounded-[var(--radius-inner)] border border-line-soft p-3 ' +
+        (row.kind === 'pracovni_list' ? 'border-l-2 border-l-worksheet' : '')
+      }
+    >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <Link
             href={testPath(row.kind, row.id)}
             className="font-medium break-words text-fg hover:text-brand"
           >
+            <KindMark kind={row.kind} className="mr-1.5 align-[-0.125em]" />
             {row.title}
           </Link>
           <TestBadges row={row} />

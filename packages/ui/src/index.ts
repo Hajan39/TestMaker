@@ -36,6 +36,8 @@ export type { UndoStatus, UndoStep } from './undoStatus'
 
 // Domain components.
 export { QuestionPreview } from './QuestionPreview'
+export { DataTable, type ColumnDef, type SortingState } from './DataTable'
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 export { PaperQuestion } from './PaperQuestion'
 export { PaperPuzzle } from './PaperPuzzle'
 export { PaperSheet, PaperHeader } from './PaperSheet'

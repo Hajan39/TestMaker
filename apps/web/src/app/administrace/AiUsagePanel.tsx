@@ -2,40 +2,12 @@ import Link from 'next/link'
 import { resources, t } from '@testmaker/core/i18n'
 import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
 import { PERIOD_DAYS, type AiUsageOverview } from '@/lib/aiUsage'
+import { ValueTable } from '@/components/ValueTable'
 import type { ModelQuota } from '@/lib/aiQuota'
 import { formatShortDateTime, formatTime } from '@testmaker/core/dates'
 
 const num = (value: number) => value.toLocaleString('cs-CZ')
 const date = formatShortDateTime
-
-function Table({ header, rows }: { header: string[]; rows: (string | number)[][] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-line-soft text-fg-muted">
-            {header.map((name, i) => (
-              <th key={name} className={`py-2 pr-4 font-medium ${i > 0 ? 'text-right' : ''}`}>
-                {name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line-soft">
-          {rows.map((row) => (
-            <tr key={String(row[0])}>
-              {row.map((cell, i) => (
-                <td key={i} className={`py-2 pr-4 ${i > 0 ? 'ui-numeric text-right' : 'text-fg'}`}>
-                  {typeof cell === 'number' ? num(cell) : cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 const time = formatTime
 
@@ -96,7 +68,7 @@ export function AiUsagePanel({ overview }: { overview: AiUsageOverview }) {
         <p className="text-xs text-fg-muted">
           {t('admin:aiUsage.quota.hint', { resetAt: date(overview.quota.resetAt), nextResetAt: date(overview.quota.nextResetAt) })}
         </p>
-        <Table
+        <ValueTable
           header={[
             t('admin:aiUsage.quota.model'),
             t('admin:aiUsage.quota.today'),
@@ -122,7 +94,7 @@ export function AiUsagePanel({ overview }: { overview: AiUsageOverview }) {
         <>
           <section className="space-y-2">
             <h3 className="text-sm font-medium text-fg-soft">{t('admin:aiUsage.byModel')}</h3>
-            <Table
+            <ValueTable
               header={[
                 column('model'),
                 column('calls'),
@@ -151,14 +123,14 @@ export function AiUsagePanel({ overview }: { overview: AiUsageOverview }) {
           <div className="grid gap-5 md:grid-cols-2">
             <section className="space-y-2">
               <h3 className="text-sm font-medium text-fg-soft">{t('admin:aiUsage.byTask')}</h3>
-              <Table
+              <ValueTable
                 header={[column('task'), column('calls'), column('input'), column('output')]}
                 rows={overview.tasks.map((u) => [t(`admin:aiUsage.tasks.${u.task}`), u.calls, u.input, u.output])}
               />
             </section>
             <section className="space-y-2">
               <h3 className="text-sm font-medium text-fg-soft">{t('admin:aiUsage.bySchool')}</h3>
-              <Table
+              <ValueTable
                 header={[column('school'), column('calls'), column('input'), column('output')]}
                 rows={overview.schools.map((s) => [s.name, s.calls, s.input, s.output])}
               />

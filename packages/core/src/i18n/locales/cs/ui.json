@@ -1,4 +1,7 @@
 {
+  "dataTable": {
+    "sort": "Seřadit"
+  },
   "navList": {
     "unreviewedDrafts": "Čekají nezkontrolované koncepty"
   },
