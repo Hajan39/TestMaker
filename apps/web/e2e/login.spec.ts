@@ -27,7 +27,7 @@ test('a wrong password shows a message and lets nowhere in', async ({ page }) =>
   await page.getByLabel('E-mail').fill(ACCOUNTS.ucitelkaA)
   await page.getByLabel('Heslo').fill('uplne-jine-heslo')
   await page.getByRole('button', { name: 'Přihlásit se' }).click()
-  await expect(page.getByText(/nesouhlasí/)).toBeVisible()
+  await expect(page.getByTestId('login-error')).toBeVisible()
   await expect(page).toHaveURL(/\/login/)
 })
 

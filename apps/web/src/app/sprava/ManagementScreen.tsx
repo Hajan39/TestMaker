@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { resources, t } from '@testmaker/core/i18n'
 import {
@@ -164,10 +167,6 @@ export function ManagementScreen({
 }) {
   const router = useRouter()
   const [tab, setTab] = useUrlTab(MANAGEMENT_TABS, initialTab)
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [role, setRole] = useState<Role>('ucitelka')
-  const [busy, setBusy] = useState(false)
   /**
    * A generated password is shown once and only here: it is sent nowhere and
    * nobody can find it out again, because the database holds only a hash.
@@ -210,30 +209,6 @@ export function ManagementScreen({
       toast.error(errorMessage(error, t('admin:errors.changeFailed')))
     } finally {
       setTogglingRule(null)
-    }
-  }
-
-  async function create(event: React.FormEvent) {
-    event.preventDefault()
-    if (!name.trim()) {
-      toast.error(t('admin:management.accounts.nameRequired'))
-      return
-    }
-    setBusy(true)
-    try {
-      const data = await requestJson<{ password: string }>(
-        '/api/sprava/uzivatele',
-        jsonBody('POST', { email: email.trim(), name: name.trim(), role }),
-        t('admin:management.accounts.createFailed'),
-      )
-      setPassword({ email: email.trim(), password: data.password ?? '' })
-      setEmail('')
-      setName('')
-      router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:management.accounts.createFailed')))
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -361,44 +336,12 @@ export function ManagementScreen({
 
           <Card className="p-4">
             <h2 className="font-medium text-fg">{t('admin:management.accounts.newAccount')}</h2>
-            <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={create}>
-              <div className="w-64">
-                <Label htmlFor="new-email">{t('admin:management.accounts.email')}</Label>
-                <Input
-                  id="new-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </div>
-              <div className="w-56">
-                <Label htmlFor="new-name">{t('admin:management.accounts.name')}</Label>
-                <Input id="new-name" value={name} onChange={(event) => setName(event.target.value)} />
-              </div>
-              <div className="w-40">
-                <Label htmlFor="new-role">{t('admin:management.accounts.role')}</Label>
-                <Select value={role} onValueChange={(next) => setRole(next as Role)}>
-                  <SelectTrigger id="new-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ASSIGNABLE_ROLES.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {t(`admin:roles.${value}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <BusyButton
-                type="submit"
-                busy={busy}
-                busyLabel={t('admin:management.accounts.creating')}
-                disabled={!email || !name}
-              >
-                {t('admin:management.accounts.create')}
-              </BusyButton>
-            </form>
+            <NewAccountForm
+              onCreated={(created) => {
+                setPassword(created)
+                router.refresh()
+              }}
+            />
           </Card>
 
           <div className="space-y-2">
@@ -787,3 +730,94 @@ export function ManagementScreen({
     </div>
   )
 }
+
+/** The new account form; built on each render so the messages follow the current language. */
+function newAccountSchema() {
+  return z.object({
+    email: z.string().trim().pipe(z.email({ message: t('admin:management.accounts.emailInvalid') })),
+    name: z.string().trim().min(1, { message: t('admin:management.accounts.nameRequired') }),
+    role: z.enum(ASSIGNABLE_ROLES),
+  })
+}
+type NewAccount = z.infer<ReturnType<typeof newAccountSchema>>
+
+/**
+ * A new account: e-mail, name and role. The server creates a one-time
+ * password, which the screen shows once (`onCreated`).
+ */
+function NewAccountForm({ onCreated }: { onCreated: (created: { email: string; password: string }) => void }) {
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<z.input<ReturnType<typeof newAccountSchema>>, unknown, NewAccount>({
+    resolver: zodResolver(newAccountSchema()),
+    defaultValues: { email: '', name: '', role: 'ucitelka' },
+  })
+  const [email, name] = useWatch({ control, name: ['email', 'name'] })
+  const error = errors.email?.message ?? errors.name?.message
+
+  async function create(account: NewAccount) {
+    try {
+      const data = await requestJson<{ password: string }>(
+        '/api/sprava/uzivatele',
+        jsonBody('POST', account),
+        t('admin:management.accounts.createFailed'),
+      )
+      onCreated({ email: account.email, password: data.password ?? '' })
+      reset({ email: '', name: '', role: account.role })
+    } catch (createError) {
+      toast.error(errorMessage(createError, t('admin:management.accounts.createFailed')))
+    }
+  }
+
+  return (
+    <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={handleSubmit(create)}>
+      <div className="w-64">
+        <Label htmlFor="new-email">{t('admin:management.accounts.email')}</Label>
+        <Input id="new-email" type="email" defaultValue="" aria-invalid={errors.email ? true : undefined} {...register('email')} />
+      </div>
+      <div className="w-56">
+        <Label htmlFor="new-name">{t('admin:management.accounts.name')}</Label>
+        <Input id="new-name" defaultValue="" aria-invalid={errors.name ? true : undefined} {...register('name')} />
+      </div>
+      <div className="w-40">
+        <Label htmlFor="new-role">{t('admin:management.accounts.role')}</Label>
+        <Controller
+          control={control}
+          name="role"
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger id="new-role" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ASSIGNABLE_ROLES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {t(`admin:roles.${value}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </div>
+      <BusyButton
+        type="submit"
+        busy={isSubmitting}
+        busyLabel={t('admin:management.accounts.creating')}
+        disabled={!email || !name}
+      >
+        {t('admin:management.accounts.create')}
+      </BusyButton>
+      {error ? (
+        <p className="w-full text-sm text-danger" role="alert" data-testid="new-account-error">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+

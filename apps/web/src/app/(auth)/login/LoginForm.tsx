@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Card, Input, Label } from '@testmaker/ui'
 import { safeReturnPath } from '@/lib/returnPath'
@@ -15,15 +15,18 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const googleError = parameters.get('chyba')
   const googleInfo = parameters.get('info')
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(googleError)
-  const [busy, setBusy] = useState(false)
+  const {
+    register,
+    control,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting, isSubmitSuccessful },
+  } = useForm<{ email: string; password: string }>({ defaultValues: { email: '', password: '' } })
+  const [email, password] = useWatch({ control, name: ['email', 'password'] })
+  // A Google sign-in error from the URL shows until the first attempt here.
+  const error = errors.root?.message ?? (isSubmitting || isSubmitSuccessful ? null : googleError)
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+  async function submit({ email, password }: { email: string; password: string }) {
     try {
       const response = await fetchOrOffline('/api/login', jsonBody('POST', { email, password }), t('auth:login.failed'))
       const data = await readJson<{ mustChangePassword: boolean }>(response)
@@ -32,15 +35,14 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
       router.push(data.mustChangePassword ? '/zmena-hesla' : next)
       router.refresh()
     } catch (submitError) {
-      setError(errorMessage(submitError, t('auth:login.failed')))
-      setBusy(false)
+      setError('root', { message: errorMessage(submitError, t('auth:login.failed')) })
     }
   }
 
   return (
     <Card className="mx-auto max-w-sm p-6">
       <h1 className="text-lg font-semibold text-fg">{t('auth:login.title')}</h1>
-      <form className="mt-4 space-y-3" onSubmit={submit}>
+      <form className="mt-4 space-y-3" onSubmit={handleSubmit(submit)}>
         <div>
           <Label htmlFor="email">{t('auth:login.email')}</Label>
           <Input
@@ -48,8 +50,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             type="email"
             autoComplete="username"
             autoFocus
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            defaultValue=""
+            {...register('email')}
           />
         </div>
         <div>
@@ -58,8 +60,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             id="password"
             type="password"
             autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            defaultValue=""
+            {...register('password')}
           />
         </div>
         {googleInfo && !error ? (
@@ -68,12 +70,13 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           </p>
         ) : null}
         {error ? (
-          <p className="text-sm text-danger" role="alert">
+          <p className="text-sm text-danger" role="alert" data-testid="login-error">
             {error}
           </p>
         ) : null}
-        <Button type="submit" disabled={busy || email.length === 0 || password.length === 0}>
-          {busy ? t('auth:login.signingIn') : t('auth:login.signIn')}
+        {/* Stays busy after a successful sign-in until the next page loads. */}
+        <Button type="submit" disabled={isSubmitting || isSubmitSuccessful || email.length === 0 || password.length === 0}>
+          {isSubmitting || isSubmitSuccessful ? t('auth:login.signingIn') : t('auth:login.signIn')}
         </Button>
       </form>
 

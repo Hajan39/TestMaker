@@ -1,6 +1,7 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId } from 'react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { t } from '@testmaker/core/i18n'
 import { BusyButton, Checkbox, Input, Label } from '@testmaker/ui'
 import { SCHOOL_DETAIL_KEYS, type SchoolDetails } from '@/lib/schoolDetails'
@@ -28,28 +29,25 @@ export function SchoolForm({
   onSave: (settings: SchoolSettings) => Promise<boolean>
 }) {
   const id = useId()
-  const [settings, setSettings] = useState(initial)
-  const [busy, setBusy] = useState(false)
+  const { register, control, handleSubmit, reset, formState } = useForm<SchoolSettings>({ defaultValues: initial })
+  const name = useWatch({ control, name: 'name' })
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    try {
-      if ((await onSave(settings)) && !initial.name) setSettings(initial)
-    } finally {
-      setBusy(false)
-    }
+  async function submit(settings: SchoolSettings) {
+    // A new school's form starts empty again after it was created.
+    if ((await onSave(settings)) && !initial.name) reset(initial)
   }
 
   return (
-    <form className="space-y-3" onSubmit={submit}>
+    <form className="space-y-3" onSubmit={handleSubmit(submit)}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-64">
           <Label htmlFor={`${id}-name`}>{t('admin:schoolForm.name')}</Label>
           <Input
             id={`${id}-name`}
-            value={settings.name}
-            onChange={(event) => setSettings({ ...settings, name: event.target.value })}
+            // The server must render the value too: `register` alone fills it only
+            // after hydration, and typing before that would be glued to it.
+            defaultValue={initial.name}
+            {...register('name')}
           />
         </div>
         <div className="w-56">
@@ -57,14 +55,17 @@ export function SchoolForm({
           <Input
             id={`${id}-domain`}
             placeholder={t('admin:schoolForm.domainPlaceholder')}
-            value={settings.googleDomain}
-            onChange={(event) => setSettings({ ...settings, googleDomain: event.target.value })}
+            defaultValue={initial.googleDomain}
+            {...register('googleDomain')}
           />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-fg">
-          <Checkbox
-            checked={settings.googleAutoJoin}
-            onCheckedChange={(checked) => setSettings({ ...settings, googleAutoJoin: checked === true })}
+          <Controller
+            control={control}
+            name="googleAutoJoin"
+            render={({ field }) => (
+              <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />
+            )}
           />
           {t('admin:schoolForm.autoJoin')}
         </label>
@@ -78,8 +79,8 @@ export function SchoolForm({
             <Input
               id={`${id}-${key}`}
               placeholder={t(`admin:schoolForm.details.${key}.placeholder`)}
-              value={settings[key]}
-              onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
+              defaultValue={initial[key]}
+              {...register(key)}
             />
           </div>
         ))}
@@ -87,9 +88,9 @@ export function SchoolForm({
 
       <BusyButton
         type="submit"
-        busy={busy}
+        busy={formState.isSubmitting}
         busyLabel={t('actions.saving')}
-        disabled={!settings.name.trim()}
+        disabled={!name.trim()}
       >
         {submitLabel}
       </BusyButton>

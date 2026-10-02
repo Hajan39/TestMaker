@@ -219,6 +219,7 @@
       "aiQuality": "AI kvalita"
     },
     "accounts": {
+      "emailInvalid": "Zadej platný e-mail, třeba jmeno@skola.cz.",
       "nameRequired": "Vyplň jméno učitelky — samé mezery nestačí.",
       "createFailed": "Účet se nepodařilo založit.",
       "passwordCopied": "Heslo zkopírováno.",

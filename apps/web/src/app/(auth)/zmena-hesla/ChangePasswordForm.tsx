@@ -1,29 +1,48 @@
 'use client'
 
 import { useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BusyButton, Button, Card, Input, Label, toast } from '@testmaker/ui'
 import { errorMessage, fetchOrOffline, jsonBody, readJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
 
+/** The form's shape; built on each render so the messages follow the current language. */
+function passwordSchema() {
+  return z
+    .object({
+      oldPassword: z.string(),
+      newPassword: z.string().min(1),
+      repeatPassword: z.string(),
+    })
+    .refine((value) => value.newPassword === value.repeatPassword, {
+      path: ['repeatPassword'],
+      message: t('auth:changePassword.mismatch'),
+    })
+}
+type PasswordForm = z.infer<ReturnType<typeof passwordSchema>>
+
 export function ChangePasswordForm({ forced }: { forced: boolean }) {
   const router = useRouter()
-  const [oldPassword, setOldPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [repeatPassword, setRepeatPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const {
+    register,
+    handleSubmit,
+    setError,
+    control,
+    formState: { errors, isSubmitting },
+  } = useForm<PasswordForm>({
+    resolver: zodResolver(passwordSchema()),
+    defaultValues: { oldPassword: '', newPassword: '', repeatPassword: '' },
+  })
+  const newPassword = useWatch({ control, name: 'newPassword' })
+  // One message under the form: a mismatch, or what the server said.
+  const error = errors.repeatPassword?.message ?? errors.root?.message ?? null
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
-    if (newPassword !== repeatPassword) {
-      setError(t('auth:changePassword.mismatch'))
-      return
-    }
-    setBusy(true)
-    setError(null)
+  async function submit({ oldPassword, newPassword }: PasswordForm) {
     try {
       const response = await fetchOrOffline('/api/zmena-hesla', jsonBody('POST', { oldPassword, newPassword }), t('auth:changePassword.failed'))
       const data = await readJson(response)
@@ -33,8 +52,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
       router.push('/')
       router.refresh()
     } catch (submitError) {
-      setError(errorMessage(submitError, t('auth:changePassword.failed')))
-      setBusy(false)
+      setError('root', { message: errorMessage(submitError, t('auth:changePassword.failed')) })
     }
   }
 
@@ -60,7 +78,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
         {t('auth:changePassword.intro')}
         {forced ? ` ${t('auth:changePassword.forcedHint')}` : null}
       </p>
-      <form className="mt-4 space-y-3" onSubmit={submit}>
+      <form className="mt-4 space-y-3" onSubmit={handleSubmit(submit)}>
         <div>
           <Label htmlFor="stare">{t('auth:changePassword.current')}</Label>
           <Input
@@ -68,8 +86,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
             type="password"
             autoComplete="current-password"
             autoFocus
-            value={oldPassword}
-            onChange={(event) => setOldPassword(event.target.value)}
+            {...register('oldPassword')}
           />
         </div>
         <div>
@@ -78,8 +95,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
             id="nove"
             type="password"
             autoComplete="new-password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
+            {...register('newPassword')}
           />
         </div>
         <div>
@@ -88,17 +104,22 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
             id="znovu"
             type="password"
             autoComplete="new-password"
-            value={repeatPassword}
-            onChange={(event) => setRepeatPassword(event.target.value)}
+            aria-invalid={errors.repeatPassword ? true : undefined}
+            {...register('repeatPassword')}
           />
         </div>
         {error ? (
-          <p className="text-sm text-danger" role="alert">
+          <p className="text-sm text-danger" role="alert" data-testid="password-error">
             {error}
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <BusyButton type="submit" busy={busy} busyLabel={t('common:actions.saving')} disabled={newPassword.length === 0}>
+          <BusyButton
+            type="submit"
+            busy={isSubmitting}
+            busyLabel={t('common:actions.saving')}
+            disabled={newPassword.length === 0}
+          >
             {t('auth:changePassword.save')}
           </BusyButton>
           {forced ? null : (

@@ -74,6 +74,15 @@ pozdější přepnutí jazyka nefungovalo. Klíče jsou typované, překlep shod
 `pnpm typecheck`. Množné číslo přes klíče `_one`, `_few`, `_other`.
 Zatím jen čeština; další jazyk = nová složka `locales/<jazyk>`.
 
+**Knihovny místo ručního kódu.** Data a časy přes `@testmaker/core/dates`
+(dayjs, česky, vždy v pásmu Europe/Prague). Načítání v prohlížeči a dotazování
+v intervalu přes TanStack Query (`lib/query.tsx`, klíče a načítací funkce
+v `lib/queries.ts`), ukládání přes `useMutation`. Tabulky přes `DataTable`
+z `packages/ui` (TanStack Table v9). Formuláře přes react-hook-form se zod
+schématem; pole s `register()` dostanou i `defaultValue`, jinak je server
+vykreslí prázdná. Stav sdílený napříč stránkami přes zustand (košík otázek).
+Zdržení psaní přes `use-debounce`. Texty přes i18next (viz níže).
+
 **Schémata.** Tvar otázky, šablony i testu určuje zod v `packages/core/src/schema`.
 Databáze i model se řídí týmž schématem; nikde se nezavádí druhá definice téhož.
 
@@ -143,6 +152,12 @@ Testy v prohlížeči (`cd apps/web && pnpm exec playwright test`) běží proti
 vlastní databázi `apps/web/e2e.db` a vlastnímu serveru na portu 3100, nikdy
 proti ostré `local.db`; databázi staví `apps/web/scripts/seed-e2e.ts`
 (`pnpm --filter @testmaker/web e2e:db`, sama se postaví, když soubor chybí).
+
+**Lokátory v e2e testech.** Ovládací prvky se hledají podle role a popisku
+(`getByRole`, `getByLabel`) — odpovídají tomu, co vidí učitelka, a hlídají
+přístupnost. Hlášky, karty, štítky a další části bez role dostanou
+`data-testid` a hledají se přes `getByTestId`, ne přes `getByText`: přeformulování
+textu nesmí shodit test.
 
 Testy extraktorů a rozpoznávání duplicit používají skutečné soubory ve složce
 `sources/`. Ta není v gitu; bez ní se tyto testy přeskočí.
