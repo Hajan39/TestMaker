@@ -36,6 +36,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@libsql/client": "^0.18.0",
     "@react-pdf/renderer": "^4.9.0",
+    "@tanstack/react-query": "^5.104.0",
     "@testmaker/core": "workspace:*",
     "@testmaker/ui": "workspace:*",
     "ai": "^7.0.120",
@@ -50,6 +51,7 @@
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
     "tesseract.js": "^7.0.0",
+    "use-debounce": "^10.1.1",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },

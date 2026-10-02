@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useDebounce } from 'use-debounce'
+import { queryKeys } from '@/lib/queries'
 import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Delayed, Input, LoadingList } from '@testmaker/ui'
@@ -16,48 +19,29 @@ import { t } from '@testmaker/core/i18n'
 export function LibrarySearch() {
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<LibrarySearchResult[]>([])
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // A short query isn't searched; results aren't cleared, just not shown.
-  // (Setting state directly in an effect leads to cascading re-renders.)
   const needle = query.trim()
   const searching = needle.length >= 2
-
-  useEffect(() => {
-    if (needle.length < 2) return
-    // `setLoading` only inside the timer: state shouldn't change synchronously
-    // in an effect (React reports it as cascading re-renders), and with fast
-    // typing the "Hledám…" message doesn't flash needlessly.
-    // Each query has its own `AbortController`: otherwise a slow response to an
-    // older query overwrote the newer one's results.
-    const controller = new AbortController()
-    const timeout = setTimeout(() => {
-      setLoading(true)
-      setError(null)
+  // Fast typing doesn't send a request per letter; Query cancels a stale request
+  // itself (`signal`), so a slow answer to an older query can't overwrite a newer one.
+  const [debounced] = useDebounce(needle, 200)
+  const search = useQuery({
+    queryKey: queryKeys.library.search(debounced),
+    queryFn: ({ signal }) =>
       requestJson<{ results: LibrarySearchResult[] }>(
-        `/api/library/search?q=${encodeURIComponent(needle)}`,
-        { signal: controller.signal },
+        `/api/library/search?q=${encodeURIComponent(debounced)}`,
+        { signal },
         t('library:search.failed'),
-      )
-        .then((data) => setResults(data.results ?? []))
-        .catch((searchError: unknown) => {
-          if (controller.signal.aborted) return
-          setResults([])
-          setError(errorMessage(searchError, t('library:search.failed')))
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoading(false)
-        })
-    }, 200)
-    return () => {
-      clearTimeout(timeout)
-      controller.abort()
-    }
-  }, [needle])
+      ),
+    enabled: debounced.length >= 2,
+    placeholderData: keepPreviousData,
+  })
+  const results = search.data?.results ?? []
+  const loading = search.isFetching
+  const error = search.error ? errorMessage(search.error, t('library:search.failed')) : null
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {

@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { MainNav, type NavAccount } from '@/components/MainNav'
 import { PermissionsProvider } from '@/components/Permissions'
 import { QuestionCartProvider } from '@/components/QuestionCart'
+import { QueryProvider } from '@/lib/query'
 import { roleCanManage } from '@/lib/role'
 
 /**
@@ -32,11 +33,13 @@ export function AppChrome({
   // The bar has no business on the login page or during a forced password change.
   if (NO_NAVIGATION.includes(pathname)) return <>{children}</>
   return (
-    <PermissionsProvider canEdit={canEdit} canManage={canManage}>
-      {/* The cart is per person and school — questions of another school's bank can't get into a test here. */}
-      <QuestionCartProvider userId={account ? `${account.email}:${account.school.id}` : null}>
-        <MainNav account={account}>{children}</MainNav>
-      </QuestionCartProvider>
-    </PermissionsProvider>
+    <QueryProvider>
+      <PermissionsProvider canEdit={canEdit} canManage={canManage}>
+        {/* The cart is per person and school — questions of another school's bank can't get into a test here. */}
+        <QuestionCartProvider userId={account ? `${account.email}:${account.school.id}` : null}>
+          <MainNav account={account}>{children}</MainNav>
+        </QuestionCartProvider>
+      </PermissionsProvider>
+    </QueryProvider>
   )
 }

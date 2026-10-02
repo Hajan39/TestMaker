@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJobCounts, queryKeys, type JobCounts } from '@/lib/queries'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { t } from '@testmaker/core/i18n'
@@ -19,14 +21,8 @@ export function announceGeneration(): void {
   window.dispatchEvent(new Event(GENERATION_STARTED))
 }
 
-interface Counts {
-  running: number
-  queued: number
-  /** Unfinished topics. They stay around even a day after the model quota ran out. */
-  error: number
-  /** Topic of the only running or queued job, when nothing failed. */
-  topicId?: string
-}
+/** `error` = unfinished topics; they stay around even a day after the model quota ran out. */
+type Counts = JobCounts
 
 /**
  * A quiet note in the top toolbar: generation is running and how many topics
@@ -42,49 +38,29 @@ interface Counts {
  * something is really happening.
  */
 export function GenerationStatus({ pathname }: { pathname: string }) {
-  const [counts, setCounts] = useState<Counts>({ running: 0, queued: 0, error: 0 })
+  const queryClient = useQueryClient()
+  const { data, refetch } = useQuery({
+    queryKey: queryKeys.jobs.counts,
+    queryFn: fetchJobCounts,
+    // Polls only while something runs or waits — otherwise nothing can change by itself.
+    refetchInterval: (query) => {
+      const current = query.state.data
+      return current && current.running + current.queued > 0 ? REFRESH_MS : false
+    },
+  })
+  // The indicator is optional: until the first answer (or when it fails) it stays empty.
+  const counts: Counts = data ?? { running: 0, queued: 0, error: 0 }
   const busy = counts.running > 0 || counts.queued > 0
-
-  /**
-   * Reads the counts. State is set in response to the result, not inside the
-   * effect body — otherwise it re-renders in circles.
-   */
-  const readCounts = useCallback(async (): Promise<Counts | null> => {
-    try {
-      const response = await fetch('/api/jobs')
-      if (!response.ok) return null
-      const data = (await response.json()) as Partial<Counts>
-      return {
-        running: data.running ?? 0,
-        queued: data.queued ?? 0,
-        error: data.error ?? 0,
-        topicId: data.topicId,
-      }
-    } catch {
-      // The toolbar indicator is optional; if it fails to load, nothing happens.
-      return null
-    }
-  }, [])
 
   // Once on every page navigation — and right when generation starts somewhere.
   useEffect(() => {
-    let valid = true
-    const load = () => {
-      void readCounts().then((next) => {
-        if (valid && next) setCounts(next)
-      })
-    }
-
-    load()
-    window.addEventListener(GENERATION_STARTED, load)
-    // Polls repeatedly only while running. While nothing generates, nothing can change.
-    const timer = busy ? setInterval(load, REFRESH_MS) : null
-    return () => {
-      valid = false
-      window.removeEventListener(GENERATION_STARTED, load)
-      if (timer) clearInterval(timer)
-    }
-  }, [pathname, busy, readCounts])
+    void refetch()
+  }, [pathname, refetch])
+  useEffect(() => {
+    const started = () => void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all })
+    window.addEventListener(GENERATION_STARTED, started)
+    return () => window.removeEventListener(GENERATION_STARTED, started)
+  }, [queryClient])
 
   if (!busy && counts.error === 0) return null
 

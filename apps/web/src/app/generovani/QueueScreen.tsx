@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchJobList, queryKeys } from '@/lib/queries'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -24,11 +26,6 @@ import { minutesSince } from '@testmaker/core/dates'
 /** How often the screen polls for progress. Only while something is happening. */
 const REFRESH_MS = 3000
 
-interface QueueData {
-  counts: QueueCounts
-  jobs: QueueJob[]
-}
-
 /**
  * Generation overview.
  *
@@ -47,26 +44,31 @@ export function QueueScreen({
   aiConfigured: boolean
 }) {
   const router = useRouter()
-  const [data, setData] = useState<QueueData>({ counts: initialCounts, jobs: initialJobs })
+  const queryClient = useQueryClient()
   const [working, setWorking] = useState(false)
-  const [retrying, setRetrying] = useState(false)
   const stopRef = useRef(false)
 
+  // The page renders with the server's data; the query takes over from it.
+  // One failed request doesn't matter — the overview stays as it was and the
+  // next poll catches up, so no message flickers.
+  const { data } = useQuery({
+    queryKey: queryKeys.jobs.list,
+    queryFn: fetchJobList,
+    initialData: { counts: initialCounts, jobs: initialJobs },
+    // Polling forever would be pointless — when nothing waits or runs, the
+    // overview won't change by itself.
+    refetchInterval: (query) => {
+      const counts = query.state.data?.counts
+      return counts && counts.running + counts.queued > 0 ? REFRESH_MS : false
+    },
+  })
   const { counts, jobs } = data
-  const busy = counts.running > 0 || counts.queued > 0
 
-  const refresh = useCallback(async () => {
-    // One failed request doesn't matter — the overview stays as it was and the
-    // next request three seconds later catches up. A message would just flicker.
-    try {
-      const response = await fetch('/api/jobs?vypis=1')
-      if (!response.ok) return
-      const next = (await response.json()) as QueueCounts & { jobs: QueueJob[] }
-      setData({ counts: next, jobs: next.jobs })
-    } catch {
-      // See above.
-    }
-  }, [])
+  /** The overview and the toolbar indicator read the jobs — both catch up together. */
+  const refresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all }),
+    [queryClient],
+  )
 
   // The queue is processed only with the page open — closing or reloading
   // stops it, so the browser asks first.
@@ -76,14 +78,6 @@ export function QueueScreen({
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [working])
-
-  // Polling forever would be pointless — when nothing waits or runs, the
-  // overview won't change by itself.
-  useEffect(() => {
-    if (!busy) return
-    const timer = setInterval(() => void refresh(), REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [busy, refresh])
 
   async function run() {
     setWorking(true)
@@ -126,27 +120,26 @@ export function QueueScreen({
     }
   }
 
-  async function retry(ids?: string[]) {
-    setRetrying(true)
-    try {
-      const result = await requestJson<{ requeued: number }>(
+  const retryMutation = useMutation({
+    mutationFn: (ids?: string[]) =>
+      requestJson<{ requeued: number }>(
         '/api/jobs/retry',
         jsonBody('POST', ids ? { ids } : {}),
         t('generation:queue.retryFailed'),
-      )
+      ),
+    onSuccess: (result) => {
       const requeued = result.requeued ?? 0
       toast.success(
         requeued > 0
           ? t('generation:queue.requeued', { topics: t('library:count.topics', { count: requeued }) })
           : t('generation:queue.nothingToRequeue'),
       )
-      await refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('generation:queue.retryFailed')))
-    } finally {
-      setRetrying(false)
-    }
-  }
+      return refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('generation:queue.retryFailed'))),
+  })
+  const retrying = retryMutation.isPending
+  const retry = (ids?: string[]) => retryMutation.mutate(ids)
 
   async function clear(scope: 'cekajici' | 'vse') {
     // The error bubbles up — `DeleteButton` then keeps the dialog open

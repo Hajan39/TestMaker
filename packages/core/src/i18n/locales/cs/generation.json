@@ -45,6 +45,7 @@
     "done": "Hotovo: {{questions}} z {{topics}}."
   },
   "queue": {
+    "loadFailed": "Přehled generování se nepodařilo načíst.",
     "metaTitle": "Průběh generování – TestMaker",
     "loading": "Načítám přehled generování…",
     "title": "Průběh generování",
