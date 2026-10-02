@@ -173,10 +173,10 @@ export function splitIntoBatches(count: number, perCall: number = AI_SETTINGS.qu
  * it does across the whole requested count. A particular batch then gets only
  * its slice of this schedule (see the call in `generateQuestions`).
  */
-export function distributeTypes(types: QuestionType[], count: number): QuestionType[] {
+export function distributeTypes(types: QuestionType[], count: number, offset: number = 0): QuestionType[] {
   if (types.length === 0 || count <= 0) return []
   const result: QuestionType[] = []
-  for (let i = 0; i < count; i++) result.push(types[i % types.length] as QuestionType)
+  for (let i = 0; i < count; i++) result.push(types[(i + offset) % types.length] as QuestionType)
   return result
 }
 
@@ -349,8 +349,11 @@ export async function generateQuestions(
     request.focus,
   )
   const perChunk = Math.max(1, Math.ceil(request.count / chunks.length))
-  // Type schedule for the whole generation — each batch takes its slice.
-  const typeSchedule = distributeTypes(request.types, request.count)
+  // Type schedule for the whole generation — each batch takes its slice. It is
+  // shifted by the questions already in the topic, like the chunks: otherwise
+  // every top-up of five would start with the same five types and the rest
+  // would never come.
+  const typeSchedule = distributeTypes(request.types, request.count, request.avoid?.length ?? 0)
 
   const accepted: QuestionContent[] = []
   const rejected: GenerationResult['rejected'] = []

@@ -626,6 +626,16 @@ describe('distributing types among batches', () => {
     expect(distributeTypes(['a', 'b', 'c'] as never, 7)).toEqual(['a', 'b', 'c', 'a', 'b', 'c', 'a'])
   })
 
+  it('a small first batch includes the free-answer types', () => {
+    const schedule = distributeTypes([...AI_QUESTION_TYPES], 5)
+    expect(schedule).toContain('open')
+    expect(schedule).toContain('short_answer')
+  })
+
+  it('the next top-up continues with the types the previous one skipped', () => {
+    expect(distributeTypes(['a', 'b', 'c'] as never, 2, 2)).toEqual(['c', 'a'])
+  })
+
   it('for twelve questions and nine types asks for a sensible schedule, not impossible equality', () => {
     const types = [...AI_QUESTION_TYPES]
     const schedule = distributeTypes(types, 12)

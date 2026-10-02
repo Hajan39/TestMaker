@@ -36,16 +36,20 @@ export function questionTypeLabel(type: QuestionType): string {
  * questions from Claude Code (`/otazky`) — the model mixes up columns and rows
  * in tables, and image labelling also needs an image, which phase 1 does not
  * generate.
+ *
+ * The order is the order of the generation schedule (`distributeTypes`): a
+ * small batch takes the first types, so the free-answer ones (open, short
+ * answer) come early — at the end they never made it into five questions.
  */
 export const AI_QUESTION_TYPES = [
   'single_choice',
+  'open',
   'true_false',
   'short_answer',
-  'matching',
-  'ordering',
-  'fill_blank',
   'multi_choice',
-  'open',
+  'matching',
+  'fill_blank',
+  'ordering',
 ] as const satisfies readonly QuestionType[]
 
 export type AiQuestionType = (typeof AI_QUESTION_TYPES)[number]
