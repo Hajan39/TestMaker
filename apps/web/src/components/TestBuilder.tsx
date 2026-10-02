@@ -108,7 +108,7 @@ export function TestBuilder({
     header: test?.header ?? emptyHeader(),
     variants: test?.variants ?? 1,
     // The key is no longer set on the test but chosen at print time ("Zadání
-    // pro žáky" / "Klíč pro mě"). The DB column stays; nothing changes it.
+    // pro žáky" / "Vyplněná pro mě"). The DB column stays; nothing changes it.
     showKey: test?.showKey ?? true,
     // A test is private by default; it is shared only when the author asks.
     visibility: test?.visibility ?? 'soukrome',

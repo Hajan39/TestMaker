@@ -338,6 +338,8 @@ export interface RenderableTest {
   variant: 'A' | 'B'
   /** Render the answer key instead of/after the test. */
   withKey: boolean
+  /** The teacher's copy: the test itself with the correct answers written in. */
+  filled?: boolean
   /** Data of images used in the test (assetId → data URL). */
   assets: Record<string, string>
 }

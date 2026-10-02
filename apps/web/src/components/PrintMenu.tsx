@@ -26,7 +26,9 @@ import { t } from '@testmaker/core/i18n'
  * to the pupils.
  *
  * So there are only two actions, named after who the paper is for:
- * **Zadání pro žáky** (without key) and **Klíč pro mě** (with key). Both can be
+ * **Zadání pro žáky** (blank) and **Vyplněná pro mě** (the same paper with the
+ * correct answers written in red — easier to grade against than a separate
+ * key list; `key=1` still renders the old key page for API callers). Both can be
  * printed or downloaded, for variant A and B. Both places in the app take this
  * list from here so their labels cannot drift apart again.
  */
@@ -39,9 +41,9 @@ export interface PrintAction {
   run: () => Promise<void>
 }
 
-/** PDF render URL; `key=1` appends the answer key. */
-function pdfHref(testId: string, variant: 'A' | 'B', withKey: boolean): string {
-  return `/api/tests/${testId}/pdf?variant=${variant}${withKey ? '&key=1' : ''}`
+/** PDF render URL; `filled=1` writes the correct answers into the test. */
+function pdfHref(testId: string, variant: 'A' | 'B', filled: boolean): string {
+  return `/api/tests/${testId}/pdf?variant=${variant}${filled ? '&filled=1' : ''}`
 }
 
 /**
@@ -63,8 +65,8 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
           run: () => printPdf(pdfHref(testId, variant, false)),
         },
         {
-          key: `print-klic-${variant}`,
-          label: t('tests:print.printKey', { suffix }),
+          key: `print-vyplnena-${variant}`,
+          label: t('tests:print.printFilled', { suffix }),
           busyLabel: t('tests:print.preparingPrint'),
           run: () => printPdf(pdfHref(testId, variant, true)),
         },
@@ -75,8 +77,8 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
           run: () => downloadPdf(pdfHref(testId, variant, false)),
         },
         {
-          key: `pdf-klic-${variant}`,
-          label: t('tests:print.downloadKey', { suffix }),
+          key: `pdf-vyplnena-${variant}`,
+          label: t('tests:print.downloadFilled', { suffix }),
           busyLabel: t('tests:print.preparingPdf'),
           run: () => downloadPdf(pdfHref(testId, variant, true)),
         },

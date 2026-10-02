@@ -141,7 +141,7 @@ export function TestSettings({
           </div>
 
           {/* The answer key is not set here: it is chosen at print time,
-              between "Zadání pro žáky" and "Klíč pro mě". */}
+              between "Zadání pro žáky" and "Vyplněná pro mě". */}
           <div className="flex flex-wrap gap-5">
             <label className={worksheet ? 'hidden' : 'flex items-center gap-2 text-sm text-fg-soft'}>
               <Checkbox

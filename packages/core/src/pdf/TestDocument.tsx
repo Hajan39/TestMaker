@@ -17,7 +17,7 @@ import { sanitizeText } from './text'
 const LIGHT = '0.6pt solid #999'
 
 /** One generic document driven by `template.config` — no template is hard-coded. */
-export function TestDocument({ test, template, items, variant, withKey, assets }: RenderableTest) {
+export function TestDocument({ test, template, items, variant, withKey, filled = false, assets }: RenderableTest) {
   const config = template.config
   // A puzzle in variant B gets a different seed — grid and key then use the same one.
   const ordered = buildVariant(items, variant, test.id).map((item) =>
@@ -68,6 +68,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
                 graded={test.graded}
                 variant={variant}
                 assets={assets}
+                filled={filled}
               />
             )
           }
@@ -77,6 +78,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
                 key={item.id}
                 puzzle={item.puzzle}
                 config={config}
+                solved={filled}
                 // The puzzle does not repeat what the header already says (a
                 // standalone puzzle has its title and instructions in the header).
                 showTitle={puzzleHeadShown(item.puzzle, config, heading).title}
@@ -122,7 +124,7 @@ export function TestDocument({ test, template, items, variant, withKey, assets }
           }
           if (item.kind === 'table') {
             // A broken table is skipped; the editor shows it as invalid.
-            return item.table ? <TableBlock key={item.id} table={item.table} /> : null
+            return item.table ? <TableBlock key={item.id} table={item.table} solved={filled} /> : null
           }
           if (item.kind === 'page_break') return <View key={item.id} break />
           return null
@@ -250,6 +252,7 @@ function QuestionView({
   graded,
   variant,
   assets,
+  filled,
 }: {
   item: ResolvedTestItem
   question: Question
@@ -258,6 +261,7 @@ function QuestionView({
   graded: boolean
   variant: 'A' | 'B'
   assets: Record<string, string>
+  filled: boolean
 }) {
   const style = resolveQuestionStyle(config, question.type)
   const label = questionLabel(index, config.numbering)
@@ -290,6 +294,7 @@ function QuestionView({
         config={config}
         variant={variant}
         assets={assets}
+        filled={filled}
       />
     </View>
   )
@@ -309,16 +314,20 @@ export function PuzzleView({
   showTitle,
   showInstructions,
   keepTogether,
+  solved = false,
 }: {
   puzzle: PuzzleContent
   config: TemplateConfig
   showTitle: boolean
   showInstructions: boolean
   keepTogether: boolean
+  /** The teacher's filled-in copy shows the puzzle solved in place. */
+  solved?: boolean
 }) {
   const body = (
     <PuzzleBody
       puzzle={puzzle}
+      solved={solved}
       // When kept together as a whole, the wrapper carries the space above. Without
       // title and instructions (a standalone puzzle has them in the header) the
       // space below the header is enough.

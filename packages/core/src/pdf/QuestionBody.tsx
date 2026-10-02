@@ -17,10 +17,17 @@ interface Props {
   assets: Record<string, string>
   /** Answer line count override from the test item; empty = as the question says. */
   linesOverride?: number | null
+  /**
+   * The teacher's filled-in copy: the same layout as the pupils' paper, with
+   * the correct answers written into it in red.
+   */
+  filled?: boolean
 }
 
 const BORDER = '1pt solid #444'
 const LIGHT = '0.6pt solid #999'
+/** Colour of answers in the filled-in copy — like a teacher's red pen. */
+const ANSWER = '#c62828'
 
 /**
  * Image height cap in points (PDF pt). Without it a tall image (e.g. a
@@ -30,7 +37,7 @@ const LIGHT = '0.6pt solid #999'
 const IMAGE_MAX_HEIGHT = 260
 
 /** Question body — everything below the prompt: options, lines, tables, images. */
-export function QuestionBody({ question, style, config, variant, assets, linesOverride }: Props) {
+export function QuestionBody({ question, style, config, variant, assets, linesOverride, filled = false }: Props) {
   return (
     <View>
       {question.blocks.map((block, i) => (
@@ -43,6 +50,7 @@ export function QuestionBody({ question, style, config, variant, assets, linesOv
         variant={variant}
         assets={assets}
         linesOverride={linesOverride}
+        filled={filled}
       />
     </View>
   )
@@ -105,11 +113,16 @@ function BlockView({ block, assets }: { block: Block; assets: Record<string, str
   )
 }
 
-function AnswerArea({ question, style, config, variant, assets, linesOverride }: Props) {
+function AnswerArea({ question, style, config, variant, assets, linesOverride, filled }: Props) {
   switch (question.type) {
     case 'open':
       return (
-        <Lines count={answerLines(question, linesOverride ?? null)} height={style.answerLineHeight} />
+        <Lines
+          count={answerLines(question, linesOverride ?? null)}
+          height={style.answerLineHeight}
+          text={filled ? question.payload.answer : undefined}
+          fontSize={config.page.fontSize}
+        />
       )
 
     case 'draw':
@@ -117,22 +130,31 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       return (
         <View
           style={{ marginTop: 6, height: answerLines(question, linesOverride ?? null) * style.answerLineHeight }}
-        />
+        >
+          {filled ? <Text style={{ color: ANSWER, fontSize: 9 }}>{sanitizeText(question.payload.answer)}</Text> : null}
+        </View>
       )
 
     case 'short_answer':
       return (
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 6 }}>
           <Text>{t('pdf:question.answerLabel')}</Text>
-          <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, height: 14 }} />
+          <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, minHeight: 14 }}>
+            {filled ? <Text style={{ color: ANSWER }}>{sanitizeText(question.payload.answer)}</Text> : null}
+          </View>
         </View>
       )
 
     case 'single_choice':
     case 'multi_choice': {
       const marker = question.type === 'single_choice' ? 'letter' : 'box'
+      const correct = !filled
+        ? []
+        : question.type === 'single_choice'
+          ? [question.payload.correctIndex]
+          : question.payload.correctIndices
       return (
-        <Options options={question.payload.options} columns={style.optionColumns} marker={marker} />
+        <Options options={question.payload.options} columns={style.optionColumns} marker={marker} correct={correct} />
       )
     }
 
@@ -164,8 +186,8 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
                   {i + 1}. {sanitizeText(statement.text)}
                 </Text>
               </View>
-              <View style={{ width: 44, borderLeft: LIGHT }} />
-              <View style={{ width: 44, borderLeft: LIGHT }} />
+              <Mark show={Boolean(filled) && statement.isTrue} />
+              <Mark show={Boolean(filled) && !statement.isTrue} />
             </View>
           ))}
         </View>
@@ -178,7 +200,24 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
       const text = numberedBlanks(sanitizeText(question.payload.text))
       return (
         <View style={{ marginTop: 6 }}>
-          <Text style={{ lineHeight: 1.9 }}>{text}</Text>
+          {filled ? (
+            <Text style={{ lineHeight: 1.9 }}>
+              {sanitizeText(question.payload.text)
+                .split('___')
+                .map((part, i, parts) => (
+                  <Text key={i}>
+                    {part}
+                    {i < parts.length - 1 ? (
+                      <Text style={{ color: ANSWER, textDecoration: 'underline' }}>
+                        {` (${i + 1}) ${sanitizeText(question.payload.blanks[i] ?? '')} `}
+                      </Text>
+                    ) : null}
+                  </Text>
+                ))}
+            </Text>
+          ) : (
+            <Text style={{ lineHeight: 1.9 }}>{text}</Text>
+          )}
           {question.payload.wordBank.length > 0 ? (
             <View style={{ marginTop: 6, padding: 5, border: LIGHT }}>
               <Text style={{ fontSize: 9 }}>
@@ -198,7 +237,16 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
             <View style={{ flex: 1, paddingRight: 8 }}>
               {question.payload.left.map((item, i) => (
                 <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
-                  <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
+                  <AnswerBox
+                    value={
+                      filled
+                        ? (() => {
+                            const pair = question.payload.pairs.find(([l]) => l === i)
+                            return pair ? (LETTERS[pair[1]] ?? String(pair[1] + 1)) : ''
+                          })()
+                        : ''
+                    }
+                  />
                   <Text style={{ flex: 1 }}>
                     {i + 1}. {sanitizeText(item)}
                   </Text>
@@ -223,7 +271,8 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
           <AnswerHint text={t('pdf:question.orderingHint')} />
           {order.map((sourceIndex, i) => (
             <View key={i} style={{ flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' }}>
-              <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6 }} />
+              {/* Items are stored in the correct order, so the source index is the answer. */}
+              <AnswerBox value={filled ? String(sourceIndex + 1) : ''} />
               <Text style={{ flex: 1 }}>{sanitizeText(question.payload.items[sourceIndex] ?? '')}</Text>
             </View>
           ))}
@@ -257,9 +306,15 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
                   key={c}
                   style={{ flex: 1, padding: 4, minHeight: 18, borderRight: c < row.length - 1 ? LIGHT : undefined }}
                 >
-                  <Text style={{ color: cell ? undefined : '#777' }}>
-                    {cell ? sanitizeText(cell) : `(${blankNumbers[r]?.[c]})`}
-                  </Text>
+                  {cell ? (
+                    <Text>{sanitizeText(cell)}</Text>
+                  ) : filled ? (
+                    <Text style={{ color: ANSWER }}>
+                      {sanitizeText(question.payload.answers[(blankNumbers[r]?.[c] ?? 0) - 1] ?? '')}
+                    </Text>
+                  ) : (
+                    <Text style={{ color: '#777' }}>{`(${blankNumbers[r]?.[c]})`}</Text>
+                  )}
                 </View>
               ))}
             </View>
@@ -288,10 +343,12 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride }:
               <Text style={{ fontSize: 9, color: '#a33' }}>{t('pdf:question.imageMissing')}</Text>
             </View>
           )}
-          {question.payload.labels.map((_, i) => (
+          {question.payload.labels.map((label, i) => (
             <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 }}>
               <Text>{i + 1}.</Text>
-              <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, height: 13 }} />
+              <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, minHeight: 13 }}>
+                {filled ? <Text style={{ color: ANSWER }}>{sanitizeText(label)}</Text> : null}
+              </View>
             </View>
           ))}
         </View>
@@ -313,12 +370,53 @@ function AnswerHint({ text }: { text: string }) {
   return <Text style={{ fontSize: 8, color: '#555', marginBottom: 4 }}>{text}</Text>
 }
 
-function Lines({ count, height }: { count: number; height: number }) {
+/** Empty answer box (matching, ordering); in the filled-in copy it holds the answer. */
+function AnswerBox({ value }: { value: string }) {
+  return (
+    <View style={{ width: 22, height: 14, border: BORDER, marginRight: 6, alignItems: 'center', justifyContent: 'center' }}>
+      {/* With the page line height the text would not fit the box and react-pdf would drop it. */}
+      {value ? <Text style={{ color: ANSWER, fontWeight: 'bold', fontSize: 9, lineHeight: 1 }}>{value}</Text> : null}
+    </View>
+  )
+}
+
+/** Yes/No cell of a true/false row; in the filled-in copy the correct one is crossed. */
+function Mark({ show }: { show: boolean }) {
+  return (
+    <View style={{ width: 44, borderLeft: LIGHT, alignItems: 'center', justifyContent: 'center' }}>
+      {show ? <Text style={{ color: ANSWER, fontWeight: 'bold' }}>X</Text> : null}
+    </View>
+  )
+}
+
+/**
+ * Answer lines. In the filled-in copy the sample answer is written over them,
+ * one text line per ruled line, so the paper keeps the pupils' layout. A
+ * longer answer simply continues below the lines.
+ */
+function Lines({ count, height, text, fontSize }: { count: number; height: number; text?: string; fontSize: number }) {
   return (
     <View style={{ marginTop: 6 }}>
       {Array.from({ length: count }, (_, i) => (
         <View key={i} style={{ borderBottom: LIGHT, height }} />
       ))}
+      {text ? (
+        <Text
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 2,
+            right: 2,
+            color: ANSWER,
+            fontSize,
+            // Each text line takes exactly one ruled line and sits just above it.
+            lineHeight: height / fontSize,
+            paddingTop: Math.max(0, height - fontSize * 1.25),
+          }}
+        >
+          {sanitizeText(text)}
+        </Text>
+      ) : null}
     </View>
   )
 }
@@ -327,12 +425,17 @@ function Options({
   options,
   columns,
   marker,
+  correct,
 }: {
   options: string[]
   columns: 1 | 2
   marker: 'letter' | 'box'
+  /** Correct option indices to mark in the filled-in copy; empty for pupils. */
+  correct: number[]
 }) {
-  const rendered = options.map((option, i) => (
+  const rendered = options.map((option, i) => {
+    const isCorrect = correct.includes(i)
+    return (
     <View
       key={i}
       style={{
@@ -344,13 +447,27 @@ function Options({
       }}
     >
       {marker === 'box' ? (
-        <View style={{ width: 9, height: 9, border: BORDER, marginRight: 6, marginTop: 1.5 }} />
+        <View
+          style={{
+            width: 9,
+            height: 9,
+            border: isCorrect ? `1pt solid ${ANSWER}` : BORDER,
+            backgroundColor: isCorrect ? ANSWER : undefined,
+            marginRight: 6,
+            marginTop: 1.5,
+          }}
+        />
       ) : (
-        <Text style={{ marginRight: 4 }}>{LETTERS[i] ?? i + 1})</Text>
+        <Text style={{ marginRight: 4, color: isCorrect ? ANSWER : undefined, fontWeight: isCorrect ? 'bold' : 'normal' }}>
+          {LETTERS[i] ?? i + 1})
+        </Text>
       )}
-      <Text style={{ flex: 1 }}>{sanitizeText(option)}</Text>
+      <Text style={{ flex: 1, color: isCorrect ? ANSWER : undefined, fontWeight: isCorrect ? 'bold' : 'normal' }}>
+        {sanitizeText(option)}
+      </Text>
     </View>
-  ))
+    )
+  })
 
   return (
     <View style={{ marginTop: 2, flexDirection: 'row', flexWrap: 'wrap' }}>{rendered}</View>

@@ -6,11 +6,11 @@ import { expect, test, type Page } from '@playwright/test'
  * "Přiložit klíč" used to be on by default for a test and the builder's
  * "Vytisknout" button attached the key based on it, while the button of the same
  * name in the test list never attached it. Now there are two actions — "zadání
- * pro žáky" and "klíč pro mě" — and they must behave the same in both places.
+ * pro žáky" and "vyplněná pro mě" — and they must behave the same in both places.
  *
  * What the server actually sent is told by the file name in the
  * `content-disposition` header (see `src/app/api/tests/[id]/pdf/route.ts`): the
- * key is appended to the name as "+ klíč".
+ * filled-in copy gets "vyplněná" in the name.
  */
 
 const TITLE = 'Zkouška tisku klíče'
@@ -55,7 +55,7 @@ test.describe('printing the assignment and the key', () => {
     await page.request.delete(`/api/tests?id=${encodeURIComponent(testId)}`)
   })
 
-  test('builder: the assignment has no key, the key has the key', async ({ page }) => {
+  test('builder: the assignment has no key, the teacher copy is filled in', async ({ page }) => {
     await page.goto(`/tests/${testId}`)
 
     await page.getByRole('button', { name: 'Tisk a PDF' }).click()
@@ -63,8 +63,8 @@ test.describe('printing the assignment and the key', () => {
     expect(assignment).toBe(`${TITLE} A.pdf`)
 
     await page.getByRole('button', { name: 'Tisk a PDF' }).click()
-    const key = await fileNameAfterClick(page, testId, 'Stáhnout klíč pro mě')
-    expect(key).toBe(`${TITLE} A + klíč.pdf`)
+    const key = await fileNameAfterClick(page, testId, 'Stáhnout vyplněnou pro mě')
+    expect(key).toBe(`${TITLE} A vyplněná.pdf`)
   })
 
   test('test list: the same actions give the same result', async ({ page }) => {
@@ -79,8 +79,8 @@ test.describe('printing the assignment and the key', () => {
     // The menu closes after the click and a spinner shows in place of the button for a while.
     await expect(row.getByRole('button', { name: 'Akce' })).toBeVisible({ timeout: 30_000 })
     await row.getByRole('button', { name: 'Akce' }).click()
-    const key = await fileNameAfterClick(page, testId, 'Stáhnout klíč pro mě')
-    expect(key).toBe(`${TITLE} A + klíč.pdf`)
+    const key = await fileNameAfterClick(page, testId, 'Stáhnout vyplněnou pro mě')
+    expect(key).toBe(`${TITLE} A vyplněná.pdf`)
   })
 
   test('printing the assignment sends a PDF without the key to the printer', async ({ page }) => {

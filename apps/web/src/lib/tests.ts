@@ -482,7 +482,7 @@ export async function loadTestUsageForQuestions(
 export async function loadRenderableTest(
   scope: Scope,
   testId: string,
-  options: { variant: 'A' | 'B'; withKey: boolean },
+  options: { variant: 'A' | 'B'; withKey: boolean; filled?: boolean },
 ): Promise<RenderableTest | null> {
   const test = await loadTest(scope, testId)
   if (!test) return null
@@ -508,6 +508,7 @@ export async function loadRenderableTest(
     items,
     variant: options.variant,
     withKey: options.withKey,
+    filled: options.filled ?? false,
     assets: await loadAssets(scope, items),
   }
 }

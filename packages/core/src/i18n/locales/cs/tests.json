@@ -36,7 +36,8 @@
     "schoolHasNoTemplate": "Škola nemá žádnou šablonu pro tisk. Dej vědět správci, ať ji přidá, a pak to zkus znovu."
   },
   "pdfFile": {
-    "keySuffix": " + klíč"
+    "keySuffix": " + klíč",
+    "filledSuffix": " vyplněná"
   },
   "table": {
     "name": "Název",
@@ -93,9 +94,9 @@
   "print": {
     "variantSuffix": ", varianta {{variant}}",
     "printStudents": "Vytisknout zadání pro žáky{{suffix}}",
-    "printKey": "Vytisknout klíč pro mě{{suffix}}",
+    "printFilled": "Vytisknout vyplněnou pro mě{{suffix}}",
     "downloadStudents": "Stáhnout zadání pro žáky{{suffix}}",
-    "downloadKey": "Stáhnout klíč pro mě{{suffix}}",
+    "downloadFilled": "Stáhnout vyplněnou pro mě{{suffix}}",
     "preparingPrint": "Připravuji tisk…",
     "preparingPdf": "Připravuji PDF…",
     "menu": "Tisk a PDF",

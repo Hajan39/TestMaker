@@ -39,6 +39,27 @@ async function checkSample(path: string, expectedText: string[]): Promise<void> 
   for (const needle of expectedText) expect(text, path).toContain(needle)
 }
 
+it.runIf(process.env.RENDER_SAMPLES)('generates the filled-in teacher copy', async () => {
+  mkdirSync(OUT, { recursive: true })
+  for (const variant of ['A', 'B'] as const) {
+    const path = resolve(OUT, `klasicka-vyplnena-${variant}.pdf`)
+    await renderToFile(
+      createElement(TestDocument, {
+        test: makeTest({ graded: true }),
+        template: makeTemplate('klasicka'),
+        items: makeItems(),
+        variant,
+        withKey: false,
+        filled: true,
+        assets: {},
+      }) as never,
+      path,
+    )
+    // Answers are written into the test itself — no separate key page.
+    await checkSample(path, ['Dýchací soustava', 'dutinou nosní', 'plicní sklípky', 'tři'])
+  }
+})
+
 it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async () => {
   mkdirSync(OUT, { recursive: true })
   for (const slug of ['klasicka', 'kompaktni', 'pracovni-list']) {

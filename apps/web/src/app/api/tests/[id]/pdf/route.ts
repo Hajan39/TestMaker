@@ -6,22 +6,27 @@ import { withScope } from '@/lib/user'
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
-/** Renders a test to PDF. `variant=A|B`; `key=1` appends the answer key. */
+/**
+ * Renders a test to PDF. `variant=A|B`; `filled=1` writes the correct answers
+ * into the test (the teacher's copy); `key=1` appends the answer key page.
+ */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   return withScope(async (account) => {
   const { id } = await params
   const url = new URL(request.url)
   const variant = url.searchParams.get('variant') === 'B' ? 'B' : 'A'
   const withKey = url.searchParams.get('key') === '1'
+  const filled = url.searchParams.get('filled') === '1'
 
   // Someone else's test can't get here even with a guessed id: `loadRenderableTest`
   // only lets through own or shared ones.
-  const renderable = await loadRenderableTest(account, id, { variant, withKey })
+  const renderable = await loadRenderableTest(account, id, { variant, withKey, filled })
   if (!renderable) return new Response(t('tests:api.testNotFound'), { status: 404 })
 
   const buffer = await renderTestToBuffer(renderable)
   const safeTitle = renderable.test.title.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'test'
-  const fileName = `${safeTitle} ${variant}${withKey ? t('tests:pdfFile.keySuffix') : ''}.pdf`
+  const suffix = filled ? t('tests:pdfFile.filledSuffix') : withKey ? t('tests:pdfFile.keySuffix') : ''
+  const fileName = `${safeTitle} ${variant}${suffix}.pdf`
 
   return new Response(new Uint8Array(buffer), {
     headers: {
