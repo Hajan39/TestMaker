@@ -206,6 +206,21 @@ export const questionContentSchema = z.discriminatedUnion('type', [
 
 export type QuestionContent = z.infer<typeof questionContentSchema>
 
+/**
+ * The question shape the model gets: only the `AI_QUESTION_TYPES`. The full
+ * union is too big for Gemini Flash Lite once it sits inside the worksheet
+ * schema next to a table — it rejects the whole request with "Request
+ * contains an invalid argument" (HTTP 400). Smaller is also easier for the
+ * model to follow. The type stays `QuestionContent`: the parsed value is a
+ * subset of it, so callers need not care.
+ */
+export const aiQuestionContentSchema = z.discriminatedUnion(
+  'type',
+  questionContentSchema.options.filter((option) =>
+    (AI_QUESTION_TYPES as readonly string[]).includes(option.shape.type.value),
+  ) as unknown as typeof questionContentSchema.options,
+)
+
 /** Longest quote stored as evidence of origin — longer ones are trimmed. */
 export const MAX_EVIDENCE_QUOTE_LENGTH = 400
 

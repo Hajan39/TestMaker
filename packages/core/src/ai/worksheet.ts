@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { t } from '../i18n'
 import {
   normalizeGeneratedQuestion,
-  questionContentSchema,
+  aiQuestionContentSchema,
   validateQuestionContent,
   type QuestionContent,
 } from '../schema/question'
@@ -89,7 +89,7 @@ const modelItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('instruction'), text: z.string(), fromMaterials }),
   z.object({ kind: z.literal('text'), variant: z.enum(TEXT_ITEM_VARIANTS), text: z.string(), fromMaterials }),
   z.object({ kind: z.literal('table'), table: tableItemShapeSchema, fromMaterials }),
-  z.object({ kind: z.literal('question'), question: questionContentSchema, fromMaterials }),
+  z.object({ kind: z.literal('question'), question: aiQuestionContentSchema, fromMaterials }),
 ])
 
 const worksheetResponseSchema = z.object({ title: z.string(), items: z.array(modelItemSchema).min(1) })

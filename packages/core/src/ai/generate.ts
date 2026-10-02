@@ -5,6 +5,7 @@ import {
   DEFAULT_POINTS,
   pointsByScope,
   normalizeGeneratedQuestion,
+  aiQuestionContentSchema,
   questionContentSchema,
   validateQuestionContent,
   type QuestionContent,
@@ -17,7 +18,7 @@ import { referencesSource } from './sourceReference'
 import { AI_SETTINGS } from './settings'
 
 const responseSchema = z.object({
-  questions: z.array(questionContentSchema).min(1),
+  questions: z.array(aiQuestionContentSchema).min(1),
 })
 
 export interface GenerationResult {

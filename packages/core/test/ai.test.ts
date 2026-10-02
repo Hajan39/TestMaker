@@ -15,6 +15,7 @@ import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../sr
 import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
+  aiQuestionContentSchema,
   DEFAULT_POINTS,
   normalizeEvidence,
   normalizeChoicePayload,
@@ -27,6 +28,14 @@ import {
 } from '../src/schema/question'
 
 describe('schema for the model', () => {
+  it('offers the model only the types it may generate — the full union is too big for Gemini Lite', () => {
+    const json = JSON.stringify(z.toJSONSchema(aiQuestionContentSchema, { io: 'input' }))
+    for (const type of AI_QUESTION_TYPES) expect(json, type).toContain(`"${type}"`)
+    expect(json).not.toContain('"table_fill"')
+    expect(json).not.toContain('"label_image"')
+    expect(json).not.toContain('"draw"')
+  })
+
   it('converts to JSON Schema (structured output)', () => {
     const schema = z.object({ questions: z.array(questionContentSchema).min(1) })
     const jsonSchema = z.toJSONSchema(schema, { io: 'input' }) as Record<string, unknown>
