@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { t } from '../i18n'
 import {
-  normalizeMatchingPayload,
-  normalizeOrderingPayload,
+  normalizeGeneratedQuestion,
   questionContentSchema,
   validateQuestionContent,
   type QuestionContent,
@@ -122,7 +121,7 @@ function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null 
     }
     case 'question': {
       if (validateQuestionContent(item.question).length > 0) return null
-      const question = withDefaultPoints(normalizeMatchingPayload(normalizeOrderingPayload(item.question)))
+      const question = withDefaultPoints(normalizeGeneratedQuestion(item.question))
       return { kind: 'question', question, needsCheck }
     }
   }

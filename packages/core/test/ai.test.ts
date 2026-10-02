@@ -17,6 +17,7 @@ import {
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
   normalizeEvidence,
+  normalizeChoicePayload,
   normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
@@ -815,6 +816,54 @@ describe('matching: a right column in the same order as the left is shuffled bef
       payload: { prompt: 'Přiřaď.', left: ['a', 'b'], right: ['x', 'y'], pairs: [[0, 1], [1, 0]] },
     })
     expect(normalizeMatchingPayload(q)).toEqual(q)
+  })
+})
+
+describe('choice options are shuffled before saving', () => {
+  const single = (n: number): QuestionContent =>
+    questionContentSchema.parse({
+      type: 'single_choice',
+      payload: { prompt: `Otázka číslo ${n}?`, options: ['alfa', 'beta', 'gama', 'delta'], correctIndex: 1 },
+    })
+
+  it('keeps the correct option correct', () => {
+    const normalized = normalizeChoicePayload(single(1))
+    if (normalized.type !== 'single_choice') throw new Error('type')
+    expect(normalized.payload.options[normalized.payload.correctIndex]).toBe('beta')
+    expect([...normalized.payload.options].sort()).toEqual(['alfa', 'beta', 'delta', 'gama'])
+  })
+
+  it('spreads the correct position over the letters, not always B', () => {
+    const positions = new Set<number>()
+    for (let n = 0; n < 40; n += 1) {
+      const normalized = normalizeChoicePayload(single(n))
+      if (normalized.type === 'single_choice') positions.add(normalized.payload.correctIndex)
+    }
+    expect(positions.size).toBe(4)
+  })
+
+  it('is deterministic — same input gives same output', () => {
+    expect(normalizeChoicePayload(single(7))).toEqual(normalizeChoicePayload(single(7)))
+  })
+
+  it('recomputes all correct indices of multi choice', () => {
+    const q = questionContentSchema.parse({
+      type: 'multi_choice',
+      payload: { prompt: 'Které jsou savci?', options: ['pes', 'kapr', 'kočka', 'žába', 'kůň'], correctIndices: [0, 2, 4] },
+    })
+    const normalized = normalizeChoicePayload(q)
+    if (normalized.type !== 'multi_choice') throw new Error('type')
+    expect(normalized.payload.correctIndices.map((i) => normalized.payload.options[i]).sort()).toEqual(['kočka', 'kůň', 'pes'])
+  })
+
+  it('shuffles true/false statements with their answers', () => {
+    const statements = ['Prvni tvrzeni.', 'Druhe tvrzeni.', 'Treti tvrzeni.', 'Ctvrte tvrzeni.', 'Pate tvrzeni.'].map((text, i) => ({ text, isTrue: i % 2 === 0 }))
+    const q = questionContentSchema.parse({ type: 'true_false', payload: { statements } })
+    const normalized = normalizeChoicePayload(q)
+    if (normalized.type !== 'true_false') throw new Error('type')
+    expect([...normalized.payload.statements].sort((a, b) => a.text.localeCompare(b.text))).toEqual(
+      [...statements].sort((a, b) => a.text.localeCompare(b.text)),
+    )
   })
 })
 

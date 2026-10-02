@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { t } from '../i18n'
-import { normalizeMatchingPayload, normalizeOrderingPayload, questionContentSchema, type QuestionContent } from '../schema/question'
+import { normalizeGeneratedQuestion, questionContentSchema, type QuestionContent } from '../schema/question'
 import { checkQuestion, duplicateCheck, withDefaultPoints } from './generate'
 import { buildSystemPrompt, QUESTION_TYPE_HINTS } from './prompts/questions'
 
@@ -172,7 +172,7 @@ export function readQuestionFile(
       rejected.push({ index, errors })
       return
     }
-    const question = withDefaultPoints(normalizeMatchingPayload(normalizeOrderingPayload(parsed.data)))
+    const question = withDefaultPoints(normalizeGeneratedQuestion(parsed.data))
     if (isDuplicate(question)) {
       rejected.push({ index, errors: [t('ai:questionFile.duplicate')] })
       return

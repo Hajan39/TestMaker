@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { t } from '../i18n'
+import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
 import { blockSchema } from './blocks'
 
 /** Question types supported by the app. */
@@ -238,6 +239,57 @@ export function normalizeMatchingPayload(q: QuestionContent): QuestionContent {
   const newRight = Array.from({ length: n }, (_, i) => right[(i + 1) % n] as string)
   const newPairs: [number, number][] = Array.from({ length: n }, (_, l) => [l, (l - 1 + n) % n])
   return { ...q, payload: { ...q.payload, right: newRight, pairs: newPairs } }
+}
+
+/**
+ * The model puts the correct option of a choice question in the same few
+ * positions (most often B) and lists true/false statements in a predictable
+ * pattern. Variant A prints the stored order, so a pupil could learn to pick
+ * B without reading. This shuffles the options (and recomputes the correct
+ * indices) and the statements before saving. The seed comes from the question
+ * content, so the same input always gives the same output, while across
+ * questions the correct position spreads evenly over all letters.
+ */
+export function normalizeChoicePayload(q: QuestionContent): QuestionContent {
+  switch (q.type) {
+    case 'single_choice': {
+      const { prompt, options, correctIndex } = q.payload
+      const rand = seededRandom(hashSeed(`${prompt}:${options.join('|')}`))
+      const order = shuffled(options.map((_, i) => i), rand)
+      return {
+        ...q,
+        payload: { ...q.payload, options: order.map((i) => options[i] as string), correctIndex: order.indexOf(correctIndex) },
+      }
+    }
+    case 'multi_choice': {
+      const { prompt, options, correctIndices } = q.payload
+      const rand = seededRandom(hashSeed(`${prompt}:${options.join('|')}`))
+      const order = shuffled(options.map((_, i) => i), rand)
+      return {
+        ...q,
+        payload: {
+          ...q.payload,
+          options: order.map((i) => options[i] as string),
+          correctIndices: correctIndices.map((i) => order.indexOf(i)).sort((a, b) => a - b),
+        },
+      }
+    }
+    case 'true_false': {
+      const { prompt, statements } = q.payload
+      const rand = seededRandom(hashSeed(`${prompt}:${statements.map((s) => s.text).join('|')}`))
+      return { ...q, payload: { ...q.payload, statements: shuffled(statements, rand) } }
+    }
+    default:
+      return q
+  }
+}
+
+/**
+ * All corrections applied to a question from the model before saving —
+ * ordering by `correctOrder`, matching columns, shuffled choice options.
+ */
+export function normalizeGeneratedQuestion(q: QuestionContent): QuestionContent {
+  return normalizeChoicePayload(normalizeMatchingPayload(normalizeOrderingPayload(q)))
 }
 
 /**

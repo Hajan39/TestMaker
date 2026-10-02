@@ -4,8 +4,7 @@ import {
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
   pointsByScope,
-  normalizeMatchingPayload,
-  normalizeOrderingPayload,
+  normalizeGeneratedQuestion,
   questionContentSchema,
   validateQuestionContent,
   type QuestionContent,
@@ -405,7 +404,7 @@ export async function generateQuestions(
           rejected.push({ index: accepted.length + i, errors })
           continue
         }
-        const normalized = withDefaultPoints(normalizeMatchingPayload(normalizeOrderingPayload(question)))
+        const normalized = withDefaultPoints(normalizeGeneratedQuestion(question))
         if (isDuplicate(normalized)) continue
         batch.push(normalized)
       }

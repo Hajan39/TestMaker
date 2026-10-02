@@ -54,14 +54,16 @@ export const QUESTION_TYPE_HINTS: Record<QuestionType, string> = {
   draw:
     'Jen když jde látku nakreslit a popsat (stavba, schéma, pokus, mapa). Zadání řekne, co nakreslit a které části popsat. 6–12 řádků místa; v `answer` vypiš, co musí kresba obsahovat a které popisky. `points` 2–4 podle počtu popisků.',
   short_answer: 'Odpověď je jedno slovo nebo krátké sousloví z materiálu. Do `acceptedAnswers` dej běžné varianty.',
-  single_choice: 'Čtyři možnosti, právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly.',
+  single_choice:
+    '3–5 možností, počet mezi otázkami střídej (ne vždy čtyři); právě jedna správná. `correctIndex` je pořadí správné možnosti od nuly. Pořadí možností aplikace sama zamíchá.',
   multi_choice:
-    '4 možnosti; správná může být jedna, dvě, tři i všechny — počet mezi otázkami střídej, ať ho žák nemůže uhodnout. Zadání řekne, ať žák označí všechny správné možnosti, ale neprozradí kolik jich je. Špatné možnosti věrohodné, ne nesmyslné. Žádná možnost se neopakuje.',
-  true_false: '4 krátká tvrzení, zhruba půl pravdivých. Nepravdivé tvrzení vznikne malou změnou pravdivého.',
+    '3–5 možností, počet mezi otázkami střídej; správná může být jedna, dvě, tři i všechny — počet mezi otázkami střídej, ať ho žák nemůže uhodnout. Zadání řekne, ať žák označí všechny správné možnosti, ale neprozradí kolik jich je. Špatné možnosti věrohodné, ne nesmyslné. Žádná možnost se neopakuje.',
+  true_false:
+    '3–6 krátkých tvrzení, počet mezi otázkami střídej; počet pravdivých taky střídej (ne vždy půl). Nepravdivé tvrzení vznikne malou změnou pravdivého.',
   fill_blank:
     '1–4 vynechaná slova; počet ___ v textu přesně odpovídá poli `blanks`; vynechávej klíčové pojmy z materiálu, ne nahodilá slova.',
   matching:
-    '4–6 dvojic; levý a pravý sloupec stejně dlouhé; `pairs` obsahuje dvojice indexů [levý, pravý], každý index právě jednou; pravý sloupec vypiš v jiném pořadí než levý.',
+    '3–6 dvojic, počet mezi otázkami střídej; levý a pravý sloupec stejně dlouhé; `pairs` obsahuje dvojice indexů [levý, pravý], každý index právě jednou; pravý sloupec vypiš v jiném pořadí než levý.',
   ordering:
     'Posloupnost, vývoj, cesta látky. 3–5 položek, počet mezi otázkami střídej. `items` vypiš v libovolném pořadí a do `correctOrder` dej indexy do `items` udávající skutečně správné pořadí — odděl si tak "co vypsat" od "v jakém pořadí to patří za sebe". Aplikace položky pro tisk stejně zamíchá.',
   table_fill: 'Tabulka s hlavičkou; buňky k doplnění zapiš jako null a jejich správné hodnoty dej do `answers` po řádcích.',
