@@ -1,35 +1,14 @@
-import { and, asc, eq, lt, or, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
 import { db, generationJobs } from '@/db'
 import { callRecorder } from '@/lib/aiUsage'
 import { generateForTopic } from '@/lib/generation'
 import { scopeFromJob, writeAudit } from '@/lib/user'
+import { technicalDetail } from '@/lib/aiFailure'
+import { expireStaleJobs } from '@/lib/jobs'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
-
-/**
- * How long a job may run before we consider it abandoned. Generating one topic
- * takes tens of seconds; when the window driving the queue closes, the job stays
- * hanging and without this limit would block the topic forever.
- */
-const ABANDONED_AFTER_MS = 15 * 60 * 1000
-
-/** Puts abandoned running jobs back into the queue. */
-async function reviveAbandoned(): Promise<number> {
-  const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString()
-  const revived = await db
-    .update(generationJobs)
-    .set({ status: 'queued', startedAt: null })
-    .where(
-      and(
-        eq(generationJobs.status, 'running'),
-        or(lt(generationJobs.startedAt, cutoff), sql`${generationJobs.startedAt} is null`),
-      ),
-    )
-    .returning({ id: generationJobs.id })
-  return revived.length
-}
 
 /**
  * Processes one job from the queue. The UI calls the endpoint in a loop while it
@@ -49,8 +28,8 @@ async function runOne() {
     return Response.json({ error: aiNotConfiguredMessage() }, { status: 503 })
   }
 
-  // First collect what an interrupted run left behind.
-  const revived = await reviveAbandoned()
+  // First collect what an interrupted run left behind (`expireStaleJobs`).
+  const { requeued: revived } = await expireStaleJobs(null)
 
   /*
    * Which job is next. Not simply the oldest in the whole queue: whoever
@@ -111,7 +90,7 @@ async function runOne() {
       action: 'fronta-chyba',
       entity: 'topic',
       entityId: job.topicId,
-      detail: { message },
+      detail: { message, technicky: technicalDetail(error) },
       severity: 'chyba',
     })
     return Response.json({

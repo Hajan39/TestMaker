@@ -30,7 +30,8 @@
     "noReplacement": "Model nevrátil použitelnou náhradu. Zkus to prosím znovu.",
     "replacementSaveFailed": "Náhradu se nepodařilo uložit",
     "noVariant": "Model nevrátil použitelnou verzi. Zkus to prosím znovu.",
-    "variantSaveFailed": "Verzi se nepodařilo uložit"
+    "variantSaveFailed": "Verzi se nepodařilo uložit",
+    "interrupted": "Generování se přerušilo — server ho po několika minutách ukončil. Zkus to znovu, případně s menším počtem otázek."
   },
   "generateClient": {
     "startFailed": "Generování se nepodařilo spustit.",

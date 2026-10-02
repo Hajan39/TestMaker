@@ -38,7 +38,7 @@ vi.mock('@testmaker/core/ai', async (importOriginal) => {
 
 const { POST: generate } = await import('@/app/api/worksheets/generate/route')
 const { POST: regenerate } = await import('@/app/api/worksheets/[id]/items/[itemId]/regenerate/route')
-const { db, materials, testItems, tests, topics } = await import('@/db')
+const { auditLog, db, materials, testItems, tests, topics } = await import('@/db')
 const { loadTest, loadTestItems } = await import('@/lib/tests')
 const { jsonReq, seedMaterial, seedTemplate, seedTopic, seedAccount } = await import('./helpers')
 
@@ -146,6 +146,14 @@ describe('POST /api/worksheets/generate', () => {
     expect(response.status).toBe(502)
     expect(((await response.json()) as { error: string }).error).toMatch(/Zkus to znovu/)
     expect((await db.select().from(tests)).length).toBe(before)
+  })
+
+  it('a failed generation shows up in Správa with the technical detail', async () => {
+    model.answer = { title: 'x', items: [text('Jen jedna věta.')] }
+    await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'free', title: 'X' }))
+    const [event] = await db.select().from(auditLog).where(eq(auditLog.action, 'list-chyba'))
+    expect(event?.severity).toBe('chyba')
+    expect((event?.detail as { technicky?: string }).technicky).toBeTruthy()
   })
 })
 

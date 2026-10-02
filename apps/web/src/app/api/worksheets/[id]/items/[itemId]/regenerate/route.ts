@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, isAiConfigured } from '@testmaker/core/ai'
 import { AI_QUESTION_TYPES } from '@testmaker/core/schema'
 import { t } from '@testmaker/core/i18n'
 import { regenerateWorksheetPart } from '@/lib/tests'
 import { withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -44,8 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (!item) return Response.json({ error: t('worksheets:api.notFound') }, { status: 404 })
         return Response.json({ item })
       } catch (error) {
-        console.error('Failed to regenerate worksheet item:', error)
-        return Response.json({ error: describeAiError(error).message }, { status: 502 })
+        const message = await reportAiFailure(account, { action: 'list-polozka-chyba', entity: 'test', entityId: id, error })
+        return Response.json({ error: message }, { status: 502 })
       }
     },
     { write: true },

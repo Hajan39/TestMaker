@@ -1,8 +1,9 @@
 import { z } from 'zod'
-import { aiNotConfiguredMessage, AI_SETTINGS, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, AI_SETTINGS, isAiConfigured } from '@testmaker/core/ai'
 import { t } from '@testmaker/core/i18n'
 import { createGeneratedWorksheet } from '@/lib/tests'
 import { withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -66,9 +67,14 @@ export async function POST(request: Request) {
         if (!result) return Response.json({ error: t('worksheets:api.topicGone') }, { status: 404 })
         return Response.json(result)
       } catch (error) {
-        // The raw error stays in the server log; the teacher gets advice in Czech.
-        console.error('Failed to generate worksheet:', error)
-        return Response.json({ error: describeAiError(error).message }, { status: 502 })
+        // The teacher gets advice in Czech; the manager sees the technical detail in Správa.
+        const message = await reportAiFailure(account, {
+          action: 'list-chyba',
+          entity: 'topic',
+          entityId: body.source === 'topic' ? body.topicId : null,
+          error,
+        })
+        return Response.json({ error: message }, { status: 502 })
       }
     },
     { write: true },

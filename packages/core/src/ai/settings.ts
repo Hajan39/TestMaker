@@ -120,6 +120,14 @@ export const AI_SETTINGS = {
    * the photo before sending it to the model — a 12 MP HEIC would not fit the
    * request limit, and the model reads a page just as well at this size.
    */
+  /**
+   * A generation job still "running" after this many minutes was cut off —
+   * the server ends a request after 5 minutes (`maxDuration`) and the job never
+   * gets to record how it ended. A direct generation is then marked as failed
+   * and a queue job goes back to the queue, so the toolbar stops spinning and
+   * the topic is free again (`expireStaleJobs`).
+   */
+  staleJobMinutes: 15,
   imageText: {
     /** Longest side of the image sent to the model (px). */
     maxSide: 2_000,

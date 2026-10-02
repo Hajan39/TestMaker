@@ -4,6 +4,7 @@ import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testma
 import { t } from '@testmaker/core/i18n'
 import { claimTopic, DEFAULT_GENERATE_PARAMS, generateForTopic, releaseTopic } from '@/lib/generation'
 import { withScope, writeAudit } from '@/lib/user'
+import { technicalDetail } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
           action: 'generovani-chyba',
           entity: 'topic',
           entityId: parsed.data.topicId,
-          detail: { message },
+          detail: { message, technicky: technicalDetail(error) },
           severity: 'chyba',
         })
         send({ type: 'error', message })

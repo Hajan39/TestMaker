@@ -1,8 +1,9 @@
 import { z } from 'zod'
-import { AI_SETTINGS, describeAiError, isAiConfigured, transcribeImage } from '@testmaker/core/ai'
+import { AI_SETTINGS, isAiConfigured, transcribeImage } from '@testmaker/core/ai'
 import { t } from '@testmaker/core/i18n'
 import { callRecorder } from '@/lib/aiUsage'
 import { withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -40,8 +41,9 @@ export async function POST(request: Request) {
         )
         return Response.json(result)
       } catch (error) {
-        console.error('Failed to transcribe image:', error)
-        return Response.json({ error: describeAiError(error).message }, { status: 502 })
+        // The browser falls back to its own OCR; the manager still learns why the model failed.
+        const message = await reportAiFailure(account, { action: 'prepis-chyba', error })
+        return Response.json({ error: message }, { status: 502 })
       }
     },
     { write: true },

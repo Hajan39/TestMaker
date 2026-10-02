@@ -110,7 +110,8 @@ export function GenerationStatus({ pathname }: { pathname: string }) {
     >
       {/* The spinner belongs only to work that really runs. For unfinished
           topics it would spin over something that stands still. */}
-      {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
+      {/* Only real work spins — a queue nobody is running waits, it does not work. */}
+      {counts.running > 0 ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
       {text}
     </Link>
   )

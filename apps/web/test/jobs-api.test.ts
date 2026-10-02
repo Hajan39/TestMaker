@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { DELETE, GET, POST } from '@/app/api/jobs/route'
-import { db, generationJobs, materials, type GenerationJobParams } from '@/db'
+import { auditLog, db, generationJobs, materials, type GenerationJobParams } from '@/db'
+import { technicalDetail } from '@/lib/aiFailure'
 import { newId } from '@/lib/ids'
 import { jsonReq, req, seedMaterial, seedQuestion, seedTopic, ACCOUNT } from './helpers'
 
@@ -127,7 +128,7 @@ describe('queue status and clearing', () => {
     await db.delete(generationJobs)
     await db.insert(generationJobs).values([
       { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'queued' },
-      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'running' },
+      { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'running', startedAt: new Date().toISOString() },
       { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'done' },
       { id: newId(), schoolId: ACCOUNT.schoolId, requestedBy: ACCOUNT.userId, topicId, params: {} as GenerationJobParams, status: 'error' },
     ])
@@ -150,5 +151,66 @@ describe('queue status and clearing', () => {
     expect(body.removed).toBe(3)
     const rest = await db.select().from(generationJobs)
     expect(rest.map((row) => row.status)).toEqual(['done'])
+  })
+})
+
+describe('generation cut off by the server', () => {
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+
+  it('a direct generation still "running" an hour later is failed and logged, so nothing spins forever', async () => {
+    const { topicId } = await seedTopic()
+    await db.delete(generationJobs)
+    const id = newId()
+    await db.insert(generationJobs).values({
+      id,
+      schoolId: ACCOUNT.schoolId,
+      requestedBy: ACCOUNT.userId,
+      topicId,
+      params: { count: 10, types: [], difficulty: 'mix', direct: true },
+      status: 'running',
+      createdAt: longAgo,
+      startedAt: longAgo,
+    })
+
+    const body = (await (await GET(req('/api/jobs'))).json()) as Record<string, number>
+    expect(body).toMatchObject({ running: 0, error: 1 })
+    const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, id))
+    expect(job?.error).toMatch(/přerušilo/)
+    const events = await db.select().from(auditLog).where(eq(auditLog.entityId, topicId))
+    expect(events.some((event) => event.action === 'fronta-prerusena' && event.severity === 'chyba')).toBe(true)
+  })
+
+  it('a stale queue job goes back to the queue instead', async () => {
+    const { topicId } = await seedTopic()
+    await db.delete(generationJobs)
+    const id = newId()
+    await db.insert(generationJobs).values({
+      id,
+      schoolId: ACCOUNT.schoolId,
+      requestedBy: ACCOUNT.userId,
+      topicId,
+      params: { count: 10, types: [], difficulty: 'mix' },
+      status: 'running',
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      startedAt: longAgo,
+    })
+
+    const body = (await (await GET(req('/api/jobs'))).json()) as Record<string, number>
+    expect(body).toMatchObject({ running: 0, queued: 1, error: 0 })
+  })
+})
+
+describe('technical detail of a failure', () => {
+  it('follows the cause chain and keeps the HTTP status and provider answer', () => {
+    const provider = Object.assign(new Error('Resource exhausted'), {
+      name: 'AI_APICallError',
+      statusCode: 429,
+      responseBody: '{"error":{"message":"Quota exceeded for model"}}',
+    })
+    const wrapped = new Error('Failed after 3 attempts', { cause: provider })
+    const detail = technicalDetail(wrapped)
+    expect(detail).toContain('Failed after 3 attempts')
+    expect(detail).toContain('[HTTP 429]')
+    expect(detail).toContain('Quota exceeded for model')
   })
 })

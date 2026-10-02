@@ -16,6 +16,7 @@ import {
   BusyButton,
   Button,
   Card,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -88,11 +89,20 @@ function eventLabel(action: string): string {
   return action in adminTexts.events ? t(`admin:events.${action as EventCode}`) : action
 }
 
-/** Event detail as "key: value"; the id and the administrator flag are not listed. */
+/** Technical detail of a failed generation (`reportAiFailure`), shown on its own line. */
+function technicalOf(detail: unknown): string | null {
+  const value = (detail as { technicky?: unknown } | null)?.technicky
+  return typeof value === 'string' && value ? value : null
+}
+
+/** Event detail as "key: value"; the id, the administrator flag and the technical detail are not listed. */
 function describeDetail(detail: unknown): string {
   if (typeof detail !== 'object' || detail === null) return String(detail)
   return Object.entries(detail as Record<string, unknown>)
-    .filter(([key, value]) => value !== undefined && value !== null && key !== 'id' && key !== 'administrator')
+    .filter(
+      ([key, value]) =>
+        value !== undefined && value !== null && key !== 'id' && key !== 'administrator' && key !== 'technicky',
+    )
     .map(([key, value]) => {
       const text =
         value === true
@@ -235,6 +245,8 @@ export function ManagementScreen({
 
   /** The account a change is running on — its buttons stay disabled until then. */
   const [working, setWorking] = useState<string | null>(null)
+  const [onlyErrors, setOnlyErrors] = useState(false)
+  const shownEvents = onlyErrors ? events.filter((event) => event.severity === 'chyba') : events
   /** A change that signs the teacher out — waits for confirmation. */
   const [confirmation, setConfirmation] = useState<{
     title: string
@@ -529,12 +541,18 @@ export function ManagementScreen({
           </div>
         </TabsContent>
 
-        <TabsContent value="udalosti">
+        <TabsContent value="udalosti" className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={onlyErrors} onCheckedChange={(checked) => setOnlyErrors(checked === true)} />
+            {t('admin:management.events.onlyErrors')}
+          </label>
           <Card className="divide-y divide-line">
-            {events.length === 0 ? (
-              <p className="p-4 text-sm text-fg-soft">{t('admin:management.events.empty')}</p>
+            {shownEvents.length === 0 ? (
+              <p className="p-4 text-sm text-fg-soft">
+                {onlyErrors ? t('admin:management.events.noErrors') : t('admin:management.events.empty')}
+              </p>
             ) : (
-              events.map((event) => (
+              shownEvents.map((event) => (
                 <div key={event.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3 text-sm">
                   <span className="ui-numeric w-40 shrink-0 text-xs text-fg-muted">{when(event.at)}</span>
                   <span
@@ -550,6 +568,12 @@ export function ManagementScreen({
                   ) : null}
                   {event.detail && describeDetail(event.detail) ? (
                     <span className="text-xs text-fg-muted">{describeDetail(event.detail)}</span>
+                  ) : null}
+                  {technicalOf(event.detail) ? (
+                    // What the model or the server actually answered — for the manager, not the teacher.
+                    <code className="block w-full whitespace-pre-wrap break-words rounded-[var(--radius-inner)] bg-surface-muted px-2 py-1 text-xs text-fg-soft">
+                      {technicalOf(event.detail)}
+                    </code>
                   ) : null}
                 </div>
               ))

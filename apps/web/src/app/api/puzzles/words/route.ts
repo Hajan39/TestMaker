@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { t } from '@testmaker/core/i18n'
-import { aiNotConfiguredMessage, describeAiError, isAiConfigured, isNearDuplicate } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, isAiConfigured, isNearDuplicate } from '@testmaker/core/ai'
 import {
   MAX_GRID_SIZE,
   MIN_GRID_SIZE,
@@ -10,6 +10,7 @@ import {
 } from '@testmaker/core/schema'
 import { loadPuzzleWordDraft, savePuzzleWordDraft, suggestPuzzleWords } from '@/lib/puzzles'
 import { withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -110,8 +111,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // Provider messages are English and technical; we translate them. The raw
     // text stays in the server log for the owner.
-    console.error('Failed to extract puzzle words:', error)
-    const { message } = describeAiError(error)
+    const message = await reportAiFailure(account, { action: 'hlavolam-chyba', entity: 'topic', entityId: parsed.data.topicId, error })
     return Response.json({ error: message }, { status: 502 })
   }
   }, { write: true })

@@ -139,6 +139,14 @@
     "administrator-prepnul-skolu": "Administrátor se přepnul do školy",
     "fronta-chyba": "Chyba ve frontě generování",
     "generovani-chyba": "Generování otázek se nepovedlo",
+    "list-chyba": "Pracovní list se nepodařilo vygenerovat",
+    "list-polozka-chyba": "Položku pracovního listu se nepodařilo přegenerovat",
+    "hlavolam-chyba": "Slova do hlavolamu se nepodařilo vygenerovat",
+    "prepis-chyba": "Model nepřečetl text z fotky",
+    "nahrazeni-chyba": "Otázku se nepodařilo přegenerovat",
+    "varianta-chyba": "Lehčí nebo těžší verzi otázky se nepodařilo vytvořit",
+    "verze-testu-chyba": "Verzi písemky se nepodařilo vytvořit",
+    "fronta-prerusena": "Generování přerušil server",
     "google-cekajici-ucet": "Přihlášení přes Google čeká na schválení",
     "google-neznamy-ucet": "Pokus o přihlášení neznámým účtem Google",
     "obnova-ze-zalohy": "Obnova ze zálohy",
@@ -166,6 +174,7 @@
       "status": "stav",
       "pocet": "počet pokusů",
       "message": "chyba",
+      "technicky": "technický detail",
       "odkazy": "odkazů",
       "heslo": "nové heslo",
       "odhlasit": "odhlášení ze všech zařízení",
@@ -231,6 +240,8 @@
     "events": {
       "empty": "Zatím se nic nestalo.",
       "anonymous": "bez přihlášení",
+      "onlyErrors": "Jen chyby",
+      "noErrors": "Žádná chyba mezi posledními událostmi.",
       "administrator": "Administrátor"
     },
     "operations": {

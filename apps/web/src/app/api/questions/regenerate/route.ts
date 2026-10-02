@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, isAiConfigured } from '@testmaker/core/ai'
 import { t } from '@testmaker/core/i18n'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
 import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
 import { inSchool, withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     return Response.json({ question })
   } catch (error) {
     // Provider messages are English and technical; translate them.
-    const { message } = describeAiError(error)
+    const message = await reportAiFailure(account, { action: 'nahrazeni-chyba', entity: 'question', entityId: parsed.data.id, error })
     return Response.json({ error: message }, { status: 502 })
   }
   }, { write: true })

@@ -1,7 +1,9 @@
 import 'server-only'
-import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lt, or, sql } from 'drizzle-orm'
+import { AI_SETTINGS } from '@testmaker/core/ai'
+import { t } from '@testmaker/core/i18n'
 import { db, generationJobs, grades, subjects, topics, users } from '@/db'
-import { canManage, inSchool, type Scope } from './user'
+import { canManage, inSchool, writeAudit, type Scope } from './user'
 
 /**
  * Generation queue for the overview. The screen and the toolbar indicator read
@@ -48,8 +50,64 @@ export interface QueueJob {
 /** How many finished jobs are listed. Older ones interest nobody. */
 export const DONE_LIMIT = 20
 
+/**
+ * Jobs that have been "running" for too long were cut off by the server and
+ * never recorded their end — they would spin in the toolbar forever and keep
+ * their topic locked (`claimTopic`). A direct generation is marked as failed
+ * (the teacher may retry it from the overview); a queue job goes back to the
+ * queue. Called wherever the queue is read or a topic claimed, so it needs no
+ * scheduler; without a scope (the queue runner) it covers all schools.
+ *
+ * Claims from before the `direct` flag are recognised by starting the moment
+ * they were created — a queue job waits in the queue first.
+ */
+export async function expireStaleJobs(scope: Scope | null): Promise<{ failed: number; requeued: number }> {
+  const cutoff = new Date(Date.now() - AI_SETTINGS.staleJobMinutes * 60_000).toISOString()
+  const stale = and(
+    scope ? inSchool(scope, generationJobs) : undefined,
+    eq(generationJobs.status, 'running'),
+    or(lt(generationJobs.startedAt, cutoff), sql`${generationJobs.startedAt} is null`),
+  )
+  const direct = sql`(json_extract(${generationJobs.params}, '$.direct') = 1
+    or abs(julianday(${generationJobs.startedAt}) - julianday(${generationJobs.createdAt})) * 86400 < 2)`
+
+  const failed = await db
+    .update(generationJobs)
+    .set({ status: 'error', error: t('generation:generation.interrupted'), finishedAt: new Date().toISOString() })
+    .where(and(stale, direct))
+    .returning({
+      id: generationJobs.id,
+      schoolId: generationJobs.schoolId,
+      topicId: generationJobs.topicId,
+      requestedBy: generationJobs.requestedBy,
+    })
+  for (const job of failed) {
+    await writeAudit({
+      schoolId: job.schoolId,
+      userId: job.requestedBy,
+      action: 'fronta-prerusena',
+      entity: 'topic',
+      entityId: job.topicId,
+      detail: {
+        message: t('generation:generation.interrupted'),
+        technicky: `job ${job.id}: "running" for over ${AI_SETTINGS.staleJobMinutes} min, the request limit is 300 s`,
+      },
+      severity: 'chyba',
+    })
+  }
+
+  const requeued = await db
+    .update(generationJobs)
+    .set({ status: 'queued', startedAt: null })
+    .where(stale)
+    .returning({ id: generationJobs.id })
+
+  return { failed: failed.length, requeued: requeued.length }
+}
+
 /** Counts per state — a cheap query for the toolbar indicator. */
 export async function countJobs(scope: Scope): Promise<QueueCounts> {
+  await expireStaleJobs(scope)
   const rows = await db
     .select({ status: generationJobs.status, value: count() })
     .from(generationJobs)
@@ -83,6 +141,7 @@ export async function countJobs(scope: Scope): Promise<QueueCounts> {
  * Ordered the way it's read — running, queued, failed, done.
  */
 export async function loadJobs(scope: Scope): Promise<QueueJob[]> {
+  await expireStaleJobs(scope)
   const rows = await db
     .select({
       id: generationJobs.id,

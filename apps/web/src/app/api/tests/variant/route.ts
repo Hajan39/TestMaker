@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { aiNotConfiguredMessage, describeAiError, isAiConfigured } from '@testmaker/core/ai'
+import { aiNotConfiguredMessage, isAiConfigured } from '@testmaker/core/ai'
 import { createTestVariant } from '@/lib/testVariant'
 import { loadTest } from '@/lib/tests'
 import { t } from '@testmaker/core/i18n'
 import { withScope } from '@/lib/user'
+import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -70,7 +71,12 @@ export async function POST(request: Request) {
             send({ type: 'done', ...outcome })
           } catch (error) {
             // Provider messages are English and technical; we translate them.
-            const { message } = describeAiError(error)
+            const message = await reportAiFailure(account, {
+              action: 'verze-testu-chyba',
+              entity: 'test',
+              entityId: parsed.data.testId,
+              error,
+            })
             send({ type: 'error', message })
           } finally {
             try {

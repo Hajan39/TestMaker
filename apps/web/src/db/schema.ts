@@ -547,6 +547,11 @@ export interface GenerationJobParams {
   difficulty: 1 | 2 | 3 | 'mix'
   /** `add` = this many new questions, `target` = top the topic up to this count. */
   mode?: 'add' | 'target'
+  /**
+   * A topic claim of a direct generation (`claimTopic`), not a queue job. When
+   * the server cuts it off it fails; a queue job goes back to the queue instead.
+   */
+  direct?: boolean
 }
 
 export const templates = sqliteTable(

@@ -26,6 +26,7 @@ import { newId } from '@/lib/ids'
 import { MIN_GENERATE_CHARS } from '@/lib/materials'
 import { loadActivePromptRules } from '@/lib/promptRules'
 import { insertQuestions, loadAvoidPrompts, questionPrompt, toQuestion } from './questions'
+import { expireStaleJobs } from './jobs'
 import { t } from '@testmaker/core/i18n'
 
 export interface GenerateParams {
@@ -96,6 +97,8 @@ export interface GenerateOutcome {
  * Returns the claim id, or `null` when someone is already processing the topic.
  */
 export async function claimTopic(scope: Scope, topicId: string): Promise<string | null> {
+  // A claim left behind by a request the server cut off must not lock the topic forever.
+  await expireStaleJobs(scope)
   const id = newId()
   const startedAt = new Date().toISOString()
 
@@ -106,7 +109,7 @@ export async function claimTopic(scope: Scope, topicId: string): Promise<string 
   const claimed = await db.all<{ id: string }>(sql`
     insert into ${generationJobs} (id, school_id, requested_by, topic_id, params, status, started_at)
     select ${id}, ${scope.schoolId}, ${scope.userId}, ${topicId},
-           ${JSON.stringify(DEFAULT_GENERATE_PARAMS)}, 'running', ${startedAt}
+           ${JSON.stringify({ ...DEFAULT_GENERATE_PARAMS, direct: true })}, 'running', ${startedAt}
     where not exists (
       select 1 from ${generationJobs}
       where topic_id = ${topicId} and status in ('queued', 'running')
@@ -283,6 +286,7 @@ export async function generateForTopic(
  * landing mid-batch would work from the same "avoid these" list.
  */
 export async function isTopicBusy(scope: Scope, topicId: string): Promise<{ who: string } | null> {
+  await expireStaleJobs(scope)
   const [running] = await db
     .select({ id: generationJobs.id, who: users.name })
     .from(generationJobs)
