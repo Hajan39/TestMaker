@@ -1,6 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { usePathname, useRouter } from 'next/navigation'
 import { toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
@@ -39,62 +41,40 @@ interface CartApi {
 
 const CartContext = createContext<CartApi | null>(null)
 
-/**
- * The selection lives in the browser of the signed-in person and survives
- * moving between topics and a reload. Storage may be unavailable (private
- * window) — the cart then just lasts until the page is closed.
- */
-function storageKey(userId: string | null): string {
-  return `testmaker:kosik:${userId ?? 'local'}`
-}
-
 const EMPTY: CartState = { items: [], templateId: '' }
 
-function readStored(key: string): CartState {
-  try {
-    const raw = window.localStorage.getItem(key)
-    if (raw) {
-      const parsed = JSON.parse(raw) as CartState
-      if (Array.isArray(parsed.items) && typeof parsed.templateId === 'string') return parsed
-    }
-  } catch {
-    // Unavailable storage or broken data — start empty.
-  }
-  return EMPTY
+interface CartStore {
+  /** One cart per person and school (`QuestionCartProvider`'s `userId`). */
+  carts: Record<string, CartState>
+  update: (key: string, change: (current: CartState) => CartState) => void
 }
 
 /**
- * The cart as an external store: read from storage once per key, then kept in
- * memory, so every snapshot of an unchanged cart is the same object. The
- * server (and the first hydration pass) sees an empty cart.
+ * The selection lives in the browser of the signed-in person and survives
+ * moving between topics and a reload (zustand `persist` over localStorage).
+ * Storage may be unavailable (private window) — the cart then lasts until the
+ * page is closed. Hydration is manual: the server and the first browser pass
+ * render an empty cart, the stored one comes right after.
  */
-const store = {
-  key: null as string | null,
-  state: EMPTY,
-  listeners: new Set<() => void>(),
-  get(key: string): CartState {
-    if (store.key !== key) {
-      store.key = key
-      store.state = readStored(key)
-    }
-    return store.state
-  },
-  set(key: string, update: (current: CartState) => CartState) {
-    const next = update(store.get(key))
-    if (next === store.state) return
-    store.state = next
-    try {
-      window.localStorage.setItem(key, JSON.stringify(next))
-    } catch {
-      // Not saved — the cart still works for this page.
-    }
-    for (const listener of store.listeners) listener()
-  },
-  subscribe(listener: () => void) {
-    store.listeners.add(listener)
-    return () => store.listeners.delete(listener)
-  },
-}
+const useCartStore = create<CartStore>()(
+  persist(
+    (set) => ({
+      carts: {},
+      update: (key, change) =>
+        set((store) => {
+          const current = store.carts[key] ?? EMPTY
+          const next = change(current)
+          return next === current ? store : { carts: { ...store.carts, [key]: next } }
+        }),
+    }),
+    {
+      name: 'testmaker:kosik',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (store) => ({ carts: store.carts }),
+      skipHydration: true,
+    },
+  ),
+)
 
 /**
  * Questions picked for a new test across topics. The teacher ticks questions
@@ -102,46 +82,45 @@ const store = {
  * how many and how many points, and creates one test from all of them.
  */
 export function QuestionCartProvider({ userId, children }: { userId: string | null; children: React.ReactNode }) {
-  const key = storageKey(userId)
-  const state = useSyncExternalStore(
-    store.subscribe,
-    () => store.get(key),
-    () => EMPTY,
-  )
-  const setState = useCallback((update: (current: CartState) => CartState) => store.set(key, update), [key])
-
-  const toggle = useCallback((question: CartQuestion, templateId: string) => {
-    setState((current) => ({
-      templateId: templateId || current.templateId,
-      items: current.items.some((item) => item.id === question.id)
-        ? current.items.filter((item) => item.id !== question.id)
-        : [...current.items, question],
-    }))
-  }, [setState])
-  const prune = useCallback((topicId: string, existingIds: Set<string>) => {
-    setState((current) => {
-      const items = current.items.filter((item) => item.topicId !== topicId || existingIds.has(item.id))
-      return items.length === current.items.length ? current : { ...current, items }
-    })
-  }, [setState])
-  const syncPoints = useCallback((points: Map<string, number>) => {
-    setState((current) => {
-      let changed = false
-      const items = current.items.map((item) => {
-        const next = points.get(item.id)
-        if (next === undefined || next === item.points) return item
-        changed = true
-        return { ...item, points: next }
-      })
-      return changed ? { ...current, items } : current
-    })
-  }, [setState])
-  const clear = useCallback(() => setState((current) => ({ ...current, items: [] })), [setState])
+  const key = userId ?? 'local'
+  useEffect(() => {
+    void useCartStore.persist.rehydrate()
+  }, [])
+  const state = useCartStore((store) => store.carts[key] ?? EMPTY)
+  const update = useCartStore((store) => store.update)
 
   const api = useMemo<CartApi>(() => {
     const ids = new Set(state.items.map((item) => item.id))
-    return { has: (id) => ids.has(id), toggle, prune, syncPoints, clear, items: state.items }
-  }, [state.items, toggle, prune, syncPoints, clear])
+    const change = (fn: (current: CartState) => CartState) => update(key, fn)
+    return {
+      items: state.items,
+      has: (id) => ids.has(id),
+      toggle: (question, templateId) =>
+        change((current) => ({
+          templateId: templateId || current.templateId,
+          items: current.items.some((item) => item.id === question.id)
+            ? current.items.filter((item) => item.id !== question.id)
+            : [...current.items, question],
+        })),
+      prune: (topicId, existingIds) =>
+        change((current) => {
+          const items = current.items.filter((item) => item.topicId !== topicId || existingIds.has(item.id))
+          return items.length === current.items.length ? current : { ...current, items }
+        }),
+      syncPoints: (points) =>
+        change((current) => {
+          let changed = false
+          const items = current.items.map((item) => {
+            const next = points.get(item.id)
+            if (next === undefined || next === item.points) return item
+            changed = true
+            return { ...item, points: next }
+          })
+          return changed ? { ...current, items } : current
+        }),
+      clear: () => change((current) => (current.items.length === 0 ? current : { ...current, items: [] })),
+    }
+  }, [key, state.items, update])
 
   return (
     <CartContext.Provider value={api}>
