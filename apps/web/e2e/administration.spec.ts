@@ -45,7 +45,9 @@ test.describe('administrator', () => {
     await page.goto('/administrace')
     const usage = page.locator('[data-slot="card"]').filter({ hasText: 'Použití AI' })
     await expect(usage.getByRole('heading', { name: 'Použití AI' })).toBeVisible()
-    await expect(usage.getByRole('cell', { name: 'google:e2e-pouziti' })).toBeVisible()
+    // The model shows in the daily limits and in the per-model table.
+    await expect(usage.getByRole('heading', { name: 'Denní limity dnes' })).toBeVisible()
+    await expect(usage.getByRole('cell', { name: 'google:e2e-pouziti' })).toHaveCount(2)
     await expect(usage.getByRole('cell', { name: 'Druhá škola' })).toBeVisible()
 
     await usage.getByRole('link', { name: '7 dní' }).click()

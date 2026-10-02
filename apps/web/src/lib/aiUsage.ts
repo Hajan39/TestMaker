@@ -5,6 +5,7 @@ import { aiCalls, db, schools, type AiCallRow } from '@/db'
 import { newId } from '@/lib/ids'
 import { isAdministratorRole } from '@/lib/role'
 import type { Scope } from '@/lib/user'
+import { QUOTA_HISTORY_DAYS, quotaDayStart, quotaOutlook, type QuotaOutlook } from '@/lib/aiQuota'
 
 /**
  * AI usage: every attempt to call a model is written to `ai_calls` and the
@@ -130,6 +131,8 @@ export interface AiUsageOverview {
   schools: SchoolUsage[]
   /** Exactly `days` days, from the oldest to today, including those without calls. */
   dayRows: UsageDay[]
+  /** Today against the daily limits, with a limit learned from past days (`quotaOutlook`). */
+  quota: QuotaOutlook
 }
 
 const outcomeCount = (outcome: AiCallRow['outcome']) =>
@@ -159,7 +162,9 @@ export async function aiUsageOverview(
   const inPeriod = gte(aiCalls.createdAt, `${periodDays[0]}T00:00:00.000Z`)
   const day = sql<string>`substr(${aiCalls.createdAt}, 1, 10)`
 
-  const [models, tasks, schoolRows, dayRows] = await Promise.all([
+  // The limit belongs to the API key, not to a school — so all calls count.
+  const quotaSince = new Date(quotaDayStart(now) - QUOTA_HISTORY_DAYS * DAY_MS).toISOString()
+  const [models, tasks, schoolRows, dayRows, quotaCalls] = await Promise.all([
     db
       .select({
         model: aiCalls.model,
@@ -193,7 +198,12 @@ export async function aiUsageOverview(
       .from(aiCalls)
       .where(inPeriod)
       .groupBy(day),
+    db
+      .select({ model: aiCalls.model, outcome: aiCalls.outcome, createdAt: aiCalls.createdAt })
+      .from(aiCalls)
+      .where(gte(aiCalls.createdAt, quotaSince)),
   ])
+  const ladder = listAiModels().map(({ model, hasKey }) => ({ model, hasKey: hasKey }))
 
   const byDay = new Map(dayRows.map((row) => [row.day, row]))
   const byTask = new Map(tasks.map((row) => [row.task, row]))
@@ -201,7 +211,12 @@ export async function aiUsageOverview(
   return {
     days,
     total: models.reduce((sum, row) => sum + row.calls, 0),
-    ladder: listAiModels().map(({ model, hasKey }) => ({ model, hasKey: hasKey })),
+    ladder,
+    quota: quotaOutlook(
+      quotaCalls,
+      ladder.filter((item) => item.hasKey).map((item) => item.model),
+      now,
+    ),
     models,
     tasks: AI_TASKS.map((task) => {
       const row = byTask.get(task)

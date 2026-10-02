@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { resources, t } from '@testmaker/core/i18n'
 import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
 import { PERIOD_DAYS, type AiUsageOverview } from '@/lib/aiUsage'
+import type { ModelQuota } from '@/lib/aiQuota'
 
 const num = (value: number) => value.toLocaleString('cs-CZ')
 const date = (iso: string) =>
@@ -34,6 +35,16 @@ function Table({ header, rows }: { header: string[]; rows: (string | number)[][]
       </table>
     </div>
   )
+}
+
+const time = (iso: string) => new Date(iso).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+
+/** One sentence on where the model stands today. */
+function quotaState(quota: ModelQuota): string {
+  if (quota.exhaustedAt) return t('admin:aiUsage.quota.exhausted', { time: time(quota.exhaustedAt) })
+  if (quota.runsOutAt) return t('admin:aiUsage.quota.runsOut', { time: time(quota.runsOutAt) })
+  if (quota.estimate === null) return quota.today === 0 ? t('admin:aiUsage.quota.idle') : t('admin:aiUsage.quota.noExperience')
+  return quota.today === 0 ? t('admin:aiUsage.quota.idle') : t('admin:aiUsage.quota.fine')
 }
 
 /**
@@ -78,6 +89,31 @@ export function AiUsagePanel({ overview }: { overview: AiUsageOverview }) {
             ))}
           </ol>
         )}
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium text-fg-soft">{t('admin:aiUsage.quota.title')}</h3>
+        <p className="text-xs text-fg-muted">
+          {t('admin:aiUsage.quota.hint', { resetAt: date(overview.quota.resetAt), nextResetAt: date(overview.quota.nextResetAt) })}
+        </p>
+        <Table
+          header={[
+            t('admin:aiUsage.quota.model'),
+            t('admin:aiUsage.quota.today'),
+            t('admin:aiUsage.quota.estimate'),
+            t('admin:aiUsage.quota.remaining'),
+            t('admin:aiUsage.quota.state'),
+          ]}
+          rows={overview.quota.models.map((quota) => [
+            quota.model,
+            quota.today,
+            quota.estimate === null
+              ? t('admin:aiUsage.quota.unknown')
+              : `${t('admin:aiUsage.quota.estimateValue', { value: num(quota.estimate) })} (${t('admin:aiUsage.quota.basedOn', { count: quota.basedOnDays })})`,
+            quota.remaining === null ? '—' : quota.remaining,
+            quotaState(quota),
+          ])}
+        />
       </section>
 
       {overview.total === 0 ? (

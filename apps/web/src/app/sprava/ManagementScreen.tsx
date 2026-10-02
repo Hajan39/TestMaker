@@ -43,6 +43,8 @@ import type { SchoolDetails } from '@/lib/schoolDetails'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
+import { useUrlTab } from '@/lib/urlTab'
+import { MANAGEMENT_TABS, type ManagementTab } from '@/lib/tabs'
 import { ASSIGNABLE_ROLES, isAdministratorRole, type Role, type UserStatus } from '@/lib/role'
 
 export interface AccountRow {
@@ -124,6 +126,7 @@ function describeDetail(detail: unknown): string {
 }
 
 export function ManagementScreen({
+  initialTab = 'ucty',
   me,
   school,
   googleDomain,
@@ -139,6 +142,8 @@ export function ManagementScreen({
   rules,
   maxRules,
 }: {
+  /** Tab from `?karta=` — a reload returns to the tab that was open. */
+  initialTab?: ManagementTab
   me: string
   school: string
   googleDomain: string | null
@@ -158,6 +163,7 @@ export function ManagementScreen({
   maxRules: number
 }) {
   const router = useRouter()
+  const [tab, setTab] = useUrlTab(MANAGEMENT_TABS, initialTab)
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<Role>('ucitelka')
@@ -292,7 +298,7 @@ export function ManagementScreen({
         <p className="mt-1 max-w-3xl text-sm text-fg-soft">{t('admin:management.intro')}</p>
       </div>
 
-      <Tabs defaultValue="ucty">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="ucty">{t('admin:management.tabs.accounts')}</TabsTrigger>
           <TabsTrigger value="udalosti">{t('admin:management.tabs.events')}</TabsTrigger>

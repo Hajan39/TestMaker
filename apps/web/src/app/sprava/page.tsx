@@ -11,6 +11,7 @@ import { roleCanManage } from '@/lib/role'
 import { EMPTY_DETAILS, detailsFromRow } from '@/lib/schoolDetails'
 import { pageAccount } from '@/lib/user'
 import { ManagementScreen } from './ManagementScreen'
+import { MANAGEMENT_TABS, tabFrom, TAB_PARAM } from '@/lib/tabs'
 
 export const dynamic = 'force-dynamic'
 export function generateMetadata() {
@@ -24,8 +25,13 @@ const EVENT_LIMIT = 100
  * School management: accounts, events and errors, operations. Only a manager
  * gets here — both the gateway and this page check it.
  */
-export default async function ManagementPage() {
+export default async function ManagementPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const account = await pageAccount()
+  const initialTab = tabFrom(MANAGEMENT_TABS, (await searchParams)[TAB_PARAM])
   if (!roleCanManage(account.role)) {
     return (
       <PageShell>
@@ -117,6 +123,7 @@ export default async function ManagementPage() {
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
         authModeValue={authMode()}
+        initialTab={initialTab}
       />
     </PageShell>
   )

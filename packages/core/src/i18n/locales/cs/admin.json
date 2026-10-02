@@ -130,7 +130,26 @@
     "dayTitle": "{{day}}: {{total}} volání (úspěšná {{ok}}, limit {{limit}}, ostatní {{others}})",
     "legendOk": "úspěšná",
     "legendLimit": "narazila na limit",
-    "legendOthers": "nepoužitelná odpověď nebo chyba"
+    "legendOthers": "nepoužitelná odpověď nebo chyba",
+    "quota": {
+      "title": "Denní limity dnes",
+      "hint": "Google vynuluje denní limity o půlnoci tichomořského času — naposledy {{resetAt}}, příště {{nextResetAt}}. Kolik zbývá, Gemini neprozradí; odhad se učí ze dnů, kdy model limit opravdu vyčerpal. Přesná čísla ukazuje Google AI Studio u klíče.",
+      "model": "Model",
+      "today": "Dnes volání",
+      "estimate": "Odhad limitu",
+      "remaining": "Zbývá asi",
+      "state": "Stav",
+      "estimateValue": "~{{value}} / den",
+      "basedOn_one": "podle {{count}} dne",
+      "basedOn_few": "podle {{count}} dnů",
+      "basedOn_other": "podle {{count}} dnů",
+      "unknown": "zatím nevíme",
+      "exhausted": "dnes došel v {{time}}",
+      "runsOut": "při dnešním tempu dojde kolem {{time}}",
+      "fine": "dnes vystačí",
+      "noExperience": "limit zatím nikdy nedošel",
+      "idle": "dnes bez volání"
+    }
   },
   "aiQuality": {
     "unknownModel": "neznámý model"

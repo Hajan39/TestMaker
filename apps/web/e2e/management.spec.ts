@@ -94,6 +94,17 @@ test('a manager turns a reason into a prompt rule and then disables it', async (
   await expect(ruleRow).toContainText('Vypnuté')
 })
 
+test('the open tab survives a reload', async ({ page }) => {
+  await page.goto('/sprava')
+  await page.getByRole('tab', { name: 'AI kvalita' }).click()
+  await expect(page).toHaveURL(/karta=ai-kvalita/)
+  await page.reload()
+  await expect(page.getByRole('tab', { name: 'AI kvalita' })).toHaveAttribute('aria-selected', 'true')
+  // The first tab is the default and leaves the URL clean.
+  await page.getByRole('tab', { name: 'Účty' }).click()
+  await expect(page).not.toHaveURL(/karta=/)
+})
+
 test('a teacher does not get into management at all', async ({ browser }) => {
   const context = await browser.newContext({ storageState: 'e2e/.auth/ucitelkaA.json' })
   const page = await context.newPage()
