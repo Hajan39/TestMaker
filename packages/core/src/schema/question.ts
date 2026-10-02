@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { t } from '../i18n'
-import { hashSeed, seededRandom, shuffled } from '../pdf/shuffle'
+import { hashSeed, seededRandom, shuffled, shuffledDistinct } from '../pdf/shuffle'
 import { blockSchema } from './blocks'
 
 /** Question types supported by the app. */
@@ -251,20 +251,37 @@ export function normalizeMatchingPayload(q: QuestionContent): QuestionContent {
  * questions the correct position spreads evenly over all letters.
  */
 export function normalizeChoicePayload(q: QuestionContent): QuestionContent {
+  if (q.type !== 'single_choice' && q.type !== 'multi_choice' && q.type !== 'true_false') return q
+  const items = q.type === 'true_false' ? q.payload.statements.map((s) => s.text) : q.payload.options
+  const rand = seededRandom(hashSeed(`${q.payload.prompt}:${items.join('|')}`))
+  return reorderChoices(q, (indices) => shuffled(indices, rand))
+}
+
+/**
+ * Shuffles the options of a question on the teacher's request ("Promíchat
+ * pořadí" in the editor). Unlike `normalizeChoicePayload` it also covers the
+ * right column of matching, and the order always differs from the current
+ * one, so a click visibly does something.
+ */
+export function shuffleChoices(q: QuestionContent, rand: () => number = Math.random): QuestionContent {
+  return reorderChoices(q, (indices) => shuffledDistinct(indices, rand))
+}
+
+/** Reorders options, statements or the right column by `reorder` and remaps the correct indices. */
+function reorderChoices(q: QuestionContent, reorder: (indices: number[]) => number[]): QuestionContent {
+  const indicesOf = (items: unknown[]) => items.map((_, i) => i)
   switch (q.type) {
     case 'single_choice': {
-      const { prompt, options, correctIndex } = q.payload
-      const rand = seededRandom(hashSeed(`${prompt}:${options.join('|')}`))
-      const order = shuffled(options.map((_, i) => i), rand)
+      const { options, correctIndex } = q.payload
+      const order = reorder(indicesOf(options))
       return {
         ...q,
         payload: { ...q.payload, options: order.map((i) => options[i] as string), correctIndex: order.indexOf(correctIndex) },
       }
     }
     case 'multi_choice': {
-      const { prompt, options, correctIndices } = q.payload
-      const rand = seededRandom(hashSeed(`${prompt}:${options.join('|')}`))
-      const order = shuffled(options.map((_, i) => i), rand)
+      const { options, correctIndices } = q.payload
+      const order = reorder(indicesOf(options))
       return {
         ...q,
         payload: {
@@ -275,9 +292,21 @@ export function normalizeChoicePayload(q: QuestionContent): QuestionContent {
       }
     }
     case 'true_false': {
-      const { prompt, statements } = q.payload
-      const rand = seededRandom(hashSeed(`${prompt}:${statements.map((s) => s.text).join('|')}`))
-      return { ...q, payload: { ...q.payload, statements: shuffled(statements, rand) } }
+      const { statements } = q.payload
+      const order = reorder(indicesOf(statements))
+      return { ...q, payload: { ...q.payload, statements: order.map((i) => statements[i] as (typeof statements)[number]) } }
+    }
+    case 'matching': {
+      const { right, pairs } = q.payload
+      const order = reorder(indicesOf(right))
+      return {
+        ...q,
+        payload: {
+          ...q.payload,
+          right: order.map((i) => right[i] as string),
+          pairs: pairs.map(([l, r]) => [l, order.indexOf(r)] as [number, number]),
+        },
+      }
     }
     default:
       return q

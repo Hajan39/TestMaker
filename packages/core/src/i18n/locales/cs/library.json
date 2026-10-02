@@ -234,6 +234,7 @@
     "options": "Možnosti (zaškrtni správné)",
     "remove": "Odebrat",
     "addOption": "Přidat možnost",
+    "shuffle": "Promíchat pořadí",
     "statements": "Tvrzení (zaškrtnuté = pravdivé)",
     "addStatement": "Přidat tvrzení",
     "fillBlankText": "Text s vynechávkami — místo k doplnění zapiš jako ___",

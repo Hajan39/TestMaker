@@ -1,7 +1,7 @@
 'use client'
 
 import { useId } from 'react'
-import type { QuestionType } from '@testmaker/core/schema'
+import { shuffleChoices, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
 import {
   Button,
   Checkbox,
@@ -31,6 +31,15 @@ export function PayloadFields({
   const set = (key: string, value: unknown) => onChange({ ...payload, [key]: value })
   const str = (key: string) => String(payload[key] ?? '')
   const list = (key: string) => (payload[key] as string[] | undefined) ?? []
+  // The payload may be half-filled while editing; the shuffle only reorders
+  // the lists and remaps indices, so it is safe on an unvalidated payload.
+  const shuffle = () => onChange(shuffleChoices({ type, payload } as QuestionContent).payload as Payload)
+  const shuffleButton = (count: number) =>
+    count > 1 ? (
+      <Button size="sm" variant="outline" className="mt-2" onClick={shuffle}>
+        {t('library:payloadFields.shuffle')}
+      </Button>
+    ) : null
 
   // A card being edited and „Nová otázka" can be on screen side by side —
   // fixed ids would then repeat and `htmlFor` would point at another field.
@@ -174,9 +183,12 @@ export function PayloadFields({
                 </div>
               ))}
             </div>
-            <Button size="sm" variant="outline" className="mt-2" onClick={() => set('options', [...options, ''])}>
-              {t('library:payloadFields.addOption')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="mt-2" onClick={() => set('options', [...options, ''])}>
+                {t('library:payloadFields.addOption')}
+              </Button>
+              {shuffleButton(options.length)}
+            </div>
           </div>
         </div>
       )
@@ -217,14 +229,17 @@ export function PayloadFields({
                 </div>
               ))}
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => set('statements', [...statements, { text: '', isTrue: true }])}
-            >
-              {t('library:payloadFields.addStatement')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => set('statements', [...statements, { text: '', isTrue: true }])}
+              >
+                {t('library:payloadFields.addStatement')}
+              </Button>
+              {shuffleButton(statements.length)}
+            </div>
           </div>
         </div>
       )
@@ -279,6 +294,7 @@ export function PayloadFields({
             <ColumnEditor label={t('library:payloadFields.leftColumn')} items={left} onChange={(next) => set('left', next)} />
             <ColumnEditor label={t('library:payloadFields.rightColumn')} items={right} onChange={(next) => set('right', next)} />
           </div>
+          {shuffleButton(right.length)}
           <div>
             <Label>{t('library:payloadFields.pairs')}</Label>
             <div className="space-y-2">

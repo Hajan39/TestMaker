@@ -18,6 +18,7 @@ import {
   DEFAULT_POINTS,
   normalizeEvidence,
   normalizeChoicePayload,
+  shuffleChoices,
   normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
@@ -864,6 +865,33 @@ describe('choice options are shuffled before saving', () => {
     expect([...normalized.payload.statements].sort((a, b) => a.text.localeCompare(b.text))).toEqual(
       [...statements].sort((a, b) => a.text.localeCompare(b.text)),
     )
+  })
+})
+
+describe('shuffle button in the editor', () => {
+  it('always changes the order and keeps the answer', () => {
+    const q = questionContentSchema.parse({
+      type: 'single_choice',
+      payload: { prompt: 'Otázka?', options: ['a', 'b', 'c'], correctIndex: 2 },
+    })
+    // A generator that would leave the order unchanged still yields a different one.
+    const shuffledQ = shuffleChoices(q, () => 0.999)
+    if (shuffledQ.type !== 'single_choice') throw new Error('type')
+    expect(shuffledQ.payload.options).not.toEqual(['a', 'b', 'c'])
+    expect(shuffledQ.payload.options[shuffledQ.payload.correctIndex]).toBe('c')
+  })
+
+  it('keeps matching pairs pointing at the same items', () => {
+    const q = questionContentSchema.parse({
+      type: 'matching',
+      payload: { prompt: 'Přiřaď.', left: ['1', '2', '3'], right: ['x', 'y', 'z'], pairs: [[0, 1], [1, 2], [2, 0]] },
+    })
+    const shuffledQ = shuffleChoices(q)
+    if (shuffledQ.type !== 'matching' || q.type !== 'matching') throw new Error('type')
+    for (const [l, r] of shuffledQ.payload.pairs) {
+      const original = q.payload.pairs.find(([ol]) => ol === l)!
+      expect(shuffledQ.payload.right[r]).toBe(q.payload.right[original[1]])
+    }
   })
 })
 
