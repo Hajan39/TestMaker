@@ -9,6 +9,7 @@
     "./compose": "./src/compose/index.ts",
     "./extract": "./src/extract/index.ts",
     "./ai": "./src/ai/index.ts",
+    "./ai/settings": "./src/ai/settings.ts",
     "./pdf": "./src/pdf/index.ts",
     "./pdf/estimate": "./src/pdf/estimate.ts",
     "./pdf/node": "./src/pdf/node.ts",

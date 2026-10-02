@@ -115,4 +115,19 @@ export const AI_SETTINGS = {
     /** More items do not fit a worksheet for one lesson; the excess is dropped. */
     maxItems: 20,
   },
+  /**
+   * Text from photos (a textbook page shot on a phone). The browser shrinks
+   * the photo before sending it to the model — a 12 MP HEIC would not fit the
+   * request limit, and the model reads a page just as well at this size.
+   */
+  imageText: {
+    /** Longest side of the image sent to the model (px). */
+    maxSide: 2_000,
+    /** JPEG quality of the shrunk image (0–1). */
+    jpegQuality: 0.85,
+    /** Largest accepted image on the server (bytes, before base64). Vercel caps a request at 4.5 MB. */
+    maxBytes: 3_000_000,
+    /** Language of the in-browser fallback OCR (Tesseract) when no model can read the photo. */
+    fallbackLanguage: 'ces',
+  },
 } as const

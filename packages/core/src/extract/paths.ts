@@ -9,6 +9,12 @@ const SKIP_FILE_PATTERNS = [/^\./, /\.tmp$/i, /^~\$/, /^lu\w+\.tmp$/i]
 
 export const SUPPORTED_EXTENSIONS = ['pdf', 'odp', 'odt', 'ods', 'docx', 'html', 'htm', 'txt', 'md'] as const
 /** Older binary formats that cannot be read in the browser. */
+/**
+ * Photos whose text is read by the model, or by OCR in the browser as a
+ * fallback (`apps/web/src/lib/imageText.ts`). SVG is a drawing, not a photo.
+ */
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'heic', 'heif', 'gif', 'bmp'] as const
+
 export const LEGACY_EXTENSIONS = ['doc', 'ppt', 'xls', 'odm'] as const
 
 /** Skip reason codes; the web maps them to messages. */
@@ -93,7 +99,11 @@ export function skipReason(rawPath: string): SkipReason | null {
   }
 
   const ext = fileExtension(fileName)
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'].includes(ext)) return 'obrazek'
+  // A photo picked on its own is read (a textbook page shot on a phone). Inside
+  // a folder it is skipped: textbook folders are full of illustrations, and
+  // reading each one would cost a model call for nothing.
+  if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return dirs.length > 0 ? 'obrazek' : null
+  if (ext === 'svg') return 'obrazek'
   if ((LEGACY_EXTENSIONS as readonly string[]).includes(ext)) return 'stary-format'
   if (!(SUPPORTED_EXTENSIONS as readonly string[]).includes(ext)) return 'nepodporovany'
   return null

@@ -82,6 +82,10 @@ Volat `renderToBuffer` z aplikace znamená druhou instanci a nenačtené fonty.
 
 **Extrakce textu běží v prohlížeči.** Na server se posílá jen text. Nikdy
 neposílej originální soubory — jsou velké a limit požadavku na Vercelu je 4,5 MB.
+Jediná výjimka jsou fotky (HEIC/JPEG/PNG nahrané samostatně, ne ve složce):
+prohlížeč je zmenší podle `AI_SETTINGS.imageText` a pošle modelu k přepisu
+(`/api/materials/image-text`); když model není nebo došly limity, přečte text
+Tesseract přímo v prohlížeči. Fotka se nikde neukládá.
 
 **Generuje se ze skupiny, ne ze souboru.** Vstupem generování je téma se všemi
 svými materiály. Materiál označený jako duplicitní obsah se vynechává.

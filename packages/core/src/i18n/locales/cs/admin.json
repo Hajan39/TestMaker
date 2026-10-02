@@ -101,7 +101,8 @@
     "tasks": {
       "otazky": "Otázky",
       "hlavolam": "Hlavolamy",
-      "list": "Pracovní listy"
+      "list": "Pracovní listy",
+      "prepis": "Přepis fotek"
     },
     "ladder": "Žebříček modelů",
     "noModels": "V AI_MODELS není žádný model — generování je vypnuté.",

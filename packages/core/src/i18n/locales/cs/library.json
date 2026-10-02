@@ -112,12 +112,18 @@
     "easier": "lehčí",
     "harder": "těžší"
   },
+  "imageText": {
+    "notConfigured": "Přepis fotek modelem není nastavený — text přečte prohlížeč sám.",
+    "invalid": "Fotku se nepodařilo poslat. Zkus ji nahrát znovu.",
+    "failed": "Model text z fotky nepřečetl.",
+    "unreadable": "Fotku se nepodařilo otevřít. Ulož ji jako JPEG nebo PNG a nahraj znovu."
+  },
   "importIssues": {
     "skip": {
       "hidden": "skrytý soubor",
       "temporary": "dočasný soubor",
       "systemFolder": "systémová složka",
-      "image": "obrázek (zatím nepodporován)",
+      "image": "obrázek ve složce — fotku s textem nahraj samostatně",
       "unsupported": "nepodporovaná přípona",
       "oldFormat": "starý formát – převeď na .docx / .odp",
       "emptyText": "soubor neobsahuje žádný text"

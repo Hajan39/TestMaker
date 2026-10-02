@@ -1,7 +1,8 @@
 'use client'
 
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { needsDom, processFile, skipReason } from '@testmaker/core/extract'
+import { isImageFile, needsDom, processedFromText, processFile, skipReason } from '@testmaker/core/extract'
+import { imageToText } from '@/lib/imageText'
 import type { ExtractResponse } from '@/workers/extract.worker'
 import { jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
@@ -106,6 +107,21 @@ export async function extractAll(
 
   try {
     for (const [index, entry] of entries.entries()) {
+      if (isImageFile(entry.file.name)) {
+        // A photo: its text is read by the model, or by OCR in the browser.
+        try {
+          const text = await imageToText(entry.file)
+          onResult({ id: index, ...(await processedFromText(entry.file, entry.relativePath, { text, pageCount: null, needsOcr: false })) })
+        } catch (error) {
+          onResult({
+            id: index,
+            status: 'error',
+            relativePath: entry.relativePath,
+            reason: error instanceof Error ? error.message : String(error),
+          })
+        }
+        continue
+      }
       if (needsDom(entry.file.name)) {
         onResult({ id: index, ...(await processFile(entry.file, entry.relativePath)) })
         continue

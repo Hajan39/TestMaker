@@ -16,7 +16,7 @@ import type { Scope } from '@/lib/user'
 export type AiTask = AiCallRow['task']
 
 /** Tasks in the order the overview shows them. */
-export const AI_TASKS: readonly AiTask[] = ['otazky', 'hlavolam', 'list']
+export const AI_TASKS: readonly AiTask[] = ['otazky', 'hlavolam', 'list', 'prepis']
 
 /** Who started the generation. The queue and the scheduler have nobody signed in (`userId: null`). */
 export interface Caller {

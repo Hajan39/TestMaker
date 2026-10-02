@@ -4,7 +4,7 @@ import { extractDocx } from './docx'
 import { extractHtml } from './html'
 import { extractOdf } from './odf'
 import { extractPdf } from './pdf'
-import { fileExtension, parsePath, skipReason } from './paths'
+import { fileExtension, IMAGE_EXTENSIONS, parsePath, skipReason } from './paths'
 import { normalizeText, UnsupportedFileError, type ExtractionResult } from './types'
 
 export * from './paths'
@@ -23,6 +23,19 @@ const MIME_BY_EXT: Record<string, string> = {
   htm: 'text/html',
   txt: 'text/plain',
   md: 'text/markdown',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+}
+
+/** Is it a photo whose text is read in the browser by the model or OCR, not by `extractFile`? */
+export function isImageFile(fileName: string): boolean {
+  return (IMAGE_EXTENSIONS as readonly string[]).includes(fileExtension(fileName))
 }
 
 /** Formats read via `DOMParser`. */
@@ -58,6 +71,16 @@ export async function extractFile(file: File): Promise<ExtractionResult> {
       // format, a short text here means an empty file, not a scanned image.
       return { text, pageCount: null, needsOcr: false }
     }
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'webp':
+    case 'heic':
+    case 'heif':
+    case 'gif':
+    case 'bmp':
+      // Photos are read in the browser (model, or OCR as a fallback), not here.
+      throw new UnsupportedFileError(file.name, t('core:extract.hints.image'))
     case 'doc':
     case 'ppt':
     case 'xls':
@@ -93,34 +116,45 @@ export async function processFile(file: File, relativePathOverride?: string): Pr
   if (skip) return { status: 'skipped', relativePath, reason: skip }
 
   try {
-    const parsed = parsePath(relativePath)
-    const result = await extractFile(file)
-    if (result.text.length < 40 && !result.needsOcr) {
-      // The reason is a code the web maps to a message (`skipLabel`), like `SkipReason`.
-      return { status: 'skipped', relativePath, reason: 'prázdný text' }
-    }
-    return {
-      status: 'ok',
-      relativePath,
-      material: {
-        relativePath,
-        fileName: parsed.fileName,
-        subject: parsed.subject,
-        grade: parsed.grade,
-        topic: parsed.topic,
-        mimeType: MIME_BY_EXT[parsed.extension] ?? file.type ?? 'application/octet-stream',
-        sizeBytes: file.size,
-        text: result.text,
-        pageCount: result.pageCount,
-        needsOcr: result.needsOcr,
-        contentHash: await hashText(result.text),
-      },
-    }
+    return await processedFromText(file, relativePath, await extractFile(file))
   } catch (error) {
     return {
       status: 'error',
       relativePath,
       reason: error instanceof Error ? error.message : String(error),
     }
+  }
+}
+
+/**
+ * Material from already extracted text. Used by `processFile` and by the
+ * browser for photos, whose text comes from the model or OCR.
+ */
+export async function processedFromText(
+  file: File,
+  relativePath: string,
+  result: ExtractionResult,
+): Promise<ProcessedFile> {
+  if (result.text.length < 40 && !result.needsOcr) {
+    // The reason is a code the web maps to a message (`skipLabel`), like `SkipReason`.
+    return { status: 'skipped', relativePath, reason: 'prázdný text' }
+  }
+  const parsed = parsePath(relativePath)
+  return {
+    status: 'ok',
+    relativePath,
+    material: {
+      relativePath,
+      fileName: parsed.fileName,
+      subject: parsed.subject,
+      grade: parsed.grade,
+      topic: parsed.topic,
+      mimeType: MIME_BY_EXT[parsed.extension] ?? file.type ?? 'application/octet-stream',
+      sizeBytes: file.size,
+      text: result.text,
+      pageCount: result.pageCount,
+      needsOcr: result.needsOcr,
+      contentHash: await hashText(result.text),
+    },
   }
 }

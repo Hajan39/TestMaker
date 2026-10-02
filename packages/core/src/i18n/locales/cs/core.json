@@ -49,7 +49,8 @@
     "unsupported": "Nepodporovaný soubor: {{fileName}}. {{hint}}",
     "hints": {
       "legacyFormat": "Převeď soubor v LibreOffice nebo Wordu na .docx / .odp.",
-      "unknownExtension": "Nepodporovaná přípona."
+      "unknownExtension": "Nepodporovaná přípona.",
+      "image": "Fotku nahraj samostatně, ne ve složce — text z ní pak přečte model."
     },
     "missingPart": "Soubor neobsahuje {{part}}",
     "unreadablePart": "{{part}} se nepodařilo načíst"

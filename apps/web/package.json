@@ -40,6 +40,7 @@
     "@testmaker/ui": "workspace:*",
     "ai": "^7.0.120",
     "drizzle-orm": "^0.45.3",
+    "heic2any": "^0.0.4",
     "jszip": "^3.10.1",
     "lucide-react": "^1.48.0",
     "nanoid": "^6.0.1",
@@ -48,6 +49,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

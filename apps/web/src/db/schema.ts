@@ -710,7 +710,7 @@ export const aiCalls = sqliteTable(
     schoolId: schoolId(),
     /** Empty for the queue and the scheduler, where nobody is signed in. */
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-    task: text('task').notNull().$type<'otazky' | 'hlavolam' | 'list'>(),
+    task: text('task').notNull().$type<'otazky' | 'hlavolam' | 'list' | 'prepis'>(),
     /** `provider:model` */
     model: text('model').notNull(),
     outcome: text('outcome').notNull().$type<'ok' | 'limit' | 'bad_shape' | 'error'>(),

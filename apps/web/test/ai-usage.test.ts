@@ -100,7 +100,7 @@ describe('AI usage overview', () => {
     ])
   })
 
-  it('always lists all three tasks, even without calls', async () => {
+  it('always lists all tasks, even without calls', async () => {
     await calls({ task: 'hlavolam' })
     await calls({ task: 'hlavolam' })
     const overview = await aiUsageOverview(ADMIN, 30, { now: NOW })
@@ -108,6 +108,7 @@ describe('AI usage overview', () => {
       { task: 'otazky', calls: 0, input: 0, output: 0 },
       { task: 'hlavolam', calls: 2, input: 200, output: 20 },
       { task: 'list', calls: 0, input: 0, output: 0 },
+      { task: 'prepis', calls: 0, input: 0, output: 0 },
     ])
   })
 

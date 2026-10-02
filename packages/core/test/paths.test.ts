@@ -27,6 +27,9 @@ describe('skipReason', () => {
     expect(skipReason('sources/PŘÍRODOPIS/7.ročník/lu54246y22.tmp')).toBe('docasny')
     expect(skipReason('sources/.DS_Store')).toBe('skryty')
     expect(skipReason('sources/VKO/omalovánky/vlajka.jpg')).toBe('obrazek')
+    // A photo picked on its own (a textbook page from a phone) is read, not skipped.
+    expect(skipReason('IMG_2041.HEIC')).toBeNull()
+    expect(skipReason('stranka.jpeg')).toBeNull()
     expect(skipReason('sources/x/stará prezentace.ppt')).toBe('stary-format')
     expect(skipReason('sources/x/Krystalová stavba - Učebna_files/css2')).toBe('systemova-slozka')
   })
