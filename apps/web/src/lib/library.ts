@@ -4,6 +4,7 @@ import { findMatchingTopic, preferredTopicName } from '@testmaker/core/extract'
 import { db, generationJobs, grades, materials, questions, subjects, topics } from '@/db'
 import { inSchool, type Scope } from './user'
 import { newId } from './ids'
+import { sortTopics } from './topicOrder'
 import { t } from '@testmaker/core/i18n'
 
 /**
@@ -50,8 +51,7 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
     db
       .select()
       .from(topics)
-      .where(inSchool(scope, topics))
-      .orderBy(asc(topics.position), asc(topics.name)),
+      .where(inSchool(scope, topics)),
     db
       .select({ topicId: materials.topicId, value: count() })
       .from(materials)
@@ -73,7 +73,7 @@ export async function loadLibraryTree(scope: Scope): Promise<SubjectNode[]> {
   const questionsByTopic = new Map(questionCounts.map((row) => [row.topicId, row]))
 
   const topicsByGrade = new Map<string, TopicNode[]>()
-  for (const topic of topicRows) {
+  for (const topic of sortTopics(topicRows)) {
     const stats = questionsByTopic.get(topic.id)
     const list = topicsByGrade.get(topic.gradeId) ?? []
     list.push({
@@ -113,6 +113,8 @@ export interface ClassInfo {
   subjectId: string
   subjectName: string
   topics: ClassTopicNode[]
+  /** Someone reordered the topics manually — returning to alphabetical order is offered. */
+  manualOrder: boolean
 }
 
 /**
@@ -130,10 +132,10 @@ export async function loadClassTopics(scope: Scope, gradeId: string): Promise<Cl
   if (!grade) return null
 
   const topicRows = await db
-    .select({ id: topics.id, name: topics.name, lowContent: topics.lowContent })
+    .select({ id: topics.id, name: topics.name, lowContent: topics.lowContent, position: topics.position })
     .from(topics)
     .where(and(inSchool(scope, topics), eq(topics.gradeId, gradeId)))
-    .orderBy(asc(topics.position), asc(topics.name))
+    .then(sortTopics)
   const topicIds = topicRows.map((topic) => topic.id)
 
   const [materialCounts, questionCounts, jobRows] = await Promise.all([
@@ -185,6 +187,7 @@ export async function loadClassTopics(scope: Scope, gradeId: string): Promise<Cl
     gradeName: grade.name,
     subjectId: grade.subjectId,
     subjectName: grade.subjectName,
+    manualOrder: topicRows.some((topic) => topic.position > 0),
     topics: topicRows.map((topic) => ({
       id: topic.id,
       name: topic.name,

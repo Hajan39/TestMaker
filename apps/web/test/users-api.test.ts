@@ -86,6 +86,26 @@ describe('editing accounts', () => {
     expect(session?.revokedAt).not.toBeNull()
   })
 
+  it('a role change signs out open windows, otherwise the gate would keep the old role', async () => {
+    const account = await seedAccount({ role: 'nahled' })
+    await db.insert(sessions).values({
+      id: 'relace-se-starou-roli',
+      userId: account.userId,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+
+    const response = await update(
+      jsonReq('/api/sprava/uzivatele', 'PATCH', { id: account.userId, role: 'ucitelka' }),
+    )
+    expect(response.status).toBe(200)
+
+    const [row] = await db.select().from(users).where(eq(users.id, account.userId))
+    expect(row?.role).toBe('ucitelka')
+    expect(row?.sessionVersion).toBe(2)
+    const [session] = await db.select().from(sessions).where(eq(sessions.id, 'relace-se-starou-roli'))
+    expect(session?.revokedAt).not.toBeNull()
+  })
+
   it('blocking does not delete the account, it only revokes access', async () => {
     const account = await seedAccount()
     const response = await blockUser(req(`/api/sprava/uzivatele?id=${account.userId}`, { method: 'DELETE' }))

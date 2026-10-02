@@ -4,8 +4,7 @@ import { t } from '@testmaker/core/i18n'
 import { BulkGenerate } from '@/components/BulkGenerate'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { NewLibraryItem, RenameLibraryItem } from '@/components/LibraryItemDialogs'
-import { MoveTopic } from '@/components/MoveTopic'
-import { TopicTile } from '@/components/TopicTile'
+import { SortableTopics } from '@/components/SortableTopics'
 import type { ClassInfo } from '@/lib/library'
 
 /**
@@ -56,21 +55,12 @@ export function ClassTopics({
           hint={t('library:classTopics.emptyHint')}
         />
       ) : (
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {classInfo.topics.map((topic) => (
-            <li key={topic.id}>
-              <TopicTile
-                id={topic.id}
-                name={topic.name}
-                materialCount={topic.materialCount}
-                questionCount={topic.questionCount}
-                lowContent={topic.lowContent}
-                jobState={topic.jobState}
-                actions={<MoveTopic topicId={topic.id} currentGradeName={classInfo.gradeName} />}
-              />
-            </li>
-          ))}
-        </ul>
+        <SortableTopics
+          gradeId={classInfo.gradeId}
+          gradeName={classInfo.gradeName}
+          topics={classInfo.topics}
+          manualOrder={classInfo.manualOrder}
+        />
       )}
     </div>
   )

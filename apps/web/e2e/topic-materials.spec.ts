@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import JSZip from 'jszip'
 
 /**
  * The topic's materials strip: uploading files straight here (no detour via
@@ -17,6 +18,64 @@ const TOPIC = 'Pruh materiálů v tématu'
 /** Text long enough that the material isn't flagged as "skoro bez textu". */
 function text(sentence: string): string {
   return `${sentence} `.repeat(30)
+}
+
+/**
+ * The smallest PDF with a text layer. The xref offsets are computed so pdf.js
+ * doesn't read it in repair mode — extraction is under test, not resilience to defects.
+ */
+function pdf(sentence: string): Buffer {
+  const stream = `BT /F1 12 Tf 72 720 Td (${sentence}) Tj ET`
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ]
+  let out = '%PDF-1.4\n'
+  const offsets = objects.map((body, index) => {
+    const offset = out.length
+    out += `${index + 1} 0 obj\n${body}\nendobj\n`
+    return offset
+  })
+  const xref = out.length
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (const offset of offsets) out += `${String(offset).padStart(10, '0')} 00000 n \n`
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return Buffer.from(out, 'latin1')
+}
+
+/** An ODP presentation with two slides — `content.xml` is enough, extraction reads nothing else. */
+async function odp(sentence: string): Promise<Buffer> {
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/vnd.oasis.opendocument.presentation')
+  zip.file(
+    'content.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body><office:presentation>
+    <draw:page><draw:frame><draw:text-box><text:p>${sentence}</text:p></draw:text-box></draw:frame></draw:page>
+    <draw:page><draw:frame><draw:text-box><text:p>${sentence}</text:p></draw:text-box></draw:frame></draw:page>
+  </office:presentation></office:body>
+</office:document-content>`,
+  )
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
+/** A DOCX document with one paragraph. */
+async function docx(sentence: string): Promise<Buffer> {
+  const zip = new JSZip()
+  zip.file(
+    'word/document.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>${sentence}</w:t></w:r></w:p></w:body>
+</w:document>`,
+  )
+  return zip.generateAsync({ type: 'nodebuffer' })
 }
 
 /** Creates a test topic with one material and returns its id. */
@@ -89,6 +148,49 @@ test.describe('topic materials strip', () => {
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([first])
       await expect(page.getByText('Všechny soubory už v tématu byly.')).toBeVisible()
       await expect(page.getByText(first.name)).toHaveCount(1)
+    } finally {
+      await cleanup(page.request, topicId)
+    }
+  })
+
+  // Extraction runs in a web worker, which has no `DOMParser` and where pdf.js
+  // can't start its own worker — the text files above would not reveal that.
+  test('PDF, ODP, DOCX and HTML are read and uploaded', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    try {
+      await page.goto(`/topics/${topicId}`)
+      await expandStrip(page)
+
+      // Each file has different content, otherwise they would flag each other as duplicates.
+      const files = [
+        {
+          name: 'Prezentace.odp',
+          mimeType: 'application/vnd.oasis.opendocument.presentation',
+          buffer: await odp('Fotosynteza probiha v chloroplastech zelenych rostlin a vyzaduje svetlo.'),
+        },
+        {
+          name: 'Vyklad.pdf',
+          mimeType: 'application/pdf',
+          buffer: pdf('Sopky vznikaji tam, kde magma z plaste pronika zemskou kurou na povrch.'),
+        },
+        {
+          name: 'Poznamky.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          buffer: await docx('Rimska rise se rozkladala kolem Stredozemniho more a jejim centrem byl Rim.'),
+        },
+        {
+          name: 'Stranka.html',
+          mimeType: 'text/html',
+          buffer: Buffer.from(
+            '<html><body><script>x()</script><p>Mitochondrie jsou elektrarny bunky a vyrabeji energii ve forme ATP.</p></body></html>',
+            'utf8',
+          ),
+        },
+      ]
+      await page.locator('[data-testid="topic-material-files"]').setInputFiles(files)
+
+      await expect(page.getByText(/Nahráno 4 materiály/)).toBeVisible()
+      for (const file of files) await expect(page.getByText(file.name, { exact: true })).toBeVisible()
     } finally {
       await cleanup(page.request, topicId)
     }

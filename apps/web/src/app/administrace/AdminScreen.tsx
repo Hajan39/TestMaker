@@ -7,8 +7,9 @@ import { Badge, BusyButton, Card, toast } from '@testmaker/ui'
 import { SchoolForm, type SchoolSettings } from '@/components/SchoolForm'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import type { SchoolRow } from '@/lib/schools'
+import { EMPTY_DETAILS, detailsFromRow } from '@/lib/schoolDetails'
 
-const EMPTY: SchoolSettings = { name: '', googleDomain: '', googleAutoJoin: false }
+const EMPTY: SchoolSettings = { name: '', googleDomain: '', googleAutoJoin: false, ...EMPTY_DETAILS }
 
 export function AdminScreen({
   schools,
@@ -100,6 +101,7 @@ export function AdminScreen({
                 name: school.name,
                 googleDomain: school.googleDomain ?? '',
                 googleAutoJoin: school.googleAutoJoin,
+                ...detailsFromRow(school),
               }}
               submitLabel={t('actions.save')}
               onSave={(settings) => send('PATCH', { id: school.id, ...settings }, t('admin:schools.saved'))}

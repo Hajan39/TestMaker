@@ -8,6 +8,7 @@ import { aiStatus } from '@/lib/ai'
 import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
 import { roleCanManage } from '@/lib/role'
+import { EMPTY_DETAILS, detailsFromRow } from '@/lib/schoolDetails'
 import { pageAccount } from '@/lib/user'
 import { ManagementScreen } from './ManagementScreen'
 
@@ -70,6 +71,14 @@ export default async function ManagementPage() {
         name: schools.name,
         googleDomain: schools.googleDomain,
         googleAutoJoin: schools.googleAutoJoin,
+        street: schools.street,
+        city: schools.city,
+        postalCode: schools.postalCode,
+        website: schools.website,
+        email: schools.email,
+        phone: schools.phone,
+        ico: schools.ico,
+        principal: schools.principal,
       })
       .from(schools)
       .where(eq(schools.id, account.schoolId))
@@ -87,6 +96,7 @@ export default async function ManagementPage() {
         school={school?.name ?? ''}
         googleDomain={school?.googleDomain ?? null}
         googleAutoJoin={school?.googleAutoJoin ?? false}
+        schoolDetails={school ? detailsFromRow(school) : EMPTY_DETAILS}
         users={accounts.map((row) => ({
           id: row.id,
           email: row.email,

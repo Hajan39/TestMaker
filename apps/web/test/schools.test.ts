@@ -81,6 +81,33 @@ describe('a manager edits their school', () => {
     expect(event).toBeTruthy()
   })
 
+  it('address and contacts: the website gets https, an empty field is cleared, an unsent one stays', async () => {
+    const first = await editOwn(
+      jsonReq('/api/sprava/skola', 'PATCH', {
+        street: ' Školní 12 ',
+        city: 'Brno',
+        postalCode: '602 00',
+        website: 'www.zs-test.cz',
+        email: 'info@zs-test.cz',
+        phone: '+420 541 000 000',
+        ico: '12345678',
+        principal: 'Mgr. Jana Nováková',
+      }),
+    )
+    expect(first.status).toBe(200)
+    let [school] = await db.select().from(schools).where(eq(schools.id, TEST_SCHOOL_ID))
+    expect(school).toMatchObject({
+      street: 'Školní 12',
+      city: 'Brno',
+      website: 'https://www.zs-test.cz',
+      principal: 'Mgr. Jana Nováková',
+    })
+
+    await editOwn(jsonReq('/api/sprava/skola', 'PATCH', { phone: '', website: 'http://zs-test.cz' }))
+    ;[school] = await db.select().from(schools).where(eq(schools.id, TEST_SCHOOL_ID))
+    expect(school).toMatchObject({ phone: null, website: 'http://zs-test.cz', city: 'Brno' })
+  })
+
   it('rejects an empty name', async () => {
     const response = await editOwn(jsonReq('/api/sprava/skola', 'PATCH', { name: '  ' }))
     expect(response.status).toBe(400)
@@ -131,7 +158,9 @@ describe('school administration', () => {
     const first = await createSchool(
       jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize', googleDomain: 'kolize.cz' }),
     )
-    const second = await createSchool(jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize' }))
+    const second = await createSchool(
+      jsonReq('/api/administrace/skoly', 'POST', { name: 'ZŠ Kolize', city: 'Olomouc' }),
+    )
     expect(first.status).toBe(200)
     expect(second.status).toBe(200)
     const { id: firstId } = (await first.json()) as { id: string }
@@ -142,6 +171,7 @@ describe('school administration', () => {
     expect(a?.slug).toBe('zs-kolize')
     expect(b?.slug).toBe('zs-kolize-2')
     expect(a?.googleDomain).toBe('kolize.cz')
+    expect(b?.city).toBe('Olomouc')
 
     const templateRows = await db.select().from(templates).where(eq(templates.schoolId, firstId))
     expect(templateRows.map((t) => t.slug).sort()).toEqual(BUILT_IN_TEMPLATES.map((t) => t.slug).sort())

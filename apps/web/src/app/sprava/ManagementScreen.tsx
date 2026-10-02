@@ -37,7 +37,8 @@ import {
   toast,
 } from '@testmaker/ui'
 import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
-import { SchoolForm } from '@/components/SchoolForm'
+import { SchoolForm, type SchoolSettings } from '@/components/SchoolForm'
+import type { SchoolDetails } from '@/lib/schoolDetails'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
@@ -117,6 +118,7 @@ export function ManagementScreen({
   school,
   googleDomain,
   googleAutoJoin,
+  schoolDetails,
   users,
   events,
   queue,
@@ -131,6 +133,7 @@ export function ManagementScreen({
   school: string
   googleDomain: string | null
   googleAutoJoin: boolean
+  schoolDetails: SchoolDetails
   users: AccountRow[]
   events: EventRow[]
   queue: { queued: number; running: number; done: number; error: number }
@@ -218,11 +221,7 @@ export function ManagementScreen({
     }
   }
 
-  async function saveSchool(settings: {
-    name: string
-    googleDomain: string
-    googleAutoJoin: boolean
-  }): Promise<boolean> {
+  async function saveSchool(settings: SchoolSettings): Promise<boolean> {
     try {
       await requestJson('/api/sprava/skola', jsonBody('PATCH', settings), t('admin:errors.schoolSaveFailed'))
     } catch (error) {
@@ -336,7 +335,7 @@ export function ManagementScreen({
             <h2 className="font-medium text-fg">{t('admin:management.accounts.school')}</h2>
             <p className="mt-1 mb-3 max-w-3xl text-sm text-fg-soft">{t('admin:management.accounts.schoolHint')}</p>
             <SchoolForm
-              initial={{ name: school, googleDomain: googleDomain ?? '', googleAutoJoin }}
+              initial={{ name: school, googleDomain: googleDomain ?? '', googleAutoJoin, ...schoolDetails }}
               submitLabel={t('admin:management.accounts.saveSchool')}
               onSave={saveSchool}
             />
@@ -386,7 +385,7 @@ export function ManagementScreen({
 
           <div className="space-y-2">
             {users.map((account) => (
-              <Card key={account.id} className="flex flex-wrap items-center gap-3 p-3">
+              <Card key={account.id} className="flex-row flex-wrap items-center gap-3 p-3">
                 <div className="min-w-56 flex-1">
                   <p className="font-medium text-fg">
                     {account.name}

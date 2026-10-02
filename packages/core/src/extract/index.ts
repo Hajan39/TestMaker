@@ -25,6 +25,17 @@ const MIME_BY_EXT: Record<string, string> = {
   md: 'text/markdown',
 }
 
+/** Formats read via `DOMParser`. */
+const DOM_EXTENSIONS = new Set(['odp', 'odt', 'ods', 'docx', 'html', 'htm'])
+
+/**
+ * Does reading the file need `DOMParser`? A web worker has none, so such
+ * files must be read on the page's main thread.
+ */
+export function needsDom(fileName: string): boolean {
+  return DOM_EXTENSIONS.has(fileExtension(fileName))
+}
+
 /** Extracts text according to the file extension. */
 export async function extractFile(file: File): Promise<ExtractionResult> {
   const ext = fileExtension(file.name)

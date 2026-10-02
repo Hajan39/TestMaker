@@ -108,6 +108,11 @@ export const currentUser = cache(async (): Promise<SignedInUser | null> => {
     .limit(1)
 
   if (!row || row.status !== 'aktivni' || row.sessionVersion !== session.sv) return null
+  // The role in the cookie decides in the gate (`proxy.ts`), which cannot see
+  // the database. When it differs from the database, the cookie is stale —
+  // otherwise after a role change a teacher would keep hitting Preview's
+  // limits until she signs out herself.
+  if (row.role !== session.role) return null
 
   // The session is in use, so the device is visibly alive; management uses
   // this to tell abandoned sign-ins apart.

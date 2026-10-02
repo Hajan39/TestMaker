@@ -223,13 +223,53 @@ test('preview sees the materials strip without uploading, toggle and deleting', 
 })
 
 /**
- * Deleting in the library (`DELETE /api/library`) is for managers only — a teacher may
- * change content (rename, move, generate), but the "Smazat ročník"/"Smazat téma"/
- * "Smazat předmět" buttons are not offered to her at all, otherwise she would hit
- * a silent 403 (see `DeleteFromLibrary`).
+ * Deleting in the library (`DELETE /api/library`): a teacher deletes topics too —
+ * she works with a topic as a whole, from creating it to deleting it. Subjects and
+ * grades, under which lies the whole school's work, only a manager; the
+ * "Smazat ročník"/"Smazat předmět" buttons are therefore not offered to her at
+ * all, otherwise she would hit a 403 (see `DeleteFromLibrary`).
  */
-test.describe('a teacher does not delete in the library — only a manager may', () => {
+test.describe('a teacher deletes topics, but not subjects or grades', () => {
   test.use({ storageState: 'e2e/.auth/ucitelkaA.json' })
+
+  test('a teacher creates a topic, renames it and deletes it', async ({ page, request }) => {
+    const subject = await request.post('/api/library', {
+      data: { kind: 'subject', name: `E2E UCITELKA TEMA ${Date.now()}` },
+    })
+    expect(subject.ok(), 'could not create the test subject').toBe(true)
+    const { id: subjectId } = (await subject.json()) as { id: string }
+    const grade = await request.post('/api/library', {
+      data: { kind: 'grade', name: `Ročník pro téma ${Date.now()}`, parentId: subjectId },
+    })
+    expect(grade.ok(), 'could not create the test grade').toBe(true)
+    const { id: gradeId } = (await grade.json()) as { id: string }
+
+    const topic = await request.post('/api/library', {
+      data: { kind: 'topic', name: 'Učitelčino téma', parentId: gradeId },
+    })
+    expect(topic.ok(), 'the teacher did not create the topic').toBe(true)
+    const { id: topicId } = (await topic.json()) as { id: string }
+
+    const renamed = await request.patch('/api/library', {
+      data: { kind: 'topic', id: topicId, name: 'Učitelčino téma přejmenované' },
+    })
+    expect(renamed.ok(), 'the teacher did not rename the topic').toBe(true)
+
+    await page.goto(`/topics/${topicId}`)
+    await expect(page.getByRole('heading', { name: 'Učitelčino téma přejmenované' })).toBeVisible()
+    await page.getByRole('button', { name: 'Smazat téma' }).first().click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
+    await expect(page).not.toHaveURL(new RegExp(topicId))
+
+    const gone = await request.get(`/api/library?kind=topic&id=${encodeURIComponent(topicId)}`)
+    expect(gone.status()).toBe(404)
+
+    // She may delete neither the grade nor the subject — not even straight via the API.
+    const gradeDelete = await request.delete(`/api/library?kind=grade&id=${encodeURIComponent(gradeId)}`)
+    expect(gradeDelete.status()).toBe(403)
+    const subjectDelete = await request.delete(`/api/library?kind=subject&id=${encodeURIComponent(subjectId)}`)
+    expect(subjectDelete.status()).toBe(403)
+  })
 
   test('the grade page does not offer Smazat ročník to a teacher', async ({ page, request }) => {
     const subject = await request.post('/api/library', {

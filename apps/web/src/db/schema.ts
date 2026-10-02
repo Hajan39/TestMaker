@@ -45,6 +45,17 @@ export const schools = sqliteTable(
      * manager assigns a role.
      */
     googleAutoJoin: integer('google_auto_join', { mode: 'boolean' }).notNull().default(false),
+    // Address and contacts (`lib/schoolDetails.ts`); all optional.
+    street: text('street'),
+    city: text('city'),
+    postalCode: text('postal_code'),
+    website: text('website'),
+    email: text('email'),
+    phone: text('phone'),
+    /** The school's company ID (ICO). */
+    ico: text('ico'),
+    /** Name of the principal. */
+    principal: text('principal'),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [

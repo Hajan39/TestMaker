@@ -9,6 +9,7 @@
 
 /**
  * - `ucitelka` — full work with content: import, generation, review, tests.
+ *   Its UI label names both genders, as staff rooms have both; the key stays.
  * - `spravce` — additionally accounts, backups, settings and the event log.
  * - `nahled` — only reads and prints; changes nothing.
  * - `administrator` — above schools: creates them, switches between them and

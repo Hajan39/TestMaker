@@ -7,6 +7,7 @@ import { seedTemplates } from '@/db/templates'
 import { newId } from '@/lib/ids'
 import { isAdministratorRole, roleCanManage } from '@/lib/role'
 import { normalizeDomain, slugFromName } from '@/lib/schoolText'
+import { normalizeDetail, SCHOOL_DETAIL_KEYS, type SchoolDetailKey } from '@/lib/schoolDetails'
 import type { Scope } from '@/lib/user'
 
 /**
@@ -15,27 +16,44 @@ import type { Scope } from '@/lib/user'
  * gets the same answer as if it did not exist.
  */
 
-export interface SchoolRow {
+export type SchoolRow = {
   id: string
   name: string
   slug: string
   googleDomain: string | null
   googleAutoJoin: boolean
   accountCount: number
-}
+} & { [K in SchoolDetailKey]: string | null }
 
-export interface SchoolChanges {
+export type SchoolChanges = {
   name?: string
   googleDomain?: string | null
   googleAutoJoin?: boolean
-}
+} & { [K in SchoolDetailKey]?: string | null }
+
+const detailsSchema = z.object(
+  Object.fromEntries(SCHOOL_DETAIL_KEYS.map((key) => [key, z.string().max(200).nullable().optional()])) as {
+    [K in SchoolDetailKey]: z.ZodOptional<z.ZodNullable<z.ZodString>>
+  },
+)
 
 /** Request body for editing a school; shared by management and administration. */
-export const schoolChangesSchema = z.object({
-  name: z.string().max(200).optional(),
-  googleDomain: z.string().max(200).nullable().optional(),
-  googleAutoJoin: z.boolean().optional(),
-})
+export const schoolChangesSchema = z
+  .object({
+    name: z.string().max(200).optional(),
+    googleDomain: z.string().max(200).nullable().optional(),
+    googleAutoJoin: z.boolean().optional(),
+  })
+  .extend(detailsSchema.shape)
+
+/** Address and contacts to store — only the fields that came in the request. */
+function detailsToStore(changes: SchoolChanges): Partial<Record<SchoolDetailKey, string | null>> {
+  const patch: Partial<Record<SchoolDetailKey, string | null>> = {}
+  for (const key of SCHOOL_DETAIL_KEYS) {
+    if (changes[key] !== undefined) patch[key] = normalizeDetail(key, changes[key])
+  }
+  return patch
+}
 
 export type SchoolResult = { ok: true; id: string } | { ok: false; error: string; status: number }
 
@@ -54,6 +72,14 @@ export async function listSchools(scope: Scope): Promise<SchoolRow[] | null> {
       slug: schools.slug,
       googleDomain: schools.googleDomain,
       googleAutoJoin: schools.googleAutoJoin,
+      street: schools.street,
+      city: schools.city,
+      postalCode: schools.postalCode,
+      website: schools.website,
+      email: schools.email,
+      phone: schools.phone,
+      ico: schools.ico,
+      principal: schools.principal,
       accountCount: count(users.id),
     })
     .from(schools)
@@ -79,6 +105,7 @@ export async function createSchool(scope: Scope, input: SchoolChanges): Promise<
     slug: await freeSlug(slugFromName(name)),
     googleDomain,
     googleAutoJoin: input.googleAutoJoin ?? false,
+    ...detailsToStore(input),
   })
   await seedTemplates(db, id)
   return { ok: true, id }
@@ -98,7 +125,7 @@ export async function updateSchool(
   const [school] = await db.select({ id: schools.id }).from(schools).where(eq(schools.id, schoolId)).limit(1)
   if (!school) return notFound()
 
-  const patch: Partial<typeof schools.$inferInsert> = {}
+  const patch: Partial<typeof schools.$inferInsert> = detailsToStore(changes)
   if (changes.name !== undefined) {
     const name = changes.name.trim()
     if (!name) return untitled()

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { DeleteButton, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
-import { useCanManage } from '@/components/Permissions'
+import { useCanEdit, useCanManage } from '@/components/Permissions'
 import { errorMessage, requestJson } from '@/lib/requestJson'
 
 type Kind = 'subject' | 'grade' | 'topic'
@@ -66,12 +66,14 @@ export function DeleteFromLibrary({
   /** Where to go after deleting; without it the page just refreshes. */
   redirectTo?: string
 }) {
-  // Only an admin may delete in the library (`DELETE /api/library`) — the
-  // button isn't offered to a teacher or viewer at all. The guard sits after
-  // the hooks so the same number of them is called on every render.
+  // Same rule as `DELETE /api/library`: a topic may be deleted by anyone who
+  // may edit content, a subject or grade only by an admin. Whoever the server
+  // would refuse isn't offered the button at all. The guard sits after the
+  // hooks so the same number of them is called on every render.
+  const canEdit = useCanEdit()
   const canManage = useCanManage()
   const router = useRouter()
-  if (!canManage) return null
+  if (kind === 'topic' ? !canEdit : !canManage) return null
 
   return (
     <DeleteButton

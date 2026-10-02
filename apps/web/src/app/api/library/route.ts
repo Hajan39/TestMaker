@@ -2,8 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
 import { createLibraryItem, renameLibraryItem } from '@/lib/library'
-import { MANAGEMENT_ROLES } from '@/lib/role'
-import { withScope, inSchool, writeAudit, type Scope } from '@/lib/user'
+import { canManage, withScope, inSchool, writeAudit, type Scope } from '@/lib/user'
 import { t } from '@testmaker/core/i18n'
 
 export const runtime = 'nodejs'
@@ -90,7 +89,9 @@ export async function PATCH(request: Request) {
  * Deletes a subject, grade or topic with everything below it.
  *
  * The library is shared, so this deletion touches colleagues' work — that's
- * why only an admin may do it and why it's written to the audit log.
+ * why it's written to the audit log. A topic may be deleted by anyone who may
+ * edit content (a topic is the unit a teacher works with as a whole); a
+ * subject or grade, under which lies the whole school's work, only by an admin.
  */
 export async function DELETE(request: Request) {
   return withScope(
@@ -99,6 +100,9 @@ export async function DELETE(request: Request) {
       const kind = kindSchema.safeParse(params.get('kind'))
       const id = params.get('id')
       if (!kind.success || !id) return Response.json({ error: t('api:invalidRequest') }, { status: 400 })
+      if (kind.data !== 'topic' && !canManage(account)) {
+        return Response.json({ error: t('library:libraryApi.deleteManagerOnly') }, { status: 403 })
+      }
 
       const impact = await measure(account, kind.data, id)
       if (!impact) return Response.json({ error: t('library:libraryApi.itemGone') }, { status: 404 })
@@ -124,7 +128,7 @@ export async function DELETE(request: Request) {
       })
       return Response.json({ ok: true, deleted: impact })
     },
-    { role: MANAGEMENT_ROLES },
+    { write: true },
   )
 }
 

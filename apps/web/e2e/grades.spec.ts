@@ -260,3 +260,45 @@ test.describe('old addresses', () => {
     }
   })
 })
+
+test.describe('topic order within a grade', () => {
+  test('topics are in Czech alphabetical order, can be reordered and returned to alphabetical', async ({ page }) => {
+    const { subjectId, gradeId } = await createGrade(page.request, `E2E PORADI ${STAMP}`, 'Pořadí')
+    try {
+      // Deliberately in an order SQL sorts wrongly: `10.` before `2.`.
+      for (const name of ['10. Savci', '2. Ptáci', '1. Úvod']) {
+        const topic = await page.request.post('/api/library', {
+          data: { kind: 'topic', name, parentId: gradeId },
+        })
+        expect(topic.ok(), `could not create topic "${name}"`).toBe(true)
+      }
+
+      await page.goto(`/tridy/${gradeId}`)
+      const list = page.getByTestId('grade-topics')
+      const order = () => list.getByRole('button', { name: /^Přesunout téma / }).evaluateAll(
+        (handles) => handles.map((handle) => handle.getAttribute('aria-label')?.replace('Přesunout téma ', '')),
+      )
+      await expect.poll(order).toEqual(['1. Úvod', '2. Ptáci', '10. Savci'])
+
+      // Reordering from the keyboard: space lifts, an arrow moves, space drops.
+      const handle = list.getByRole('button', { name: 'Přesunout téma 10. Savci' })
+      // dnd-kit computes tile positions between steps, hence the short pauses.
+      await handle.focus()
+      for (const key of ['Space', 'ArrowLeft', 'ArrowLeft', 'Space']) {
+        await page.keyboard.press(key)
+        await page.waitForTimeout(150)
+      }
+      await expect.poll(order).toEqual(['10. Savci', '1. Úvod', '2. Ptáci'])
+
+      // The order was saved: it still applies after a page reload.
+      await page.reload()
+      await expect.poll(order).toEqual(['10. Savci', '1. Úvod', '2. Ptáci'])
+
+      await page.getByRole('button', { name: 'Seřadit podle abecedy' }).click()
+      await expect.poll(order).toEqual(['1. Úvod', '2. Ptáci', '10. Savci'])
+      await expect(page.getByRole('button', { name: 'Seřadit podle abecedy' })).toHaveCount(0)
+    } finally {
+      await deleteSubject(page.request, subjectId)
+    }
+  })
+})

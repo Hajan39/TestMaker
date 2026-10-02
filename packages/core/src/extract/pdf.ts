@@ -1,12 +1,23 @@
+/// <reference path="./pdfjs-worker.d.ts" />
 import './uint8array-polyfill'
 import { normalizeText, type ExtractionResult } from './types'
 
 /**
  * PDF via pdf.js. The import is dynamic so the package can also be loaded on
  * the server, where extraction is not used.
+ *
+ * pdf.js's own worker is not started: extraction already runs in a web
+ * worker, where pdf.js has no `window` or `workerSrc` and fails with "No
+ * GlobalWorkerOptions.workerSrc specified". The worker module is therefore
+ * loaded here and pdf.js uses it on the same thread.
  */
 export async function extractPdf(data: ArrayBuffer | Uint8Array): Promise<ExtractionResult> {
-  const pdfjs = await import('pdfjs-dist')
+  const [pdfjs, pdfjsWorker] = await Promise.all([
+    import('pdfjs-dist'),
+    import('pdfjs-dist/build/pdf.worker.mjs'),
+  ])
+  const global = globalThis as { pdfjsWorker?: unknown }
+  global.pdfjsWorker ??= pdfjsWorker
   const doc = await pdfjs.getDocument({ data, useSystemFonts: true }).promise
 
   const numPages = doc.numPages

@@ -1,6 +1,6 @@
 {
   "roles": {
-    "ucitelka": "Učitelka",
+    "ucitelka": "Učitel/ka",
     "spravce": "Správce",
     "nahled": "Náhled",
     "administrator": "Administrátor"
@@ -34,7 +34,42 @@
     "name": "Název školy",
     "googleDomain": "Doména Google",
     "domainPlaceholder": "skola.cz",
-    "autoJoin": "Nové účty z domény zaevidovat ke schválení"
+    "autoJoin": "Nové účty z domény zaevidovat ke schválení",
+    "details": {
+      "street": {
+        "label": "Ulice a číslo",
+        "placeholder": "Školní 12"
+      },
+      "city": {
+        "label": "Město",
+        "placeholder": "Brno"
+      },
+      "postalCode": {
+        "label": "PSČ",
+        "placeholder": "602 00"
+      },
+      "website": {
+        "label": "Web",
+        "placeholder": "www.skola.cz"
+      },
+      "email": {
+        "label": "E-mail školy",
+        "placeholder": "info@skola.cz"
+      },
+      "phone": {
+        "label": "Telefon",
+        "placeholder": "+420 …"
+      },
+      "ico": {
+        "label": "IČO",
+        "placeholder": "12345678"
+      },
+      "principal": {
+        "label": "Ředitel/ka",
+        "placeholder": "Mgr. Jana Nováková"
+      }
+    },
+    "detailsLegend": "Adresa a kontakty"
   },
   "schoolSwitcher": {
     "ariaLabel": "Škola: {{name}}",
@@ -175,7 +210,7 @@
       "google": "Google",
       "mustChangePassword": "změní heslo",
       "lastLogin": "naposledy {{when}}",
-      "roleChanged": "Role změněna na {{role}}.",
+      "roleChanged": "Role změněna na {{role}}. Účet se musí znovu přihlásit.",
       "ownAccount": "Svou roli tu neměníš; své heslo změníš v nabídce účtu.",
       "working": "Pracuji…",
       "resetTitle": "Vygenerovat nové heslo pro {{name}}?",

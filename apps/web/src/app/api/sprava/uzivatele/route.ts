@@ -186,7 +186,10 @@ export async function PATCH(request: Request) {
         await db.update(users).set(changes).where(eq(users.id, target.id))
       }
       // A password reset, blocking and an explicit sign-out must all drop open windows.
-      if (password || parsed.data.odhlasit || parsed.data.status === 'zablokovany') {
+      // So must a role change: the role is stored in the cookie and the gate
+      // would follow the old one until the next sign-in.
+      const roleChanged = parsed.data.role !== undefined && parsed.data.role !== target.role
+      if (password || parsed.data.odhlasit || parsed.data.status === 'zablokovany' || roleChanged) {
         await revokeAllSessions(target.id)
       }
 

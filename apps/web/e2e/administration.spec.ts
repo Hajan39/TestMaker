@@ -101,7 +101,7 @@ test.describe('manager', () => {
 
     await page.goto('/sprava')
     await page.getByLabel('Role').click()
-    await expect(page.getByRole('option', { name: 'Učitelka' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Učitel/ka' })).toBeVisible()
     await expect(page.getByRole('option', { name: 'Administrátor' })).toHaveCount(0)
   })
 })

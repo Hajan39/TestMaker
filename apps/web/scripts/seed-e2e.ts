@@ -318,7 +318,12 @@ const SECOND_SCHOOL_ACCOUNTS = [
 
 async function main() {
   if (onlyIfMissing && existsSync(dbFile)) {
-    console.log(`Testovací databáze ${dbFile} už je, nechávám ji být.`)
+    // The data stays, but the schema is brought up to date — otherwise after
+    // every new migration the tests would run on an old database and fail on a missing column.
+    const existing = createClient({ url: `file:${dbFile}` })
+    await migrate(drizzle(existing, { schema }), { migrationsFolder: resolve(webRoot, 'drizzle') })
+    existing.close()
+    console.log(`Testovací databáze ${dbFile} už je, jen jsem dotáhl migrace.`)
     return
   }
 

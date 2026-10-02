@@ -17,7 +17,8 @@ test('a manager creates an account, gets a one-time password and then blocks it'
   await page.goto('/sprava')
   await expect(page.getByRole('heading', { name: /^Správa/ })).toBeVisible()
 
-  await page.getByLabel('E-mail').fill(email)
+  // `exact`: the school form also has "E-mail školy".
+  await page.getByLabel('E-mail', { exact: true }).fill(email)
   await page.getByLabel('Jméno').fill('Nová učitelka')
   await page.getByRole('button', { name: 'Založit účet' }).click()
 

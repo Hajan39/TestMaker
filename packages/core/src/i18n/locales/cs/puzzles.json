@@ -13,7 +13,7 @@
   "workshop": {
     "title": "Hlavolamy",
     "intro": "Osmisměrka a tajenka z materiálů tématu. Slova dodá model, mřížku skládá aplikace — vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.",
-    "readOnly": "Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitelka.",
+    "readOnly": "Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitel/ka.",
     "inLibrary_one": "{{count}} hlavolam v knihovně",
     "inLibrary_few": "{{count}} hlavolamy v knihovně",
     "inLibrary_other": "{{count}} hlavolamů v knihovně",

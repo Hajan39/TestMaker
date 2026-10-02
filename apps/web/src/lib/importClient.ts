@@ -1,7 +1,7 @@
 'use client'
 
 import type { ExtractedMaterial } from '@testmaker/core/schema'
-import { skipReason } from '@testmaker/core/extract'
+import { needsDom, processFile, skipReason } from '@testmaker/core/extract'
 import type { ExtractResponse } from '@/workers/extract.worker'
 import { jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
@@ -90,7 +90,12 @@ async function walkDropEntry(
   }
 }
 
-/** Processes the files in a worker; `onResult` gets each result right away. */
+/**
+ * Processes the files; `onResult` gets each result right away. PDFs, which
+ * tend to be large and slow to read, go to a worker so the UI does not freeze.
+ * Documents and presentations need `DOMParser`, which a worker lacks — they
+ * are read here; from the unzipped archive it is only a single XML file.
+ */
 export async function extractAll(
   entries: FileEntry[],
   onResult: (result: ExtractResponse) => void,
@@ -101,12 +106,20 @@ export async function extractAll(
 
   try {
     for (const [index, entry] of entries.entries()) {
+      if (needsDom(entry.file.name)) {
+        onResult({ id: index, ...(await processFile(entry.file, entry.relativePath)) })
+        continue
+      }
       const result = await new Promise<ExtractResponse>((resolve, reject) => {
+        // Once loaded, the pdf.js worker module hooks onto this worker's
+        // messages and posts its own "ready" here — so the result is
+        // recognised by `id`, not by being the first message to arrive.
         const onMessage = (event: MessageEvent<ExtractResponse>) => {
+          if (event.data?.id !== index) return
           worker.removeEventListener('message', onMessage)
           resolve(event.data)
         }
-        worker.addEventListener('message', onMessage, { once: true })
+        worker.addEventListener('message', onMessage)
         worker.addEventListener('error', (event) => reject(new Error(event.message)), { once: true })
         worker.postMessage({ id: index, file: entry.file, relativePath: entry.relativePath })
       })

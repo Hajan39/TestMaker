@@ -95,7 +95,13 @@
     "lowText": "málo textu",
     "nothingSelected": "Z tématu se neuloží nic — všechny řádky jsou vynechané.",
     "failedTitle": "Nepodařilo se přečíst ({{n}})",
-    "skippedTitle": "Přeskočeno ({{n}})"
+    "skippedTitle": "Přeskočeno ({{n}})",
+    "bulk": {
+      "title": "Zařadit všechna témata najednou",
+      "hint": "Vyplněné pole se přepíše u všech zahrnutých témat, prázdné zůstane beze změny. Stejné téma u všech spojí soubory do jednoho tématu.",
+      "unchanged": "beze změny",
+      "apply": "Nastavit všem"
+    }
   },
   "questionCard": {
     "restore": "Obnovit",
@@ -188,7 +194,9 @@
     "newTitle": "Nová otázka"
   },
   "libraryApi": {
-    "itemGone": "Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku."
+    "itemGone": "Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku.",
+    "deleteManagerOnly": "Předmět nebo ročník smí smazat jen správce.",
+    "topicsChanged": "Témata ročníku se mezitím změnila. Obnov stránku a zkus to znovu."
   },
   "labels": {
     "noGrade": "Bez ročníku"
@@ -429,5 +437,12 @@
     "queued": "Čeká ve frontě",
     "noQuestions": "bez otázek",
     "lowContent": "málo textu"
+  },
+  "sortableTopics": {
+    "saveFailed": "Pořadí se nepodařilo uložit.",
+    "manualHint": "Témata jsou seřazená ručně. Přeskládáš je přetažením za úchyt.",
+    "alphabeticalHint": "Témata jsou podle abecedy. Přeskládáš je přetažením za úchyt.",
+    "sortAlphabetically": "Seřadit podle abecedy",
+    "handleLabel": "Přesunout téma {{name}}"
   }
 }
