@@ -59,6 +59,7 @@ import { RowActions } from '@/components/RowActions'
 import type { PuzzleListItem, PuzzleTopic } from '@/lib/puzzles'
 import { errorMessage, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
+import { formatDate } from '@testmaker/core/dates'
 
 /** A puzzle as the API returns it after saving. */
 type PuzzleListRow = PuzzleContent & { id: string; topicId: string | null; updatedAt: string }
@@ -1135,7 +1136,7 @@ export function PuzzleWorkshop({
                         </span>
                         {test.updatedAt ? (
                           <span className="shrink-0 text-xs text-fg-muted">
-                            {new Date(test.updatedAt).toLocaleDateString('cs-CZ')}
+                            {formatDate(test.updatedAt)}
                           </span>
                         ) : null}
                       </button>

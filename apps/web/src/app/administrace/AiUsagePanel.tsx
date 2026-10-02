@@ -3,10 +3,10 @@ import { resources, t } from '@testmaker/core/i18n'
 import { Badge, Button, Card, EmptyState } from '@testmaker/ui'
 import { PERIOD_DAYS, type AiUsageOverview } from '@/lib/aiUsage'
 import type { ModelQuota } from '@/lib/aiQuota'
+import { formatShortDateTime, formatTime } from '@testmaker/core/dates'
 
 const num = (value: number) => value.toLocaleString('cs-CZ')
-const date = (iso: string) =>
-  new Date(iso).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+const date = formatShortDateTime
 
 function Table({ header, rows }: { header: string[]; rows: (string | number)[][] }) {
   return (
@@ -37,7 +37,7 @@ function Table({ header, rows }: { header: string[]; rows: (string | number)[][]
   )
 }
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+const time = formatTime
 
 /** One sentence on where the model stands today. */
 function quotaState(quota: ModelQuota): string {

@@ -4,6 +4,7 @@ import { AI_SETTINGS } from '@testmaker/core/ai'
 import { t } from '@testmaker/core/i18n'
 import { db, generationJobs, grades, subjects, topics, users } from '@/db'
 import { canManage, inSchool, writeAudit, type Scope } from './user'
+import { isoAgo } from '@testmaker/core/dates'
 
 /**
  * Generation queue for the overview. The screen and the toolbar indicator read
@@ -62,7 +63,7 @@ export const DONE_LIMIT = 20
  * they were created — a queue job waits in the queue first.
  */
 export async function expireStaleJobs(scope: Scope | null): Promise<{ failed: number; requeued: number }> {
-  const cutoff = new Date(Date.now() - AI_SETTINGS.staleJobMinutes * 60_000).toISOString()
+  const cutoff = isoAgo(AI_SETTINGS.staleJobMinutes, 'minute')
   const stale = and(
     scope ? inSchool(scope, generationJobs) : undefined,
     eq(generationJobs.status, 'running'),

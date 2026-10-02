@@ -19,6 +19,7 @@ import { drainQueue } from '@/lib/generateClient'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import type { QueueCounts, QueueJob } from '@/lib/jobs'
 import { runSummary } from '@/lib/queueSummary'
+import { minutesSince } from '@testmaker/core/dates'
 
 /** How often the screen polls for progress. Only while something is happening. */
 const REFRESH_MS = 3000
@@ -358,7 +359,7 @@ function describe(job: QueueJob): string {
  * Precision helps nobody here; the point is telling a stuck job from a fresh one.
  */
 export function sinceText(from: string, now: number = Date.now()): string {
-  const minutes = Math.floor((now - new Date(from).getTime()) / 60_000)
+  const minutes = minutesSince(from, now)
   if (!Number.isFinite(minutes) || minutes < 1) return t('generation:queue.since.moment')
   if (minutes < 60) return t('generation:queue.since.minutes', { count: minutes })
   return t('generation:queue.since.hours', { count: Math.floor(minutes / 60) })

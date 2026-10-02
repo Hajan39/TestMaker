@@ -4,6 +4,7 @@ import { t } from '@testmaker/core/i18n'
 import type { RegenerateReason } from '@testmaker/core/schema'
 import { db, grades, questionFeedback, questions, subjects, topics } from '@/db'
 import { inSchool, type Scope } from './user'
+import { isoAgo } from '@testmaker/core/dates'
 
 /** Default overview window: what happened lately, not the school's whole history. */
 const WINDOW_DAYS = 90
@@ -32,7 +33,7 @@ export interface AiQuality {
 }
 
 function defaultFrom(): string {
-  return new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
+  return isoAgo(WINDOW_DAYS, 'day')
 }
 
 /**

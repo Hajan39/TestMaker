@@ -14,6 +14,7 @@ import {
   type Backup,
 } from '@/lib/backupClient'
 import { errorMessage, fetchOrOffline, readJson, responseError } from '@/lib/requestJson'
+import { formatDateTime } from '@testmaker/core/dates'
 
 /** What shows in the count row above the page; the rest is in the cards. */
 const OVERVIEW = ['subjects', 'topics', 'materials', 'questions', 'tests'] as const
@@ -190,7 +191,7 @@ export function BackupScreen({ counts }: { counts: Record<string, number> }) {
               </ul>
               {backup?.vytvoreno ? (
                 <p className="mt-2 text-xs text-fg-muted">
-                  {t('backup:restore.createdAt', { date: new Date(backup.vytvoreno).toLocaleString('cs-CZ') })}
+                  {t('backup:restore.createdAt', { date: formatDateTime(backup.vytvoreno) })}
                 </p>
               ) : null}
             </div>

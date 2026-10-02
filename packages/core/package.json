@@ -15,7 +15,8 @@
     "./pdf/node": "./src/pdf/node.ts",
     "./pdf/layout": "./src/pdf/layout.ts",
     "./puzzle": "./src/puzzle/index.ts",
-    "./i18n": "./src/i18n/index.ts"
+    "./i18n": "./src/i18n/index.ts",
+    "./dates": "./src/dates.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -28,6 +29,7 @@
     "@ai-sdk/openai-compatible": "^3.0.58",
     "@react-pdf/renderer": "^4.9.0",
     "ai": "^7.0.120",
+    "dayjs": "^1.11.23",
     "i18next": "^26.4.2",
     "jszip": "^3.10.1",
     "pdfjs-dist": "^6.3.289",

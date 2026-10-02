@@ -22,6 +22,7 @@ import { errorMessage, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
 import type { TestKind } from '@testmaker/core/schema'
 import { testPath } from './paths'
+import { formatDate } from '@testmaker/core/dates'
 
 export interface TestRowData {
   id: string
@@ -235,7 +236,7 @@ export function TestRow({ row }: { row: TestRowData }) {
       <td className="py-2 pr-4 text-fg-soft">{row.templateName}</td>
       <td className="py-2 pr-4 text-fg-soft">{row.gradeLabel ?? ''}</td>
       <td className="py-2 pr-4 text-fg-muted">
-        {new Date(row.updatedAt).toLocaleDateString('cs')}
+        {formatDate(row.updatedAt)}
       </td>
       <td className="py-2 pr-0 text-right">
         <TestActions row={row} />
@@ -283,7 +284,7 @@ export function TestCard({ row }: { row: TestRowData }) {
           </>
         ) : null}
         <span aria-hidden="true">·</span>
-        <span className="text-fg-muted">{new Date(row.updatedAt).toLocaleDateString('cs')}</span>
+        <span className="text-fg-muted">{formatDate(row.updatedAt)}</span>
       </p>
     </li>
   )

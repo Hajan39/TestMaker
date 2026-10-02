@@ -50,9 +50,6 @@ importers:
       ai:
         specifier: ^7.0.120
         version: 7.0.120(zod@4.6.5)
-      dayjs:
-        specifier: ^1.11.23
-        version: 1.11.23
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@libsql/client@0.18.0)
@@ -147,6 +144,9 @@ importers:
       ai:
         specifier: ^7.0.120
         version: 7.0.120(zod@4.6.5)
+      dayjs:
+        specifier: ^1.11.23
+        version: 1.11.23
       i18next:
         specifier: ^26.4.2
         version: 26.4.2(typescript@5.9.3)

@@ -46,6 +46,7 @@ import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { useUrlTab } from '@/lib/urlTab'
 import { MANAGEMENT_TABS, type ManagementTab } from '@/lib/tabs'
 import { ASSIGNABLE_ROLES, isAdministratorRole, type Role, type UserStatus } from '@/lib/role'
+import { dayjs, formatDateTime } from '@testmaker/core/dates'
 
 export interface AccountRow {
   id: string
@@ -77,8 +78,7 @@ type DetailField = keyof typeof adminTexts.eventDetail.fields
 /** Date and time as read in Czech. */
 function when(value: string | null): string {
   if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('cs-CZ')
+  return dayjs(value).isValid() ? formatDateTime(value) : value
 }
 
 /** The event was written by an administrator from outside — `writeAudit` flagged it. */

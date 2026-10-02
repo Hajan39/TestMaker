@@ -6,6 +6,7 @@ import { newId } from '@/lib/ids'
 import { isAdministratorRole } from '@/lib/role'
 import type { Scope } from '@/lib/user'
 import { QUOTA_HISTORY_DAYS, quotaDayStart, quotaOutlook, type QuotaOutlook } from '@/lib/aiQuota'
+import { dayjs, isoAgo } from '@testmaker/core/dates'
 
 /**
  * AI usage: every attempt to call a model is written to `ai_calls` and the
@@ -35,7 +36,6 @@ export function periodFrom(value: unknown): PeriodDays {
   return (PERIOD_DAYS as readonly number[]).includes(days) ? (days as PeriodDays) : DEFAULT_PERIOD
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
 /** How long records are kept — over a year, so the same period last year can be compared. */
 const RETENTION_DAYS = 400
 /** Clean up old records roughly once per this many writes. */
@@ -78,7 +78,7 @@ export function callRecorder(who: Caller, task: AiTask): AiCallListener {
 
 /** Deletes records older than 400 days; returns how many there were. */
 export async function cleanupOldCalls(now: number = Date.now()): Promise<number> {
-  const cutoffDate = new Date(now - RETENTION_DAYS * DAY_MS).toISOString()
+  const cutoffDate = isoAgo(RETENTION_DAYS, 'day', now)
   const deleted = await db.delete(aiCalls).where(lt(aiCalls.createdAt, cutoffDate)).returning({ id: aiCalls.id })
   return deleted.length
 }
@@ -157,13 +157,13 @@ export async function aiUsageOverview(
   const now = options.now ?? Date.now()
 
   const periodDays = Array.from({ length: days }, (_, i) =>
-    new Date(now - (days - 1 - i) * DAY_MS).toISOString().slice(0, 10),
+    dayjs.utc(now).subtract(days - 1 - i, 'day').format('YYYY-MM-DD'),
   )
   const inPeriod = gte(aiCalls.createdAt, `${periodDays[0]}T00:00:00.000Z`)
   const day = sql<string>`substr(${aiCalls.createdAt}, 1, 10)`
 
   // The limit belongs to the API key, not to a school — so all calls count.
-  const quotaSince = new Date(quotaDayStart(now) - QUOTA_HISTORY_DAYS * DAY_MS).toISOString()
+  const quotaSince = isoAgo(QUOTA_HISTORY_DAYS, 'day', quotaDayStart(now))
   const [models, tasks, schoolRows, dayRows, quotaCalls] = await Promise.all([
     db
       .select({

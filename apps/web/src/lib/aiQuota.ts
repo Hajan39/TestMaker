@@ -6,12 +6,7 @@
  * call records, so they can be tested without a database.
  */
 
-import dayjs from 'dayjs'
-import timezone from 'dayjs/plugin/timezone'
-import utc from 'dayjs/plugin/utc'
-
-dayjs.extend(utc)
-dayjs.extend(timezone)
+import { dayjs } from '@testmaker/core/dates'
 
 /** Google resets daily limits at midnight Pacific time. */
 const QUOTA_TIME_ZONE = 'America/Los_Angeles'
