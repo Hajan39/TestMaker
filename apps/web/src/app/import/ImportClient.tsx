@@ -17,15 +17,12 @@ import {
   type FileEntry,
   type ImportDestination,
 } from '@/lib/importClient'
-import { IssueList, skipLabel } from '@/components/importIssues'
+import { IssueList, skipLabel, type IssueItem } from '@/components/importIssues'
 import { errorMessage } from '@/lib/requestJson'
 
 type Phase = 'idle' | 'extracting' | 'preview' | 'uploading' | 'done'
 
-interface Failure {
-  relativePath: string
-  reason: string
-}
+type Failure = IssueItem
 
 /** Subjects and their grades as they already are in the library — for suggestions. */
 export interface LibraryHint {
@@ -112,7 +109,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     setFailed([])
 
     const { accepted, skipped: skippedFiles } = triageEntries(entries)
-    setSkipped(skippedFiles.map((item) => ({ ...item, reason: skipLabel(item.reason) ?? item.reason })))
+    setSkipped(skippedFiles.map((item) => ({ ...item, code: item.reason, reason: skipLabel(item.reason) ?? item.reason })))
 
     if (accepted.length === 0) {
       setPhase('preview')
@@ -139,6 +136,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
         } else if (result.status === 'skipped') {
           emptySkips.push({
             relativePath: result.relativePath,
+            code: result.reason,
             reason: skipLabel(result.reason ?? '') ?? t('library:importIssues.skip.emptyText'),
           })
         }

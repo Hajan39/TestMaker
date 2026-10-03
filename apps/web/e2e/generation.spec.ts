@@ -149,7 +149,7 @@ test.describe('question generation in a topic', () => {
       buffer: Buffer.from(TEXT, 'utf8'),
     })
 
-    await expect(page.getByText(/Nahráno 1 materiál/)).toBeVisible()
+    await expect(page.getByTestId('toast-materials-uploaded')).toContainText('1')
     await expect(page.getByTestId('topic-empty')).toHaveCount(0)
     await expect(page.getByText('Nahraný z prázdného tématu.txt')).toBeVisible()
   })

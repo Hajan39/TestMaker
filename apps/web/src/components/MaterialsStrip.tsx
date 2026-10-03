@@ -215,7 +215,7 @@ export const MaterialsStrip = forwardRef<
     setOpen(true)
 
     const { accepted, skipped: skippedFiles } = triageEntries(entries)
-    setSkipped(skippedFiles.map((item) => ({ ...item, reason: skipLabel(item.reason) ?? item.reason })))
+    setSkipped(skippedFiles.map((item) => ({ ...item, code: item.reason, reason: skipLabel(item.reason) ?? item.reason })))
     setFailed([])
 
     if (accepted.length === 0) return
@@ -241,6 +241,7 @@ export const MaterialsStrip = forwardRef<
         } else if (result.status === 'skipped') {
           emptySkips.push({
             relativePath: result.relativePath,
+            code: result.reason,
             reason: skipLabel(result.reason ?? '') ?? t('library:importIssues.skip.emptyText'),
           })
         }

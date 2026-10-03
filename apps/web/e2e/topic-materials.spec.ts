@@ -211,7 +211,7 @@ test.describe('topic materials strip', () => {
 
       await page.getByTestId('skipped-files').getByTestId('issue-list-trigger').click()
       await expect(page.getByText(unsupported.name)).toBeVisible()
-      await expect(page.getByTestId('issue-reason')).toBeVisible()
+      await expect(page.getByTestId('issue-reason')).toHaveAttribute('data-reason', 'nepodporovany')
     } finally {
       await cleanup(page.request, topicId)
     }
@@ -254,7 +254,7 @@ test.describe('topic materials strip', () => {
 
       await page.getByTestId('skipped-files').getByTestId('issue-list-trigger').click()
       await expect(page.getByText(empty.name)).toBeVisible()
-      await expect(page.getByTestId('issue-reason')).toBeVisible()
+      await expect(page.getByTestId('issue-reason')).toHaveAttribute('data-reason', 'prázdný text')
       // It wasn't added to the topic's materials.
       await expect(page.getByText(empty.name).locator('..').getByRole('checkbox')).toHaveCount(0)
     } finally {

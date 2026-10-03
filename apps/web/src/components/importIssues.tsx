@@ -36,6 +36,8 @@ export function skipLabel(reason: string): string | undefined {
 export interface IssueItem {
   relativePath: string
   reason: string
+  /** Untranslated reason code (`SkipReason` or `prázdný text`) — for tests, not shown. */
+  code?: string
 }
 
 /** Collapsed list of skipped or failed files, each with its reason. */
@@ -63,7 +65,7 @@ export function IssueList({
             {items.map((item) => (
               <li key={item.relativePath} className="flex flex-wrap gap-2" data-testid="issue-item">
                 <span className="text-fg-soft">{item.relativePath}</span>
-                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'} data-testid="issue-reason">{item.reason}</span>
+                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'} data-testid="issue-reason" data-reason={item.code}>{item.reason}</span>
               </li>
             ))}
           </ul>
