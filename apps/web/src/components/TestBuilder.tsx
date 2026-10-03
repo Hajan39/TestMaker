@@ -552,7 +552,8 @@ export function TestBuilder({
     },
     onError: (copyError) => toast.error(errorMessage(copyError, t('tests:row.copyFailed'))),
   })
-  const copying = copyMutation.isPending
+  // Stays busy after success until the copy's page loads — no second copy by a double click.
+  const copying = copyMutation.isPending || copyMutation.isSuccess
 
   const saveMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
