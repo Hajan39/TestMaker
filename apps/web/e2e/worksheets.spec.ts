@@ -83,17 +83,17 @@ test.describe('worksheets', () => {
 
   test('the ověř flag is cleared by a click and the warning disappears', async ({ page }) => {
     await page.goto(`/listy/${SEED_LIST_ID}`)
-    await expect(page.getByText('Ke kontrole: 1 položka')).toBeVisible()
+    await expect(page.getByTestId('worksheet-to-check')).toHaveAttribute('data-count', '1')
     await page.getByRole('button', { name: /^ověř — odškrtnout/ }).click()
     await expect(page.getByRole('button', { name: /^ověř — odškrtnout/ })).toHaveCount(0)
-    await expect(page.getByText(/Ke kontrole:/)).toHaveCount(0)
+    await expect(page.getByTestId('worksheet-to-check')).toHaveCount(0)
   })
 
   test('without a model the form offers only an empty worksheet and explains why', async ({ page }) => {
     await page.goto('/listy/new')
     const generate = page.getByRole('button', { name: 'Vygenerovat' })
     test.skip(await generate.isVisible(), 'A model is configured on the test server.')
-    await expect(page.getByText(/Generování listu není nastavené/)).toBeVisible()
+    await expect(page.getByTestId('worksheet-not-configured')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Založit prázdný list' })).toBeVisible()
   })
 
@@ -111,7 +111,7 @@ test.describe('worksheets', () => {
     await generate.click()
 
     await expect(page).toHaveURL(new RegExp(`/listy/${SEED_LIST_ID}\\?vynechano=2$`), { timeout: 30_000 })
-    await expect(page.getByText('2 položky model nevrátil v pořádku a vynechaly se.', { exact: false })).toBeVisible()
+    await expect(page.getByTestId('worksheet-dropped')).toHaveAttribute('data-count', '2')
     // With a configured model every piece can be regenerated.
     await expect(page.getByRole('button', { name: 'Přegenerovat' }).first()).toBeAttached()
   })

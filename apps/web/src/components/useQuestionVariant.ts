@@ -51,7 +51,10 @@ export function useQuestionVariant(
         toast.error(`${t('generation:variant.failed')} ${t('common:errors.serverTrouble')}`)
         return
       }
-      toast.success(direction === 'easier' ? t('generation:variant.createdEasier') : t('generation:variant.createdHarder'))
+      toast.success(
+        direction === 'easier' ? t('generation:variant.createdEasier') : t('generation:variant.createdHarder'),
+        { testId: `toast-question-variant-${direction}` },
+      )
       onCreated?.(data.question)
       router.refresh()
     } catch (error) {

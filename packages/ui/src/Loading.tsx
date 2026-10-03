@@ -25,15 +25,17 @@ import { Skeleton } from './ui/skeleton'
 export function Delayed({
   label,
   className,
+  testId,
   children,
 }: {
   /** What the screen reader hears. The skeleton itself is a picture of nothing. */
   label?: string
   className?: string
+  testId?: string
   children: ReactNode
 }) {
   return (
-    <div data-slot="loading" role="status" aria-live="polite" className={cn('ui-delayed', className)}>
+    <div data-slot="loading" data-testid={testId} role="status" aria-live="polite" className={cn('ui-delayed', className)}>
       <span className="sr-only">{label ?? t('status.loading')}</span>
       {children}
     </div>

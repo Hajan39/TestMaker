@@ -81,7 +81,7 @@ export function LibrarySearch() {
             // height, so it doesn't jump while typing the next letter and results
             // land where one is already looking. It shows only after a delay — a
             // search in a small library finishes before it would be visible.
-            <Delayed label={t('library:search.searching')} className="p-1">
+            <Delayed label={t('library:search.searching')} className="p-1" testId="library-search-loading">
               <LoadingList items={3} />
             </Delayed>
           ) : error ? (

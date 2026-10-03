@@ -182,16 +182,16 @@ test.describe('composing the outline', () => {
   test('the same question can be added twice and is saved twice', async ({ page }) => {
     const questions = await addTwoQuestions(page)
     const first = questions.first()
-    await expect(first.getByText('1\u00d7')).toBeVisible()
+    await expect(first.getByTestId('question-used-count')).toHaveAttribute('data-count', '1')
 
     // "Vybrat vše" adds only the missing ones — it must not duplicate already added questions.
     await page.getByRole('checkbox', { name: 'Vybrat vše', exact: true }).click()
-    await expect(first.getByText('1\u00d7')).toBeVisible()
+    await expect(first.getByTestId('question-used-count')).toHaveAttribute('data-count', '1')
 
     // A question already in the test offers adding another occurrence at the end.
     await first.getByRole('button', { name: 'Zařadit do testu ještě jednou' }).click()
-    await expect(first.getByText('2\u00d7')).toBeVisible()
-    const count = await page.getByText(/^Otázek:\s*\d+/).first().textContent()
+    await expect(first.getByTestId('question-used-count')).toHaveAttribute('data-count', '2')
+    const count = await page.getByTestId('test-question-count').first().getAttribute('data-count')
 
     await page.getByLabel('Název písemky').fill('Zkouška dvojího použití')
     await page.getByRole('button', { name: 'Uložit' }).click()
@@ -200,7 +200,7 @@ test.describe('composing the outline', () => {
     // After reloading both occurrences must survive including order — the second
     // stays at the end of the outline where it was added.
     await page.goto(page.url())
-    await expect(page.getByText(/^Otázek:\s*\d+/).first()).toHaveText(count ?? '')
+    await expect(page.getByTestId('test-question-count').first()).toHaveAttribute('data-count', count ?? '')
     const rows = page.locator('[data-slot="paper-sheet"] ol > li')
     await expect(rows.nth(1)).toContainText('1. použití')
     // Second-to-last <li>: an insert bar follows the last item.

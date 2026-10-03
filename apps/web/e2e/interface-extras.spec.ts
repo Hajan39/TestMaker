@@ -45,7 +45,7 @@ test.describe('library-wide search', () => {
     await page.goto('/')
     const search = page.getByPlaceholder('Hledat v celé knihovně…')
     await search.pressSequentially('a')
-    await expect(page.getByText('Hledám…')).toHaveCount(0)
+    await expect(page.getByTestId('library-search-loading')).toHaveCount(0)
   })
 })
 

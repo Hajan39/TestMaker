@@ -612,7 +612,7 @@ export function TestBuilder({
       if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
       setSavedFingerprint(fingerprint)
       setSavedId(id)
-      toast.success(t('common:status.saved'))
+      toast.success(t('common:status.saved'), { testId: 'toast-saved' })
       // `?vynechano=` only belongs to a freshly generated worksheet — after a save
       // the skipped-items notice would linger, so the URL drops it.
       if (!test || dropped > 0) router.replace(testPath(kind, id))
@@ -723,7 +723,7 @@ export function TestBuilder({
               testId={savedId}
               ai={ai}
               dirty={dirty}
-              onDirty={() => toast.error(t('tests:builder.saveBeforeVariant'))}
+              onDirty={() => toast.error(t('tests:builder.saveBeforeVariant'), { testId: 'toast-save-before-variant' })}
             />
           ) : null}
           {/* Random draw and bank belong to a written test — worksheet tasks don't come from the bank. */}
@@ -755,13 +755,13 @@ export function TestBuilder({
       ) : null}
 
       {worksheet && dropped > 0 ? (
-        <p className="text-sm text-fg-muted">
+        <p className="text-sm text-fg-muted" data-testid="worksheet-dropped" data-count={dropped}>
           {t('worksheets:builder.dropped', { count: dropped })}
         </p>
       ) : null}
       {worksheet && toCheck > 0 ? (
         // A subtle notice; it does not block printing.
-        <p className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg" data-slot="ke-kontrole">
+        <p className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg" data-slot="ke-kontrole" data-testid="worksheet-to-check" data-count={toCheck}>
           {t('worksheets:builder.toCheck', { count: toCheck })}
         </p>
       ) : null}

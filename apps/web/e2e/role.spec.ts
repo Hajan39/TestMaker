@@ -136,7 +136,7 @@ test('preview sees question cards in a topic but no button that would change the
   // The "Vybrat do testu" checkbox and the selection bar are also changing actions —
   // preview adds nothing to the bank and has no way to select questions in it.
   await expect(page.getByRole('checkbox', { name: 'Vybrat do testu' })).toHaveCount(0)
-  await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
 
   // The "Smazané" toggle leads to restoring a question — also a changing action
   // preview does not have.

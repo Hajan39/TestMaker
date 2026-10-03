@@ -294,7 +294,7 @@ export function NewWorksheetForm({
         {!ai.configured ? (
           // Without a model generation is not offered at all — the button would only fail.
           <div className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft">
-            <p>{t('worksheets:new.notConfigured')}</p>
+            <p data-testid="worksheet-not-configured">{t('worksheets:new.notConfigured')}</p>
             {ai.problems.length > 0 ? (
               <ul className="mt-1 list-disc pl-5 text-fg-muted">
                 {ai.problems.map((problem) => (

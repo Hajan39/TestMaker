@@ -29,7 +29,13 @@ export function SelectionBar({
 }) {
   return (
     <div className="surface-chrome flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-inner)] border border-line bg-surface px-4 py-3">
-      <span className="text-sm font-medium text-fg">
+      <span
+        className="text-sm font-medium text-fg"
+        data-testid="selection-bar"
+        data-count={count}
+        data-points={points}
+        data-topics={topicCount}
+      >
         {t('library:selectionBar.selected', { selected: count })} · {t('library:selectionBar.points', { count: points })}
         {topicCount > 1 ? (
           <span className="text-fg-muted"> · {t('library:selectionBar.topics', { count: topicCount })}</span>

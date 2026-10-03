@@ -66,7 +66,12 @@ export function TopicTile({
       </Tooltip>
 
       <Link href={`/topics/${id}`} className="block">
-        <p className="truncate text-xs text-fg-muted">
+        <p
+          className="truncate text-xs text-fg-muted"
+          data-testid="topic-tile-status"
+          data-materials={materialCount}
+          data-questions={questionCount}
+        >
           {t('library:count.materials', { count: materialCount })}
           {questionCount > 0 ? ` · ${t('library:count.questions', { count: questionCount })}` : ''}
         </p>

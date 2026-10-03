@@ -63,17 +63,17 @@ test('a question edited after being added does not change the finished test', as
   const outline = page.locator('ol').first()
   await expect(outline.getByText(original)).toBeVisible()
   await expect(outline.getByText(edited)).toHaveCount(0)
-  await expect(outline.getByText('otázka byla od zařazení upravena')).toBeVisible()
+  await expect(outline.getByTestId('question-edited-badge')).toBeVisible()
 
   // The teacher may take the new version on purpose — after saving it stays.
   await outline.getByRole('button', { name: 'Načíst znovu z banky' }).click()
   await expect(outline.getByText(edited)).toBeVisible()
-  await expect(outline.getByText('otázka byla od zařazení upravena')).toHaveCount(0)
+  await expect(outline.getByTestId('question-edited-badge')).toHaveCount(0)
   await page.getByRole('button', { name: 'Uložit', exact: true }).click()
-  await expect(page.getByText('Uloženo')).toBeVisible()
+  await expect(page.getByTestId('toast-saved')).toBeVisible()
   await page.reload()
   await expect(page.locator('ol').first().getByText(edited)).toBeVisible()
-  await expect(page.locator('ol').first().getByText('otázka byla od zařazení upravena')).toHaveCount(0)
+  await expect(page.locator('ol').first().getByTestId('question-edited-badge')).toHaveCount(0)
 
   // Clean up so no test material stays in the library.
   await request.delete(`/api/tests?id=${testId}`)

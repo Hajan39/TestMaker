@@ -97,19 +97,22 @@ test.describe('picking questions for a test', () => {
     await expect(rowC).toBeVisible()
 
     // The bar is not visible yet — nothing is selected.
-    await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
+    await expect(page.getByTestId('selection-bar')).toHaveCount(0)
 
     await rowA.getByRole('checkbox', { name: 'Vybrat do testu' }).click()
     await rowB.getByRole('checkbox', { name: 'Vybrat do testu' }).click()
-    await expect(page.getByText('Vybráno 2 · 5 bodů')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '2')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '5')
 
     // Deleting a selected card removes it from the selection and the point total.
     await rowB.getByRole('button', { name: 'Smazat' }).click()
     await expect(rowB).toHaveCount(0)
-    await expect(page.getByText('Vybráno 1 · 2 body')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '1')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '2')
 
     await rowC.getByRole('checkbox', { name: 'Vybrat do testu' }).click()
-    await expect(page.getByText('Vybráno 2 · 3 body')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '2')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '3')
 
     await page.getByRole('button', { name: 'Vytvořit test' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
@@ -121,7 +124,7 @@ test.describe('picking questions for a test', () => {
     // back shows it stale.
     await page.goBack()
     await expect(page).toHaveURL(new RegExp(`/topics/${topicId}$`))
-    await expect(rowA.getByText(/^V testu:/)).toBeVisible()
+    await expect(rowA.getByTestId('question-in-test')).toBeVisible()
     await page.goForward()
     await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
 
@@ -247,13 +250,17 @@ test.describe('picking questions for a test', () => {
 
     await page.goto(`/topics/${firstTopicId}`)
     await page.locator('li[data-question-id]', { hasText: first }).getByRole('checkbox', { name: 'Vybrat do testu' }).click()
-    await expect(page.getByText('Vybráno 1 · 2 body')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '1')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '2')
 
     // Another topic: the pick from the first one stays in the bar.
     await page.goto(`/topics/${secondTopicId}`)
-    await expect(page.getByText('Vybráno 1 · 2 body')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '1')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '2')
     await page.locator('li[data-question-id]', { hasText: second }).getByRole('checkbox', { name: 'Vybrat do testu' }).click()
-    await expect(page.getByText(/Vybráno 2 · 5 bodů · ze 2 témat/)).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '2')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '5')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-topics', '2')
 
     await page.getByRole('button', { name: 'Vytvořit test' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+/.test(url.pathname))
@@ -272,7 +279,7 @@ test.describe('picking questions for a test', () => {
     await dialog.getByRole('button', { name: 'Uložit' }).click()
     await expect(outline.getByText(edited)).toBeVisible()
     await page.getByRole('button', { name: 'Uložit', exact: true }).click()
-    await expect(page.getByText('Uloženo')).toBeVisible()
+    await expect(page.getByTestId('toast-saved')).toBeVisible()
     await page.reload()
     await expect(page.locator('[data-slot="paper-sheet"] ol').getByText(edited)).toBeVisible()
     const bank = await page.request.get(`/api/questions/${secondId}`)
@@ -280,7 +287,7 @@ test.describe('picking questions for a test', () => {
 
     // The cart is empty again after creating the test.
     await page.goto(`/topics/${firstTopicId}`)
-    await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
+    await expect(page.getByTestId('selection-bar')).toHaveCount(0)
   })
 
   test('"Zrušit výběr" hides the bar', async ({ page }) => {
@@ -291,9 +298,10 @@ test.describe('picking questions for a test', () => {
     await page.goto(`/topics/${topicId}`)
     const row = page.locator('li[data-question-id]', { hasText: prompt })
     await row.getByRole('checkbox', { name: 'Vybrat do testu' }).click()
-    await expect(page.getByText('Vybráno 1 · 1 bod')).toBeVisible()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-count', '1')
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('data-points', '1')
 
     await page.getByRole('button', { name: 'Zrušit výběr' }).click()
-    await expect(page.getByText(/^Vybráno/)).toHaveCount(0)
+    await expect(page.getByTestId('selection-bar')).toHaveCount(0)
   })
 })

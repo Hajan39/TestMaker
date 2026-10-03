@@ -41,7 +41,7 @@ test.describe('test list', () => {
     await page.getByRole('button', { name: /^Akce u testu/ }).first().click()
     await page.getByRole('menuitem', { name: 'Vytvořit kopii' }).click()
 
-    await expect(page.getByText(/^Kopie /).first()).toBeVisible()
+    await expect(page.getByTestId('toast-test-copied').first()).toBeVisible()
 
     // The list refreshes itself; the copy matches the filter because it has the
     // original title plus the "(kopie)" suffix.

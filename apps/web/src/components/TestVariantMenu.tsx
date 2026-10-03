@@ -67,7 +67,7 @@ export function TestVariantMenu({
     const openPartial = (copy: string) => {
       // Longer than a regular toast: redirecting to the copy takes a while and the
       // warning must not vanish before the copy page even shows.
-      toast.warning(t('tests:variant.partial'), { duration: 15_000 })
+      toast.warning(t('tests:variant.partial'), { duration: 15_000, testId: 'toast-variant-partial' })
       router.push(`/tests/${copy}`)
     }
     try {
@@ -104,6 +104,7 @@ export function TestVariantMenu({
       toast.success(
         (direction === 'easier' ? t('tests:variant.doneEasier') : t('tests:variant.doneHarder')) +
           (createdDetail ? ` ${createdDetail}.` : ''),
+        { testId: 'toast-variant-done' },
       )
       if (done.kept > 0) {
         // Czech has three plural forms for counts: "1 otázka zůstala původní",

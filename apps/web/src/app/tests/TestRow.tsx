@@ -92,6 +92,7 @@ export function TestActions({ row }: { row: TestRowData }) {
       router.refresh()
       toast.success(t('tests:row.copied', { title: row.title }), {
         duration: 10_000,
+        testId: 'toast-test-copied',
         action: { label: t('common:actions.open'), onClick: () => router.push(testPath(row.kind, id)) },
       })
     } catch (error) {

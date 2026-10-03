@@ -22,7 +22,8 @@ test.describe('select all', () => {
     await selectAll.click()
 
     // Counts are read in one place only: the footer below the test page.
-    await expect(page.getByText(/^Otázek:\s*[1-9]/)).toBeVisible()
+    await expect(page.getByTestId('test-question-count')).toBeVisible()
+    await expect(page.getByTestId('test-question-count')).not.toHaveAttribute('data-count', '0')
   })
 
   test('generating in a topic offers only count and difficulty, no type selection', async ({ page }) => {
@@ -46,9 +47,8 @@ test.describe('topic tile', () => {
     // Open the first class so its topic tiles show.
     await page.locator('a[href^="/tridy/"]').first().click()
 
-    const tile = page.locator('main a[href^="/topics/"]').first()
-    await expect(tile).toBeVisible()
-    await expect(tile).toContainText(/materiál|bez materiálů/)
+    await expect(page.locator('main a[href^="/topics/"]').first()).toBeVisible()
+    await expect(page.getByTestId('topic-tile-status').first()).toHaveAttribute('data-materials', /^\d+$/)
   })
 })
 

@@ -153,7 +153,7 @@ function TestUsageLabel({ usage }: { usage: TestUsage[] | undefined }) {
   if (!usage || usage.length === 0) return null
   const [first, ...rest] = usage
   return (
-    <p className="mt-1 text-xs text-fg-muted">
+    <p className="mt-1 text-xs text-fg-muted" data-testid="question-in-test">
       {t('library:questionCard.inTest')}{' '}
       <Link href={`/tests/${first!.testId}`} className="hover:text-brand hover:underline">
         {first!.title}

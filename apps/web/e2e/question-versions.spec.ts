@@ -129,7 +129,7 @@ test.describe('question versions on the card', () => {
     await expect(menu).toBeVisible()
     await menu.getByRole('menuitem', { name: 'Lehčí verze' }).click()
 
-    await expect(page.getByText('Vznikla lehčí verze otázky.')).toBeVisible()
+    await expect(page.getByTestId('toast-question-variant-easier')).toBeVisible()
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ id: originalId, direction: 'easier' })
 
@@ -268,7 +268,7 @@ test.describe('test version in the builder', () => {
     await page.getByRole('menuitem', { name: 'Lehčí verze písemky' }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${newId}$`))
-    await expect(page.getByText('Lehčí verze písemky je hotová.')).toBeVisible()
+    await expect(page.getByTestId('toast-variant-done')).toBeVisible()
   })
 
   test('a stream without an ending opens the partial copy with a warning', async ({ page }) => {
@@ -282,7 +282,7 @@ test.describe('test version in the builder', () => {
     await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${newId}$`))
-    await expect(page.getByText(/dokončená jen částečně/)).toBeVisible()
+    await expect(page.getByTestId('toast-variant-partial')).toBeVisible()
   })
 
   test('unsaved changes offer saving instead of a request', async ({ page }) => {
@@ -309,7 +309,7 @@ test.describe('test version in the builder', () => {
     await page.getByRole('button', { name: 'Verze písemky' }).click()
     await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
 
-    await expect(page.getByText(/Nejdřív ulož písemku/)).toBeVisible()
+    await expect(page.getByTestId('toast-save-before-variant')).toBeVisible()
     expect(queries).toBe(0)
   })
 })

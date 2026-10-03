@@ -308,7 +308,10 @@ export function TestPage({
 
       {items.length > 0 ? (
         <dl className="mt-3 flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-line-soft pt-2 text-sm text-fg-muted">
-          <div>
+          <div
+            data-testid="test-question-count"
+            data-count={worksheet ? items.filter((item) => item.kind !== 'page_break').length : questionCount}
+          >
             <dt className="inline text-fg-soft">{worksheet ? t('tests:page.itemCount') : t('tests:page.questionCount')}</dt>
             <dd className="ui-numeric inline">
               {worksheet ? items.filter((item) => item.kind !== 'page_break').length : questionCount}
@@ -559,7 +562,9 @@ function PageRow({
             <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionMissing')}</Badge>
           ) : item.questionEdited ? (
             <>
-              <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionEdited')}</Badge>
+              <Badge className="bg-draft-bg text-draft-fg" data-testid="question-edited-badge">
+                {t('tests:page.questionEdited')}
+              </Badge>
               {onReloadQuestion ? (
                 <Button
                   size="sm"

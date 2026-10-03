@@ -256,7 +256,7 @@ export function BankPanel({
                           also flip the checkbox and remove the question instead. */}
                       {count > 0 ? (
                         <div className="flex shrink-0 items-center gap-1">
-                          <Badge variant="secondary" title={t('tests:bank.usedTimes', { count })}>
+                          <Badge variant="secondary" title={t('tests:bank.usedTimes', { count })} data-testid="question-used-count" data-count={count}>
                             {count}&times;
                           </Badge>
                           <Button

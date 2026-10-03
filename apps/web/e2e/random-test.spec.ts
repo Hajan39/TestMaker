@@ -41,12 +41,12 @@ test.describe('randomly composed test', () => {
     await expect(dialog).toBeHidden()
 
     // The outline has five questions and the test can be saved; counts are in the page footer.
-    await expect(page.getByText(/^Otázek:\s*5/)).toBeVisible()
+    await expect(page.getByTestId('test-question-count')).toHaveAttribute('data-count', '5')
     await page.getByLabel('Název písemky').fill('Náhodná písemka')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 
     await page.goto(page.url())
-    await expect(page.getByText(/^Otázek:\s*5/)).toBeVisible()
+    await expect(page.getByTestId('test-question-count')).toHaveAttribute('data-count', '5')
   })
 })

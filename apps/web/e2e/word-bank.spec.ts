@@ -50,7 +50,7 @@ test('the word bank of a fill-in-the-blank question can be left out of a test', 
     await expect(sheet.getByText(`žaludkem${stamp}`)).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Uložit', exact: true }).click()
-    await expect(page.getByText('Uloženo')).toBeVisible()
+    await expect(page.getByTestId('toast-saved')).toBeVisible()
     await page.reload()
     await expect(page.locator('[data-slot="paper-sheet"]').getByText(`Doplň chybějící slova ${stamp}`)).toBeVisible()
     await expect(page.locator('[data-slot="paper-sheet"]').getByText(`žaludkem${stamp}`)).toHaveCount(0)
