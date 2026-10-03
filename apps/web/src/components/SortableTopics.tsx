@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import {
   closestCenter,
   DndContext,
@@ -49,7 +50,16 @@ export function SortableTopics({
   const router = useRouter()
   // The reorder shows right away; the server confirms it by refreshing the page.
   const [order, setOrder] = useState<string[] | null>(null)
-  const [saving, setSaving] = useState(false)
+  const saveMutation = useMutation({
+    mutationFn: (topicIds: string[] | null) =>
+      requestJson('/api/library/poradi', jsonBody('POST', { gradeId, topicIds }), t('library:sortableTopics.saveFailed')),
+    onSuccess: () => router.refresh(),
+    onError: (error) => {
+      setOrder(null)
+      toast.error(errorMessage(error, t('library:sortableTopics.saveFailed')))
+    },
+  })
+  const saving = saveMutation.isPending
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -64,19 +74,6 @@ export function SortableTopics({
       ? order.map((id) => byId.get(id)!)
       : topics
 
-  async function save(topicIds: string[] | null) {
-    setSaving(true)
-    try {
-      await requestJson('/api/library/poradi', jsonBody('POST', { gradeId, topicIds }), t('library:sortableTopics.saveFailed'))
-      router.refresh()
-    } catch (error) {
-      setOrder(null)
-      toast.error(errorMessage(error, t('library:sortableTopics.saveFailed')))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -86,7 +83,7 @@ export function SortableTopics({
     if (from === -1 || to === -1) return
     const next = arrayMove(ids, from, to)
     setOrder(next)
-    void save(next)
+    saveMutation.mutate(next)
   }
 
   const tile = (topic: ClassTopicNode, handle?: ReactNode) => (
@@ -129,7 +126,7 @@ export function SortableTopics({
             disabled={saving}
             onClick={() => {
               setOrder(null)
-              void save(null)
+              saveMutation.mutate(null)
             }}
           >
             {t('library:sortableTopics.sortAlphabetically')}

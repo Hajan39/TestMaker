@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -176,56 +177,66 @@ export function ManagementScreen({
   // A rule in progress from the "Make it a rule" button — prefilled from the
   // reason's hint, but the manager may edit it before saving.
   const [newRule, setNewRule] = useState<{ reason: RegenerateReason; text: string } | null>(null)
-  const [ruleBusy, setRuleBusy] = useState(false)
-
-  async function saveRule() {
-    if (!newRule) return
-    setRuleBusy(true)
-    try {
-      await requestJson(
+  const saveRuleMutation = useMutation({
+    mutationFn: (rule: { reason: RegenerateReason; text: string }) =>
+      requestJson(
         '/api/prompt-rules',
-        jsonBody('POST', { text: newRule.text, reason: newRule.reason }),
+        jsonBody('POST', { text: rule.text, reason: rule.reason }),
         t('admin:management.quality.ruleSaveFailed'),
-      )
+      ),
+    onSuccess: () => {
       toast.success(t('admin:management.quality.ruleSaved'))
       setNewRule(null)
       router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:management.quality.ruleSaveFailed')))
-    } finally {
-      setRuleBusy(false)
-    }
-  }
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:management.quality.ruleSaveFailed'))),
+  })
+  const ruleBusy = saveRuleMutation.isPending
 
+  const toggleRuleMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      requestJson('/api/prompt-rules', jsonBody('PATCH', { id, active }), t('admin:errors.changeFailed')),
+    onSuccess: () => router.refresh(),
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.changeFailed'))),
+  })
   /** The rule being toggled right now — a double click would flip it back. */
-  const [togglingRule, setTogglingRule] = useState<string | null>(null)
+  const togglingRule = toggleRuleMutation.isPending ? toggleRuleMutation.variables.id : null
 
-  async function toggleRule(id: string, active: boolean) {
-    setTogglingRule(id)
-    try {
-      await requestJson('/api/prompt-rules', jsonBody('PATCH', { id, active }), t('admin:errors.changeFailed'))
+  const saveSchoolMutation = useMutation({
+    mutationFn: (settings: SchoolSettings) =>
+      requestJson('/api/sprava/skola', jsonBody('PATCH', settings), t('admin:errors.schoolSaveFailed')),
+    onSuccess: () => {
+      toast.success(t('admin:schools.saved'), { testId: 'toast-school-saved' })
       router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.changeFailed')))
-    } finally {
-      setTogglingRule(null)
-    }
-  }
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.schoolSaveFailed'))),
+  })
+  // Resolves to whether the save worked — the form decides from it whether to reset.
+  const saveSchool = (settings: SchoolSettings): Promise<boolean> =>
+    saveSchoolMutation.mutateAsync(settings).then(
+      () => true,
+      () => false,
+    )
 
-  async function saveSchool(settings: SchoolSettings): Promise<boolean> {
-    try {
-      await requestJson('/api/sprava/skola', jsonBody('PATCH', settings), t('admin:errors.schoolSaveFailed'))
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.schoolSaveFailed')))
-      return false
-    }
-    toast.success(t('admin:schools.saved'), { testId: 'toast-school-saved' })
-    router.refresh()
-    return true
-  }
-
+  const updateMutation = useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: Record<string, unknown>; message: string }) =>
+      requestJson<{ password: string }>(
+        '/api/sprava/uzivatele',
+        jsonBody('PATCH', { id, ...changes }),
+        t('admin:errors.changeFailed'),
+      ),
+    onSuccess: (data, { id, message }) => {
+      if (data.password) {
+        const account = users.find((row) => row.id === id)
+        setPassword({ email: account?.email ?? '', password: data.password })
+      }
+      toast.success(message)
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.changeFailed'))),
+  })
   /** The account a change is running on — its buttons stay disabled until then. */
-  const [working, setWorking] = useState<string | null>(null)
+  const working = updateMutation.isPending ? updateMutation.variables.id : null
   const [onlyErrors, setOnlyErrors] = useState(false)
   const shownEvents = onlyErrors ? events.filter((event) => event.severity === 'chyba') : events
   /** A change that signs the teacher out — waits for confirmation. */
@@ -236,26 +247,12 @@ export function ManagementScreen({
     run: () => Promise<void>
   } | null>(null)
 
-  async function update(id: string, changes: Record<string, unknown>, message: string) {
-    setWorking(id)
-    try {
-      const data = await requestJson<{ password: string }>(
-        '/api/sprava/uzivatele',
-        jsonBody('PATCH', { id, ...changes }),
-        t('admin:errors.changeFailed'),
-      )
-      if (data.password) {
-        const account = users.find((row) => row.id === id)
-        setPassword({ email: account?.email ?? '', password: data.password })
-      }
-      toast.success(message)
-      router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.changeFailed')))
-    } finally {
-      setWorking(null)
-    }
-  }
+  // Never rejects: the error is already shown by `onError`.
+  const update = (id: string, changes: Record<string, unknown>, message: string) =>
+    updateMutation.mutateAsync({ id, changes, message }).then(
+      () => {},
+      () => {},
+    )
 
   async function copyPassword(text: string) {
     try {
@@ -657,7 +654,7 @@ export function ManagementScreen({
                       busy={ruleBusy}
                       busyLabel={t('actions.saving')}
                       disabled={!newRule.text.trim()}
-                      onClick={() => void saveRule()}
+                      onClick={() => newRule && saveRuleMutation.mutate(newRule)}
                     >
                       {t('admin:management.quality.saveRule')}
                     </BusyButton>
@@ -726,7 +723,7 @@ export function ManagementScreen({
                         p.active ? t('admin:management.quality.disabling') : t('admin:management.quality.enabling')
                       }
                       disabled={togglingRule !== null}
-                      onClick={() => void toggleRule(p.id, !p.active)}
+                      onClick={() => toggleRuleMutation.mutate({ id: p.id, active: !p.active })}
                     >
                       {p.active ? t('admin:management.quality.disable') : t('admin:management.quality.enable')}
                     </BusyButton>

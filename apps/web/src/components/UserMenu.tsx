@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { LogOut, UserRound } from 'lucide-react'
 import {
   Button,
@@ -34,23 +34,21 @@ export function UserMenu({
   hasPassword: boolean
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
-
-  async function signOutEverywhere() {
-    setBusy(true)
-    try {
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
       const response = await fetch('/api/logout', { method: 'POST' })
       if (!response.ok) throw new Error()
-    } catch {
-      // On a shared computer it is worse to think you are signed out and not be.
-      toast.error(t('auth:signOut.failed'))
-      setBusy(false)
-      return
-    }
-    // `replace`, so the signed-out user cannot come back with the browser's back button.
-    router.replace('/login')
-    router.refresh()
-  }
+    },
+    onSuccess: () => {
+      // `replace`, so the signed-out user cannot come back with the browser's back button.
+      router.replace('/login')
+      router.refresh()
+    },
+    // On a shared computer it is worse to think you are signed out and not be.
+    onError: () => toast.error(t('auth:signOut.failed')),
+  })
+  // Stays busy after success too: the page is about to navigate away.
+  const busy = signOutMutation.isPending || signOutMutation.isSuccess
 
   return (
     <DropdownMenu>
@@ -78,7 +76,7 @@ export function UserMenu({
             // The menu stays open until signing out finishes — otherwise an
             // error would arrive when it is no longer clear what it belongs to.
             event.preventDefault()
-            void signOutEverywhere()
+            signOutMutation.mutate()
           }}
         >
           <LogOut className="size-4" />

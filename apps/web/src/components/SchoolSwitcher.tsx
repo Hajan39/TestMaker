@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Check, School } from 'lucide-react'
 import { t } from '@testmaker/core/i18n'
 import {
@@ -32,22 +32,23 @@ export function SchoolSwitcher({
   schools: { id: string; name: string }[]
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
   const foreign = school.id !== homeSchoolId
 
-  async function switchTo(schoolId: string) {
-    if (schoolId === school.id) return
-    setBusy(true)
-    try {
-      await requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), t('admin:errors.switchFailed'))
+  const switchMutation = useMutation({
+    mutationFn: (schoolId: string) =>
+      requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), t('admin:errors.switchFailed')),
+    onSuccess: () => {
       // An open topic or test does not exist in the other school — start from the home page.
       router.push('/')
       router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.switchFailed')))
-    } finally {
-      setBusy(false)
-    }
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.switchFailed'))),
+  })
+  const busy = switchMutation.isPending
+
+  function switchTo(schoolId: string) {
+    if (schoolId === school.id) return
+    switchMutation.mutate(schoolId)
   }
 
   return (
@@ -74,7 +75,7 @@ export function SchoolSwitcher({
           {t('admin:schoolSwitcher.workIn')}
         </DropdownMenuLabel>
         {schools.map((option) => (
-          <DropdownMenuItem key={option.id} onSelect={() => void switchTo(option.id)}>
+          <DropdownMenuItem key={option.id} onSelect={() => switchTo(option.id)}>
             <Check className={option.id === school.id ? 'size-4' : 'size-4 opacity-0'} />
             <span className="truncate">{option.name}</span>
             {option.id === homeSchoolId ? (

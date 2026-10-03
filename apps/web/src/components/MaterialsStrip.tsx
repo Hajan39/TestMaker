@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ChevronDown, FileUp, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { useCanEdit } from '@/components/Permissions'
@@ -104,7 +105,6 @@ export const MaterialsStrip = forwardRef<
   // arrive the dropdowns are empty — if they stayed usable they would open
   // empty and look like a bug.
   const [optionsReady, setOptionsReady] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [manage, setManage] = useState(false)
   // Collapsed once the topic has materials — the screen is mainly about
   // questions. Without materials the upload area shows right away, so the
@@ -173,23 +173,23 @@ export const MaterialsStrip = forwardRef<
       .finally(() => setOptionsReady(true))
   }, [manage, topicId])
 
-  /** Saves a topic change and announces it; returns whether it worked. Shows errors in the strip. */
-  async function call(method: string, body: unknown, success: string): Promise<boolean> {
-    setBusy(true)
-    setError(null)
-    try {
+  const callMutation = useMutation({
+    mutationFn: ({ method, body }: { method: string; body: unknown; success: string }) =>
       // The server refuses e.g. moving a file where the same content already is.
       // Without this message it looked like nothing happened.
-      await requestJson('/api/topics', jsonBody(method, body), t('library:materialsStrip.saveFailed'))
-      toast.success(success)
-      return true
-    } catch (callError) {
-      setError(errorMessage(callError, t('library:materialsStrip.saveFailed')))
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
+      requestJson('/api/topics', jsonBody(method, body), t('library:materialsStrip.saveFailed')),
+    onMutate: () => setError(null),
+    onSuccess: (_data, { success }) => toast.success(success),
+    onError: (callError) => setError(errorMessage(callError, t('library:materialsStrip.saveFailed'))),
+  })
+  const busy = callMutation.isPending
+
+  /** Saves a topic change and announces it; returns whether it worked. Shows errors in the strip. */
+  const call = (method: string, body: unknown, success: string): Promise<boolean> =>
+    callMutation.mutateAsync({ method, body, success }).then(
+      () => true,
+      () => false,
+    )
 
   async function update(method: string, body: unknown, success: string) {
     if (await call(method, body, success)) router.refresh()

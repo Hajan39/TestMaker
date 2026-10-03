@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Check, Pencil, X } from 'lucide-react'
 import { Button, Input, cn } from '@testmaker/ui'
 import { useCanEdit } from '@/components/Permissions'
@@ -44,7 +45,6 @@ export function InlineName({
   const canEdit = useCanEdit()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -53,7 +53,18 @@ export function InlineName({
     if (editing) inputRef.current?.select()
   }, [editing])
 
-  async function save() {
+  const renameMutation = useMutation({
+    mutationFn: (next: string) =>
+      requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), t('library:inlineName.failed')),
+    onSuccess: () => {
+      setEditing(false)
+      router.refresh()
+    },
+    onError: (saveError) => setError(errorMessage(saveError, t('library:inlineName.failed'))),
+  })
+  const busy = renameMutation.isPending
+
+  function save() {
     const next = value.trim()
     if (!next || next === name) {
       setEditing(false)
@@ -61,17 +72,8 @@ export function InlineName({
       return
     }
 
-    setBusy(true)
     setError(null)
-    try {
-      await requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), t('library:inlineName.failed'))
-      setEditing(false)
-      router.refresh()
-    } catch (saveError) {
-      setError(errorMessage(saveError, t('library:inlineName.failed')))
-    } finally {
-      setBusy(false)
-    }
+    renameMutation.mutate(next)
   }
 
   // A viewer only reads — no pencil, so the UI shows right away that renaming
@@ -128,7 +130,7 @@ export function InlineName({
           className={cn('h-8 min-w-0 flex-1', inputClassName)}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') void save()
+            if (event.key === 'Enter') save()
             if (event.key === 'Escape') {
               setEditing(false)
               setValue(name)
@@ -142,7 +144,7 @@ export function InlineName({
           disabled={busy}
           aria-label={t('library:inlineName.saveName')}
           title={t('common:actions.save')}
-          onClick={() => void save()}
+          onClick={save}
         >
           <Check aria-hidden />
         </Button>

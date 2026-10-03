@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { DeleteButton, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 import { useCanEdit, useCanManage } from '@/components/Permissions'
@@ -73,6 +74,19 @@ export function DeleteFromLibrary({
   const canEdit = useCanEdit()
   const canManage = useCanManage()
   const router = useRouter()
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      requestJson(
+        `/api/library?kind=${kind}&id=${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        t('library:deleteFromLibrary.failed'),
+      ),
+    onSuccess: () => {
+      if (redirectTo) router.push(redirectTo)
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('library:deleteFromLibrary.failed'))),
+  })
   if (kind === 'topic' ? !canEdit : !canManage) return null
 
   return (
@@ -95,21 +109,9 @@ export function DeleteFromLibrary({
           </p>
         )
       }}
+      // `mutateAsync` rejects on error — `DeleteButton` keeps the dialog open.
       onConfirm={async () => {
-        // The error is rethrown — `DeleteButton` waits for it so it doesn't
-        // close the dialog and pretend a success that didn't happen.
-        try {
-          await requestJson(
-            `/api/library?kind=${kind}&id=${encodeURIComponent(id)}`,
-            { method: 'DELETE' },
-            t('library:deleteFromLibrary.failed'),
-          )
-        } catch (error) {
-          toast.error(errorMessage(error, t('library:deleteFromLibrary.failed')))
-          throw error
-        }
-        if (redirectTo) router.push(redirectTo)
-        router.refresh()
+        await deleteMutation.mutateAsync()
       }}
     />
   )

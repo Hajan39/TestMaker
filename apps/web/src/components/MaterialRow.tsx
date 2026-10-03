@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import {
   Badge,
   Checkbox,
@@ -55,7 +56,6 @@ export function MaterialRow({
 }) {
   const router = useRouter()
   const canEdit = useCanEdit()
-  const [excludePending, setExcludePending] = useState(false)
   // Optimistic change: the check shows immediately, not after `router.refresh()`.
   // When the server refuses, it flips back and the teacher gets a message —
   // otherwise the checkbox would silently stay in a state that wasn't saved.
@@ -68,23 +68,39 @@ export function MaterialRow({
     setExcludedOverride(material.excluded)
   }
 
-  async function toggleExcluded() {
-    const next = !excludedOverride
-    setExcludedOverride(next)
-    setExcludePending(true)
-    try {
-      await requestJson(
+  const excludeMutation = useMutation({
+    mutationFn: (next: boolean) =>
+      requestJson(
         '/api/materials',
         jsonBody('PATCH', { id: material.id, excluded: next }),
         t('library:materialRow.saveFailed'),
-      )
-      router.refresh()
-    } catch (saveError) {
+      ),
+    onSuccess: () => router.refresh(),
+    onError: (saveError, next) => {
       setExcludedOverride(!next)
       toast.error(errorMessage(saveError, t('library:materialRow.saveFailedRetry')))
-    } finally {
-      setExcludePending(false)
-    }
+    },
+  })
+  const excludePending = excludeMutation.isPending
+
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      requestJson(
+        `/api/materials?id=${encodeURIComponent(material.id)}`,
+        { method: 'DELETE' },
+        t('library:materialRow.deleteFailed'),
+      ),
+    onSuccess: () => {
+      toast.success(t('library:materialRow.deleted', { name: material.fileName }))
+      router.refresh()
+    },
+    onError: (deleteError) => toast.error(errorMessage(deleteError, t('library:materialRow.deleteFailed'))),
+  })
+
+  function toggleExcluded() {
+    const next = !excludedOverride
+    setExcludedOverride(next)
+    excludeMutation.mutate(next)
   }
 
   return (
@@ -121,7 +137,7 @@ export function MaterialRow({
             checked={!material.duplicateOfId && !excludedOverride}
             disabled={excludePending || !!material.duplicateOfId}
             aria-label={t('library:materialRow.useForGenerationAria', { name: material.fileName })}
-            onCheckedChange={() => void toggleExcluded()}
+            onCheckedChange={toggleExcluded}
           />
           {t('library:materialRow.useForGeneration')}
         </label>
@@ -152,21 +168,10 @@ export function MaterialRow({
           label={t('common:actions.delete')}
           title={t('library:materialRow.deleteTitle')}
           description={t('library:materialRow.deleteDescription', { name: material.fileName })}
+          // `mutateAsync` rejects on error — `DeleteButton` then keeps the
+          // dialog open instead of pretending a success that didn't happen.
           onConfirm={async () => {
-            // The error is rethrown — `DeleteButton` then keeps the dialog
-            // open instead of pretending a success that didn't happen.
-            try {
-              await requestJson(
-                `/api/materials?id=${encodeURIComponent(material.id)}`,
-                { method: 'DELETE' },
-                t('library:materialRow.deleteFailed'),
-              )
-            } catch (deleteError) {
-              toast.error(errorMessage(deleteError, t('library:materialRow.deleteFailed')))
-              throw deleteError
-            }
-            toast.success(t('library:materialRow.deleted', { name: material.fileName }))
-            router.refresh()
+            await deleteMutation.mutateAsync()
           }}
         />
       ) : null}

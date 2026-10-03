@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { AI_QUESTION_TYPES, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
@@ -27,7 +28,20 @@ export function useRegenerateQuestion(
 ): { available: boolean; busy: boolean; run: (reason?: RegenerateReason, note?: string) => Promise<void> } {
   const router = useRouter()
   const [configured, setConfigured] = useState<boolean | null>(configuredCache)
-  const [busy, setBusy] = useState(false)
+  const regenerateMutation = useMutation({
+    mutationFn: ({ reason, note }: { reason?: RegenerateReason; note?: string }) =>
+      requestJson(
+        '/api/questions/regenerate',
+        jsonBody('POST', { id: questionId, reason, note }),
+        t('generation:regenerate.failed'),
+      ),
+    onSuccess: () => {
+      toast.success(t('generation:regenerate.done'), { testId: 'toast-question-replaced' })
+      onDone?.()
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('generation:regenerate.failed'))),
+  })
 
   useEffect(() => {
     if (configuredCache !== null) return
@@ -47,23 +61,12 @@ export function useRegenerateQuestion(
 
   const supportedType = (AI_QUESTION_TYPES as readonly string[]).includes(type)
 
-  async function run(reason?: RegenerateReason, note?: string) {
-    setBusy(true)
-    try {
-      await requestJson(
-        '/api/questions/regenerate',
-        jsonBody('POST', { id: questionId, reason, note }),
-        t('generation:regenerate.failed'),
-      )
-      toast.success(t('generation:regenerate.done'), { testId: 'toast-question-replaced' })
-      onDone?.()
-      router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('generation:regenerate.failed')))
-    } finally {
-      setBusy(false)
-    }
-  }
+  // Never rejects: the error is already shown by `onError`.
+  const run = (reason?: RegenerateReason, note?: string) =>
+    regenerateMutation.mutateAsync({ reason, note }).then(
+      () => {},
+      () => {},
+    )
 
-  return { available: configured === true && supportedType, busy, run }
+  return { available: configured === true && supportedType, busy: regenerateMutation.isPending, run }
 }
