@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Button, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 
@@ -12,12 +13,10 @@ import { t } from '@testmaker/core/i18n'
 export function ClaudeCodeImport({ topicId }: { topicId: string }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
   const base = `/api/topics/${encodeURIComponent(topicId)}`
 
-  async function upload(file: File) {
-    setBusy(true)
-    try {
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
       let response: Response
       try {
         response = await fetch(`${base}/otazky-soubor`, {
@@ -27,34 +26,33 @@ export function ClaudeCodeImport({ topicId }: { topicId: string }) {
         })
       } catch {
         // Network outage — fetch itself returns no response.
-        toast.error(t('library:claudeCodeImport.uploadOffline'))
-        return
+        throw new Error(t('library:claudeCodeImport.uploadOffline'))
       }
       // The response may not be JSON (e.g. when the server crashes before it
-      // sends a body) — without its own try/catch this would be lost as an
-      // unhandled rejection and the teacher would see nothing at all.
+      // sends a body) — without its own try/catch the teacher would see nothing at all.
       let data: { created?: number; rejected?: unknown[]; error?: string }
       try {
         data = (await response.json()) as { created?: number; rejected?: unknown[]; error?: string }
       } catch {
-        toast.error(t('library:claudeCodeImport.uploadOffline'))
-        return
+        throw new Error(t('library:claudeCodeImport.uploadOffline'))
       }
-      if (!response.ok) {
-        toast.error(data.error ?? t('library:claudeCodeImport.uploadFailed'))
-        return
-      }
+      if (!response.ok) throw new Error(data.error ?? t('library:claudeCodeImport.uploadFailed'))
+      return data
+    },
+    onSuccess: (data) => {
       const rejected = data.rejected?.length ?? 0
       const uploaded = t('library:claudeCodeImport.uploaded', {
         questions: t('library:count.questions', { count: data.created ?? 0 }),
       })
       toast.success(rejected > 0 ? uploaded + t('library:claudeCodeImport.rejectedSuffix', { rejected }) : uploaded)
       router.refresh()
-    } finally {
-      setBusy(false)
+    },
+    onError: (error) => toast.error(error.message),
+    onSettled: () => {
       if (input.current) input.current.value = ''
-    }
-  }
+    },
+  })
+  const busy = uploadMutation.isPending
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
@@ -74,7 +72,7 @@ export function ClaudeCodeImport({ topicId }: { topicId: string }) {
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0]
-          if (file) void upload(file)
+          if (file) uploadMutation.mutate(file)
         }}
       />
     </div>

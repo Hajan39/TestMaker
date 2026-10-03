@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import type { Question, QuestionType } from '@testmaker/core/schema'
 import { toast } from '@testmaker/ui'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
@@ -26,7 +26,27 @@ export function useQuestionVariant(
   create: (direction: 'easier' | 'harder') => Promise<void>
 } {
   const router = useRouter()
-  const [busyDirection, setBusyDirection] = useState<'easier' | 'harder' | null>(null)
+  const variantMutation = useMutation({
+    mutationFn: async (direction: 'easier' | 'harder') => {
+      const data = await requestJson<{ question: Question }>(
+        '/api/questions/variant',
+        jsonBody('POST', { id: question.id, direction }),
+        t('generation:variant.failed'),
+      )
+      if (!data.question) throw new Error(`${t('generation:variant.failed')} ${t('common:errors.serverTrouble')}`)
+      return data.question
+    },
+    onSuccess: (created, direction) => {
+      toast.success(
+        direction === 'easier' ? t('generation:variant.createdEasier') : t('generation:variant.createdHarder'),
+        { testId: `toast-question-variant-${direction}` },
+      )
+      onCreated?.(created)
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('generation:variant.failed'))),
+  })
+  const busyDirection = variantMutation.isPending ? variantMutation.variables : null
 
   function disabledReason(direction: 'easier' | 'harder'): string | null {
     const targetDifficulty = question.difficulty + (direction === 'easier' ? -1 : 1)
@@ -40,28 +60,8 @@ export function useQuestionVariant(
     // second is not started at all.
     if (busyDirection !== null) return
     if (disabledReason(direction)) return
-    setBusyDirection(direction)
-    try {
-      const data = await requestJson<{ question: Question }>(
-        '/api/questions/variant',
-        jsonBody('POST', { id: question.id, direction }),
-        t('generation:variant.failed'),
-      )
-      if (!data.question) {
-        toast.error(`${t('generation:variant.failed')} ${t('common:errors.serverTrouble')}`)
-        return
-      }
-      toast.success(
-        direction === 'easier' ? t('generation:variant.createdEasier') : t('generation:variant.createdHarder'),
-        { testId: `toast-question-variant-${direction}` },
-      )
-      onCreated?.(data.question)
-      router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('generation:variant.failed')))
-    } finally {
-      setBusyDirection(null)
-    }
+    // Never rejects: the error is already shown by `onError`.
+    await variantMutation.mutateAsync(direction).catch(() => {})
   }
 
   return { busyDirection, disabledReason, create }

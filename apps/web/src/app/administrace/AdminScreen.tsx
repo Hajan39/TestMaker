@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { t } from '@testmaker/core/i18n'
 import { Badge, BusyButton, Card, toast } from '@testmaker/ui'
 import { SchoolForm, type SchoolSettings } from '@/components/SchoolForm'
@@ -25,34 +26,33 @@ export function AdminScreen({
   aiUsage?: ReactNode
 }) {
   const router = useRouter()
-  /** The school being switched to — a double click would send two requests. */
-  const [switching, setSwitching] = useState<string | null>(null)
+  const saveMutation = useMutation({
+    mutationFn: ({ method, body }: { method: 'POST' | 'PATCH'; body: object; message: string }) =>
+      requestJson('/api/administrace/skoly', jsonBody(method, body), t('admin:errors.changeFailed')),
+    onSuccess: (_data, { message }) => {
+      toast.success(message)
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.changeFailed'))),
+  })
+  // Resolves to whether the save worked — the form decides from it whether to reset.
+  const send = (method: 'POST' | 'PATCH', body: object, message: string) =>
+    saveMutation.mutateAsync({ method, body, message }).then(
+      () => true,
+      () => false,
+    )
 
-  async function send(method: 'POST' | 'PATCH', body: object, message: string) {
-    try {
-      await requestJson('/api/administrace/skoly', jsonBody(method, body), t('admin:errors.changeFailed'))
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.changeFailed')))
-      return false
-    }
-    toast.success(message)
-    router.refresh()
-    return true
-  }
-
-  async function switchTo(schoolId: string) {
-    setSwitching(schoolId)
-    try {
-      await requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), t('admin:errors.switchFailed'))
-    } catch (error) {
-      toast.error(errorMessage(error, t('admin:errors.switchFailed')))
-      setSwitching(null)
-      return
-    }
-    // The button stays disabled until leaving for the home page.
-    router.push('/')
-    router.refresh()
-  }
+  const switchMutation = useMutation({
+    mutationFn: (schoolId: string) =>
+      requestJson('/api/administrace/skola', jsonBody('POST', { schoolId }), t('admin:errors.switchFailed')),
+    onSuccess: () => {
+      router.push('/')
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('admin:errors.switchFailed'))),
+  })
+  /** The school being switched to — a double click would send two requests. The button stays disabled until leaving for the home page. */
+  const switching = switchMutation.isPending || switchMutation.isSuccess ? switchMutation.variables : null
 
   return (
     <div className="space-y-5">
@@ -90,7 +90,7 @@ export function AdminScreen({
                   busy={switching === school.id}
                   busyLabel={t('admin:schools.switching')}
                   disabled={switching !== null}
-                  onClick={() => void switchTo(school.id)}
+                  onClick={() => switchMutation.mutate(school.id)}
                 >
                   {t('admin:schools.switchHere')}
                 </BusyButton>

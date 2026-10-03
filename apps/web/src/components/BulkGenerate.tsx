@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import {
   Button,
@@ -48,25 +49,19 @@ export function BulkGenerate({
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
   const [skipWithQuestions, setSkipWithQuestions] = useState(true)
-  const [running, setRunning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const stopRef = useRef(false)
 
-  // Guard after the hooks: hook call order must be the same on every render.
-  if (!canEdit) return null
-
-  async function start(scope: BulkScope) {
-    setErrors([])
-    setRunning(true)
-    // Building the queue over a whole subject takes a few seconds. Without this
-    // line the area stayed empty after the click until the first count arrived,
-    // and it looked as if the click didn't register.
-    const preparing = t('generation:bulkGenerate.preparing')
-    setStatus(preparing)
-    stopRef.current = false
-    try {
-      // A server rejection (e.g. an expired session) ends in the `catch` below —
+  const startMutation = useMutation({
+    mutationFn: async (scope: BulkScope) => {
+      setErrors([])
+      // Building the queue over a whole subject takes a few seconds. Without this
+      // line the area stayed empty after the click until the first count arrived,
+      // and it looked as if the click didn't register.
+      setStatus(t('generation:bulkGenerate.preparing'))
+      stopRef.current = false
+      // A server rejection (e.g. an expired session) ends in `onError` —
       // previously the count was read from the error response, reporting "Ve frontě undefined témat".
       const queued = await requestJson<{ enqueued: number; skipped: number }>(
         '/api/jobs',
@@ -81,7 +76,6 @@ export function BulkGenerate({
             ? t('generation:bulkGenerate.allHaveQuestions', { topics: t('library:count.topics', { count: skipped }) })
             : t('generation:bulkGenerate.noMaterials'),
         )
-        setRunning(false)
         return
       }
 
@@ -117,13 +111,16 @@ export function BulkGenerate({
       // so one run isn't reported two different ways in two places.
       setStatus(runSummary({ processed: done, errors: failed, questions: created }).text)
       router.refresh()
-    } catch (error) {
-      setStatus((current) => (current === preparing ? null : current))
+    },
+    onError: (error) => {
+      setStatus((current) => (current === t('generation:bulkGenerate.preparing') ? null : current))
       setErrors((current) => [...current, errorMessage(error, t('generation:bulkGenerate.stopped'))])
-    } finally {
-      setRunning(false)
-    }
-  }
+    },
+  })
+  const running = startMutation.isPending
+
+  // Guard after the hooks: hook call order must be the same on every render.
+  if (!canEdit) return null
 
   // Without configured AI, bulk generation isn't offered at all.
   if (!ai.configured) return null
@@ -166,7 +163,7 @@ export function BulkGenerate({
 
               <div className="flex flex-wrap items-center gap-2">
                 {scopes.map((scope) => (
-                  <Button key={scope.label} size="sm" disabled={running} onClick={() => void start(scope)}>
+                  <Button key={scope.label} size="sm" disabled={running} onClick={() => startMutation.mutate(scope)}>
                     {scope.label}
                   </Button>
                 ))}

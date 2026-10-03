@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, toast } from '@testmaker/ui'
 import { useCanEdit } from '@/components/Permissions'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
@@ -23,7 +24,17 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
   const canEdit = useCanEdit()
   const router = useRouter()
   const [grades, setGrades] = useState<{ id: string; name: string }[] | null>(null)
-  const [busy, setBusy] = useState(false)
+  const moveMutation = useMutation({
+    mutationFn: (gradeName: string) =>
+      requestJson('/api/topics', jsonBody('PATCH', { id: topicId, gradeName }), t('library:moveTopic.failed')),
+    onSuccess: (_data, gradeName) => {
+      toast.success(t('library:moveTopic.moved', { grade: gradeName || t('library:labels.noGrade') }), {
+        testId: 'toast-topic-moved',
+      })
+      router.refresh()
+    },
+    onError: (error) => toast.error(errorMessage(error, t('library:moveTopic.failedRetry'))),
+  })
 
   // The guard sits after the hooks so the same number of them is called on every render.
   if (!canEdit) return null
@@ -42,30 +53,15 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
     }
   }
 
-  async function move(gradeName: string) {
-    setBusy(true)
-    try {
-      await requestJson('/api/topics', jsonBody('PATCH', { id: topicId, gradeName }), t('library:moveTopic.failed'))
-      toast.success(t('library:moveTopic.moved', { grade: gradeName || t('library:labels.noGrade') }), {
-        testId: 'toast-topic-moved',
-      })
-      router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('library:moveTopic.failedRetry')))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const options = (grades ?? []).filter((grade) => grade.name !== currentGradeName)
 
   return (
     <Select
       value={PLACEHOLDER}
-      disabled={busy}
+      disabled={moveMutation.isPending}
       onValueChange={(value) => {
         if (value === PLACEHOLDER) return
-        void move(value === WITHOUT_GRADE ? '' : value)
+        moveMutation.mutate(value === WITHOUT_GRADE ? '' : value)
       }}
       onOpenChange={(open) => {
         if (open) void ensureLoaded()

@@ -2,6 +2,7 @@
 
 import { useState, type ComponentProps, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
 import { Pencil, Plus } from 'lucide-react'
 import {
   BusyButton,
@@ -18,7 +19,7 @@ import {
 } from '@testmaker/ui'
 import type { LibraryKind } from '@/lib/library'
 import { useCanEdit } from '@/components/Permissions'
-import { errorMessage, readJson, responseError } from '@/lib/requestJson'
+import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
 
 /**
@@ -40,8 +41,8 @@ interface NameDialogProps {
   confirmLabel: string
   busyLabel: string
   trigger: ReactNode
-  /** Returns an error message, or `null` when the action succeeded. */
-  onSubmit: (name: string) => Promise<string | null>
+  /** Rejects with a `RequestError` (from `requestJson`) when the action failed. */
+  onSubmit: (name: string) => Promise<unknown>
 }
 
 function NameDialog({
@@ -56,7 +57,6 @@ function NameDialog({
 }: NameDialogProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(initialName)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function change(next: boolean) {
@@ -68,23 +68,18 @@ function NameDialog({
     setError(null)
   }
 
-  async function submit() {
+  const submitMutation = useMutation({
+    mutationFn: onSubmit,
+    onSuccess: () => change(false),
+    // A network error used to show nothing — the button just went idle again.
+    onError: (submitError) => setError(errorMessage(submitError, t('library:itemDialogs.saveFailed'))),
+  })
+  const busy = submitMutation.isPending
+
+  function submit() {
     if (!name.trim() || busy) return
-    setBusy(true)
     setError(null)
-    try {
-      const failure = await onSubmit(name.trim())
-      if (failure) {
-        setError(failure)
-        return
-      }
-      change(false)
-    } catch (submitError) {
-      // A network error used to show nothing — the button just went idle again.
-      setError(errorMessage(submitError, t('library:itemDialogs.saveFailed')))
-    } finally {
-      setBusy(false)
-    }
+    submitMutation.mutate(name.trim())
   }
 
   return (
@@ -106,7 +101,7 @@ function NameDialog({
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()
-                void submit()
+                submit()
               }
             }}
           />
@@ -117,19 +112,13 @@ function NameDialog({
           <Button variant="outline" onClick={() => change(false)}>
             {t('common:actions.cancel')}
           </Button>
-          <BusyButton busy={busy} busyLabel={busyLabel} disabled={!name.trim()} onClick={() => void submit()}>
+          <BusyButton busy={busy} busyLabel={busyLabel} disabled={!name.trim()} onClick={submit}>
             {confirmLabel}
           </BusyButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-}
-
-/** The API response turned into a message worth showing the teacher. */
-async function problem(response: Response): Promise<string | null> {
-  if (response.ok) return null
-  return responseError(response, await readJson(response), t('library:itemDialogs.saveFailed')).message
 }
 
 /**
@@ -179,21 +168,16 @@ export function NewLibraryItem({
         )
       }
       onSubmit={async (name) => {
-        const response = await fetch('/api/library', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ kind, name, parentId: parentId ?? null }),
-        })
-        const failure = await problem(response)
-        if (failure) return failure
-
-        const { id } = (await response.json()) as { id: string }
+        const { id } = await requestJson<{ id: string }>(
+          '/api/library',
+          jsonBody('POST', { kind, name, parentId: parentId ?? null }),
+          t('library:itemDialogs.saveFailed'),
+        )
         // After creating, it helps to land right where work continues:
         // questions are written in a new topic, topics are created in a new grade.
         if (kind === 'topic') router.push(`/topics/${id}`)
         else if (kind === 'grade') router.push(`/tridy/${id}`)
         router.refresh()
-        return null
       }}
     />
   )
@@ -245,15 +229,8 @@ export function RenameLibraryItem({
         )
       }
       onSubmit={async (next) => {
-        const response = await fetch('/api/library', {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ kind, id, name: next }),
-        })
-        const failure = await problem(response)
-        if (failure) return failure
+        await requestJson('/api/library', jsonBody('PATCH', { kind, id, name: next }), t('library:itemDialogs.saveFailed'))
         router.refresh()
-        return null
       }}
     />
   )

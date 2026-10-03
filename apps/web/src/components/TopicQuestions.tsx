@@ -1,5 +1,6 @@
 'use client'
 
+import { useMutation } from '@tanstack/react-query'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionStatus, QuestionType } from '@testmaker/core/schema'
@@ -293,15 +294,15 @@ export const TopicQuestions = forwardRef<
     )
   }
 
-  /** Deleting without asking — it can be undone right away, hence no confirmation dialog. */
-  async function remove(question: Question) {
-    if (busyIds.has(question.id)) return
-    setBusyIds((current) => new Set(current).add(question.id))
-    // Optimistic: the card disappears right away so deleting does not wait for
-    // the server. If it fails, the card comes back and a toast reports the error.
-    setHiddenIds((current) => new Set(current).add(question.id))
-    try {
-      const previous = await rejectQuestions([question])
+  const removeMutation = useMutation({
+    mutationFn: (question: Question) => rejectQuestions([question]),
+    onMutate: (question) => {
+      setBusyIds((current) => new Set(current).add(question.id))
+      // Optimistic: the card disappears right away so deleting does not wait for
+      // the server. If it fails, the card comes back and a toast reports the error.
+      setHiddenIds((current) => new Set(current).add(question.id))
+    },
+    onSuccess: (previous, question) => {
       // The deleted card counts toward „Smazané" right away, not only after the
       // page refreshes from the server — and is added to an already loaded
       // deleted list, so it shows even if the panel is switched on now.
@@ -334,7 +335,8 @@ export const TopicQuestions = forwardRef<
               ),
         },
       })
-    } catch (error) {
+    },
+    onError: (error, question) => {
       // Deletion failed — the card returns to the list.
       setHiddenIds((current) => {
         const next = new Set(current)
@@ -342,13 +344,19 @@ export const TopicQuestions = forwardRef<
         return next
       })
       toast.error(errorMessage(error, t('library:topicQuestions.deleteFailed')))
-    } finally {
+    },
+    onSettled: (_data, _error, question) =>
       setBusyIds((current) => {
         const next = new Set(current)
         next.delete(question.id)
         return next
-      })
-    }
+      }),
+  })
+
+  /** Deleting without asking — it can be undone right away, hence no confirmation dialog. */
+  function remove(question: Question) {
+    if (busyIds.has(question.id)) return
+    removeMutation.mutate(question)
   }
 
   /**
@@ -408,12 +416,10 @@ export const TopicQuestions = forwardRef<
     })
   }
 
-  /** Restores a deleted question back to approved. */
-  async function restore(question: Question) {
-    if (restoringIds.has(question.id)) return
-    setRestoringIds((current) => new Set(current).add(question.id))
-    try {
-      await restoreStatuses([[question.id, 'approved']])
+  const restoreMutation = useMutation({
+    mutationFn: (question: Question) => restoreStatuses([[question.id, 'approved']]),
+    onMutate: (question) => setRestoringIds((current) => new Set(current).add(question.id)),
+    onSuccess: (_data, question) => {
       setDeletedQuestions((current) => (current ?? []).filter((q) => q.id !== question.id))
       setDeletedDelta((current) => Math.max(0, current - 1))
       // The question may also be hidden here (deleted during this page load) —
@@ -426,15 +432,20 @@ export const TopicQuestions = forwardRef<
       })
       toast.success(t('library:topicQuestions.restored'))
       router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, t('library:topicQuestions.restoreFailed')))
-    } finally {
+    },
+    onError: (error) => toast.error(errorMessage(error, t('library:topicQuestions.restoreFailed'))),
+    onSettled: (_data, _error, question) =>
       setRestoringIds((current) => {
         const next = new Set(current)
         next.delete(question.id)
         return next
-      })
-    }
+      }),
+  })
+
+  /** Restores a deleted question back to approved. */
+  function restore(question: Question) {
+    if (restoringIds.has(question.id)) return
+    restoreMutation.mutate(question)
   }
 
   return (
@@ -588,7 +599,7 @@ export const TopicQuestions = forwardRef<
                   jumpToQuestion(created.id)
                 }}
                 onJumpToVersion={jumpToQuestion}
-                onRemove={() => void remove(question)}
+                onRemove={() => remove(question)}
               />
             </li>
           ))}
@@ -626,7 +637,7 @@ export const TopicQuestions = forwardRef<
                     onRemove={() => {}}
                     deleted
                     restoring={restoringIds.has(question.id)}
-                    onRestore={() => void restore(question)}
+                    onRestore={() => restore(question)}
                   />
                 </li>
               ))}
