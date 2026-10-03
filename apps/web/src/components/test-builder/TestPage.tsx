@@ -423,6 +423,8 @@ function PageRow({
   reloading: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.key })
+  // A worksheet task never lives in the bank — "no longer in the bank" means nothing there.
+  const missing = Boolean(item.questionMissing) && !worksheet
   const config = template.config
   const question = item.question
   const style = {
@@ -552,14 +554,16 @@ function PageRow({
         </div>
       ) : null}
 
-      {repeatLabel || item.questionMissing || item.questionEdited ? (
+      {repeatLabel || missing || item.questionEdited ? (
         <div className="flex flex-wrap items-center gap-1 pt-2">
           {repeatLabel ? <Badge variant="secondary">{repeatLabel}</Badge> : null}
           {/* The test keeps the question content frozen at the moment it was
               added, so a printed test cannot change through later edits to the
               question. If the bank has drifted since, it shows here. */}
-          {item.questionMissing ? (
-            <Badge className="bg-draft-bg text-draft-fg">{t('tests:page.questionMissing')}</Badge>
+          {missing ? (
+            <Badge className="bg-draft-bg text-draft-fg" data-testid="question-missing-badge">
+              {t('tests:page.questionMissing')}
+            </Badge>
           ) : item.questionEdited ? (
             <>
               <Badge className="bg-draft-bg text-draft-fg" data-testid="question-edited-badge">

@@ -89,6 +89,12 @@ test.describe('worksheets', () => {
     await expect(page.getByTestId('worksheet-to-check')).toHaveCount(0)
   })
 
+  test('a worksheet task is not flagged as missing from the bank — it never lives there', async ({ page }) => {
+    await page.goto(`/listy/${SEED_LIST_ID}`)
+    await expect(page.locator('[data-slot="paper-sheet"]').first()).toBeVisible()
+    await expect(page.getByTestId('question-missing-badge')).toHaveCount(0)
+  })
+
   test('without a model the form offers only an empty worksheet and explains why', async ({ page }) => {
     await page.goto('/listy/new')
     const generate = page.getByRole('button', { name: 'Vygenerovat' })
