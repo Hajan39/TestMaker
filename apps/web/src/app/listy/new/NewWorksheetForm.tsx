@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import {
   Button,
@@ -32,7 +35,32 @@ export interface WorksheetSubject {
   grades: { id: string; name: string; topics: { id: string; name: string }[] }[]
 }
 
-type Source = 'topic' | 'free'
+/** The form's shape, by source; built on each render so the messages follow the current language. */
+function worksheetSchema() {
+  const brief = {
+    subjectId: z.string(),
+    gradeId: z.string(),
+    freeGradeId: z.string(),
+    instructions: z.string().trim(),
+    ownText: z.string().trim(),
+    onlyMaterials: z.boolean(),
+  }
+  return z.discriminatedUnion('source', [
+    z.object({
+      source: z.literal('topic'),
+      topicId: z.string().min(1, t('worksheets:new.missingTopic')),
+      title: z.string(),
+      ...brief,
+    }),
+    z.object({
+      source: z.literal('free'),
+      topicId: z.string(),
+      title: z.string().trim().min(1, t('worksheets:new.missingTitle')),
+      ...brief,
+    }),
+  ])
+}
+type WorksheetValues = z.output<ReturnType<typeof worksheetSchema>>
 
 /**
  * The "Nový pracovní list" form. A worksheet is made from a library topic or
@@ -54,17 +82,28 @@ export function NewWorksheetForm({
   limits: { instructionsMax: number; ownTextMax: number }
 }) {
   const router = useRouter()
-  const [source, setSource] = useState<Source>(subjects.length > 0 ? 'topic' : 'free')
-  const [subjectId, setSubjectId] = useState('')
-  const [gradeId, setGradeId] = useState('')
-  const [topicId, setTopicId] = useState('')
-  const [title, setTitle] = useState('')
-  const [freeGradeId, setFreeGradeId] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [ownText, setOwnText] = useState('')
-  const [onlyMaterials, setOnlyMaterials] = useState(true)
   const [busy, setBusy] = useState<'generate' | 'blank' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    setError,
+    formState: { errors },
+  } = useForm<z.input<ReturnType<typeof worksheetSchema>>, unknown, WorksheetValues>({
+    resolver: zodResolver(worksheetSchema()),
+    defaultValues: {
+      source: subjects.length > 0 ? 'topic' : 'free',
+      subjectId: '',
+      gradeId: '',
+      topicId: '',
+      title: '',
+      freeGradeId: '',
+      instructions: '',
+      ownText: '',
+      onlyMaterials: true,
+    },
+  })
   // Did the teacher move elsewhere in the app before the worksheet finished? Then don't pull her back.
   // Also set on mount: in development React runs the effect, cleans up and runs it again.
   const mounted = useRef(true)
@@ -87,17 +126,16 @@ export function NewWorksheetForm({
     return () => window.removeEventListener('beforeunload', warn)
   }, [busy])
 
+  const [source, subjectId, gradeId, freeGradeId] = useWatch({
+    control,
+    name: ['source', 'subjectId', 'gradeId', 'freeGradeId'],
+  })
+  const topicId = useWatch({ control, name: 'topicId' })
   const subject = subjects.find((item) => item.id === subjectId)
   const grade = subject?.grades.find((item) => item.id === gradeId)
-  const topic = grade?.topics.find((item) => item.id === topicId)
   const allGrades = subjects.flatMap((item) => item.grades.map((g) => ({ id: g.id, label: `${item.name} · ${g.name}` })))
-
-  /** What is missing to submit; `null` when the brief is complete. */
-  function missing(): string | null {
-    if (source === 'topic' && !topic) return t('worksheets:new.missingTopic')
-    if (source === 'free' && !title.trim()) return t('worksheets:new.missingTitle')
-    return null
-  }
+  // One message under the form: what is missing, or what the server said.
+  const error = errors.topicId?.message ?? errors.title?.message ?? errors.root?.message ?? null
 
   async function post(url: string, body: unknown): Promise<{ id: string; dropped?: number }> {
     const failure = t('worksheets:new.createFailed')
@@ -106,31 +144,31 @@ export function NewWorksheetForm({
     return { id: data.id, dropped: data.dropped }
   }
 
-  async function run(kind: 'generate' | 'blank') {
-    const problem = missing()
-    if (problem) return setError(problem)
-    setError(null)
+  async function run(kind: 'generate' | 'blank', values: WorksheetValues) {
     setBusy(kind)
-    const brief = { instructions: instructions.trim(), ownText: ownText.trim(), onlyMaterials }
+    const brief = { instructions: values.instructions, ownText: values.ownText, onlyMaterials: values.onlyMaterials }
     try {
       if (kind === 'generate') {
         const { id, dropped } = await post(
           '/api/worksheets/generate',
-          source === 'topic'
-            ? { source, topicId, ...brief }
-            : { source, title: title.trim(), gradeId: freeGradeId || null, ...brief },
+          values.source === 'topic'
+            ? { source: values.source, topicId: values.topicId, ...brief }
+            : { source: values.source, title: values.title, gradeId: values.freeGradeId || null, ...brief },
         )
         if (mounted.current) router.push(dropped ? `/listy/${id}?vynechano=${dropped}` : `/listy/${id}`)
       } else {
-        const name = source === 'topic' ? topic!.name : title.trim()
+        const name =
+          values.source === 'topic'
+            ? (grade?.topics.find((item) => item.id === values.topicId)?.name ?? '')
+            : values.title
         const { id } = await post('/api/tests', {
           kind: 'pracovni_list',
           title: name,
           description: null,
           graded: false,
           templateId,
-          topicId: source === 'topic' ? topicId : null,
-          gradeId: source === 'topic' ? gradeId : freeGradeId || null,
+          topicId: values.source === 'topic' ? values.topicId : null,
+          gradeId: values.source === 'topic' ? values.gradeId : values.freeGradeId || null,
           brief: JSON.stringify({ title: name, ...brief }),
           header: emptyHeader(),
           variants: 1,
@@ -140,7 +178,7 @@ export function NewWorksheetForm({
         router.push(`/listy/${id}`)
       }
     } catch (runError) {
-      setError(errorMessage(runError, t('worksheets:new.createFailed')))
+      setError('root', { message: errorMessage(runError, t('worksheets:new.createFailed')) })
       setBusy(null)
     }
   }
@@ -150,7 +188,7 @@ export function NewWorksheetForm({
       <h1 className="ui-page-title">{t('worksheets:new.title')}</h1>
 
       <Card className="space-y-5 p-5">
-        <Tabs value={source} onValueChange={(value) => setSource(value as Source)}>
+        <Tabs value={source} onValueChange={(value) => setValue('source', value as WorksheetValues['source'])}>
           <TabsList>
             <TabsTrigger value="topic">{t('worksheets:new.fromTopic')}</TabsTrigger>
             <TabsTrigger value="free">{t('worksheets:new.free')}</TabsTrigger>
@@ -166,9 +204,9 @@ export function NewWorksheetForm({
                   <Select
                     value={subjectId}
                     onValueChange={(value) => {
-                      setSubjectId(value)
-                      setGradeId('')
-                      setTopicId('')
+                      setValue('subjectId', value)
+                      setValue('gradeId', '')
+                      setValue('topicId', '')
                     }}
                   >
                     <SelectTrigger id="list-subject" className="w-full">
@@ -189,8 +227,8 @@ export function NewWorksheetForm({
                     value={gradeId}
                     disabled={!subject}
                     onValueChange={(value) => {
-                      setGradeId(value)
-                      setTopicId('')
+                      setValue('gradeId', value)
+                      setValue('topicId', '')
                     }}
                   >
                     <SelectTrigger id="list-grade" className="w-full">
@@ -207,7 +245,7 @@ export function NewWorksheetForm({
                 </div>
                 <div>
                   <Label htmlFor="list-topic">{t('worksheets:new.topic')}</Label>
-                  <Select value={topicId} disabled={!grade} onValueChange={setTopicId}>
+                  <Select value={topicId} disabled={!grade} onValueChange={(value) => setValue('topicId', value)}>
                     <SelectTrigger id="list-topic" className="w-full">
                       <SelectValue placeholder={t('worksheets:new.pickTopic')} />
                     </SelectTrigger>
@@ -230,17 +268,17 @@ export function NewWorksheetForm({
                 <Label htmlFor="list-title">{t('worksheets:new.about')}</Label>
                 <Input
                   id="list-title"
-                  value={title}
+                  defaultValue=""
                   maxLength={200}
                   placeholder={t('worksheets:new.aboutPlaceholder')}
-                  onChange={(event) => setTitle(event.target.value)}
+                  {...register('title')}
                 />
               </div>
               <div>
                 <Label htmlFor="list-free-grade">{t('worksheets:new.grade')}</Label>
                 <Select
                   value={freeGradeId}
-                  onValueChange={(value) => setFreeGradeId(value === NO_GRADE ? '' : value)}
+                  onValueChange={(value) => setValue('freeGradeId', value === NO_GRADE ? '' : value)}
                 >
                   <SelectTrigger id="list-free-grade" className="w-full">
                     <SelectValue placeholder={t('worksheets:new.noGrade')} />
@@ -264,10 +302,10 @@ export function NewWorksheetForm({
           <Label htmlFor="list-instructions">{t('worksheets:new.instructions')}</Label>
           <Input
             id="list-instructions"
-            value={instructions}
+            defaultValue=""
             maxLength={limits.instructionsMax}
             placeholder={t('worksheets:new.instructionsPlaceholder')}
-            onChange={(event) => setInstructions(event.target.value)}
+            {...register('instructions')}
           />
         </div>
 
@@ -275,17 +313,23 @@ export function NewWorksheetForm({
           <Label htmlFor="list-own-text">{t('worksheets:new.ownText')}</Label>
           <Textarea
             id="list-own-text"
-            value={ownText}
+            defaultValue=""
             maxLength={limits.ownTextMax}
             rows={5}
             placeholder={t('worksheets:new.ownTextPlaceholder')}
-            onChange={(event) => setOwnText(event.target.value)}
+            {...register('ownText')}
           />
         </div>
 
         <div>
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox checked={onlyMaterials} onCheckedChange={(checked) => setOnlyMaterials(checked === true)} />
+            <Controller
+              control={control}
+              name="onlyMaterials"
+              render={({ field }) => (
+                <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(checked === true)} />
+              )}
+            />
             {t('worksheets:new.onlyMaterials')}
           </label>
           <p className="mt-1 text-xs text-fg-muted">{t('worksheets:new.onlyMaterialsHint')}</p>
@@ -313,11 +357,11 @@ export function NewWorksheetForm({
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="outline" disabled={busy !== null} onClick={() => void run('blank')}>
+          <Button variant="outline" disabled={busy !== null} onClick={() => void handleSubmit((values) => run('blank', values))()}>
             {busy === 'blank' ? t('worksheets:new.creating') : t('worksheets:new.createBlank')}
           </Button>
           {ai.configured ? (
-            <Button disabled={busy !== null} onClick={() => void run('generate')}>
+            <Button disabled={busy !== null} onClick={() => void handleSubmit((values) => run('generate', values))()}>
               {busy === 'generate' ? t('worksheets:new.generatingButton') : t('worksheets:new.generate')}
             </Button>
           ) : null}

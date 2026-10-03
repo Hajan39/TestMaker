@@ -1,6 +1,9 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId } from 'react'
+import { Controller, useForm, useWatch } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import {
   DEFAULT_POINTS,
   questionTypeLabel,
@@ -44,6 +47,37 @@ function fieldProblem(field: string): string {
     : t('library:questionEditor.problems.incomplete')
 }
 
+/**
+ * The form's shape. The content rules stay in core: the transform runs the
+ * same `questionContentSchema` and `validateQuestionContent` as the server and
+ * reports what to fix under `payload`. Built per call so messages follow the language.
+ */
+function formSchema(blocks: Question['blocks']) {
+  return z
+    .object({
+      type: z.enum(QUESTION_TYPES),
+      payload: z.record(z.string(), z.unknown()),
+      points: z.number(),
+      difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+      explanation: z.string(),
+    })
+    .transform((value, ctx): QuestionContent => {
+      const fail = (message: string) => {
+        ctx.addIssue({ code: 'custom', path: ['payload'], message })
+        return z.NEVER
+      }
+      const parsed = questionContentSchema.safeParse({
+        ...value,
+        explanation: value.explanation.trim() || undefined,
+        blocks,
+      })
+      if (!parsed.success) return fail(describeIssues(parsed.error.issues.map((issue) => issue.path)))
+      const problems = validateQuestionContent(parsed.data as QuestionContent)
+      if (problems.length > 0) return fail(problems.join('; '))
+      return parsed.data as QuestionContent
+    })
+}
+
 function describeIssues(paths: PropertyKey[][]): string {
   const messages = new Set(
     paths.map((path) => {
@@ -78,66 +112,53 @@ export function QuestionEditorForm({
    */
   onSubmit?: (content: QuestionContent) => void
 }) {
-  const [type, setType] = useState<QuestionType>(question?.type ?? 'single_choice')
-  const [payload, setPayload] = useState<Record<string, unknown>>(
-    question ? (question.payload as Record<string, unknown>) : emptyPayload('single_choice'),
-  )
-  const [points, setPoints] = useState(question?.points ?? DEFAULT_POINTS.single_choice)
-  const [difficulty, setDifficulty] = useState<1 | 2 | 3>(question?.difficulty ?? 2)
-  const [explanation, setExplanation] = useState(question?.explanation ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<z.input<ReturnType<typeof formSchema>>, unknown, QuestionContent>({
+    resolver: zodResolver(formSchema(question?.blocks ?? [])),
+    defaultValues: {
+      type: question?.type ?? 'single_choice',
+      payload: question ? (question.payload as Record<string, unknown>) : emptyPayload('single_choice'),
+      points: question?.points ?? DEFAULT_POINTS.single_choice,
+      difficulty: question?.difficulty ?? 2,
+      explanation: question?.explanation ?? '',
+    },
+  })
+  const type = useWatch({ control, name: 'type' })
+  const difficulty = useWatch({ control, name: 'difficulty' })
+  // One message under the form: what is wrong with the content, or what the server said.
+  const error = (errors.payload?.message as string | undefined) ??errors.root?.message ?? null
   // A card being edited and „Nová otázka" can be on screen side by side —
   // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
 
   function changeType(next: QuestionType) {
-    setType(next)
-    setPayload(emptyPayload(next))
-    setPoints(DEFAULT_POINTS[next])
+    setValue('type', next)
+    setValue('payload', emptyPayload(next))
+    setValue('points', DEFAULT_POINTS[next])
   }
 
-  async function save() {
-    setError(null)
-    const candidate = {
-      type,
-      payload,
-      points,
-      difficulty,
-      explanation: explanation.trim() || undefined,
-      blocks: question?.blocks ?? [],
-    }
-
-    const parsed = questionContentSchema.safeParse(candidate)
-    if (!parsed.success) {
-      setError(describeIssues(parsed.error.issues.map((issue) => issue.path)))
-      return
-    }
-    const problems = validateQuestionContent(parsed.data as QuestionContent)
-    if (problems.length > 0) {
-      setError(problems.join('; '))
-      return
-    }
-
+  async function save(content: QuestionContent) {
     if (onSubmit) {
-      onSubmit(parsed.data as QuestionContent)
+      onSubmit(content)
       return
     }
-
-    setSaving(true)
     try {
       await requestJson(
         '/api/questions',
         question
-          ? jsonBody('PATCH', { id: question.id, question: parsed.data })
-          : jsonBody('POST', { topicId, question: parsed.data }),
+          ? jsonBody('PATCH', { id: question.id, question: content })
+          : jsonBody('POST', { topicId, question: content }),
         t('library:questionEditor.saveFailed'),
       )
       onSaved()
     } catch (saveError) {
-      setError(errorMessage(saveError, t('library:questionEditor.saveFailed')))
-    } finally {
-      setSaving(false)
+      setError('root', { message: errorMessage(saveError, t('library:questionEditor.saveFailed')) })
     }
   }
 
@@ -166,15 +187,15 @@ export function QuestionEditorForm({
             type="number"
             min={0}
             step={0.5}
-            value={points}
-            onChange={(event) => setPoints(Number(event.target.value) || 0)}
+            defaultValue={question?.points ?? DEFAULT_POINTS.single_choice}
+            {...register('points', { setValueAs: (value) => Number(value) || 0 })}
           />
         </div>
         <div className="w-36">
           <Label htmlFor={`question-editor-difficulty-${uid}`}>{t('library:questionEditor.difficulty')}</Label>
           <Select
             value={String(difficulty)}
-            onValueChange={(next) => setDifficulty(Number(next) as 1 | 2 | 3)}
+            onValueChange={(next) => setValue('difficulty', Number(next) as 1 | 2 | 3)}
           >
             <SelectTrigger id={`question-editor-difficulty-${uid}`} className="w-full">
               <SelectValue />
@@ -189,16 +210,20 @@ export function QuestionEditorForm({
       </div>
 
       <div className="mt-4">
-        <PayloadFields type={type} payload={payload} onChange={setPayload} />
+        <Controller
+          control={control}
+          name="payload"
+          render={({ field }) => <PayloadFields type={type} payload={field.value} onChange={field.onChange} />}
+        />
       </div>
 
       <div className="mt-4">
         <Label htmlFor={`question-editor-explanation-${uid}`}>{t('library:questionEditor.explanation')}</Label>
         <Textarea
           id={`question-editor-explanation-${uid}`}
-          value={explanation}
+          defaultValue={question?.explanation ?? ''}
           placeholder={t('library:questionEditor.explanationPlaceholder')}
-          onChange={(event) => setExplanation(event.target.value)}
+          {...register('explanation')}
         />
       </div>
 
@@ -208,8 +233,8 @@ export function QuestionEditorForm({
         <Button variant="outline" onClick={onCancel}>
           {t('common:actions.cancel')}
         </Button>
-        <Button disabled={saving} onClick={() => void save()}>
-          {saving ? t('common:actions.saving') : t('common:actions.save')}
+        <Button disabled={isSubmitting} onClick={() => void handleSubmit(save)()}>
+          {isSubmitting ? t('common:actions.saving') : t('common:actions.save')}
         </Button>
       </div>
     </>
