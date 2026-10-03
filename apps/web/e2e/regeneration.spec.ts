@@ -109,7 +109,7 @@ test.describe('regenerating with a reason', () => {
     await row.getByRole('button', { name: 'Přegenerovat', exact: true }).click()
 
     await expect(row).toHaveCount(0)
-    await expect(page.getByText('Otázka nahrazena novou.')).toBeVisible()
+    await expect(page.getByTestId('toast-question-replaced')).toBeVisible()
     expect(requests).toHaveLength(1)
     expect(requests[0]).not.toHaveProperty('reason')
     expect(requests[0]).not.toHaveProperty('note')
@@ -140,7 +140,7 @@ test.describe('regenerating with a reason', () => {
     await menu.getByRole('menuitem', { name: 'Špatné možnosti' }).click()
 
     await expect(row).toHaveCount(0)
-    await expect(page.getByText('Otázka nahrazena novou.')).toBeVisible()
+    await expect(page.getByTestId('toast-question-replaced')).toBeVisible()
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({
       id: expect.any(String),

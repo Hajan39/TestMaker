@@ -85,18 +85,21 @@ test.describe('question generation in a topic', () => {
 
     // No type selection or top-up mode — those belong to bulk generation only.
     await expect(page.getByRole('button', { name: 'Nastavení generování' })).toHaveCount(0)
-    await expect(page.getByText('Počet otázek znamená')).toHaveCount(0)
-    await expect(page.getByText('Typy otázek')).toHaveCount(0)
+    await expect(page.getByTestId('generate-settings-full')).toHaveCount(0)
 
     // `#generate-difficulty`, not the generic label — the question filter below
     // has a difficulty with the same name.
     const difficulty = page.locator('#generate-difficulty')
     await expect(page.getByLabel('Počet', { exact: true })).toHaveValue('10')
     await expect(difficulty).toHaveText('Promíchat')
-    await expect(page.getByText(/^Vznikne 10 otázek z 1 materiálu\.$/)).toBeVisible()
+    const hint = page.getByTestId('generate-hint')
+    await expect(hint).toHaveAttribute('data-state', 'will-create')
+    await expect(hint).toHaveAttribute('data-count', '10')
+    await expect(hint).toHaveAttribute('data-materials', '1')
 
     await page.getByLabel('Počet', { exact: true }).fill('3')
-    await expect(page.getByText(/^Vznikne 3 otázky z 1 materiálu\.$/)).toBeVisible()
+    await expect(hint).toHaveAttribute('data-count', '3')
+    await expect(hint).toHaveAttribute('data-materials', '1')
 
     await difficulty.click()
     await page.getByRole('option', { name: 'Těžké' }).click()
@@ -125,14 +128,14 @@ test.describe('question generation in a topic', () => {
     await page.reload()
 
     await expect(page.getByRole('button', { name: 'Vygenerovat otázky' })).toBeDisabled()
-    await expect(page.getByText('Nejdřív nahraj materiál nebo ho zapni pro generování.')).toBeVisible()
+    await expect(page.getByTestId('generate-hint')).toHaveAttribute('data-state', 'no-material')
   })
 
   test('an empty topic offers uploading a material and writing a question', async ({ page, request }) => {
     const topicId = await ensureEmptyTopic(request, `Prázdné téma nahrání ${Date.now()}`)
     await page.goto(`/topics/${topicId}`)
 
-    await expect(page.getByText('Téma je zatím prázdné.')).toBeVisible()
+    await expect(page.getByTestId('topic-empty')).toBeVisible()
     // Neither the generation card nor the materials strip shows in an empty
     // topic — just a single prompt with both paths.
     await expect(page.getByRole('button', { name: 'Vygenerovat otázky' })).toHaveCount(0)
@@ -147,7 +150,7 @@ test.describe('question generation in a topic', () => {
     })
 
     await expect(page.getByText(/Nahráno 1 materiál/)).toBeVisible()
-    await expect(page.getByText('Téma je zatím prázdné.')).toHaveCount(0)
+    await expect(page.getByTestId('topic-empty')).toHaveCount(0)
     await expect(page.getByText('Nahraný z prázdného tématu.txt')).toBeVisible()
   })
 
@@ -155,7 +158,7 @@ test.describe('question generation in a topic', () => {
     const topicId = await ensureEmptyTopic(request, `Prázdné téma otázka ${Date.now()}`)
     await page.goto(`/topics/${topicId}`)
 
-    await expect(page.getByText('Téma je zatím prázdné.')).toBeVisible()
+    await expect(page.getByTestId('topic-empty')).toBeVisible()
     await page.getByRole('button', { name: 'Napsat otázku' }).click()
 
     const form = page.getByTestId('new-question-form')
@@ -167,7 +170,7 @@ test.describe('question generation in a topic', () => {
     await form.getByLabel('Správná odpověď').fill('odpověď')
     await form.getByRole('button', { name: 'Uložit' }).click()
 
-    await expect(page.getByText('Téma je zatím prázdné.')).toHaveCount(0)
+    await expect(page.getByTestId('topic-empty')).toHaveCount(0)
     await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
   })
 })

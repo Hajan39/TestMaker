@@ -55,7 +55,7 @@ export function useRegenerateQuestion(
         jsonBody('POST', { id: questionId, reason, note }),
         t('generation:regenerate.failed'),
       )
-      toast.success(t('generation:regenerate.done'))
+      toast.success(t('generation:regenerate.done'), { testId: 'toast-question-replaced' })
       onDone?.()
       router.refresh()
     } catch (error) {

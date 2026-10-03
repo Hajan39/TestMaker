@@ -72,7 +72,8 @@ export function TopicWorkspace({
    */
   const [fresh, setFresh] = useState<Question[]>([])
   /** A finished run: the summary stays on screen even after the toast disappears. */
-  const [outcome, setOutcome] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<{ text: string; created: number; rejected: number } | null>(null)
+  const [doneCount, setDoneCount] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const materialsStripRef = useRef<MaterialsStripHandle>(null)
   const topicQuestionsRef = useRef<TopicQuestionsHandle>(null)
@@ -120,6 +121,7 @@ export function TopicWorkspace({
     setGenerating(true)
     setOutcome(null)
     setFresh([])
+    setDoneCount(0)
     setStatus(t('generation:topicGeneration.starting'))
     announceGeneration()
     abortRef.current = new AbortController()
@@ -138,6 +140,7 @@ export function TopicWorkspace({
       router.refresh()
     }
     const progress = () => {
+      setDoneCount(done)
       const doneText = done > 0 ? t('generation:topicGeneration.doneSoFar', { count: done }) : t('generation:topicGeneration.noneDoneYet')
       // `done` is the number of parts already processed, so work is on the next.
       // When the last one is done too, nothing remains and there is nothing to report.
@@ -167,12 +170,12 @@ export function TopicWorkspace({
             // The detailed summary (what was discarded, how often the model
             // failed) has one place — a lasting line in the card. The toast only
             // says it is done, so the same sentence isn't read twice side by side.
-            setOutcome(summarizeRun(event))
+            setOutcome({ text: summarizeRun(event), created: event.created, rejected: event.rejected })
             toast.success(
               event.created > 0
                 ? t('generation:topicGeneration.doneToast', { count: event.created })
                 : t('generation:topicGeneration.doneToastNone'),
-              { duration: 12_000 },
+              { duration: 12_000, testId: 'toast-generation-done' },
             )
             router.refresh()
           } else if (event.type === 'error') setError(event.message)
@@ -208,6 +211,7 @@ export function TopicWorkspace({
           (`router.refresh()` after saving); `revealed` only runs ahead of it. */}
       {showEmptyState ? (
         <EmptyState
+          testId="topic-empty"
           title={t('library:topicWorkspace.emptyTitle')}
           hint={t('library:topicWorkspace.emptyHint')}
           action={
@@ -248,7 +252,15 @@ export function TopicWorkspace({
             >
               {t('generation:topicGeneration.generate')}
             </Button>
-            <span className="text-sm text-fg-muted">
+            <span
+              className="text-sm text-fg-muted"
+              data-testid="generate-hint"
+              data-state={
+                materialsUploading ? 'uploading' : usable.length === 0 ? 'no-material' : tooLittleText ? 'too-little-text' : 'will-create'
+              }
+              data-count={settings.count}
+              data-materials={usable.length}
+            >
               {materialsUploading
                 ? t('generation:topicGeneration.waitForUpload')
                 : usable.length === 0
@@ -268,11 +280,24 @@ export function TopicWorkspace({
             </p>
           ) : null}
 
-          {generating ? <ProgressLine label={status ?? t('generation:topicGeneration.starting')} /> : null}
+          {generating ? (
+            <div data-testid="generation-progress" data-done={doneCount}>
+              <ProgressLine label={status ?? t('generation:topicGeneration.starting')} />
+            </div>
+          ) : null}
 
           {/* The run summary stays on screen after the toast disappears — the new
               questions are visible right away as cards below, nowhere else to go. */}
-          {!generating && outcome ? <p className="text-sm text-fg-soft">{outcome}</p> : null}
+          {!generating && outcome ? (
+            <p
+              className="text-sm text-fg-soft"
+              data-testid="generation-outcome"
+              data-created={outcome.created}
+              data-rejected={outcome.rejected}
+            >
+              {outcome.text}
+            </p>
+          ) : null}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
         </Card>
       ) : canEdit ? (

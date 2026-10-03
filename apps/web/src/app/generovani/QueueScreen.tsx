@@ -231,6 +231,7 @@ export function QueueScreen({
 
       {jobs.length === 0 ? (
         <EmptyState
+          testId="queue-empty"
           title={t('generation:queue.empty.title')}
           hint={t('generation:queue.empty.hint')}
           action={
@@ -246,15 +247,17 @@ export function QueueScreen({
       {/* Counts are read in one place — the stat row on top. Sections render
           only when non-empty, so a number in the heading would just repeat it;
           for finished jobs it would even lie, since only the last few are listed. */}
-      <Section title={t('generation:queue.sections.running')} jobs={running} />
-      <Section title={t('generation:queue.sections.queued')} jobs={waiting} />
+      <Section id="running" title={t('generation:queue.sections.running')} jobs={running} />
+      <Section id="queued" title={t('generation:queue.sections.queued')} jobs={waiting} />
       <Section
+        id="error"
         title={t('generation:queue.sections.error')}
         jobs={failed}
         onRetry={(id) => void retry([id])}
         retrying={retrying}
       />
       <Section
+        id="done"
         title={
           counts.done > finished.length
             ? t('generation:queue.sections.doneLast', { count: finished.length })
@@ -267,11 +270,13 @@ export function QueueScreen({
 }
 
 function Section({
+  id,
   title,
   jobs,
   onRetry,
   retrying,
 }: {
+  id: string
   title: string
   jobs: QueueJob[]
   onRetry?: (id: string) => void
@@ -279,7 +284,7 @@ function Section({
 }) {
   if (jobs.length === 0) return null
   return (
-    <Card className="p-4">
+    <Card className="p-4" data-testid={`queue-section-${id}`}>
       <h2 className="text-sm font-semibold text-fg">{title}</h2>
       <ul className="mt-2 divide-y divide-line-soft">
         {jobs.map((job) => (
@@ -295,7 +300,15 @@ function Section({
                 instead of overflowing the card — `main` hides horizontal
                 scrolling, so a button past the edge would be unreachable. */}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-xs text-fg-muted">{describe(job)}</span>
+              <span
+                className="text-xs text-fg-muted"
+                data-testid="job-describe"
+                data-status={job.status}
+                data-running-minutes={job.status === 'running' && job.startedAt ? minutesSince(job.startedAt) : undefined}
+                data-created={job.createdCount}
+              >
+                {describe(job)}
+              </span>
               <StateBadge status={job.status} />
               {onRetry ? (
                 <Button size="sm" variant="outline" disabled={retrying} onClick={() => onRetry(job.id)}>
