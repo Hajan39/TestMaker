@@ -63,7 +63,7 @@ export function GenerateSettingsForm({
   }
 
   return (
-    <Collapsible>
+    <Collapsible data-testid="generate-settings-full">
       <CollapsibleTrigger asChild>
         <Button type="button" size="sm" variant="ghost" className="group -ml-2.5 gap-1.5">
           <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />

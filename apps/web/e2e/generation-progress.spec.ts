@@ -93,23 +93,25 @@ test.describe('generation progress in a topic', () => {
     await run(page)
 
     // Before the first batch arrives, at least the start is visible.
-    await expect(page.getByText(/Spouštím generování|Zatím žádná otázka není hotová/)).toBeVisible()
+    await expect(page.getByTestId('generation-progress')).toBeVisible()
 
     // First saved batch: the count and the question itself, still while running.
-    await expect(page.getByText('Hotovo 1 otázka')).toBeVisible()
+    await expect(page.getByTestId('generation-progress')).toHaveAttribute('data-done', '1')
     await expect(page.getByText(FIRST)).toBeVisible()
 
     // The second batch joins it — the list grows without waiting for the end.
-    await expect(page.getByText(/Hotovo 2 otázky/)).toBeVisible()
+    await expect(page.getByTestId('generation-progress')).toHaveAttribute('data-done', '2')
     await expect(page.getByText(SECOND)).toBeVisible()
 
     // The end says what was created and what was discarded — once, in the card.
     // The toast only signals that it's done.
-    await expect(page.getByText(/Vytvořeno 2 otázky/)).toHaveCount(1)
-    await expect(page.getByText('Zahozeno: 1 otázka — neúplné nebo si odporovaly.')).toBeVisible()
+    const outcome = page.getByTestId('generation-outcome')
+    await expect(outcome).toHaveCount(1)
+    await expect(outcome).toHaveAttribute('data-created', '2')
+    await expect(outcome).toHaveAttribute('data-rejected', '1')
     // New questions show right away as cards below — the toast no longer links
     // anywhere, draft review in the topic is gone.
-    await expect(page.getByText('Hotovo, 2 nové otázky.')).toBeVisible()
+    await expect(page.getByTestId('toast-generation-done')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Zkontrolovat' })).toHaveCount(0)
   })
 
@@ -129,7 +131,7 @@ test.describe('generation progress in a topic', () => {
       }
 
       await run(page)
-      await expect(page.getByText('Hotovo 1 otázka')).toBeVisible()
+      await expect(page.getByTestId('generation-progress')).toHaveAttribute('data-done', '1')
       await expect(page.getByText(FIRST)).toBeVisible()
       await page.setViewportSize({ width: 1440, height: 900 })
       await page.screenshot({
@@ -138,7 +140,7 @@ test.describe('generation progress in a topic', () => {
       })
 
       // It must run to the end, otherwise the second pass would start midway.
-      await expect(page.getByText(/^Vytvořeno/)).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByTestId('generation-outcome')).toBeVisible({ timeout: 10_000 })
       // State after finishing: the run summary is in the card once, the toast only says done.
       await page.screenshot({ path: `e2e/screenshots/tema-pote-${theme}-1440.png`, fullPage: false })
 

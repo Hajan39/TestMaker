@@ -157,13 +157,13 @@ test.describe('generation overview', () => {
 
     await page.goto('/generovani')
     await expect(page.getByRole('heading', { name: 'Průběh generování' })).toBeVisible()
-    await expect(page.getByText('Čeká na řadu', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('queue-section-queued')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Zkušební téma' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Vyprázdnit frontu' }).click()
     await page.getByRole('button', { name: 'Vyprázdnit', exact: true }).click()
 
-    await expect(page.getByText('Nic se negeneruje')).toBeVisible()
+    await expect(page.getByTestId('queue-empty')).toBeVisible()
   })
 
   test('the indicator with a single waiting job leads straight to its topic', async ({ page, request }) => {
@@ -228,10 +228,13 @@ test.describe('generation overview', () => {
     await page.goto('/generovani')
     // The screen polls by itself while something waits — the stubbed listing
     // arrives with the first such poll.
-    await expect(page.getByText('Právě se tvoří', { exact: true })).toBeVisible()
-    await expect(page.getByText(/běží \d+ minut/)).toBeVisible()
+    await expect(page.getByTestId('queue-section-running')).toBeVisible()
+    await expect(page.getByTestId('queue-section-running').getByTestId('job-describe')).toHaveAttribute(
+      'data-running-minutes',
+      /^[45]$/,
+    )
     await expect(page.getByText('Dnešní limit modelu je vyčerpaný. Zkus to prosím zítra.')).toBeVisible()
-    await expect(page.getByText('stihlo vzniknout 3 otázky')).toBeVisible()
+    await expect(page.getByTestId('queue-section-error').getByTestId('job-describe')).toHaveAttribute('data-created', '3')
     await expect(page.getByRole('button', { name: 'Zkusit znovu', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
   })
@@ -276,7 +279,7 @@ test.describe('generation overview', () => {
     await stubJobs(page)
 
     await page.goto('/generovani')
-    await expect(page.getByText('Právě se tvoří', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('queue-section-running')).toBeVisible()
 
     for (const theme of ['light', 'dark'] as const) {
       if (theme === 'dark') {

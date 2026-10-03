@@ -191,7 +191,7 @@ test.describe('topic questions', () => {
     await row.getByRole('button', { name: 'Smazat' }).click()
 
     await expect(row).toHaveCount(0)
-    const toast = page.getByText('Otázka smazána')
+    const toast = page.getByTestId('toast-question-deleted')
     await expect(toast).toBeVisible()
     await page.getByRole('button', { name: 'Vrátit zpět' }).click()
 
@@ -242,10 +242,10 @@ test.describe('topic questions', () => {
     await page.locator('#topic-question-difficulty-filter').click()
     await page.getByRole('option', { name: 'Těžká' }).click()
 
-    await expect(page.getByText('Filtru neodpovídá žádná otázka.')).toBeVisible()
+    await expect(page.getByTestId('questions-no-match')).toBeVisible()
     // The empty-topic message would be misleading here — the topic has
     // questions, the filter just hides them.
-    await expect(page.getByText('V tématu zatím nejsou otázky.')).toHaveCount(0)
+    await expect(page.getByTestId('questions-empty')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Zrušit filtr' }).click()
     await expect(page.locator('li[data-question-id]', { hasText: prompt })).toBeVisible()
@@ -353,7 +353,7 @@ test.describe('topic questions', () => {
 
     await rowA.getByRole('button', { name: 'Smazat' }).click()
     await expect(rowA).toHaveCount(0)
-    const toast = page.getByText('Otázka smazána')
+    const toast = page.getByTestId('toast-question-deleted')
     await expect(toast).toBeVisible()
 
     // Meanwhile another card is edited — saving calls `router.refresh()`, so
@@ -454,6 +454,6 @@ test.describe('topic without questions', () => {
 
     await row.getByRole('button', { name: 'Smazat' }).click()
     await expect(row).toHaveCount(0)
-    await expect(page.getByText('V tématu zatím nejsou otázky.')).toBeVisible()
+    await expect(page.getByTestId('questions-empty')).toBeVisible()
   })
 })

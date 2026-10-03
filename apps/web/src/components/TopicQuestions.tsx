@@ -310,6 +310,7 @@ export const TopicQuestions = forwardRef<
         current === null ? null : [{ ...question, status: 'rejected' }, ...current],
       )
       toast.success(t('library:topicQuestions.deleted'), {
+        testId: 'toast-question-deleted',
         duration: 10_000,
         action: {
           label: t('library:topicQuestions.undo'),
@@ -535,6 +536,7 @@ export const TopicQuestions = forwardRef<
         <div className="mt-4">
           {active.length === 0 ? (
             <EmptyState
+              testId="questions-empty"
               title={t('library:topicQuestions.emptyTitle')}
               // A viewer (role `nahled`) does not write questions — that addition
               // would only offer an action she does not have.
@@ -542,6 +544,7 @@ export const TopicQuestions = forwardRef<
             />
           ) : (
             <EmptyState
+              testId="questions-no-match"
               title={t('library:topicQuestions.noMatchTitle')}
               action={
                 <Button variant="outline" onClick={resetFilters}>
