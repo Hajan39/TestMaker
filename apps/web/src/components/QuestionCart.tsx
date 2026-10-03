@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { usePathname, useRouter } from 'next/navigation'
@@ -143,7 +144,11 @@ function CartBar({ templateId }: { templateId: string }) {
   const cart = useQuestionCart()
   const router = useRouter()
   const pathname = usePathname()
-  const [busy, setBusy] = useState(false)
+  const createMutation = useMutation({
+    mutationFn: (body: unknown) =>
+      requestJson<{ id: string }>('/api/tests', jsonBody('POST', body), t('library:topicQuestions.createTestFailed')),
+  })
+  const busy = createMutation.isPending
   if (cart.items.length === 0 || NO_BAR.some((re) => re.test(pathname))) return null
 
   const points = cart.items.reduce((sum, item) => sum + item.points, 0)
@@ -153,11 +158,8 @@ function CartBar({ templateId }: { templateId: string }) {
   const subjects = new Set(cart.items.map((item) => item.subjectName))
 
   async function create() {
-    setBusy(true)
     try {
-      const result = await requestJson<{ id: string }>(
-        '/api/tests',
-        jsonBody('POST', {
+      const result = await createMutation.mutateAsync({
           // One topic names the test; several give a neutral name to rename.
           title: single ? single.topicName : t('library:cart.mixedTitle', { count: topics.size }),
           templateId,
@@ -172,9 +174,7 @@ function CartBar({ templateId }: { templateId: string }) {
             pointsOverride: null,
             linesOverride: null,
           })),
-        }),
-        t('library:topicQuestions.createTestFailed'),
-      )
+      })
       if (!result.id) throw new Error(t('library:topicQuestions.createTestFailed'))
       cart.clear()
       // `refresh()` before `push()`: the page left behind would otherwise stay
@@ -183,8 +183,6 @@ function CartBar({ templateId }: { templateId: string }) {
       router.push(single ? `/tests/${result.id}?tema=${single.topicId}` : `/tests/${result.id}`)
     } catch (error) {
       toast.error(errorMessage(error, t('library:topicQuestions.createTestFailed')))
-    } finally {
-      setBusy(false)
     }
   }
 
