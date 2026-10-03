@@ -82,7 +82,9 @@ export function TopicTile({
           ) : null}
           {jobState === 'queued' ? <Badge variant="status">{t('library:topicTile.queued')}</Badge> : null}
           {questionCount === 0 ? <Badge variant="status">{t('library:topicTile.noQuestions')}</Badge> : null}
-          {lowContent ? <Badge variant="status">{t('library:topicTile.lowContent')}</Badge> : null}
+          {lowContent ? <Badge variant="status" data-testid="topic-low-content">
+              {t('library:topicTile.lowContent')}
+            </Badge> : null}
         </Link>
       ) : null}
 

@@ -51,7 +51,7 @@ test.describe('thin topic warning', () => {
 
     // The topic detail explains what little text means and still allows generating.
     await expect(page.getByRole('heading', { name: 'Chudé téma' })).toBeVisible()
-    await expect(page.getByText('Materiálů je v tomhle tématu málo')).toBeVisible()
+    await expect(page.getByTestId('thin-topic-warning')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Generovat otázky' })).toBeVisible()
 
     // And the same calm note is visible on the tile in the grade overview.
@@ -62,7 +62,7 @@ test.describe('thin topic warning', () => {
       .locator('section', { has: page.getByRole('heading', { name: 'PODKLADY', exact: true }) })
       .last()
     await subjectOverview.getByRole('link', { name: '9. ročník' }).first().click()
-    await expect(page.getByText('málo textu', { exact: true }).first()).toBeVisible()
+    await expect(page.getByTestId('topic-low-content').first()).toBeVisible()
 
     // Clean up — the test created its own subject, it does not belong in the real library.
     await page.goto('/?vse=1')
@@ -128,8 +128,8 @@ test.describe('same file in two topics', () => {
       // it via the toggle in its header.
       await page.getByRole('button', { name: /^Materiály/ }).click()
       await expect(page.getByText(fileName).first()).toBeVisible()
-      await expect(page.getByText('stejný obsah jako')).toHaveCount(0)
-      await expect(page.getByText('Materiálů je v tomhle tématu málo')).toHaveCount(0)
+      await expect(page.getByTestId('material-duplicate-of')).toHaveCount(0)
+      await expect(page.getByTestId('thin-topic-warning')).toHaveCount(0)
     }
 
     // Clean up — the test subject does not belong in the real library.

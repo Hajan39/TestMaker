@@ -47,7 +47,7 @@ test('someone else\'s test is not in the list, at its URL or in the PDF', async 
     await pageB.goto('/tests')
     await expect(pageB.getByText(name)).toHaveCount(0)
     await pageB.goto(`/tests/${id}`)
-    await expect(pageB.getByText(/Stránka neexistuje|Stránka nenalezena|404/i).first()).toBeVisible()
+    await expect(pageB.getByTestId('not-found-page')).toBeVisible()
 
     // Nor does she get the PDF, even when she builds the URL herself.
     const pdf = await contextB.request.get(`/api/tests/${id}/pdf`)

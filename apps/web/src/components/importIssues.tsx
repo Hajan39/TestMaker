@@ -43,25 +43,27 @@ export function IssueList({
   title,
   items,
   kind,
+  testId,
 }: {
   title: string
   items: IssueItem[]
   kind: 'danger' | 'neutral'
+  testId: string
 }) {
   const [open, setOpen] = useState(false)
   return (
-    <Card className="p-5">
+    <Card className="p-5" data-testid={testId}>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-semibold text-fg-soft">
+        <CollapsibleTrigger data-testid="issue-list-trigger" className="flex w-full items-center justify-between text-sm font-semibold text-fg-soft">
           {title}
           <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
             {items.map((item) => (
-              <li key={item.relativePath} className="flex flex-wrap gap-2">
+              <li key={item.relativePath} className="flex flex-wrap gap-2" data-testid="issue-item">
                 <span className="text-fg-soft">{item.relativePath}</span>
-                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'}>{item.reason}</span>
+                <span className={kind === 'danger' ? 'text-danger' : 'text-fg-muted'} data-testid="issue-reason">{item.reason}</span>
               </li>
             ))}
           </ul>

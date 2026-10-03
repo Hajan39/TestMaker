@@ -24,7 +24,7 @@ test('a manager creates an account, gets a one-time password and then blocks it'
 
   // The password is shown once and only here — the manager hands it over in person.
   const passwordDialog = page.getByRole('dialog')
-  await expect(passwordDialog.getByText(`Heslo pro ${email}`)).toBeVisible()
+  await expect(passwordDialog.getByTestId('account-password-title')).toContainText(email)
   await passwordDialog.getByRole('button', { name: 'Hotovo' }).click()
   await expect(page.getByText(email).first()).toBeVisible()
 
@@ -33,14 +33,14 @@ test('a manager creates an account, gets a one-time password and then blocks it'
   await row.getByRole('button', { name: 'Zablokovat' }).click()
   // Blocking signs the teacher out, so it is confirmed first.
   await page.getByRole('alertdialog').getByRole('button', { name: 'Zablokovat' }).click()
-  await expect(row.getByText('Zablokovaný')).toBeVisible()
+  await expect(row.getByTestId('account-status')).toHaveAttribute('data-status', 'zablokovany')
 })
 
 test('events show what happened in the app', async ({ page }) => {
   await page.goto('/sprava')
   await page.getByRole('tab', { name: 'Události a chyby' }).click()
   // Sign-ins of the test accounts were logged — otherwise the log would be useless.
-  await expect(page.getByText('Přihlášení', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('[data-testid="event-label"][data-action="prihlaseni"]').first()).toBeVisible()
 })
 
 test('a manager sees the AI quality tab with numbers from the test data', async ({ page }) => {

@@ -107,7 +107,7 @@ export function MaterialRow({
         <Badge className="shrink-0 bg-draft-bg text-draft-fg">{t('library:materialRow.needsOcr')}</Badge>
       ) : null}
       {material.duplicateOfId ? (
-        <span className="min-w-0 break-all text-xs text-fg-muted">
+        <span className="min-w-0 break-all text-xs text-fg-muted" data-testid="material-duplicate-of">
           {t('library:materialRow.duplicateOf', { name: originalFileName ?? t('library:materialRow.otherMaterial') })}
           {material.duplicateScore
             ? t('library:materialRow.duplicateScore', { percent: Math.round(material.duplicateScore * 100) })

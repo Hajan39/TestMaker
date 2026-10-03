@@ -9,7 +9,7 @@ import { t } from '@testmaker/core/i18n'
  */
 export default function NotFound() {
   return (
-    <div className="p-5">
+    <div className="p-5" data-testid="not-found-page">
       <EmptyState
         title={t('auth:shell.notFoundTitle')}
         hint={t('auth:shell.notFoundHint')}

@@ -498,10 +498,12 @@ export function PuzzleWorkshop({
       const added = t('puzzles:words', { count: entries.length })
       if (entries.length === 0) {
         toast.warning(t('puzzles:workshop.fetch.none'), {
+          testId: 'toast-puzzle-no-words',
           description: t('puzzles:workshop.fetch.noneHint', { note: rejectedNote }).trim(),
         })
       } else if (entries.length < requested / 2) {
         toast.warning(t('puzzles:workshop.fetch.fewAdded', { added, requested }), {
+          testId: 'toast-puzzle-few-added',
           description: t('puzzles:workshop.fetch.fewAddedHint', { note: rejectedNote }).trim(),
         })
       } else if (typeof data.warning === 'string' && data.warning) {
@@ -559,6 +561,7 @@ export function PuzzleWorkshop({
       router.refresh()
       if (problems.length > 0) {
         toast.warning(t('puzzles:workshop.save.savedUnprintable'), {
+          testId: 'toast-puzzle-saved-unprintable',
           description: problems[0]?.message,
         })
       } else if (!options.quiet) {

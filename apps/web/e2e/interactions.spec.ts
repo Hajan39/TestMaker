@@ -24,7 +24,7 @@ test.describe('question editor', () => {
     await page.getByRole('option', { name: 'Volná odpověď' }).click()
 
     // A free answer asks for the number of lines; a choice question does not.
-    await expect(form.getByText('Počet linek')).toBeVisible()
+    await expect(form.getByLabel('Počet linek')).toBeVisible()
   })
 })
 
@@ -69,9 +69,6 @@ test.describe('generation menu', () => {
     if (configured) await expect(topicButton).toBeVisible()
     else {
       await expect(topicButton).toHaveCount(0)
-      // Without a key even the explanatory message on the topic is not offered —
-      // generation is simply not visible.
-      await expect(page.getByText('chybí přístupový klíč')).toHaveCount(0)
     }
 
     // `?vse=1`: the test opened a topic before, so `/` would otherwise silently

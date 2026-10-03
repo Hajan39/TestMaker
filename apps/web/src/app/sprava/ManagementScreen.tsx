@@ -219,7 +219,7 @@ export function ManagementScreen({
       toast.error(errorMessage(error, t('admin:errors.schoolSaveFailed')))
       return false
     }
-    toast.success(t('admin:schools.saved'))
+    toast.success(t('admin:schools.saved'), { testId: 'toast-school-saved' })
     router.refresh()
     return true
   }
@@ -287,7 +287,9 @@ export function ManagementScreen({
           <Dialog open={password !== null} onOpenChange={(open) => (open ? null : setPassword(null))}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>{t('admin:management.accounts.passwordFor', { email: password?.email })}</DialogTitle>
+                <DialogTitle data-testid="account-password-title">
+                  {t('admin:management.accounts.passwordFor', { email: password?.email })}
+                </DialogTitle>
                 <DialogDescription>{t('admin:management.accounts.passwordHint')}</DialogDescription>
               </DialogHeader>
               <code className="ui-numeric block rounded-[var(--radius-inner)] border border-line p-3 text-center text-lg">
@@ -359,7 +361,11 @@ export function ManagementScreen({
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   {account.status !== 'aktivni' ? (
-                    <Badge variant={account.status === 'ceka' ? 'secondary' : 'destructive'}>
+                    <Badge
+                      variant={account.status === 'ceka' ? 'secondary' : 'destructive'}
+                      data-testid="account-status"
+                      data-status={account.status}
+                    >
                       {t(`admin:statuses.${account.status}`)}
                     </Badge>
                   ) : null}
@@ -505,6 +511,8 @@ export function ManagementScreen({
                 <div key={event.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3 text-sm">
                   <span className="ui-numeric w-40 shrink-0 text-xs text-fg-muted">{when(event.at)}</span>
                   <span
+                    data-testid="event-label"
+                    data-action={event.action}
                     className={
                       event.severity === 'chyba' ? 'font-medium text-danger' : 'font-medium text-fg'
                     }
@@ -513,7 +521,9 @@ export function ManagementScreen({
                   </span>
                   <span className="text-fg-soft">{event.who ?? t('admin:management.events.anonymous')}</span>
                   {fromAdministrator(event.detail) ? (
-                    <Badge variant="secondary">{t('admin:management.events.administrator')}</Badge>
+                    <Badge variant="secondary" data-testid="event-administrator">
+                      {t('admin:management.events.administrator')}
+                    </Badge>
                   ) : null}
                   {event.detail && describeDetail(event.detail) ? (
                     <span className="text-xs text-fg-muted">{describeDetail(event.detail)}</span>

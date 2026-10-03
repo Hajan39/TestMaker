@@ -31,14 +31,14 @@ test.describe('administrator', () => {
     await expect(page.getByRole('button', { name: 'Škola: Vývoj' })).toBeVisible()
 
     await switchInto(page, 'Druhá škola')
-    await expect(page.getByText('Cizí škola')).toBeVisible()
+    await expect(page.getByTestId('foreign-school-badge')).toBeVisible()
 
     await page.goto('/tests')
     await expect(page.getByText(PRIVATE_TEST_C)).toBeVisible()
 
     // Back home, so the next tests start from the default state.
     await switchInto(page, 'Vývoj')
-    await expect(page.getByText('Cizí škola')).toHaveCount(0)
+    await expect(page.getByTestId('foreign-school-badge')).toHaveCount(0)
   })
 
   test('sees AI usage across all schools and switches the period', async ({ page }) => {
@@ -74,9 +74,9 @@ test.describe('manager of the second school', () => {
   test('sees in the log that the administrator switched to them', async ({ page }) => {
     await page.goto('/sprava')
     await page.getByRole('tab', { name: 'Události a chyby' }).click()
-    const event = page.getByText('Administrátor se přepnul do školy').first()
+    const event = page.locator('[data-testid="event-label"][data-action="administrator-prepnul-skolu"]').first()
     await expect(event).toBeVisible()
-    await expect(page.getByText('Administrátor', { exact: true }).first()).toBeVisible()
+    await expect(page.getByTestId('event-administrator').first()).toBeVisible()
   })
 })
 
@@ -88,7 +88,7 @@ test.describe('manager', () => {
     const school = page.locator('[data-slot="card"]').filter({ hasText: 'Uložit školu' })
     await school.getByLabel('Doména Google').fill('@Vyvoj-E2E.cz')
     await school.getByRole('button', { name: 'Uložit školu' }).click()
-    await expect(page.getByText('Škola uložena.')).toBeVisible()
+    await expect(page.getByTestId('toast-school-saved')).toBeVisible()
 
     await page.reload()
     await expect(

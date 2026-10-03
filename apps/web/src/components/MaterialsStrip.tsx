@@ -263,7 +263,9 @@ export const MaterialsStrip = forwardRef<
         topicId,
         onProgress: (uploadDone, uploadTotal) => setProgress({ done: uploadDone, total: uploadTotal }),
       })
-      toast.success(uploadSummaryMessage(result))
+      toast.success(uploadSummaryMessage(result), {
+        testId: result.imported === 0 ? 'toast-materials-already-in-topic' : 'toast-materials-uploaded',
+      })
       // A scan without a text layer is saved to the library (the teacher may
       // replace it with a better version), but no questions ever come from it —
       // say so right away, not only at the strip's checkbox.
@@ -377,10 +379,10 @@ export const MaterialsStrip = forwardRef<
           ) : null}
 
           {failed.length > 0 ? (
-            <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" />
+            <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" testId="failed-files" />
           ) : null}
           {skipped.length > 0 ? (
-            <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" />
+            <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" testId="skipped-files" />
           ) : null}
 
           {materials.length > 0 ? (

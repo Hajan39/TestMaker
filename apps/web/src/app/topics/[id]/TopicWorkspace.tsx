@@ -263,7 +263,7 @@ export function TopicWorkspace({
           </div>
 
           {lowContent ? (
-            <p className="text-sm text-fg-muted">
+            <p className="text-sm text-fg-muted" data-testid="thin-topic-warning">
               {t('generation:topicGeneration.lowContent')}
             </p>
           ) : null}

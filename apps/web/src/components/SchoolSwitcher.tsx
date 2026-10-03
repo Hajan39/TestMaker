@@ -62,7 +62,11 @@ export function SchoolSwitcher({
         >
           <School className="size-4" />
           <span className="max-w-40 truncate">{school.name}</span>
-          {foreign ? <Badge variant="secondary">{t('admin:schoolSwitcher.foreign')}</Badge> : null}
+          {foreign ? (
+            <Badge variant="secondary" data-testid="foreign-school-badge">
+              {t('admin:schoolSwitcher.foreign')}
+            </Badge>
+          ) : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
