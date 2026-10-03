@@ -139,14 +139,14 @@ test.describe('topic materials strip', () => {
       }
 
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([first, second])
-      await expect(page.getByText(/Nahráno 2 materiály/)).toBeVisible()
+      await expect(page.getByTestId('toast-materials-uploaded')).toContainText('2')
       await expect(page.getByText(first.name)).toBeVisible()
       await expect(page.getByText(second.name)).toBeVisible()
 
       // Uploading the same file again: no duplicate, and the message says so —
       // nothing is saved this time, so the sentence only talks about duplicates.
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([first])
-      await expect(page.getByText('Všechny soubory už v tématu byly.')).toBeVisible()
+      await expect(page.getByTestId('toast-materials-already-in-topic')).toBeVisible()
       await expect(page.getByText(first.name)).toHaveCount(1)
     } finally {
       await cleanup(page.request, topicId)
@@ -189,7 +189,7 @@ test.describe('topic materials strip', () => {
       ]
       await page.locator('[data-testid="topic-material-files"]').setInputFiles(files)
 
-      await expect(page.getByText(/Nahráno 4 materiály/)).toBeVisible()
+      await expect(page.getByTestId('toast-materials-uploaded')).toContainText('4')
       for (const file of files) await expect(page.getByText(file.name, { exact: true })).toBeVisible()
     } finally {
       await cleanup(page.request, topicId)
@@ -209,9 +209,9 @@ test.describe('topic materials strip', () => {
       }
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([unsupported])
 
-      await page.getByText(/^Přeskočeno/).click()
+      await page.getByTestId('skipped-files').getByTestId('issue-list-trigger').click()
       await expect(page.getByText(unsupported.name)).toBeVisible()
-      await expect(page.getByText('nepodporovaná přípona')).toBeVisible()
+      await expect(page.getByTestId('issue-reason')).toBeVisible()
     } finally {
       await cleanup(page.request, topicId)
     }
@@ -252,9 +252,9 @@ test.describe('topic materials strip', () => {
       }
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([empty])
 
-      await page.getByText(/^Přeskočeno/).click()
+      await page.getByTestId('skipped-files').getByTestId('issue-list-trigger').click()
       await expect(page.getByText(empty.name)).toBeVisible()
-      await expect(page.getByText('soubor neobsahuje žádný text')).toBeVisible()
+      await expect(page.getByTestId('issue-reason')).toBeVisible()
       // It wasn't added to the topic's materials.
       await expect(page.getByText(empty.name).locator('..').getByRole('checkbox')).toHaveCount(0)
     } finally {
@@ -277,7 +277,7 @@ test.describe('topic materials strip', () => {
         buffer: Buffer.from(text('Úvodní materiál založený přes API, aby téma existovalo.').slice(0, 200), 'utf8'),
       }
       await page.locator('[data-testid="topic-material-files"]').setInputFiles([duplicate])
-      await expect(page.getByText('stejný obsah jako')).toBeVisible()
+      await expect(page.getByTestId('material-duplicate-of')).toBeVisible()
 
       const duplicateCheckbox = page.getByRole('checkbox', {
         name: `Použít pro generování: ${duplicate.name}`,

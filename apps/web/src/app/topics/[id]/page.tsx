@@ -116,7 +116,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
 
       <StatRow
         items={[
-          { value: usableCount, label: t('library:word.materials', { count: usableCount }) },
+          { id: 'materials', value: usableCount, label: t('library:word.materials', { count: usableCount }) },
           { value: totalChars.toLocaleString('cs'), label: t('library:topicPage.charsAvailable') },
           { value: usableQuestionCount, label: t('library:word.questions', { count: usableQuestionCount }) },
         ]}

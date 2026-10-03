@@ -46,7 +46,9 @@ export function MoveTopic({ topicId, currentGradeName }: { topicId: string; curr
     setBusy(true)
     try {
       await requestJson('/api/topics', jsonBody('PATCH', { id: topicId, gradeName }), t('library:moveTopic.failed'))
-      toast.success(t('library:moveTopic.moved', { grade: gradeName || t('library:labels.noGrade') }))
+      toast.success(t('library:moveTopic.moved', { grade: gradeName || t('library:labels.noGrade') }), {
+        testId: 'toast-topic-moved',
+      })
       router.refresh()
     } catch (error) {
       toast.error(errorMessage(error, t('library:moveTopic.failedRetry')))

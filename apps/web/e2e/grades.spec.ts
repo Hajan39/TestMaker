@@ -172,7 +172,7 @@ test.describe('class hub', () => {
     // In the dev server Next.js returns a `notFound()` page with status 200
     // (only the production build fixes that) — so the content is checked.
     await page.goto('/tridy/neexistujici-trida-xyz')
-    await expect(page.getByText('Třída už neexistuje')).toBeVisible()
+    await expect(page.getByTestId('grade-not-found')).toBeVisible()
     const back = page.getByRole('link', { name: 'Všechny třídy' })
     await expect(back).toBeVisible()
     await back.click()
@@ -212,7 +212,7 @@ test.describe('managing a topic on the class page', () => {
       await move.click()
       await page.getByRole('option', { name: GRADE_2, exact: true }).click()
 
-      await expect(page.getByText(`Téma přesunuto do ${GRADE_2}`)).toBeVisible()
+      await expect(page.getByTestId('toast-topic-moved')).toContainText(GRADE_2)
 
       // The topic disappears from the old class...
       await expect(page.getByText(TOPIC, { exact: true })).toHaveCount(0)

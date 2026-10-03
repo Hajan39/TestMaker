@@ -101,7 +101,7 @@ test.describe('puzzles', () => {
     await expect(rows).toHaveCount(3)
 
     // The solution shows what should come out — the empty cells get filled.
-    await page.getByText('Ukázat řešení').click()
+    await page.getByLabel('Ukázat řešení').click()
     await expect(page.locator('[data-slot="puzzle-rows"]')).toContainText('L')
 
     const print = page.waitForResponse(
@@ -133,7 +133,7 @@ test.describe('puzzles', () => {
 
     // Saving as a draft works, it just says printing is not possible yet.
     await page.getByRole('button', { name: 'Uložit hlavolam' }).click()
-    await expect(page.getByText('zatím se nedá vytisknout ani zařadit do písemky')).toBeVisible()
+    await expect(page.getByTestId('toast-puzzle-saved-unprintable')).toBeVisible()
     await expect(page.locator('[data-slot="puzzle-list"]').getByText(name)).toBeVisible()
   })
 
@@ -227,7 +227,7 @@ test.describe('puzzles', () => {
     await page.getByLabel('Téma').click()
     await page.getByRole('option').nth(1).click()
     await extractButton.click()
-    await expect(page.getByText('Model nedodal žádné nové slovo.')).toBeVisible()
+    await expect(page.getByTestId('toast-puzzle-no-words')).toBeVisible()
 
     // Fewer words than requested is a warning with advice, not a green success.
     await page.unroute('**/api/puzzles/words**')
@@ -244,6 +244,6 @@ test.describe('puzzles', () => {
       })
     })
     await extractButton.click()
-    await expect(page.getByText('Přibylo jen 2 slova z 12 požadovaných.')).toBeVisible()
+    await expect(page.getByTestId('toast-puzzle-few-added')).toContainText('2')
   })
 })

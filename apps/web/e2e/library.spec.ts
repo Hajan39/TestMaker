@@ -64,7 +64,7 @@ test.describe('manual library management', () => {
       await expect(page).toHaveURL(/\/topics\//)
       await expect(page.getByRole('heading', { name: TOPIC, exact: true })).toBeVisible()
       // A topic without materials must not break the overview — the counts are just zero.
-      await expect(page.getByText('materiálů', { exact: false }).first()).toBeVisible()
+      await expect(page.getByTestId('stat-materials')).toContainText('0')
 
       // --- Renaming the topic (in place, no dialog) ------------------------
       await page.goto(gradeUrl)

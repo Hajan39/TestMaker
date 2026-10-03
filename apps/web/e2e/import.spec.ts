@@ -43,7 +43,7 @@ test.describe('import preview', () => {
     // Next to the folder picker there must be a file picker and a drop zone.
     await expect(page.getByRole('button', { name: 'Vybrat složku' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Vybrat soubory' })).toBeVisible()
-    await expect(page.getByText('přetáhni myší')).toBeVisible()
+    await expect(page.getByTestId('import-drop-hint')).toBeVisible()
 
     await page.locator('[data-testid="import-files"]').setInputFiles([KEPT, DROPPED])
 
@@ -51,7 +51,7 @@ test.describe('import preview', () => {
     // since a standalone file's path says nothing, it stays without a subject.
     const group = page.locator('[data-testid="import-group"]')
     await expect(group).toHaveCount(1)
-    await expect(page.getByText('Předmět z cesty vyčíst nešel')).toBeVisible()
+    await expect(page.getByTestId('import-subject-missing')).toBeVisible()
     await expect(group.getByLabel('Téma')).toHaveValue(TOPIC)
 
     // Until the preview is confirmed, the library has nothing.
@@ -68,7 +68,7 @@ test.describe('import preview', () => {
     await expect(page.getByRole('button', { name: 'Importovat (1)' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Importovat (1)' }).click()
-    await expect(page.getByText(/Naimportováno 1 materiál/)).toBeVisible()
+    await expect(page.getByTestId('import-summary')).toHaveAttribute('data-count', '1')
 
     // After import it offers where to continue — not just an overview.
     await expect(page.getByRole('button', { name: `Ročník ${GRADE}` })).toBeVisible()
@@ -129,7 +129,7 @@ test.describe('import preview', () => {
     }
 
     await page.getByRole('button', { name: 'Importovat (2)' }).click()
-    await expect(page.getByText(/Naimportováno 2 materiály/)).toBeVisible()
+    await expect(page.getByTestId('import-summary')).toHaveAttribute('data-count', '2')
     // Both groups ended up in a single topic.
     await expect(page.getByRole('button', { name: /^Téma / })).toHaveCount(1)
 

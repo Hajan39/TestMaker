@@ -298,7 +298,9 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
             {t('library:import.pickFiles')}
           </Button>
         </div>
-        <p className="text-sm text-fg-soft">{t('library:import.dropHint')}</p>
+        <p className="text-sm text-fg-soft" data-testid="import-drop-hint">
+          {t('library:import.dropHint')}
+        </p>
         <p className="max-w-md text-sm text-fg-muted">{t('library:import.supported')}</p>
 
         {busy ? (
@@ -316,7 +318,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       </Card>
 
       {summary ? (
-        <Card className="border-brand bg-brand-bg p-5">
+        <Card className="border-brand bg-brand-bg p-5" data-testid="import-summary" data-count={summary.imported}>
           <p className="text-sm text-fg-soft">
             {t('library:import.imported', { materials: t('library:count.materials', { count: summary.imported }) })}
             {summary.duplicates > 0 ? t('library:import.alreadyInLibrary', { duplicates: summary.duplicates }) : ''}.
@@ -430,7 +432,9 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                 </div>
 
                 {!group.subject.trim() && group.include ? (
-                  <p className="text-sm text-draft-fg">{t('library:import.subjectMissing')}</p>
+                  <p className="text-sm text-draft-fg" data-testid="import-subject-missing">
+                    {t('library:import.subjectMissing')}
+                  </p>
                 ) : null}
                 {near ? (
                   <p className="text-sm text-draft-fg">{t('library:import.nearDuplicateSubject', { name: near })}</p>
@@ -458,7 +462,9 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
                       {file.material.needsOcr ? (
                         <Badge className="bg-draft-bg text-draft-fg">{t('library:import.needsOcr')}</Badge>
                       ) : file.material.text.length < LOW_TEXT ? (
-                        <Badge className="bg-draft-bg text-draft-fg">{t('library:import.lowText')}</Badge>
+                        <Badge className="bg-draft-bg text-draft-fg" data-testid="low-text-badge">
+                          {t('library:import.lowText')}
+                        </Badge>
                       ) : null}
                     </li>
                   ))}
@@ -473,10 +479,10 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       ) : null}
 
       {failed.length > 0 ? (
-        <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" />
+        <IssueList title={t('library:import.failedTitle', { n: failed.length })} items={failed} kind="danger" testId="failed-files" />
       ) : null}
       {skipped.length > 0 ? (
-        <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" />
+        <IssueList title={t('library:import.skippedTitle', { n: skipped.length })} items={skipped} kind="neutral" testId="skipped-files" />
       ) : null}
     </div>
   )

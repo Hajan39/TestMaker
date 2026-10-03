@@ -9,7 +9,7 @@ import { t } from '@testmaker/core/i18n'
  */
 export default function TopicNotFound() {
   return (
-    <div className="p-5">
+    <div className="p-5" data-testid="topic-not-found">
       <EmptyState
         title={t('library:topicPage.notFoundTitle')}
         hint={t('library:topicPage.notFoundHint')}

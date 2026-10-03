@@ -9,7 +9,7 @@ import { t } from '@testmaker/core/i18n'
  */
 export default function ClassNotFound() {
   return (
-    <div className="p-5">
+    <div className="p-5" data-testid="grade-not-found">
       <EmptyState
         title={t('library:grade.notFoundTitle')}
         hint={t('library:grade.notFoundHint')}
