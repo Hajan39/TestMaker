@@ -132,7 +132,7 @@ export function QuestionEditorForm({
   const type = useWatch({ control, name: 'type' })
   const difficulty = useWatch({ control, name: 'difficulty' })
   // One message under the form: what is wrong with the content, or what the server said.
-  const error = (errors.payload?.message as string | undefined) ??errors.root?.message ?? null
+  const error = (errors.payload?.message as string | undefined) ?? errors.root?.message ?? null
   // A card being edited and „Nová otázka" can be on screen side by side —
   // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
