@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Question, QuestionContent, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
@@ -150,8 +151,6 @@ export function TestBuilder({
     grade: gradeId && topics.some((topic) => topic.gradeId === gradeId) ? gradeId : '',
     type: '',
   })
-  const [saving, setSaving] = useState(false)
-  const [copying, setCopying] = useState(false)
   // Only the title error — it belongs to the field; other action errors go to toasts.
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(test?.id ?? null)
@@ -283,20 +282,22 @@ export function TestBuilder({
     setDraft((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
-  // Key of the item whose question is being reloaded from the bank.
-  const [reloading, setReloading] = useState<string | null>(null)
   // Bank question opened for editing from the test, with the item it came from.
   const [bankEdit, setBankEdit] = useState<{ key: string; question: Question } | null>(null)
 
-  async function fetchBankQuestion(questionId: string): Promise<Question> {
-    const data = await requestJson<{ question: Question }>(
-      `/api/questions/${encodeURIComponent(questionId)}`,
-      undefined,
-      t('tests:page.reloadFailed'),
-    )
-    if (!data.question) throw new Error(t('tests:page.reloadFailed'))
-    return data.question
-  }
+  // `key` is the item being reloaded (none after a bank edit, which updates every item).
+  const bankQuestionMutation = useMutation({
+    mutationFn: async ({ questionId }: { questionId: string; key?: string }) => {
+      const data = await requestJson<{ question: Question }>(
+        `/api/questions/${encodeURIComponent(questionId)}`,
+        undefined,
+        t('tests:page.reloadFailed'),
+      )
+      if (!data.question) throw new Error(t('tests:page.reloadFailed'))
+      return data.question
+    },
+  })
+  const reloading = bankQuestionMutation.isPending ? (bankQuestionMutation.variables.key ?? null) : null
 
   /**
    * Opens the bank question for editing — the current bank version, not the
@@ -305,13 +306,10 @@ export function TestBuilder({
   async function editBankQuestion(key: string) {
     const item = draft.find((candidate) => candidate.key === key)
     if (!item?.questionId) return
-    setReloading(key)
     try {
-      setBankEdit({ key, question: await fetchBankQuestion(item.questionId) })
+      setBankEdit({ key, question: await bankQuestionMutation.mutateAsync({ questionId: item.questionId, key }) })
     } catch (loadError) {
       toast.error(errorMessage(loadError, t('tests:page.reloadFailed')))
-    } finally {
-      setReloading(null)
     }
   }
 
@@ -319,7 +317,7 @@ export function TestBuilder({
   async function afterBankEdit(questionId: string) {
     setBankEdit(null)
     try {
-      const question = await fetchBankQuestion(questionId)
+      const question = await bankQuestionMutation.mutateAsync({ questionId })
       setDraft((current) =>
         current.map((item) =>
           item.questionId === questionId && item.kind === 'question'
@@ -341,15 +339,12 @@ export function TestBuilder({
   async function reloadQuestion(key: string) {
     const item = draft.find((candidate) => candidate.key === key)
     if (!item?.questionId) return
-    setReloading(key)
     try {
-      const question = await fetchBankQuestion(item.questionId)
+      const question = await bankQuestionMutation.mutateAsync({ questionId: item.questionId, key })
       patchItem(key, { question, questionEdited: false, id: null, reloaded: true })
       toast.success(t('tests:page.reloaded'))
     } catch (reloadError) {
       toast.error(errorMessage(reloadError, t('tests:page.reloadFailed')))
-    } finally {
-      setReloading(null)
     }
   }
 
@@ -357,7 +352,6 @@ export function TestBuilder({
 
   // Worksheet task editor: `key` of the edited item, or the slot for a new one.
   const [questionDialog, setQuestionDialog] = useState<{ key: string | null; index?: number } | null>(null)
-  const [regenerating, setRegenerating] = useState<string | null>(null)
 
   function insertAt(item: DraftItem, index?: number) {
     setDraft((current) => {
@@ -446,23 +440,32 @@ export function TestBuilder({
    * saved by itself — the worksheet is saved with the Save button like after
    * any other edit.
    */
+  const regenerateMutation = useMutation({
+    mutationFn: async (args: { key: string; id: string; target: WorksheetTarget; existing: string[] }) => {
+      const failure = t('worksheets:builder.regenerateFailed')
+      const data = await requestJson<{ item: WorksheetItemDraft }>(
+        `/api/worksheets/${encodeURIComponent(savedId ?? '')}/items/${encodeURIComponent(args.id)}/regenerate`,
+        jsonBody('POST', { target: args.target, existing: args.existing }),
+        failure,
+      )
+      if (!data.item) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      return data.item
+    },
+  })
+  const regenerating = regenerateMutation.isPending ? regenerateMutation.variables.key : null
+
   async function regenerate(key: string) {
     const item = draft.find((candidate) => candidate.key === key)
     const target = item ? targetOf(item) : null
     if (!item || !target || !savedId) return
-    setRegenerating(key)
-    const failure = t('worksheets:builder.regenerateFailed')
     try {
-      const data = await requestJson<{ item: WorksheetItemDraft }>(
-        `/api/worksheets/${encodeURIComponent(savedId)}/items/${encodeURIComponent(item.id ?? key)}/regenerate`,
-        jsonBody('POST', {
-          target,
-          existing: draft.filter((other) => other.key !== key).map(summaryOf).filter(Boolean),
-        }),
-        failure,
-      )
-      if (!data.item) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
-      const replacement = fromModel(data.item, item)
+      const modelItem = await regenerateMutation.mutateAsync({
+        key,
+        id: item.id ?? key,
+        target,
+        existing: draft.filter((other) => other.key !== key).map(summaryOf).filter(Boolean),
+      })
+      const replacement = fromModel(modelItem, item)
       setDraft((current) => current.map((candidate) => (candidate.key === key ? replacement : candidate)))
       // The new version overwrites manual edits too — the original can still be restored.
       toast.success(t('worksheets:builder.regenerated'), {
@@ -473,9 +476,7 @@ export function TestBuilder({
         },
       })
     } catch (regenerateError) {
-      toast.error(errorMessage(regenerateError, failure))
-    } finally {
-      setRegenerating(null)
+      toast.error(errorMessage(regenerateError, t('worksheets:builder.regenerateFailed')))
     }
   }
 
@@ -534,24 +535,52 @@ export function TestBuilder({
   }, [dirty])
 
   /** Copy of a shared test — which the author then edits her own way. */
-  async function copy() {
-    if (!savedId) return
-    setCopying(true)
-    const failure = t('tests:row.copyFailed')
-    try {
+  const copyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const failure = t('tests:row.copyFailed')
       const data = await requestJson<{ id: string }>(
-        `/api/tests?copyOf=${encodeURIComponent(savedId)}`,
+        `/api/tests?copyOf=${encodeURIComponent(id)}`,
         { method: 'POST' },
         failure,
       )
       if (!data.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      return data.id
+    },
+    onSuccess: (id) => {
       toast.success(t('tests:builder.copied'))
-      router.push(testPath(kind, data.id))
-    } catch (copyError) {
-      toast.error(errorMessage(copyError, failure))
-      setCopying(false)
-    }
-  }
+      router.push(testPath(kind, id))
+    },
+    onError: (copyError) => toast.error(errorMessage(copyError, t('tests:row.copyFailed'))),
+  })
+  const copying = copyMutation.isPending
+
+  const saveMutation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const failure = worksheet ? t('worksheets:builder.saveFailed') : t('tests:builder.saveFailed')
+      const result = await requestJson<{ id: string; itemIds: string[] }>(
+        '/api/tests',
+        jsonBody(savedId ? 'PUT' : 'POST', body),
+        failure,
+      )
+      if (!result.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      return { id: result.id, itemIds: result.itemIds }
+    },
+    onSuccess: ({ id, itemIds }) => {
+      // Without ids from the save the next save would not recognise the items
+      // and their frozen snapshots would be retaken from the current bank.
+      if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
+      setSavedFingerprint(fingerprint)
+      setSavedId(id)
+      toast.success(t('common:status.saved'), { testId: 'toast-saved' })
+      // `?vynechano=` only belongs to a freshly generated worksheet — after a save
+      // the skipped-items notice would linger, so the URL drops it.
+      if (!test || dropped > 0) router.replace(testPath(kind, id))
+      else router.refresh()
+    },
+    onError: (saveError) =>
+      toast.error(errorMessage(saveError, worksheet ? t('worksheets:builder.saveFailed') : t('tests:builder.saveFailed'))),
+  })
+  const saving = saveMutation.isPending
 
   async function save() {
     setError(null)
@@ -565,7 +594,6 @@ export function TestBuilder({
       if (draft.length === 0) return void toast.error(t('worksheets:builder.itemRequired'))
     } else if (questionCount === 0) return void toast.error(t('tests:builder.questionRequired'))
 
-    setSaving(true)
     const body = {
       ...(savedId ? { id: savedId } : {}),
       title: settings.title.trim(),
@@ -597,31 +625,7 @@ export function TestBuilder({
       })),
     }
 
-    const failure = worksheet ? t('worksheets:builder.saveFailed') : t('tests:builder.saveFailed')
-    try {
-      const result = await requestJson<{ id: string; itemIds: string[] }>(
-        '/api/tests',
-        jsonBody(savedId ? 'PUT' : 'POST', body),
-        failure,
-      )
-      const id = result.id
-      if (!id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
-      // Without ids from the save the next save would not recognise the items
-      // and their frozen snapshots would be retaken from the current bank.
-      const itemIds = result.itemIds
-      if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
-      setSavedFingerprint(fingerprint)
-      setSavedId(id)
-      toast.success(t('common:status.saved'), { testId: 'toast-saved' })
-      // `?vynechano=` only belongs to a freshly generated worksheet — after a save
-      // the skipped-items notice would linger, so the URL drops it.
-      if (!test || dropped > 0) router.replace(testPath(kind, id))
-      else router.refresh()
-    } catch (saveError) {
-      toast.error(errorMessage(saveError, failure))
-    } finally {
-      setSaving(false)
-    }
+    saveMutation.mutate(body)
   }
 
   const bank = (
@@ -712,7 +716,7 @@ export function TestBuilder({
         <div className="flex flex-wrap items-center gap-2">
           {savedId ? <PrintMenu testId={savedId} variants={settings.variants} dirty={dirty} /> : null}
           {readOnly ? (
-            <Button disabled={copying} aria-busy={copying || undefined} onClick={() => void copy()}>
+            <Button disabled={copying} aria-busy={copying || undefined} onClick={() => savedId && copyMutation.mutate(savedId)}>
               {copying ? t('tests:row.copying') : t('tests:row.copy')}
             </Button>
           ) : null}

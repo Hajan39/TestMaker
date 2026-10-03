@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -53,8 +54,6 @@ export interface TestRowData {
 export function TestActions({ row }: { row: TestRowData }) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [copying, setCopying] = useState(false)
   // What is happening to the test right now. The menu closes on click, so the
   // state cannot show inside it — it replaces the three-dot button instead.
   const [pdfWork, setPdfWork] = useState<string | null>(null)
@@ -78,46 +77,41 @@ export function TestActions({ row }: { row: TestRowData }) {
    * overwrite it — the copy takes the frozen question wording too, so it looks
    * exactly like the original even if the bank questions have changed since.
    */
-  async function copy() {
-    setCopying(true)
-    const failure = t('tests:row.copyFailed')
-    try {
+  const copyMutation = useMutation({
+    mutationFn: async () => {
+      const failure = t('tests:row.copyFailed')
       const data = await requestJson<{ id: string }>(
         `/api/tests?copyOf=${encodeURIComponent(row.id)}`,
         { method: 'POST' },
         failure,
       )
-      const id = data.id
-      if (!id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      if (!data.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
+      return data.id
+    },
+    onSuccess: (id) => {
       router.refresh()
       toast.success(t('tests:row.copied', { title: row.title }), {
         duration: 10_000,
         testId: 'toast-test-copied',
         action: { label: t('common:actions.open'), onClick: () => router.push(testPath(row.kind, id)) },
       })
-    } catch (error) {
-      toast.error(errorMessage(error, failure))
-    } finally {
-      setCopying(false)
-    }
-  }
+    },
+    onError: (error) => toast.error(errorMessage(error, t('tests:row.copyFailed'))),
+  })
+  const copying = copyMutation.isPending
 
-  async function remove() {
-    setDeleting(true)
-    const failure =
-      row.kind === 'pracovni_list' ? t('worksheets:row.deleteFailed') : t('tests:row.deleteFailed')
-    try {
-      await requestJson(`/api/tests?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' }, failure)
+  const deleteFailure = row.kind === 'pracovni_list' ? t('worksheets:row.deleteFailed') : t('tests:row.deleteFailed')
+  const removeMutation = useMutation({
+    mutationFn: () => requestJson(`/api/tests?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' }, deleteFailure),
+    onSuccess: () => {
       // The dialog only closes on success — after an error it stays open for a retry.
       setConfirmOpen(false)
       toast.success(t('tests:row.deleted', { title: row.title }))
       router.refresh()
-    } catch (error) {
-      toast.error(errorMessage(error, failure))
-    } finally {
-      setDeleting(false)
-    }
-  }
+    },
+    onError: (error) => toast.error(errorMessage(error, deleteFailure)),
+  })
+  const deleting = removeMutation.isPending
 
   return (
     <>
@@ -134,7 +128,7 @@ export function TestActions({ row }: { row: TestRowData }) {
         </DropdownMenuItem>
         {/* The menu closes on click — copying shows in place of the
             three-dot button, just like printing. */}
-        <DropdownMenuItem onSelect={() => void copy()}>{t('tests:row.copy')}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => copyMutation.mutate()}>{t('tests:row.copy')}</DropdownMenuItem>
         {/* Print and download take their labels from the shared menu — so the
             test list and the builder cannot disagree on what "Vytisknout"
             actually does with the answer key. */}
@@ -181,7 +175,7 @@ export function TestActions({ row }: { row: TestRowData }) {
               aria-busy={deleting || undefined}
               onClick={(event) => {
                 event.preventDefault()
-                void remove()
+                removeMutation.mutate()
               }}
             >
               {deleting ? t('common:actions.deleting') : t('common:actions.delete')}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { Plus, Sparkles } from 'lucide-react'
 import {
@@ -347,17 +348,13 @@ export function PuzzleWorkshop({
   /** Fingerprint of the last saved (or opened) state. */
   const [baseline, setBaseline] = useState(() => draftKey(start))
   const [wordCount, setWordCount] = useState(String(DEFAULT_WORD_COUNT))
-  const [fetching, setFetching] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [printing, setPrinting] = useState<'plain' | 'key' | null>(null)
-  const [opening, setOpening] = useState<string | null>(null)
   const [solved, setSolved] = useState(false)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const [confirmBusy, setConfirmBusy] = useState(false)
   /** Tests to add the puzzle to; loaded only once the teacher asks for them. */
   const [tests, setTests] = useState<TestOption[] | 'loading' | null>(null)
   const [testsSearch, setTestsSearch] = useState('')
-  const [enqueueing, setEnqueueing] = useState<string | null>(null)
   /**
    * Just saved and just deleted puzzles are kept by the browser: `router.refresh()`
    * arrives with a delay and the teacher must see right away that saving worked.
@@ -437,6 +434,16 @@ export function PuzzleWorkshop({
   const maxRequest = Math.max(MIN_WORDS, Math.min(MAX_WORDS, roomLeft))
 
   /** Words from the model. The grid is built by code, the model only supplies vocabulary. */
+  const fetchWordsMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      requestJson<Record<string, unknown>>(
+        '/api/puzzles/words',
+        { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+        t('puzzles:workshop.fetch.failed'),
+      ),
+  })
+  const fetching = fetchWordsMutation.isPending
+
   async function fetchWords(): Promise<void> {
     if (!draft.topicId) {
       toast.error(t('puzzles:workshop.fetch.noTopic'))
@@ -448,35 +455,26 @@ export function PuzzleWorkshop({
     }
     const count = clamp(parseWhole(wordCount) ?? DEFAULT_WORD_COUNT, MIN_WORDS, maxRequest)
     setWordCount(String(count))
-    setFetching(true)
     try {
-      const data = (await requestJson<Record<string, unknown>>(
-        '/api/puzzles/words',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            topicId: draft.topicId,
-            kind: draft.kind,
-            count,
-            avoid: draft.entries
-              .map((entry) => entry.word.trim())
-              .filter(Boolean)
-              .slice(0, MAX_WORDS),
-            // A cryptogram needs words with the letters of its phrase, a word
-            // search words that fit the grid — the server checks both by these fields.
-            ...(draft.kind === 'cryptogram'
-              ? draft.phrase.trim()
-                ? { phrase: draft.phrase.trim().slice(0, MAX_PHRASE_LENGTH) }
-                : {}
-              : {
-                  ...(parseWhole(draft.cols) !== null ? { cols: parseWhole(draft.cols) } : {}),
-                  ...(parseWhole(draft.rows) !== null ? { rows: parseWhole(draft.rows) } : {}),
-                }),
-          }),
-        },
-        t('puzzles:workshop.fetch.failed'),
-      )) as Record<string, unknown>
+      const data = await fetchWordsMutation.mutateAsync({
+        topicId: draft.topicId,
+        kind: draft.kind,
+        count,
+        avoid: draft.entries
+          .map((entry) => entry.word.trim())
+          .filter(Boolean)
+          .slice(0, MAX_WORDS),
+        // A cryptogram needs words with the letters of its phrase, a word
+        // search words that fit the grid — the server checks both by these fields.
+        ...(draft.kind === 'cryptogram'
+          ? draft.phrase.trim()
+            ? { phrase: draft.phrase.trim().slice(0, MAX_PHRASE_LENGTH) }
+            : {}
+          : {
+              ...(parseWhole(draft.cols) !== null ? { cols: parseWhole(draft.cols) } : {}),
+              ...(parseWhole(draft.rows) !== null ? { rows: parseWhole(draft.rows) } : {}),
+            }),
+      })
 
       const entries = (Array.isArray(data.entries) ? (data.entries as ApiEntry[]) : []).map((entry) => ({
         word: entry.word ?? '',
@@ -516,10 +514,22 @@ export function PuzzleWorkshop({
       }
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.fetch.failed')))
-    } finally {
-      setFetching(false)
     }
   }
+
+  const saveMutation = useMutation({
+    mutationFn: (args: { id: string | null; body: unknown }) =>
+      requestJson<{ puzzle: PuzzleListRow }>(
+        args.id ? `/api/puzzles/${args.id}` : '/api/puzzles',
+        {
+          method: args.id ? 'PUT' : 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(args.body),
+        },
+        t('puzzles:workshop.save.failed'),
+      ),
+  })
+  const saving = saveMutation.isPending
 
   /**
    * Saves the puzzle and returns its id. A broken puzzle (a word did not fit…)
@@ -531,17 +541,11 @@ export function PuzzleWorkshop({
       return null
     }
     const snapshot = draft
-    setSaving(true)
     try {
-      const data = await requestJson<{ puzzle: PuzzleListRow }>(
-        snapshot.id ? `/api/puzzles/${snapshot.id}` : '/api/puzzles',
-        {
-          method: snapshot.id ? 'PUT' : 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ puzzle: content, topicId: snapshot.topicId }),
-        },
-        t('puzzles:workshop.save.failed'),
-      )
+      const data = await saveMutation.mutateAsync({
+        id: snapshot.id,
+        body: { puzzle: content, topicId: snapshot.topicId },
+      })
       if (!data.puzzle) throw new Error(`${t('puzzles:workshop.save.failed')} ${t('common:errors.serverTrouble')}`)
 
       const saved = data.puzzle
@@ -571,8 +575,6 @@ export function PuzzleWorkshop({
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.save.failed')))
       return null
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -621,36 +623,46 @@ export function PuzzleWorkshop({
   }
 
   /** Adds the puzzle to the end of the chosen test; unsaved changes are saved. */
-  async function addToTest(testId: string): Promise<void> {
-    setEnqueueing(testId)
-    try {
-      const id = await savedId()
-      if (!id) return
-      const data = await requestJson<{ testTitle: string }>(
-        `/api/puzzles/${id}/to-test`,
+  const addToTestMutation = useMutation({
+    mutationFn: (args: { id: string; testId: string }) =>
+      requestJson<{ testTitle: string }>(
+        `/api/puzzles/${args.id}/to-test`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ testId }),
+          body: JSON.stringify({ testId: args.testId }),
         },
         t('puzzles:workshop.tests.addFailed'),
-      )
+      ),
+  })
+  const enqueueing = addToTestMutation.isPending ? addToTestMutation.variables.testId : null
+
+  async function addToTest(testId: string): Promise<void> {
+    try {
+      const id = await savedId()
+      if (!id) return
+      const data = await addToTestMutation.mutateAsync({ id, testId })
       setTests(null)
       toast.success(t('puzzles:workshop.tests.added', { title: data.testTitle ?? '' }))
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.tests.addFailed')))
-    } finally {
-      setEnqueueing(null)
     }
   }
 
-  async function openPuzzle(id: string): Promise<void> {
-    setOpening(id)
-    try {
+  const openPuzzleMutation = useMutation({
+    mutationFn: async (id: string) => {
       const { puzzle } = await requestJson<{
         puzzle: PuzzleContent & { id: string; topicId: string | null }
       }>(`/api/puzzles/${id}`, undefined, t('puzzles:workshop.open.failed'))
       if (!puzzle) throw new Error(`${t('puzzles:workshop.open.failed')} ${t('common:errors.serverTrouble')}`)
+      return puzzle
+    },
+  })
+  const opening = openPuzzleMutation.isPending ? openPuzzleMutation.variables : null
+
+  async function openPuzzle(id: string): Promise<void> {
+    try {
+      const puzzle = await openPuzzleMutation.mutateAsync(id)
       resetTo({
         id: puzzle.id,
         kind: puzzle.kind,
@@ -666,14 +678,17 @@ export function PuzzleWorkshop({
       })
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.open.failed')))
-    } finally {
-      setOpening(null)
     }
   }
 
+  const removePuzzleMutation = useMutation({
+    mutationFn: (id: string) =>
+      requestJson(`/api/puzzles/${id}`, { method: 'DELETE' }, t('puzzles:workshop.remove.failed')),
+  })
+
   async function removePuzzle(id: string, title: string): Promise<void> {
     try {
-      await requestJson(`/api/puzzles/${id}`, { method: 'DELETE' }, t('puzzles:workshop.remove.failed'))
+      await removePuzzleMutation.mutateAsync(id)
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.remove.failed')))
       return
