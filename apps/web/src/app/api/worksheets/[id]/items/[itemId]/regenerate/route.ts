@@ -16,6 +16,8 @@ const bodySchema = z.object({
   ]),
   /** Texts of the other worksheet items so the new one does not repeat them. */
   existing: z.array(z.string().max(2_000)).max(60).default([]),
+  /** The editor's current toggle; overrides the saved brief so a change applies before saving. */
+  onlyMaterials: z.boolean().optional(),
 })
 
 /**
@@ -40,6 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       try {
         const item = await regenerateWorksheetPart(account, id, parsed.data.target, parsed.data.existing, {
           signal: request.signal,
+          onlyMaterials: parsed.data.onlyMaterials,
         })
         // Someone else's worksheet behaves as missing.
         if (!item) return Response.json({ error: t('worksheets:api.notFound') }, { status: 404 })

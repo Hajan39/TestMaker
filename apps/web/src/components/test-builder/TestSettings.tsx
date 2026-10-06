@@ -166,6 +166,18 @@ export function TestSettings({
               {t('tests:settings.share')}
             </label>
           </div>
+          {worksheet ? (
+            <div>
+              <label className="flex items-center gap-2 text-sm text-fg-soft">
+                <Checkbox
+                  checked={value.onlyMaterials}
+                  onCheckedChange={() => onChange({ ...value, onlyMaterials: !value.onlyMaterials })}
+                />
+                {t('worksheets:new.onlyMaterials')}
+              </label>
+              <p className="mt-1 text-xs text-fg-muted">{t('worksheets:builder.onlyMaterialsHint')}</p>
+            </div>
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>

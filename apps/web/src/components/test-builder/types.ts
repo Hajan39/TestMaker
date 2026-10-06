@@ -80,6 +80,11 @@ export interface TestSettingsValue {
   showKey: boolean
   /** `soukrome` is visible only to the author, `skola` also to colleagues. */
   visibility: 'soukrome' | 'skola'
+  /**
+   * Worksheet only: keep strictly to the materials when regenerating items.
+   * Stored in the worksheet brief; ignored for written tests.
+   */
+  onlyMaterials: boolean
 }
 
 /** `key` is only stable in browser memory, so a module-level counter is enough. */

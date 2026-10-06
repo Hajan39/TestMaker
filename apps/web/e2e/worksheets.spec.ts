@@ -89,6 +89,16 @@ test.describe('worksheets', () => {
     await expect(page.getByTestId('worksheet-to-check')).toHaveCount(0)
   })
 
+  test('the materials-only toggle can be changed on an existing worksheet and counts as an unsaved change', async ({ page }) => {
+    await page.goto(`/listy/${SEED_LIST_ID}`)
+    await page.getByRole('button', { name: 'Nastavení listu' }).click()
+    const toggle = page.getByRole('checkbox', { name: 'Vycházet jen z materiálů' })
+    await expect(toggle).toBeChecked()
+    await toggle.click()
+    await expect(toggle).not.toBeChecked()
+    await expect(page.getByText('Neuložené změny')).toBeVisible()
+  })
+
   test('a worksheet task is not flagged as missing from the bank — it never lives there', async ({ page }) => {
     await page.goto(`/listy/${SEED_LIST_ID}`)
     await expect(page.locator('[data-slot="paper-sheet"]').first()).toBeVisible()

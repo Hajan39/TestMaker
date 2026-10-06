@@ -649,7 +649,7 @@ export async function regenerateWorksheetPart(
   testId: string,
   target: WorksheetTarget,
   existing: string[],
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; onlyMaterials?: boolean } = {},
 ): Promise<WorksheetItemDraft | null> {
   const [row] = await db
     .select({ title: tests.title, topicId: tests.topicId, gradeId: tests.gradeId, brief: tests.brief })
@@ -657,7 +657,8 @@ export async function regenerateWorksheetPart(
     .where(and(eq(tests.id, testId), ownedBy(scope, tests), eq(tests.kind, 'pracovni_list')))
     .limit(1)
   if (!row) return null
-  const brief = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '', onlyMaterials: true }
+  const saved = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '', onlyMaterials: true }
+  const brief = { ...saved, onlyMaterials: options.onlyMaterials ?? saved.onlyMaterials }
   const title = brief.title || row.title
   // A deleted topic doesn't take the worksheet along (`topic_id` is cleared) —
   // it is then regenerated as a free-form brief from title and grade.

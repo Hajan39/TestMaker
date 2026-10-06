@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { DELETE, GET, POST, PUT } from '@/app/api/tests/route'
-import { db, grades, questions, schools, subjects, testItems, users } from '@/db'
+import { db, grades, questions, schools, subjects, testItems, tests, users } from '@/db'
 import { newId } from '@/lib/ids'
 import { loadTest, loadTestItems } from '@/lib/tests'
 import { jsonReq, req, seedQuestion, seedTemplate, seedTopic, ACCOUNT } from './helpers'
@@ -283,6 +283,54 @@ describe('re-saving a test', () => {
     const test = await loadTest(ACCOUNT, id)
     expect(test?.title).toBe('Přejmenovaná písemka')
     expect(test?.header).toMatchObject({ school: 'ZŠ Ukázková', className: '8.A' })
+  })
+})
+
+describe('worksheet materials-only toggle', () => {
+  it('re-saving a worksheet stores the toggle in its brief and keeps the rest of the brief', async () => {
+    const brief = JSON.stringify({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: true })
+    const id = await createTest([{ kind: 'heading', questionId: null, text: 'Sopky', pointsOverride: null }], {
+      kind: 'pracovni_list',
+      brief,
+    })
+    const response = await PUT(
+      jsonReq('/api/tests', 'PUT', {
+        id,
+        title: 'Sopky',
+        description: null,
+        graded: false,
+        templateId,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        onlyMaterials: false,
+        items: [{ kind: 'heading', questionId: null, text: 'Sopky', pointsOverride: null }],
+      }),
+    )
+    expect(response.status).toBe(200)
+    const [row] = await db.select({ brief: tests.brief }).from(tests).where(eq(tests.id, id))
+    expect(JSON.parse(row!.brief!)).toEqual({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: false })
+  })
+
+  it('a written test ignores the toggle and keeps no brief', async () => {
+    const id = await createTest([])
+    const response = await PUT(
+      jsonReq('/api/tests', 'PUT', {
+        id,
+        title: 'Písemka',
+        description: null,
+        graded: true,
+        templateId,
+        header: emptyHeader,
+        variants: 1,
+        showKey: true,
+        onlyMaterials: false,
+        items: [],
+      }),
+    )
+    expect(response.status).toBe(200)
+    const [row] = await db.select({ brief: tests.brief }).from(tests).where(eq(tests.id, id))
+    expect(row!.brief).toBeNull()
   })
 })
 

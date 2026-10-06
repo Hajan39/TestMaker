@@ -104,6 +104,7 @@
     "toCheck_few": "Ke kontrole: {{count}} položky. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
     "toCheck_other": "Ke kontrole: {{count}} položek. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
     "editTask": "Upravit úlohu",
-    "newTask": "Nová úloha"
+    "newTask": "Nová úloha",
+    "onlyMaterialsHint": "Platí pro přegenerování položek. Když volbu vypneš, model smí přidat vlastní příklady a obecné znalosti; takové položky označí „ověř“."
   }
 }

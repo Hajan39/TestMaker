@@ -92,7 +92,8 @@ describe('POST /api/worksheets/generate', () => {
     )
     expect(response.status).toBe(200)
     const { id, dropped } = (await response.json()) as { id: string; dropped: number }
-    expect(dropped).toBe(1)
+    // One broken item plus, in the default strict mode, the fun fact the model admits is not from the materials.
+    expect(dropped).toBe(2)
 
     expect(model.requests[0]!.materials).toContain('magma')
     expect(model.requests[0]!.materials).not.toContain('DUPLICITNÍ')
@@ -103,9 +104,9 @@ describe('POST /api/worksheets/generate', () => {
     expect(JSON.parse(test!.brief!)).toEqual({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: true })
 
     const items = await loadTestItems((await import('./helpers')).ACCOUNT, id)
-    expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'text', 'table', 'question'])
-    expect(items.map((item) => item.needsCheck)).toEqual([false, false, true, false, false])
-    expect(items[4]!.question?.payload).toMatchObject({ prompt: 'Kde je Etna?' })
+    expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'table', 'question'])
+    expect(items.every((item) => !item.needsCheck)).toBe(true)
+    expect(items[3]!.question?.payload).toMatchObject({ prompt: 'Kde je Etna?' })
   })
 
   it('saves a free-form brief with a foreign grade without grade and topic', async () => {
@@ -165,12 +166,16 @@ describe('POST /api/worksheets/[id]/items/[itemId]/regenerate', () => {
   }
   const params = (id: string, itemId = 'nova') => ({ params: Promise.resolve({ id, itemId }) })
 
-  it('returns a new item from the same brief and materials', async () => {
+  it('returns a new item from the same brief and materials (editor toggle off overrides the brief)', async () => {
     const id = await listId()
     model.answer = { item: { kind: 'text', variant: 'fun_fact', text: 'Etna je nejvyšší činná sopka Evropy.', fromMaterials: false } }
     model.requests = []
     const response = await regenerate(
-      jsonReq('/x', 'POST', { target: { kind: 'fun_fact' }, existing: ['Sopka vzniká tam, kde magma proniká na povrch.'] }),
+      jsonReq('/x', 'POST', {
+        target: { kind: 'fun_fact' },
+        existing: ['Sopka vzniká tam, kde magma proniká na povrch.'],
+        onlyMaterials: false,
+      }),
       params(id),
     )
     expect(response.status).toBe(200)
@@ -178,6 +183,13 @@ describe('POST /api/worksheets/[id]/items/[itemId]/regenerate', () => {
     expect(item).toMatchObject({ kind: 'text', needsCheck: true })
     expect(model.requests[0]!.materials).toContain('magma')
     expect(model.prompts.at(-1)).toContain('Sopka vzniká tam')
+  })
+
+  it('keeps to the materials by default and refuses an item from outside them', async () => {
+    const id = await listId()
+    model.answer = { item: { kind: 'text', variant: 'fun_fact', text: 'Etna je nejvyšší činná sopka Evropy.', fromMaterials: false } }
+    const response = await regenerate(jsonReq('/x', 'POST', { target: { kind: 'fun_fact' }, existing: [] }), params(id))
+    expect(response.status).toBe(502)
   })
 
   it('returns 404 for both a foreign worksheet and a foreign test', async () => {

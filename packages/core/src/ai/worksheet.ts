@@ -95,13 +95,23 @@ const modelItemSchema = z.discriminatedUnion('kind', [
 const worksheetResponseSchema = z.object({ title: z.string(), items: z.array(modelItemSchema).min(1) })
 const itemResponseSchema = z.object({ item: modelItemSchema })
 
+interface CheckOptions {
+  hasSource: boolean
+  /** Strict mode: content the model admits is not from the supplied text is dropped, not flagged. */
+  onlyMaterials: boolean
+}
+
 /** Verifies one item; a broken one returns `null`. */
-function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null {
+function checkItem(raw: unknown, options: CheckOptions): WorksheetItemDraft | null {
   const parsed = modelItemSchema.safeParse(raw)
   if (!parsed.success) return null
   const item = parsed.data
+  const structural = item.kind === 'heading' || item.kind === 'instruction'
+  // The model does not reliably follow the prompt, so strict mode is enforced here.
+  // Without supplied text there is nothing to keep to, so nothing is dropped.
+  if (options.onlyMaterials && options.hasSource && !structural && !item.fromMaterials) return null
   // Without supplied text nothing can be based on the materials, whatever the model claims.
-  const needsCheck = !hasSource || !item.fromMaterials
+  const needsCheck = !options.hasSource || !item.fromMaterials
 
   switch (item.kind) {
     case 'heading':
@@ -129,18 +139,18 @@ function checkItem(raw: unknown, hasSource: boolean): WorksheetItemDraft | null 
 
 /**
  * Goes through the model's items: drops (and counts) broken ones, turns
- * `fromMaterials: false` into the "check" flag. Without materials and own
- * text (`hasSource`) everything except headings and instructions gets the
- * flag.
+ * `fromMaterials: false` into the "check" flag — or, with `onlyMaterials`,
+ * drops such items. Without materials and own text (`hasSource`) everything
+ * except headings and instructions gets the flag.
  */
 export function checkWorksheetItems(
   raw: unknown[],
-  options: { hasSource: boolean },
+  options: { hasSource: boolean; onlyMaterials?: boolean },
 ): { items: WorksheetItemDraft[]; dropped: number } {
   const items: WorksheetItemDraft[] = []
   let dropped = 0
   for (const candidate of raw) {
-    const item = checkItem(candidate, options.hasSource)
+    const item = checkItem(candidate, { hasSource: options.hasSource, onlyMaterials: options.onlyMaterials ?? false })
     if (item) items.push(item)
     else dropped += 1
   }
@@ -174,6 +184,11 @@ async function callWorksheet(
   }
 }
 
+/** Strict unless the teacher turned it off; the brief defaults to strict too. */
+function checkOptions(request: WorksheetRequest): CheckOptions {
+  return { hasSource: hasSource(request), onlyMaterials: request.onlyMaterials !== false }
+}
+
 function hasSource(request: WorksheetRequest): boolean {
   return Boolean(request.materials.trim() || request.ownText.trim())
 }
@@ -195,7 +210,7 @@ export async function generateWorksheet(
   )
   const answer = (value ?? {}) as { title?: unknown; items?: unknown }
   const raw = Array.isArray(answer.items) ? answer.items : []
-  const { items, dropped } = checkWorksheetItems(raw, { hasSource: hasSource(request) })
+  const { items, dropped } = checkWorksheetItems(raw, checkOptions(request))
   const kept = items.slice(0, S.maxItems)
   // A heading or instruction at the end of the worksheet (typically after trimming) has nothing to belong to.
   while (kept.length > 0 && isStructural(kept[kept.length - 1]!)) kept.pop()
@@ -245,7 +260,7 @@ export async function regenerateWorksheetItem(
     buildWorksheetItemPrompt(request, materialsFor(request), target, existing),
     options,
   )
-  const item = checkItem((value as { item?: unknown } | null)?.item, hasSource(request))
+  const item = checkItem((value as { item?: unknown } | null)?.item, checkOptions(request))
   if (!item || !matchesTarget(item, target)) throw new Error(worksheetItemFailedMessage())
   return item
 }

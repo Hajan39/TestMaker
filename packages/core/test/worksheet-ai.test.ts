@@ -5,6 +5,7 @@ import {
   checkWorksheetItems,
   generateWorksheet,
   regenerateWorksheetItem,
+  worksheetItemFailedMessage,
   worksheetTooFewMessage,
   type AiCallEvent,
   type WorksheetCall,
@@ -20,6 +21,9 @@ const REQUEST: WorksheetRequest = {
   materials: '=== plice.txt ===\nPlíce jsou párový orgán. Výměna plynů probíhá v plicních sklípcích.',
   ownText: '',
   instructions: 'víc tabulek, na 20 minut',
+  // The shared fixtures include an invented fun fact, so they run in free mode;
+  // strict mode has its own tests.
+  onlyMaterials: false,
 }
 
 const question = (correctIndex = 1) => ({
@@ -177,7 +181,10 @@ describe('generating a worksheet', () => {
 
   it('keeps to the materials by default and may invent only when allowed', async () => {
     const strict: { prompt?: string } = {}
-    await generateWorksheet(REQUEST, { models: MODELS, callModel: fake({ title: 't', items: [text(), funFact, table()] }, strict) })
+    await generateWorksheet(
+      { ...REQUEST, onlyMaterials: undefined },
+      { models: MODELS, callModel: fake({ title: 't', items: [text(), text('Výměna plynů.'), table()] }, strict) },
+    )
     expect(strict.prompt).toContain('Vycházej výhradně z dodaného textu')
 
     const free: { prompt?: string } = {}
@@ -187,6 +194,28 @@ describe('generating a worksheet', () => {
     )
     expect(free.prompt).toContain('vymyšlené situace')
     expect(free.prompt).not.toContain('Vycházej výhradně z dodaného textu')
+  })
+
+  it('in strict mode drops content the model admits is not from the materials', async () => {
+    const result = await generateWorksheet(
+      { ...REQUEST, onlyMaterials: true },
+      {
+        models: MODELS,
+        callModel: fake({ title: 't', items: [heading, text(), funFact, text('Výměna plynů.'), table()] }),
+      },
+    )
+    expect(result.items.map((item) => item.kind)).toEqual(['heading', 'text', 'text', 'table'])
+    expect(result.items.every((item) => !item.needsCheck)).toBe(true)
+    expect(result.dropped).toBe(1)
+  })
+
+  it('strict mode without any supplied text drops nothing and flags everything', async () => {
+    const result = await generateWorksheet(
+      { ...REQUEST, materials: '', onlyMaterials: true },
+      { models: MODELS, callModel: fake({ title: 't', items: [text('a', false), funFact, table()] }) },
+    )
+    expect(result.dropped).toBe(0)
+    expect(result.items.every((item) => item.needsCheck)).toBe(true)
   })
 
   it('trims long materials to the budget', async () => {
@@ -211,6 +240,15 @@ describe('generating a worksheet', () => {
 })
 
 describe('regenerating a single item', () => {
+  it('in strict mode refuses an item that is not from the materials', async () => {
+    await expect(
+      regenerateWorksheetItem({ ...REQUEST, onlyMaterials: true }, { kind: 'fun_fact' }, [], {
+        models: MODELS,
+        callModel: fake({ item: funFact }),
+      }),
+    ).rejects.toThrow(worksheetItemFailedMessage())
+  })
+
   it('returns one item of the requested kind and sends the existing items to the model', async () => {
     const seen: { prompt?: string } = {}
     const item = await regenerateWorksheetItem(REQUEST, { kind: 'fun_fact' }, ['Plíce jsou párový orgán.'], {

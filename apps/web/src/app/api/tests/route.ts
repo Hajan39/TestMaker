@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   parseItemContent,
+  parseWorksheetBrief,
   questionContentSchema,
   serializeQuestionSnapshot,
   TEST_ITEM_KINDS,
@@ -206,26 +207,36 @@ export async function PUT(request: Request) {
   // field, the first save from an editor that doesn't send gradeId would
   // silently clear the test's grade.
   // Kind, topic and brief don't change on edit — the editor doesn't send them
-  // and schema defaults would otherwise silently clear them.
+  // and schema defaults would otherwise silently clear them. The only part of
+  // a worksheet brief the editor may change is `onlyMaterials`.
   const schema = testSchema.omit({ kind: true, topicId: true, brief: true }).extend({
     id: z.string().min(1),
     gradeId: z.string().min(1).nullable().optional(),
+    onlyMaterials: z.boolean().optional(),
   })
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) {
     return Response.json({ error: invalidTest(), detail: parsed.error.issues }, { status: 400 })
   }
-  const { id, items, gradeId: gradeIdInput, ...test } = parsed.data
+  const { id, items, gradeId: gradeIdInput, onlyMaterials, ...test } = parsed.data
   const gradeId = gradeIdInput === undefined ? undefined : await resolveGradeId(account, gradeIdInput)
 
   // Only the owner may edit: a shared test can be read and printed, not
   // overwritten.
   const [original] = await db
-    .select({ kind: tests.kind })
+    .select({ kind: tests.kind, brief: tests.brief })
     .from(tests)
     .where(and(eq(tests.id, id), ownedBy(account, tests)))
     .limit(1)
   if (!original) return Response.json({ error: t('tests:api.testNotFoundShort') }, { status: 404 })
+  // An older worksheet may have no brief at all; the toggle then starts one.
+  const brief =
+    original.kind === 'pracovni_list' && onlyMaterials !== undefined
+      ? JSON.stringify({
+          ...(parseWorksheetBrief(original.brief) ?? { title: '', instructions: '', ownText: '' }),
+          onlyMaterials,
+        })
+      : undefined
   const invalid = checkItems(original.kind, items)
   if (invalid) return invalid
 
@@ -263,6 +274,7 @@ export async function PUT(request: Request) {
         // `gradeId` goes into `.set()` only when the body carried it — otherwise
         // an explicit `undefined` in the `.set()` object would clear the grade.
         ...(gradeId !== undefined ? { gradeId } : {}),
+        ...(brief !== undefined ? { brief } : {}),
         updatedAt: new Date().toISOString(),
       })
       .where(and(eq(tests.id, id), ownedBy(account, tests))),

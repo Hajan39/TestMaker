@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import type { Question, QuestionContent, ResolvedTestItem, Template, Test } from '@testmaker/core/schema'
+import { parseWorksheetBrief, type Question, type QuestionContent, type ResolvedTestItem, type Template, type Test } from '@testmaker/core/schema'
 import type { WorksheetItemDraft, WorksheetTarget } from '@testmaker/core/ai'
 import {
   Button,
@@ -114,6 +114,8 @@ export function TestBuilder({
     showKey: test?.showKey ?? true,
     // A test is private by default; it is shared only when the author asks.
     visibility: test?.visibility ?? 'soukrome',
+    // A worksheet keeps to its materials unless the teacher allowed more.
+    onlyMaterials: parseWorksheetBrief(test?.brief)?.onlyMaterials ?? true,
   }))
   const [draft, setDraft] = useState<DraftItem[]>(() =>
     items.map((item) => ({
@@ -445,7 +447,8 @@ export function TestBuilder({
       const failure = t('worksheets:builder.regenerateFailed')
       const data = await requestJson<{ item: WorksheetItemDraft }>(
         `/api/worksheets/${encodeURIComponent(savedId ?? '')}/items/${encodeURIComponent(args.id)}/regenerate`,
-        jsonBody('POST', { target: args.target, existing: args.existing }),
+        // The current toggle wins over the saved brief, so a change applies before saving.
+        jsonBody('POST', { target: args.target, existing: args.existing, onlyMaterials: settings.onlyMaterials }),
         failure,
       )
       if (!data.item) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
@@ -608,6 +611,7 @@ export function TestBuilder({
       variants: settings.variants,
       showKey: settings.showKey,
       visibility: settings.visibility,
+      ...(worksheet ? { onlyMaterials: settings.onlyMaterials } : {}),
       items: draft.map((item) => ({
         id: item.id,
         kind: item.kind,
