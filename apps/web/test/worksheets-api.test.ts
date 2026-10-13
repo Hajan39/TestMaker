@@ -17,7 +17,9 @@ const model = vi.hoisted(() => ({
 
 vi.mock('@testmaker/core/ai', async (importOriginal) => {
   const original = await importOriginal<typeof import('@testmaker/core/ai')>()
-  const callModel = async ({ prompt }: { prompt: string }) => {
+  const callModel = async ({ prompt, signal }: { prompt: string; signal?: AbortSignal }) => {
+    // Like the real SDK call: an aborted signal ends the call.
+    if (signal?.aborted) throw signal.reason
     model.prompts.push(prompt)
     return model.answer
   }
@@ -147,6 +149,16 @@ describe('POST /api/worksheets/generate', () => {
     expect(response.status).toBe(502)
     expect(((await response.json()) as { error: string }).error).toMatch(/Zkus to znovu/)
     expect((await db.select().from(tests)).length).toBe(before)
+  })
+
+  it('running out of time ends with a Czech 504 and advice, not a bare platform timeout', async () => {
+    const timedOut = AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError'))
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(timedOut)
+    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'free', title: 'Sopky' }))
+    expect(response.status).toBe(504)
+    const { error } = (await response.json()) as { error: string }
+    expect(error).toMatch(/příliš dlouho/)
+    expect(await db.select().from(tests).where(eq(tests.title, 'Sopky'))).toHaveLength(0)
   })
 
   it('a failed generation shows up in Správa with the technical detail', async () => {

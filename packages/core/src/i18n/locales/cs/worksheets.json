@@ -18,7 +18,8 @@
     "topicGone": "Téma už v knihovně není, vyber jiné.",
     "invalidTextVariant": "Text v listu nemá platnou variantu (text, nebo fun fact).",
     "invalidTable": "Tabulku nejde uložit: každý řádek musí mít tolik buněk, kolik je sloupců (nejvýš 6 sloupců a 12 řádků), a aspoň jedna buňka musí zůstat prázdná k doplnění.",
-    "emptyTask": "Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber."
+    "emptyTask": "Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber.",
+    "timedOut": "Generování listu trvalo příliš dlouho a zastavilo se. Zkus to znovu s kratším pokynem (třeba méně stránek nebo položek), případně zapni „Vycházet jen z materiálů“."
   },
   "text": {
     "funFactLabel": "Text fun factu",

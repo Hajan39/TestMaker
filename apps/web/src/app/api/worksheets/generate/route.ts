@@ -6,7 +6,9 @@ import { withScope } from '@/lib/user'
 import { reportAiFailure } from '@/lib/aiFailure'
 
 export const runtime = 'nodejs'
-export const maxDuration = 120
+// One call that writes a whole worksheet; a long brief ("na 4 stránky") with
+// model retries easily takes over two minutes. Same limit as question generation.
+export const maxDuration = 300
 
 const S = AI_SETTINGS.worksheet
 
@@ -55,15 +57,21 @@ export async function POST(request: Request) {
       const body = parsed.data
       const source = body.source === 'topic' ? { topicId: body.topicId } : { title: body.title, gradeId: body.gradeId }
 
+      // Deliberately not `request.signal`: if the teacher closes the page, the
+      // worksheet still finishes, is saved and shows up in the overview. Only our
+      // own deadline stops it, before the platform would.
+      const deadline = AbortSignal.timeout(S.deadlineMs)
       try {
-        // Deliberately without `request.signal`: if the teacher closes the page,
-        // the worksheet still finishes, is saved and shows up in the overview.
-        const result = await createGeneratedWorksheet(account, {
-          source,
-          instructions: body.instructions.trim(),
-          ownText: body.ownText.trim(),
-          onlyMaterials: body.onlyMaterials,
-        })
+        const result = await createGeneratedWorksheet(
+          account,
+          {
+            source,
+            instructions: body.instructions.trim(),
+            ownText: body.ownText.trim(),
+            onlyMaterials: body.onlyMaterials,
+          },
+          { signal: deadline },
+        )
         if (!result) return Response.json({ error: t('worksheets:api.topicGone') }, { status: 404 })
         return Response.json(result)
       } catch (error) {
@@ -74,6 +82,7 @@ export async function POST(request: Request) {
           entityId: body.source === 'topic' ? body.topicId : null,
           error,
         })
+        if (deadline.aborted) return Response.json({ error: t('worksheets:api.timedOut') }, { status: 504 })
         return Response.json({ error: message }, { status: 502 })
       }
     },

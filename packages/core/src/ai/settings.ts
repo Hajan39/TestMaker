@@ -93,6 +93,12 @@ export const AI_SETTINGS = {
   /** Worksheets (`worksheet.ts`). The table shape and its limits come from the core schema. */
   worksheet: {
     /**
+     * How long generating a whole worksheet may take (ms) before it is cut off
+     * with advice. Must stay below the route's `maxDuration` (300 s) — otherwise
+     * the platform kills the function first and the teacher gets a bare 504.
+     */
+    deadlineMs: 270_000,
+    /**
      * Maximum characters of topic material sent to the model. A worksheet is
      * one call; more text would not be covered anyway and would only make the
      * call more expensive.
