@@ -1,11 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { InlineName } from '@/components/InlineName'
-import { DeleteFromLibrary } from '@/components/DeleteFromLibrary'
 import { RememberClass } from '@/components/RememberClass'
-import { StatRow } from '@testmaker/ui'
-import { t } from '@testmaker/core/i18n'
 import { db, grades, materials, subjects, topics } from '@/db'
 import { aiStatus } from '@/lib/ai'
 import { countQuestions, loadQuestions, loadVariantLinks } from '@/lib/questions'
@@ -72,7 +67,6 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   // Generation only gets the text of materials that are not a duplicate of
   // another, not manually excluded and not a scan without a text layer.
   const usable = materialRows.filter(isUsableMaterial)
-  const usableCount = usable.length
   const totalChars = usable.reduce((sum, material) => sum + material.charCount, 0)
 
   // The „V testu: …" badge and the „Jen nepoužité v testu" filter on the
@@ -92,36 +86,6 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-5">
       <RememberClass gradeId={topic.gradeId} userId={account.userId} />
-      <div>
-        <p className="text-sm text-fg-muted">
-          <Link href={`/tridy/${topic.gradeId}`} className="hover:text-brand">
-            ← {topic.subjectName}
-            {topic.gradeName ? ` · ${topic.gradeName}` : ''}
-          </Link>
-        </p>
-        {/* Name and its actions on one row; numbers one level below, in a single
-            place — material and question counts used to repeat in every card. */}
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          <InlineName
-            kind="topic"
-            id={topic.id}
-            name={topic.name}
-            as="h1"
-            className="ui-page-title"
-            label={t('library:topicPage.rename')}
-          />
-          <DeleteFromLibrary kind="topic" id={topic.id} iconOnly redirectTo="/" />
-        </div>
-      </div>
-
-      <StatRow
-        items={[
-          { id: 'materials', value: usableCount, label: t('library:word.materials', { count: usableCount }) },
-          { value: totalChars.toLocaleString('cs'), label: t('library:topicPage.charsAvailable') },
-          { value: usableQuestionCount, label: t('library:word.questions', { count: usableQuestionCount }) },
-        ]}
-      />
-
       <TopicWorkspace
         topic={{
           id: topic.id,
@@ -133,6 +97,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         defaultTemplateId={defaultTemplateId(templates)}
         materials={materialRows}
         questions={questionList.items}
+        usableQuestionCount={usableQuestionCount}
         usage={usage}
         rejectedCount={rejectedCount}
         variantLinks={variantLinks}

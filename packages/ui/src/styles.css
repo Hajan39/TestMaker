@@ -22,11 +22,17 @@
   /* Text */
   --color-fg: #0c0e12;
   --color-fg-soft: #3a4150;
-  --color-fg-muted: #8a919f;
+  /* Secondary text. At least 4.5:1 on surface, surface-muted and brand-bg —
+     it carries hints, breadcrumbs and table headers, not just decoration. */
+  --color-fg-muted: #646b7a;
 
   /* Lines */
   --color-line: #e0e2e7;
   --color-line-soft: #eceef1;
+  /* Boundary of form controls (inputs, selects, checkboxes). A transparent
+     control is recognisable only by its border, so it needs 3:1 (WCAG 1.4.11)
+     where a plain divider (`line`) would vanish. */
+  --color-line-strong: #8a919f;
 
   /* Brand colour — the single colour for actions, selection and correct answers.
      Not named accent, because that is shadcn's name for the quiet hover tint. */
@@ -91,6 +97,7 @@
 
     --color-line: #2b2f37;
     --color-line-soft: #23272e;
+    --color-line-strong: #646c7b;
 
     /* A more saturated green — the dark surface would swallow it otherwise. */
     --color-brand: #2f9e79;
@@ -142,7 +149,7 @@
 
 /* Section label — the single definition for the whole app. */
 .ui-label {
-  font-size: 0.594rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: var(--label-track);
   font-weight: var(--label-weight);
@@ -211,6 +218,20 @@
   outline-offset: 2px;
 }
 
+/*
+ * Tailwind 4 gives a bare `border` the current text colour. Without this rule
+ * every card, dialog and outline button would be framed in black (white in
+ * dark mode) instead of the line token.
+ */
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--color-line);
+  }
+}
+
 /* Bridge to the naming used by shadcn components. */
 @theme {
   --color-background: var(--color-surface);
@@ -225,12 +246,17 @@
   --color-secondary-foreground: var(--color-fg);
   --color-muted: var(--color-surface-muted);
   --color-muted-foreground: var(--color-fg-muted);
-  /* In shadcn, accent is the quiet hover tint, not the brand colour. */
-  --color-accent: var(--color-surface-muted);
+  /* In shadcn, accent is the quiet hover tint, not the brand colour. It must
+     stay visible on both surface and the surface-muted sidebar. */
+  --color-accent: var(--color-line-soft);
   --color-accent-foreground: var(--color-fg);
   --color-destructive: var(--color-danger);
   --color-border: var(--color-line);
-  --color-input: var(--color-line);
+  --color-input: var(--color-line-strong);
   --color-ring: var(--color-brand);
   --radius: var(--radius-inner);
+  /* shadcn primitives use rounded-md / rounded-lg; tie them to our shape tokens
+     so the chrome vs content emphasis reaches buttons and inputs too. */
+  --radius-md: var(--radius-inner);
+  --radius-lg: var(--radius-outer);
 }

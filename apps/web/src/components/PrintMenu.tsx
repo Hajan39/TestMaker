@@ -124,19 +124,41 @@ export function PrintMenuItems({
  * Standalone menu for the builder bar — including waiting and the error message.
  *
  * The PDF is rendered on the server from the saved state. With unsaved changes
- * an older version than the one the teacher sees would print — so printing
- * waits for a save.
+ * an older version than the one the teacher sees would print — so the menu
+ * saves first (`ensureSaved`) and prints what was just saved.
  */
-export function PrintMenu({ testId, variants, dirty = false }: { testId: string; variants: number; dirty?: boolean }) {
+export function PrintMenu({
+  testId,
+  variants,
+  unsaved = false,
+  ensureSaved,
+}: {
+  /** `null` for a test that was never saved. */
+  testId: string | null
+  variants: number
+  /** Unsaved changes (or a never-saved test) — they are saved before printing. */
+  unsaved?: boolean
+  /** Saves the test and resolves to its id; `null` when saving failed (the caller shows why). */
+  ensureSaved?: () => Promise<string | null>
+}) {
   // Rendering the PDF takes seconds; without this the click seemed to do nothing.
   const [work, setWork] = useState<string | null>(null)
 
-  function run(action: PrintAction) {
+  async function run(action: PrintAction) {
     setWork(action.busyLabel)
-    void action
-      .run()
-      .catch((cause: unknown) => toast.error(cause instanceof Error ? cause.message : String(cause)))
-      .finally(() => setWork(null))
+    try {
+      const id = unsaved || !testId ? ((await ensureSaved?.()) ?? null) : testId
+      if (!id) return
+      // The labels did not depend on the id; the action is rebuilt for the saved one.
+      const ready = printGroups(id, variants)
+        .flatMap((group) => group.actions)
+        .find((candidate) => candidate.key === action.key)
+      await ready?.run()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setWork(null)
+    }
   }
 
   return (
@@ -154,13 +176,13 @@ export function PrintMenu({ testId, variants, dirty = false }: { testId: string;
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className={dirty ? 'max-w-xs' : undefined}>
-          {dirty ? (
-            <DropdownMenuLabel className="text-xs font-normal text-fg-soft">
+        <DropdownMenuContent align="end" className={unsaved ? 'max-w-xs' : undefined}>
+          {unsaved ? (
+            <DropdownMenuLabel className="text-xs font-normal text-fg-soft" data-testid="print-save-first">
               {t('tests:print.saveFirst')}
             </DropdownMenuLabel>
           ) : null}
-          <PrintMenuItems testId={testId} variants={variants} disabled={dirty} onRun={run} />
+          <PrintMenuItems testId={testId ?? ''} variants={variants} onRun={(action) => void run(action)} />
         </DropdownMenuContent>
       </DropdownMenu>
     </>

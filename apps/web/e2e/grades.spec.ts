@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 /**
  * The home page as a hub of classes: tiles lead to `/tridy/[gradeId]`, the
- * last opened class is remembered in the browser and "Všechny třídy"
+ * last opened class is remembered in the browser and "Všechny ročníky"
  * (`/?vse=1`) suppresses the redirect to it. The class page can add and move
  * a topic.
  *
@@ -61,7 +61,7 @@ test.describe('class hub', () => {
       await page.goto('/?vse=1')
       // The same link now also leads from the sidebar, not only from the tile —
       // so look only in the content area, otherwise two elements would match.
-      const content = page.getByRole('region', { name: 'Třídy' })
+      const content = page.getByRole('region', { name: 'Ročníky' })
       await content.locator(`a[href="/tridy/${gradeId}"]`).click()
       await expect(page).toHaveURL(`/tridy/${gradeId}`)
       await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
@@ -119,16 +119,16 @@ test.describe('class hub', () => {
     }
   })
 
-  test('the "Třídy" bar item shows the tiles even with a remembered class', async ({ page }) => {
+  test('the "Ročníky" bar item shows the tiles even with a remembered class', async ({ page }) => {
     const GRADE = `9. ročník ${STAMP}`
     const { subjectId, gradeId } = await createGrade(page.request, `E2E TRIDY LISTA ${STAMP}`, GRADE)
     try {
       await page.goto(`/tridy/${gradeId}`)
       await expect(page.getByRole('heading', { name: GRADE, exact: true })).toBeVisible()
 
-      // Clicking "Třídy" in the bar must not land back in the remembered class —
-      // it always leads to the tile overview (`/?vse=1`), like the "Všechny třídy" link.
-      await page.getByRole('link', { name: 'Třídy', exact: true }).click()
+      // Clicking "Ročníky" in the bar must not land back in the remembered class —
+      // it always leads to the tile overview (`/?vse=1`), like the "Všechny ročníky" link.
+      await page.getByRole('link', { name: 'Ročníky', exact: true }).click()
       await expect(page).toHaveURL('/?vse=1')
       await expect(page.getByText(GRADE, { exact: false }).first()).toBeVisible()
     } finally {
@@ -136,7 +136,7 @@ test.describe('class hub', () => {
     }
   })
 
-  test('"Všechny třídy" shows the tiles even with a remembered class', async ({ page }) => {
+  test('"Všechny ročníky" shows the tiles even with a remembered class', async ({ page }) => {
     const GRADE = `7. ročník ${STAMP}`
     const { subjectId, gradeId } = await createGrade(page.request, `E2E TRIDY VSECHNY ${STAMP}`, GRADE)
     try {
@@ -168,12 +168,12 @@ test.describe('class hub', () => {
     await expect(page.locator('a[href^="/tridy/"]').first()).toBeVisible()
   })
 
-  test('a foreign or missing class leads to the Czech message "Třída už neexistuje"', async ({ page }) => {
+  test('a foreign or missing class leads to the Czech message "Ročník už neexistuje"', async ({ page }) => {
     // In the dev server Next.js returns a `notFound()` page with status 200
     // (only the production build fixes that) — so the content is checked.
     await page.goto('/tridy/neexistujici-trida-xyz')
     await expect(page.getByTestId('grade-not-found')).toBeVisible()
-    const back = page.getByRole('link', { name: 'Všechny třídy' })
+    const back = page.getByRole('link', { name: 'Všechny ročníky' })
     await expect(back).toBeVisible()
     await back.click()
     await expect(page).toHaveURL('/?vse=1')

@@ -135,7 +135,7 @@ export function BackupScreen({ counts }: { counts: Record<string, number> }) {
         }))}
       />
 
-      <Card className="space-y-3 p-4">
+      <Card className="space-y-3">
         <div>
           <h2 className="text-sm font-semibold text-fg">{t('backup:download.title')}</h2>
           <p className="mt-1 max-w-3xl text-sm text-fg-muted">{t('backup:download.hint')}</p>
@@ -152,7 +152,7 @@ export function BackupScreen({ counts }: { counts: Record<string, number> }) {
         </div>
       </Card>
 
-      <Card className="space-y-3 p-4">
+      <Card className="space-y-3">
         <div>
           <h2 className="text-sm font-semibold text-fg">{t('backup:restore.title')}</h2>
           <p className="mt-1 max-w-3xl text-sm text-fg-muted">{t('backup:restore.hint')}</p>

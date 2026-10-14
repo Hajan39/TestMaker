@@ -86,11 +86,11 @@ export function ThemeToggle({ className }: { className?: string }) {
           aria-pressed={ready ? choice === value : undefined}
           onClick={() => pick(value)}
           className={cn(
-            'rounded-[var(--radius-inner)] p-1 text-fg-muted transition-colors hover:text-fg',
+            'grid size-7 place-items-center rounded-[var(--radius-inner)] text-fg-muted transition-colors hover:text-fg pointer-coarse:size-11',
             ready && choice === value ? 'bg-brand-bg text-brand' : '',
           )}
         >
-          <Icon className="size-3.5" />
+          <Icon className="size-4" />
         </button>
         )
       })}

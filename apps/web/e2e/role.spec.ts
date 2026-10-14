@@ -16,7 +16,7 @@ test.beforeEach(({ baseURL }) => {
 
 test('preview browses the library but creates and deletes nothing in it', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Ročníky' })).toBeVisible()
 
   // Import, generation and the question bank are gone from the bar entirely (not only
   // for preview) — import and generation remain as pages, the bank was removed altogether.
@@ -184,12 +184,12 @@ test('preview sees the topics of a grade but no button that would change it', as
   await expect(page.getByRole('heading', { name: gradeName, exact: true })).toBeVisible()
   // The topic is now visible twice — in the middle column and on a tile in the
   // content — so the search is limited to the content area.
-  const content = page.getByRole('region', { name: 'Obsah třídy' })
+  const content = page.getByRole('region', { name: 'Obsah ročníku' })
   await expect(content.getByText('Téma pro náhled', { exact: true })).toBeVisible()
 
   await expect(page.getByRole('button', { name: 'Přidat téma' })).toHaveCount(0)
   await expect(page.getByLabel('Přesunout téma do jiného ročníku')).toHaveCount(0)
-  // "Vygenerovat pro celou třídu" is a button label only inside the bulk generation
+  // "Vygenerovat pro celý ročník" is a button label only inside the bulk generation
   // panel — the whole panel and its trigger disappear together.
   await expect(page.getByRole('button', { name: 'Hromadné generování' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Přejmenovat/ })).toHaveCount(0)
@@ -257,7 +257,8 @@ test.describe('a teacher deletes topics, but not subjects or grades', () => {
 
     await page.goto(`/topics/${topicId}`)
     await expect(page.getByRole('heading', { name: 'Učitelčino téma přejmenované' })).toBeVisible()
-    await page.getByRole('button', { name: 'Smazat téma' }).first().click()
+    await page.getByRole('button', { name: 'Upravit téma' }).click()
+    await page.getByRole('button', { name: 'Smazat téma' }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Smazat' }).click()
     await expect(page).not.toHaveURL(new RegExp(topicId))
 

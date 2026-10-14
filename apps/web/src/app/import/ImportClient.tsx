@@ -245,7 +245,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     <div className="space-y-4">
       <Card
         className={cn(
-          'items-center p-8 text-center transition-colors',
+          'flex flex-col items-center gap-4 border-dashed p-8 text-center transition-colors',
           dragging && 'border-brand bg-brand-bg',
         )}
         onDragOver={(event) => {
@@ -353,7 +353,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
 
       {groups.length > 0 && phase !== 'done' ? (
         <>
-          <Card className="sticky top-2 z-10 flex-row flex-wrap items-center justify-between gap-3 p-4">
+          <Card className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-fg">
                 {t('library:import.previewTitle', {
@@ -383,7 +383,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
             return (
               <Card
                 key={group.id}
-                className={cn('gap-4 p-5', !group.include && 'opacity-55')}
+                className={cn('flex flex-col gap-4 p-5', !group.include && 'opacity-55')}
                 data-testid="import-group"
               >
                 <div className="flex flex-wrap items-end gap-3">
@@ -520,7 +520,7 @@ function BulkAssign({
   const empty = !subject.trim() && !grade.trim() && !topic.trim()
 
   return (
-    <Card className="gap-3 p-5" data-testid="import-bulk">
+    <Card className="flex flex-col gap-3 p-5" data-testid="import-bulk">
       <div>
         <h2 className="text-sm font-semibold text-fg">{t('library:import.bulk.title')}</h2>
         <p className="mt-1 text-sm text-fg-muted">{t('library:import.bulk.hint')}</p>

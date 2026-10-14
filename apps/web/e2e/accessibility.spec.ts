@@ -121,7 +121,7 @@ test.describe('top bar on a phone (390 px)', () => {
     await page.goto('/')
 
     const header = page.locator('header')
-    for (const label of ['Třídy', 'Testy', 'Hlavolamy', 'Šablony']) {
+    for (const label of ['Ročníky', 'Testy', 'Hlavolamy', 'Šablony']) {
       await expect(header.getByRole('link', { name: label, exact: true })).toBeVisible()
     }
     for (const label of ['Světlý motiv', 'Tmavý motiv', 'Podle systému']) {
@@ -135,9 +135,12 @@ test.describe('top bar on a phone (390 px)', () => {
     })
     expect(overflow).toBeLessThanOrEqual(0)
 
-    // The last navigation item and the theme switch must lie inside the window.
+    // On a phone the navigation is one row that scrolls sideways, so the last
+    // item may start off-screen — it must scroll into the window, not be cut off.
     const viewport = page.viewportSize()!
-    const templatesBox = await header.getByRole('link', { name: 'Šablony' }).boundingBox()
+    const templates = header.getByRole('link', { name: 'Šablony' })
+    await templates.scrollIntoViewIfNeeded()
+    const templatesBox = await templates.boundingBox()
     const themeBox = await header.getByRole('button', { name: 'Tmavý motiv' }).boundingBox()
     expect(templatesBox?.x).toBeGreaterThanOrEqual(0)
     expect((templatesBox?.x ?? 0) + (templatesBox?.width ?? 0)).toBeLessThanOrEqual(viewport.width)

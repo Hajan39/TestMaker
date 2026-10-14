@@ -27,8 +27,8 @@ test.describe('worksheets', () => {
     await expect(page.getByRole('heading', { name: 'Úprava pracovního listu' })).toBeVisible()
     const id = new URL(page.url()).pathname.split('/').at(-1)!
 
-    await page.getByRole('button', { name: '+ Fun fact' }).click()
-    await page.getByLabel('Text fun factu').fill('Etna je nejvyšší činná sopka Evropy.')
+    await page.getByRole('button', { name: '+ Zajímavost' }).click()
+    await page.getByLabel('Text zajímavosti').fill('Etna je nejvyšší činná sopka Evropy.')
     await page.getByRole('button', { name: '+ Tabulka' }).click()
     await page.getByLabel('Buňka 1. řádku, 1. sloupce').fill('Etna')
     await page.getByLabel('Buňka 1. řádku, 2. sloupce').fill('Itálie')
@@ -43,7 +43,7 @@ test.describe('worksheets', () => {
 
     // After reloading everything is in place.
     await page.reload()
-    await expect(page.getByLabel('Text fun factu')).toHaveValue('Etna je nejvyšší činná sopka Evropy.')
+    await expect(page.getByLabel('Text zajímavosti')).toHaveValue('Etna je nejvyšší činná sopka Evropy.')
     await expect(page.getByLabel('Buňka 1. řádku, 2. sloupce')).toHaveValue('Itálie')
 
     for (const url of [`/api/tests/${id}/pdf?variant=A`, `/api/tests/${id}/pdf?variant=A&key=1`]) {
@@ -123,7 +123,7 @@ test.describe('worksheets', () => {
 
     await page.getByRole('tab', { name: 'Volné zadání' }).click()
     await page.getByLabel('O čem má list být').fill('Fotosyntéza')
-    await page.getByLabel('Pokyn pro model (nepovinné)').fill('víc tabulek')
+    await page.getByLabel('Pokyn pro generování (nepovinné)').fill('víc tabulek')
     await generate.click()
 
     await expect(page).toHaveURL(new RegExp(`/listy/${SEED_LIST_ID}\\?vynechano=2$`), { timeout: 30_000 })

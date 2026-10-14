@@ -83,6 +83,23 @@ test.describe('printing the assignment and the key', () => {
     expect(key).toBe(`${TITLE} A vyplněná.pdf`)
   })
 
+  test('builder: unsaved changes are saved before printing, and an unsavable test is not printed', async ({ page }) => {
+    await page.goto(`/tests/${testId}`)
+    let pdfRequested = false
+    page.on('request', (request) => {
+      if (request.url().includes(`/api/tests/${testId}/pdf`)) pdfRequested = true
+    })
+
+    // An empty title cannot be saved — so nothing may print from the stale saved state.
+    const title = page.getByLabel('Název testu')
+    await title.fill('')
+    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await expect(page.getByTestId('print-save-first')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Stáhnout zadání pro žáky' }).click()
+    await expect(title).toHaveAttribute('aria-invalid', 'true')
+    expect(pdfRequested).toBe(false)
+  })
+
   test('printing the assignment sends a PDF without the key to the printer', async ({ page }) => {
     await page.goto(`/tests/${testId}`)
     await page.getByRole('button', { name: 'Tisk a PDF' }).click()

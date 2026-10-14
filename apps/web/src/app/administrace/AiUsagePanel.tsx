@@ -30,7 +30,7 @@ export function AiUsagePanel({ overview }: { overview: AiUsageOverview }) {
   const column = (name: keyof typeof resources.cs.admin.aiUsage.columns) => t(`admin:aiUsage.columns.${name}`)
 
   return (
-    <Card className="space-y-5 p-4" aria-labelledby="ai-usage">
+    <Card className="space-y-5" aria-labelledby="ai-usage">
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="ai-usage" className="font-medium text-fg">
           {t('admin:aiUsage.title')}

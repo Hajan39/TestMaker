@@ -55,8 +55,8 @@ export function ClaudeCodeImport({ topicId }: { topicId: string }) {
   const busy = uploadMutation.isPending
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
-      <span>{t('library:claudeCodeImport.label')}</span>
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-fg-muted">{t('library:claudeCodeImport.label')}</span>
       <Button asChild variant="outline" size="sm">
         <a href={`${base}/zdroj`} download>
           {t('library:claudeCodeImport.download')}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Card, Input, Label } from '@testmaker/ui'
 import { safeReturnPath } from '@/lib/returnPath'
@@ -17,14 +17,19 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 
   const {
     register,
-    control,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting, isSubmitSuccessful },
   } = useForm<{ email: string; password: string }>({ defaultValues: { email: '', password: '' } })
-  const [email, password] = useWatch({ control, name: ['email', 'password'] })
   // A Google sign-in error from the URL shows until the first attempt here.
-  const error = errors.root?.message ?? (isSubmitting || isSubmitSuccessful ? null : googleError)
+  const error =
+    errors.root?.message ??
+    errors.email?.message ??
+    errors.password?.message ??
+    (isSubmitting || isSubmitSuccessful ? null : googleError)
+  // Checked on submit, not by disabling the button: browser autofill does not
+  // tell the page it filled the fields, so the button stayed dead over filled ones.
+  const required = { validate: (value: string) => value.trim() !== '' || t('auth:login.fillBoth') }
 
   async function submit({ email, password }: { email: string; password: string }) {
     try {
@@ -51,7 +56,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             autoComplete="username"
             autoFocus
             defaultValue=""
-            {...register('email')}
+            aria-invalid={errors.email ? true : undefined}
+            {...register('email', required)}
           />
         </div>
         <div>
@@ -61,7 +67,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             type="password"
             autoComplete="current-password"
             defaultValue=""
-            {...register('password')}
+            aria-invalid={errors.password ? true : undefined}
+            {...register('password', required)}
           />
         </div>
         {googleInfo && !error ? (
@@ -75,7 +82,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           </p>
         ) : null}
         {/* Stays busy after a successful sign-in until the next page loads. */}
-        <Button type="submit" disabled={isSubmitting || isSubmitSuccessful || email.length === 0 || password.length === 0}>
+        <Button type="submit" disabled={isSubmitting || isSubmitSuccessful}>
           {isSubmitting || isSubmitSuccessful ? t('auth:login.signingIn') : t('auth:login.signIn')}
         </Button>
       </form>

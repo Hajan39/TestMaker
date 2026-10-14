@@ -54,7 +54,7 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
 
   const account = await pageAccount()
   const gradeOptions = await loadTestGradeOptions(account, kind)
-  // A foreign or stale grade from a link behaves as "Všechny třídy" (all
+  // A foreign or stale grade from a link behaves as "Všechny ročníky" (all
   // grades), not as a filter nothing matches.
   const grade = params.trida && gradeOptions.some((grade) => grade.id === params.trida) ? params.trida : ''
 
@@ -122,11 +122,18 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
       .innerJoin(templates, eq(templates.id, tests.templateId))
       .where(where),
     db
-      .select({ id: templates.id, name: templates.name })
+      .select({ id: templates.id, name: templates.name, config: templates.config })
       .from(templates)
       .where(inSchool(account, templates))
       .orderBy(asc(templates.name)),
   ])
+
+  // Only templates of this overview's kind — a worksheet template means nothing
+  // in the test filter. A template picked earlier (from a link) stays on offer.
+  // Older stored configs have no `kind`; the schema reads them as a test.
+  const templateOptions = templateRows
+    .filter((row) => (row.config.kind ?? 'pisemka') === kind || row.id === templateId)
+    .map(({ id, name }) => ({ id, name }))
 
   const total = Number(totalRow?.value ?? 0)
   const filtered = Boolean(search.trim()) || Boolean(templateId) || Boolean(grade)
@@ -146,9 +153,9 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
             <KindMark kind={kind} />
             {text.title} ({total})
           </h1>
-          <Link href={`${basePath}/new`}>
-            <Button>{text.add}</Button>
-          </Link>
+          <Button asChild>
+            <Link href={`${basePath}/new`}>{text.add}</Link>
+          </Button>
         </div>
 
         {total === 0 && !filtered ? (
@@ -156,18 +163,19 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
             title={text.emptyTitle}
             hint={text.emptyHint}
             action={
-              <Link href={`${basePath}/new`}>
-                <Button>{text.create}</Button>
-              </Link>
+              <Button asChild>
+                <Link href={`${basePath}/new`}>{text.create}</Link>
+              </Button>
             }
           />
         ) : (
-          <Card className="overflow-hidden p-4">
+          <Card className="overflow-hidden">
             <TestsFilters
+              kind={kind}
               basePath={basePath}
               search={search}
               templateId={templateId}
-              templates={templateRows}
+              templates={templateOptions}
               gradeId={grade}
               grades={gradeOptions}
             />
@@ -178,9 +186,9 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
                   title={t('tests:overview.noMatch.title')}
                   hint={t('tests:overview.noMatch.hint')}
                   action={
-                    <Link href={basePath}>
-                      <Button variant="outline">{t('tests:overview.noMatch.clear')}</Button>
-                    </Link>
+                    <Button asChild variant="outline">
+                      <Link href={basePath}>{t('tests:overview.noMatch.clear')}</Link>
+                    </Button>
                   }
                 />
               </div>
@@ -190,9 +198,11 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
 
             {total > rows.length ? (
               <div className="mt-3 flex justify-center">
-                <Link href={`${basePath}?${moreParams.toString()}`} scroll={false}>
-                  <Button variant="outline">{t('tests:overview.loadMore', { count: total - rows.length })}</Button>
-                </Link>
+                <Button asChild variant="outline">
+                  <Link href={`${basePath}?${moreParams.toString()}`} scroll={false}>
+                    {t('tests:overview.loadMore', { count: total - rows.length })}
+                  </Link>
+                </Button>
               </div>
             ) : null}
           </Card>

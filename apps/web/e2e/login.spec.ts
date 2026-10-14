@@ -19,7 +19,7 @@ test('a signed-out user is let only onto the login page', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByRole('heading', { name: 'Přihlášení' })).toBeVisible()
   // The login page has no app navigation.
-  await expect(page.getByRole('link', { name: 'Třídy' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Ročníky' })).toHaveCount(0)
 })
 
 test('a wrong password shows a message and lets nowhere in', async ({ page }) => {
@@ -38,7 +38,7 @@ test('signs in with the correct password, survives a reload and signs out', asyn
   await page.getByRole('button', { name: 'Přihlásit se' }).click()
 
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Ročníky' })).toBeVisible()
 
   // The cookie holds after a page reload.
   await page.reload()

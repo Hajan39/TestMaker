@@ -1,5 +1,6 @@
 'use client'
 
+import { Check } from 'lucide-react'
 import { templatesFor, type Template } from '@testmaker/core/schema'
 import {
   Button,
@@ -117,28 +118,35 @@ export function TestSettings({
             </div>
           </div>
 
-          <div>
-            <Label>{t('tests:settings.template')}</Label>
+          {/* The choice is not told by colour alone: the selected card is
+              pressed for screen readers and carries a check mark. */}
+          <fieldset>
+            <legend className="mb-2 text-sm leading-none font-medium">{t('tests:settings.template')}</legend>
             <div className="grid grid-cols-2 gap-3">
-              {templatesFor(templates, worksheet ? 'pracovni_list' : 'pisemka', value.templateId).map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => onChange({ ...value, templateId: template.id })}
-                  className={
-                    'rounded-lg border p-1.5 text-left transition-colors ' +
-                    (template.id === value.templateId
-                      ? 'border-brand bg-brand-bg'
-                      : 'border-line hover:border-fg-muted')
-                  }
-                >
-                  <TemplatePreview templateId={template.id} graded={value.graded} decorative />
-                  <span className="mt-1.5 block px-1 text-sm font-medium text-fg-soft">{template.name}</span>
-                  <span className="block px-1 pb-1 text-xs text-fg-muted">{template.description}</span>
-                </button>
-              ))}
+              {templatesFor(templates, worksheet ? 'pracovni_list' : 'pisemka', value.templateId).map((template) => {
+                const selected = template.id === value.templateId
+                return (
+                  <button
+                    key={template.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onChange({ ...value, templateId: template.id })}
+                    className={
+                      'rounded-lg border p-1.5 text-left transition-colors ' +
+                      (selected ? 'border-brand bg-brand-bg' : 'border-line hover:border-fg-muted')
+                    }
+                  >
+                    <TemplatePreview templateId={template.id} graded={value.graded} decorative />
+                    <span className="mt-1.5 flex items-center gap-1 px-1 text-sm font-medium text-fg-soft">
+                      {selected ? <Check aria-hidden="true" className="size-4 shrink-0 text-brand" /> : null}
+                      {template.name}
+                    </span>
+                    <span className="block px-1 pb-1 text-xs text-fg-muted">{template.description}</span>
+                  </button>
+                )
+              })}
             </div>
-          </div>
+          </fieldset>
 
           {/* The answer key is not set here: it is chosen at print time,
               between "Zadání pro žáky" and "Vyplněná pro mě". */}

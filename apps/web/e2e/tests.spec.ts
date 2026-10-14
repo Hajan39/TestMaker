@@ -31,6 +31,14 @@ test.describe('test list', () => {
     await expect(page.getByRole('link', { name: name })).toBeVisible()
   })
 
+  test('the template filter offers only test templates, not worksheet ones', async ({ page }) => {
+    await createTest(page.request, `${PREFIX} pro filtr šablon ${Date.now()}`)
+    await page.goto('/tests')
+    await page.getByLabel('Šablona').click()
+    await expect(page.getByRole('option', { name: 'Klasická' })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Pracovní list – jednoduchý' })).toHaveCount(0)
+  })
+
   test('a test copy is created next to the original without overwriting it', async ({ page }) => {
     const name = `${PREFIX} ke kopírování ${Date.now()}`
     await createTest(page.request, name)
@@ -66,7 +74,7 @@ test.describe('test list', () => {
     await createTest(page.request, nameB, { gradeId: gradeB.gradeId })
 
     await page.goto('/tests')
-    await page.getByLabel('Třída').click()
+    await page.getByLabel('Ročník').click()
     await page.getByRole('option', { name: gradeA.label }).click()
 
     await expect(page).toHaveURL(new RegExp(`trida=${gradeA.gradeId}`))

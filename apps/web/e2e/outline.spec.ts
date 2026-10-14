@@ -92,7 +92,7 @@ test.describe('outline item', () => {
     await lines.fill('9')
 
     // The title is right in the builder header.
-    await page.getByLabel('Název písemky').fill('Zkouška počtu řádků')
+    await page.getByLabel('Název testu').fill('Zkouška počtu řádků')
     await page.getByRole('button', { name: 'Uložit' }).click()
     // After saving the URL changes to the test detail (careful: "/tests/new"
     // would match a generic pattern too).
@@ -193,7 +193,7 @@ test.describe('composing the outline', () => {
     await expect(first.getByTestId('question-used-count')).toHaveAttribute('data-count', '2')
     const count = await page.getByTestId('test-question-count').first().getAttribute('data-count')
 
-    await page.getByLabel('Název písemky').fill('Zkouška dvojího použití')
+    await page.getByLabel('Název testu').fill('Zkouška dvojího použití')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 

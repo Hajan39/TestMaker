@@ -9,6 +9,9 @@ import { useMatchesMedia } from './useMatchesMedia'
  * Three columns per the spec. Below 1280 px the second column drops out,
  * below 1024 px a single column remains and tabs switch between columns.
  *
+ * Without `second` the middle column (and its phone tab) is left out — an
+ * empty column would only say there is nothing to choose yet.
+ *
  * Content is rendered only once. An earlier version had both variants on the
  * page at once and hid one, which duplicated `id`s and field labels pointed at
  * the invisible copy.
@@ -22,7 +25,7 @@ export function ThreePane({
   children,
 }: {
   first: ReactNode
-  second: ReactNode
+  second?: ReactNode
   firstLabel?: string
   secondLabel?: string
   contentLabel?: string
@@ -36,15 +39,17 @@ export function ThreePane({
         <Tabs defaultValue="content" className="flex h-full min-h-0 flex-col gap-0">
           <TabsList className="shrink-0">
             <TabsTrigger value="first">{firstLabel}</TabsTrigger>
-            <TabsTrigger value="second">{secondLabel}</TabsTrigger>
+            {second ? <TabsTrigger value="second">{secondLabel}</TabsTrigger> : null}
             <TabsTrigger value="content">{contentLabel}</TabsTrigger>
           </TabsList>
           <TabsContent value="first" className="min-h-0 flex-1 overflow-y-auto bg-surface-muted p-3">
             {first}
           </TabsContent>
-          <TabsContent value="second" className="min-h-0 flex-1 overflow-y-auto p-3">
-            {second}
-          </TabsContent>
+          {second ? (
+            <TabsContent value="second" className="min-h-0 flex-1 overflow-y-auto p-3">
+              {second}
+            </TabsContent>
+          ) : null}
           <TabsContent value="content" className="surface-content min-h-0 flex-1 overflow-y-auto p-5">
             {children}
           </TabsContent>
@@ -61,12 +66,14 @@ export function ThreePane({
       >
         {first}
       </aside>
-      <aside
-        aria-label={secondLabel}
-        className="surface-chrome hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block"
-      >
-        {second}
-      </aside>
+      {second ? (
+        <aside
+          aria-label={secondLabel}
+          className="surface-chrome hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block"
+        >
+          {second}
+        </aside>
+      ) : null}
       <section aria-label={contentLabel} className="surface-content min-w-0 flex-1 overflow-y-auto p-5">
         {children}
       </section>

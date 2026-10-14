@@ -19,7 +19,7 @@ export function LibrarySidebar({
       {tree.map((subject) => (
         <div key={subject.id}>
           <div className="mb-1 flex items-center justify-between gap-1 px-2">
-            <p className="ui-label min-w-0 truncate">{subject.name}</p>
+            <p className="ui-label min-w-0 truncate" title={subject.name}>{subject.name}</p>
             {/* A grade is created where grades are visible — at the subject.
                 An icon is enough: a label on every subject would drown its name. */}
             <NewLibraryItem kind="grade" parentId={subject.id} iconOnly variant="ghost" />

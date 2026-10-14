@@ -10,7 +10,7 @@ import type { ClassInfo } from '@/lib/library'
 /**
  * Class page content: heading (subject and renamable grade), topics with
  * counts and generation state, adding a topic, bulk generation for the whole
- * class and deleting the grade. The "Všechny třídy" link goes back home
+ * class and deleting the grade. The "Všechny ročníky" link goes back home
  * without redirecting to the last opened class.
  */
 export function ClassTopics({

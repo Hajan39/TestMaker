@@ -26,6 +26,8 @@ describe('AppShell', () => {
     expect(screen.getByText('TestMaker')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Testy' })).toBeInTheDocument()
     expect(screen.getByText('Obsah')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Přeskočit na obsah' })).toHaveAttribute('href', '#main')
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
   })
 
   it('marks the active item for screen readers', () => {

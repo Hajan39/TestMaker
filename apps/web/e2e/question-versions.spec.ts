@@ -264,8 +264,8 @@ test.describe('test version in the builder', () => {
     await mockTestVariant(page, newId)
 
     await page.goto(`/tests/${testId}`)
-    await page.getByRole('button', { name: 'Verze písemky' }).click()
-    await page.getByRole('menuitem', { name: 'Lehčí verze písemky' }).click()
+    await page.getByRole('button', { name: 'Verze testu' }).click()
+    await page.getByRole('menuitem', { name: 'Lehčí verze testu' }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${newId}$`))
     await expect(page.getByTestId('toast-variant-done')).toBeVisible()
@@ -278,8 +278,8 @@ test.describe('test version in the builder', () => {
     await mockTestVariant(page, newId, true)
 
     await page.goto(`/tests/${testId}`)
-    await page.getByRole('button', { name: 'Verze písemky' }).click()
-    await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
+    await page.getByRole('button', { name: 'Verze testu' }).click()
+    await page.getByRole('menuitem', { name: 'Těžší verze testu' }).click()
 
     await expect(page).toHaveURL(new RegExp(`/tests/${newId}$`))
     await expect(page.getByTestId('toast-variant-partial')).toBeVisible()
@@ -301,13 +301,13 @@ test.describe('test version in the builder', () => {
     // dnd-kit's `SortableContext`) that sets the value without React learning
     // about the change via `onChange`.
     const edited = `${title} (upraveno)`
-    const titleInput = page.getByLabel('Název písemky')
+    const titleInput = page.getByLabel('Název testu')
     await titleInput.selectText()
     await titleInput.pressSequentially(edited)
     await expect(titleInput).toHaveValue(edited)
 
-    await page.getByRole('button', { name: 'Verze písemky' }).click()
-    await page.getByRole('menuitem', { name: 'Těžší verze písemky' }).click()
+    await page.getByRole('button', { name: 'Verze testu' }).click()
+    await page.getByRole('menuitem', { name: 'Těžší verze testu' }).click()
 
     await expect(page.getByTestId('toast-save-before-variant')).toBeVisible()
     expect(queries).toBe(0)

@@ -167,7 +167,7 @@ export function GenerateSettingsForm({
  */
 export function AiUnavailable({ problems }: { problems: string[] }) {
   return (
-    <Card className="gap-1 border-draft-bg bg-draft-bg/40 p-4 text-sm text-draft-fg">
+    <Card className="flex flex-col gap-1 border-draft-bg bg-draft-bg/40 text-sm text-draft-fg">
       <p>{t('generation:generateDialog.notConfigured')}</p>
       {problems.length > 0 ? (
         <ul className="list-disc space-y-0.5 pl-5 text-xs">
@@ -240,7 +240,7 @@ export function SimpleGenerateSettingsForm({
           onChange={(event) => onChange({ ...value, count: clampCount(event.target.value) })}
         />
       </div>
-      <div className="w-36">
+      <div className="w-48">
         {/* Its own name, not a generic "Obtížnost" — the question filter below has
             the same name and `getByLabel('Obtížnost')` would otherwise match both. */}
         <Label htmlFor="generate-difficulty">{t('generation:generateDialog.newDifficulty')}</Label>

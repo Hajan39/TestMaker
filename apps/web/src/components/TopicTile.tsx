@@ -44,7 +44,7 @@ export function TopicTile({
   actions?: ReactNode
 }) {
   return (
-    <Card className="gap-1.5 p-3 hover:border-brand">
+    <Card className="flex flex-col gap-1.5 p-3 hover:border-brand">
       {/* Renaming belongs to the name, so it's inside the card, not next to it.
           The name is a link like the rest of the tile — clicking it used to do
           nothing; the pencil and the rename field stop the click themselves. */}
@@ -55,7 +55,7 @@ export function TopicTile({
               kind="topic"
               id={id}
               name={name}
-              className="text-sm text-fg-soft"
+              className="text-sm font-medium text-fg"
               label={t('library:itemDialogs.topic.rename')}
             />
           </Link>

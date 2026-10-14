@@ -55,8 +55,8 @@
   "topicPage": {
     "loading": "Načítám téma…",
     "notFoundTitle": "Téma už neexistuje",
-    "notFoundHint": "Nejspíš se smazalo nebo sloučilo s jiným. Najdeš ho přes jeho třídu.",
-    "allClasses": "Všechny třídy",
+    "notFoundHint": "Nejspíš se smazalo nebo sloučilo s jiným. Najdeš ho přes jeho ročník.",
+    "allClasses": "Všechny ročníky",
     "rename": "Přejmenovat téma",
     "charsAvailable": "znaků k dispozici"
   },
@@ -66,7 +66,7 @@
   "import": {
     "metaTitle": "Import materiálů – TestMaker",
     "title": "Import materiálů",
-    "intro": "Vyber složku, jednotlivé soubory, nebo je sem přetáhni. Text se vytáhne přímo v prohlížeči, na server se posílá jen text, ne soubory. Ze struktury složek se odhadne Předmět → Ročník → Téma — v náhledu si odhad projdeš a opravíš dřív, než se cokoli uloží.",
+    "intro": "Vyber složku nebo soubory. Podle složek navrhneme předmět, ročník a téma a před uložením si vše zkontroluješ. Soubory zůstávají u tebe, ukládá se jen text.",
     "loading": "Načítám import…",
     "errorReason": "chyba",
     "readFailed": "Soubory se nepodařilo přečíst.",
@@ -82,7 +82,7 @@
     "topicLink": "Téma {{name}}",
     "gradeLink": "Ročník {{name}}",
     "noGrade": "bez ročníku",
-    "allClasses": "Všechny třídy",
+    "allClasses": "Všechny ročníky",
     "previewTitle": "Náhled importu: {{topics}}, {{files}}",
     "files_one": "{{count}} soubor",
     "files_few": "{{count}} soubory",
@@ -277,20 +277,20 @@
     "materialGone": "Materiál mezitím zmizel, obnov stránku."
   },
   "grade": {
-    "contentLabel": "Obsah třídy",
-    "loading": "Načítám třídu…",
-    "notFoundTitle": "Třída už neexistuje",
-    "notFoundHint": "Nejspíš se smazala. Vyber si jinou na úvodní obrazovce.",
-    "allClasses": "Všechny třídy"
+    "contentLabel": "Obsah ročníku",
+    "loading": "Načítám ročník…",
+    "notFoundTitle": "Ročník už neexistuje",
+    "notFoundHint": "Nejspíš se smazal. Vyber si jiný na úvodní obrazovce.",
+    "allClasses": "Všechny ročníky"
   },
   "classTiles": {
     "noGrades": "Zatím bez ročníku."
   },
   "classTopics": {
-    "generateForClass": "Vygenerovat pro celou třídu",
+    "generateForClass": "Vygenerovat pro celý ročník",
     "addTopic": "Přidat téma",
-    "emptyTitle": "V téhle třídě zatím není žádné téma",
-    "emptyHint": "Přidej téma tlačítkem nahoře, nebo do ní naimportuj materiály."
+    "emptyTitle": "V tomhle ročníku zatím není žádné téma",
+    "emptyHint": "Přidej téma tlačítkem nahoře, nebo do něj naimportuj materiály."
   },
   "topicWorkspace": {
     "emptyTitle": "Téma je zatím prázdné.",
@@ -370,7 +370,7 @@
     "editTopic": "Upravit téma",
     "upload": "Nahrát materiály",
     "dropHint": "Nebo sem soubory přetáhni myší.",
-    "keepOpen": "Nechte stránku otevřenou, než se soubory nahrají.",
+    "keepOpen": "Nech stránku otevřenou, dokud se soubory nenahrají.",
     "moved": "Materiál přesunut do „{{name}}“.",
     "topicName": "Název tématu",
     "renamed": "Téma přejmenováno.",

@@ -141,7 +141,7 @@ export function TestBuilder({
   // bank, so a draft has no way into a real test.
   //
   // Default grade filter = the test's grade — whoever builds a test for 6. B
-  // wants to see 6. B first. Switching to "Všechny třídy" allows picking from
+  // wants to see 6. B first. Switching to "Všechny ročníky" allows picking from
   // other grades, which is how a cross-topic review test is made. A test
   // without a grade (older or created without a topic) offers everything.
   const [filters, setFilters] = useState<BankFilters>({
@@ -276,8 +276,16 @@ export function TestBuilder({
     })
   }
 
+  /** Removing is immediate, so the toast offers to put the item back where it was. */
   function removeItem(key: string) {
+    const index = draft.findIndex((item) => item.key === key)
+    const removed = draft[index]
+    if (!removed) return
     setDraft((current) => current.filter((item) => item.key !== key))
+    toast.success(t('tests:page.removed'), {
+      duration: 10_000,
+      action: { label: t('common:actions.undo'), onClick: () => insertAt(removed, index) },
+    })
   }
 
   function patchItem(key: string, patch: Partial<DraftItem>) {
@@ -510,8 +518,9 @@ export function TestBuilder({
     [settings, draft, worksheet],
   )
   // Fingerprint of the last saved state. In state, not a ref — refs must not be
-  // read during render and React warns about it.
-  const [savedFingerprint, setSavedFingerprint] = useState<string | null>(test ? fingerprint : null)
+  // read during render and React warns about it. An untouched new test is not
+  // dirty either; `savedId` alone says whether it was ever saved.
+  const [savedFingerprint, setSavedFingerprint] = useState(fingerprint)
   // A shared test cannot be saved, so there is nothing to lose.
   const dirty = !readOnly && savedFingerprint !== fingerprint
 
@@ -559,7 +568,8 @@ export function TestBuilder({
   const copying = copyMutation.isPending || copyMutation.isSuccess
 
   const saveMutation = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
+    // `quiet` leaves the "saved" toast to the caller (printing says it its own way).
+    mutationFn: async ({ body }: { body: Record<string, unknown>; quiet?: boolean }) => {
       const failure = worksheet ? t('worksheets:builder.saveFailed') : t('tests:builder.saveFailed')
       const result = await requestJson<{ id: string; itemIds: string[] }>(
         '/api/tests',
@@ -569,13 +579,13 @@ export function TestBuilder({
       if (!result.id) throw new Error(`${failure} ${t('common:errors.serverTrouble')}`)
       return { id: result.id, itemIds: result.itemIds }
     },
-    onSuccess: ({ id, itemIds }) => {
+    onSuccess: ({ id, itemIds }, { quiet }) => {
       // Without ids from the save the next save would not recognise the items
       // and their frozen snapshots would be retaken from the current bank.
       if (itemIds) setDraft((current) => current.map((item, index) => ({ ...item, id: itemIds[index] ?? item.id })))
       setSavedFingerprint(fingerprint)
       setSavedId(id)
-      toast.success(t('common:status.saved'), { testId: 'toast-saved' })
+      if (!quiet) toast.success(t('common:status.saved'), { testId: 'toast-saved' })
       // `?vynechano=` only belongs to a freshly generated worksheet — after a save
       // the skipped-items notice would linger, so the URL drops it.
       if (!test || dropped > 0) router.replace(testPath(kind, id))
@@ -586,17 +596,20 @@ export function TestBuilder({
   })
   const saving = saveMutation.isPending
 
-  async function save() {
+  /** Saves the test; resolves to its id, or `null` when it could not be saved (the reason is shown). */
+  async function save({ quiet = false }: { quiet?: boolean } = {}): Promise<string | null> {
     setError(null)
     setTitleInvalid(false)
     if (!settings.title.trim()) {
       setTitleInvalid(true)
       titleRef.current?.focus()
-      return setError(worksheet ? t('worksheets:builder.titleRequired') : t('tests:builder.titleRequired'))
+      setError(worksheet ? t('worksheets:builder.titleRequired') : t('tests:builder.titleRequired'))
+      return null
     }
-    if (worksheet) {
-      if (draft.length === 0) return void toast.error(t('worksheets:builder.itemRequired'))
-    } else if (questionCount === 0) return void toast.error(t('tests:builder.questionRequired'))
+    if (worksheet ? draft.length === 0 : questionCount === 0) {
+      toast.error(worksheet ? t('worksheets:builder.itemRequired') : t('tests:builder.questionRequired'))
+      return null
+    }
 
     const body = {
       ...(savedId ? { id: savedId } : {}),
@@ -630,7 +643,20 @@ export function TestBuilder({
       })),
     }
 
-    saveMutation.mutate(body)
+    try {
+      return (await saveMutation.mutateAsync({ body, quiet })).id
+    } catch {
+      // The mutation's `onError` has already told the teacher why.
+      return null
+    }
+  }
+
+  /** The PDF renders from the saved state, so unsaved work is saved before printing. */
+  async function savedForPrint(): Promise<string | null> {
+    if (savedId && !dirty) return savedId
+    const id = await save({ quiet: true })
+    if (id) toast.success(t('tests:print.savedAndPrinting'), { testId: 'toast-saved' })
+    return id
   }
 
   const bank = (
@@ -673,6 +699,7 @@ export function TestBuilder({
       }
     />
   )
+  const narrowHint = <p className="text-sm text-fg-muted">{t('tests:builder.narrowHint')}</p>
   const editedQuestion = questionDialog?.key
     ? (draft.find((item) => item.key === questionDialog.key)?.question ?? null)
     : null
@@ -719,9 +746,14 @@ export function TestBuilder({
             the footer under the test page where they arise. The top bar used to
             repeat them and both numbers had to be kept from contradicting. */}
         <div className="flex flex-wrap items-center gap-2">
-          {savedId ? <PrintMenu testId={savedId} variants={settings.variants} dirty={dirty} /> : null}
+          <PrintMenu
+            testId={savedId}
+            variants={settings.variants}
+            unsaved={!readOnly && (dirty || !savedId)}
+            ensureSaved={savedForPrint}
+          />
           {readOnly ? (
-            <Button disabled={copying} aria-busy={copying || undefined} onClick={() => savedId && copyMutation.mutate(savedId)}>
+            <Button size="sm" disabled={copying} aria-busy={copying || undefined} onClick={() => savedId && copyMutation.mutate(savedId)}>
               {copying ? t('tests:row.copying') : t('tests:row.copy')}
             </Button>
           ) : null}
@@ -745,7 +777,7 @@ export function TestBuilder({
                   {t('common:status.unsavedChanges')}
                 </span>
               ) : null}
-              <Button disabled={saving} onClick={() => void save()}>{saving ? t('common:actions.saving') : t('common:actions.save')}</Button>
+              <Button size="sm" disabled={saving} onClick={() => void save()}>{saving ? t('common:actions.saving') : t('common:actions.save')}</Button>
             </>
           )}
         </div>
@@ -805,17 +837,28 @@ export function TestBuilder({
           <div className="h-[75vh]">{sheet}</div>
         </fieldset>
       ) : worksheet ? (
-        // A worksheet has no bank — the page gets the full width.
-        <div className="h-[75vh]">{sheet}</div>
+        // A worksheet has no bank — the page gets the full width. On a phone the
+        // page scrolls with the window; a nested scroller there traps the finger.
+        narrow ? (
+          <div className="space-y-2">
+            {narrowHint}
+            {sheet}
+          </div>
+        ) : (
+          <div className="h-[75vh]">{sheet}</div>
+        )
       ) : narrow ? (
-        // Below 1024 px: one column with tabs.
+        // Below 1024 px: one column with tabs, scrolling with the window.
         <Tabs defaultValue="banka">
           <TabsList>
             <TabsTrigger value="banka">{t('tests:builder.tabBank')}</TabsTrigger>
-            <TabsTrigger value="stranka">{t('tests:page.title')}</TabsTrigger>
+            <TabsTrigger value="stranka">{t('tests:builder.tabPage', { count: questionCount })}</TabsTrigger>
           </TabsList>
-          <TabsContent value="banka"><div className="h-[70vh]">{bank}</div></TabsContent>
-          <TabsContent value="stranka"><div className="h-[70vh]">{sheet}</div></TabsContent>
+          <TabsContent value="banka">{bank}</TabsContent>
+          <TabsContent value="stranka" className="space-y-2">
+            {narrowHint}
+            {sheet}
+          </TabsContent>
         </Tabs>
       ) : (
         // From 1024 px side by side: bank left, page right. The page gets more

@@ -196,7 +196,7 @@ export function TestPage({
   }
 
   return (
-    <Card className="surface-content flex h-full flex-col gap-0 p-4">
+    <Card className="surface-content flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-fg">{t('tests:page.title')}</h2>
         <div className="flex flex-wrap gap-1">
@@ -244,7 +244,8 @@ export function TestPage({
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={items.map((item) => item.key)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-4">
+              {/* Capped so a full-width worksheet keeps the size of a real sheet. */}
+              <div className="mx-auto max-w-[820px] space-y-4">
                 {pages.map((page, pageIndex) => (
                   <PaperSheet
                     key={pageIndex}
@@ -440,8 +441,9 @@ function PageRow({
       style={style}
       className="group/row relative list-none rounded-[var(--radius-inner)] outline-offset-4 hover:outline hover:outline-line focus-within:outline focus-within:outline-line"
     >
-      {/* Margin controls. They stay in the keyboard flow even when invisible. */}
-      <div className="absolute -top-3 right-0 z-10 flex items-center gap-1 rounded-[var(--radius-inner)] border border-line bg-surface px-1 py-0.5 text-fg opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
+      {/* Margin controls. They stay in the keyboard flow even when invisible; on
+          a touch screen there is no hover, so they are always shown there. */}
+      <div className="absolute -top-3 right-0 z-10 flex items-center gap-1 rounded-[var(--radius-inner)] border border-line bg-surface px-1 py-0.5 text-fg opacity-0 shadow-sm transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
         <button
           type="button"
           className="cursor-grab touch-none px-1 text-fg-muted active:cursor-grabbing"

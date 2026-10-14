@@ -77,7 +77,8 @@ export function DeleteButton({
     <AlertDialog open={open} onOpenChange={(next) => void handleOpenChange(next)}>
       <AlertDialogTrigger asChild>
         {/*
-          Red text belongs only on a neutral background (`ghost`, `outline`).
+          On a neutral background (`ghost`, `outline`) the trigger stays quiet and
+          turns red only on hover — a row of red trash cans shouts louder than the content.
           The `destructive` variant has a red background and light text of its
           own — forcing the text colour would give red on red and hide the label.
         */}
@@ -86,7 +87,7 @@ export function DeleteButton({
           variant={variant}
           aria-label={iconOnly ? title : undefined}
           title={iconOnly ? title : undefined}
-          className={variant === 'destructive' ? undefined : 'text-danger hover:text-danger'}
+          className={variant === 'destructive' ? undefined : 'text-fg-muted hover:text-danger'}
         >
           {iconOnly ? <Trash2 aria-hidden /> : (label ?? t('actions.delete'))}
         </Button>

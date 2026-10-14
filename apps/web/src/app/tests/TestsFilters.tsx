@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
+import type { TestKind } from '@testmaker/core/schema'
 
 /** How long to wait before typing in the search reaches the URL. */
 const SEARCH_DELAY = 350
@@ -24,6 +25,7 @@ const SEARCH_DELAY = 350
  * is never loaded here.
  */
 export function TestsFilters({
+  kind,
   basePath,
   search,
   templateId,
@@ -31,6 +33,7 @@ export function TestsFilters({
   gradeId,
   grades,
 }: {
+  kind: TestKind
   /** `/tests` or `/listy` — the filter stays on the overview it came from. */
   basePath: string
   search: string
@@ -79,7 +82,7 @@ export function TestsFilters({
         <Input
           id="test-search"
           value={text}
-          placeholder={t('tests:filters.searchPlaceholder')}
+          placeholder={kind === 'pracovni_list' ? t('worksheets:filters.searchPlaceholder') : t('tests:filters.searchPlaceholder')}
           onChange={(event) => setText(event.target.value)}
         />
       </div>

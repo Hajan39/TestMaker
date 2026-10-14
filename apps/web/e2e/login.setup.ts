@@ -21,7 +21,7 @@ for (const person of Object.keys(ACCOUNTS) as Person[]) {
     await page.getByRole('button', { name: 'Přihlásit se' }).click()
 
     // A manager also has Management in the bar; the others at least the Classes item.
-    await expect(page.getByRole('link', { name: 'Třídy' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Ročníky' })).toBeVisible()
     await page.context().storageState({ path: state(person) })
   })
 }

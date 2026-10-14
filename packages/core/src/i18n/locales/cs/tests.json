@@ -14,25 +14,25 @@
     "hint": "Ve škole zatím není žádná šablona pro tisk, takže nejde nic založit. Dej vědět správci, ať ji přidá."
   },
   "templates": {
-    "title": "Šablony testů",
-    "intro": "Šablona určuje, jak písemka vypadá na papíře. Náhled ukazuje skutečnou stránku tak, jak se vytiskne; šablonu si vybereš v nastavení písemky.",
+    "title": "Šablony",
+    "intro": "Šablona určuje, jak test nebo pracovní list vypadá na papíře. Náhled ukazuje skutečnou stránku tak, jak se vytiskne; šablonu si vybereš v nastavení testu nebo listu.",
     "count_one": "{{count}} šablona",
     "count_few": "{{count}} šablony",
     "count_other": "{{count}} šablon",
     "empty": {
       "title": "Zatím tu není žádná šablona",
-      "hint": "Bez šablony nejde písemku vytisknout. Dej vědět správci, ať ji přidá."
+      "hint": "Bez šablony nejde test vytisknout. Dej vědět správci, ať ji přidá."
     },
     "builtIn": "vestavěná"
   },
   "api": {
     "templateNotFound": "Šablona nenalezena",
     "testNotFound": "Test nenalezen",
-    "variantInvalid": "Verzi písemky se nepodařilo spustit. Obnov stránku a zkus to znovu.",
+    "variantInvalid": "Verzi testu se nepodařilo spustit. Obnov stránku a zkus to znovu.",
     "testNotFoundShort": "Test se nenašel",
-    "invalidTest": "Písemku se nepodařilo uložit — chybí název (nejvýš 200 znaků) nebo šablona, případně je některá položka neúplná. Zkontroluj to, obnov stránku a zkus to znovu.",
+    "invalidTest": "Test se nepodařilo uložit — chybí název (nejvýš 200 znaků) nebo šablona, případně je některá položka neúplná. Zkontroluj to, obnov stránku a zkus to znovu.",
     "missingId": "Chybí id",
-    "foreignPuzzle": "Do písemky jde zařadit jen vlastní hlavolam.",
+    "foreignPuzzle": "Do testu jde zařadit jen vlastní hlavolam.",
     "schoolHasNoTemplate": "Škola nemá žádnou šablonu pro tisk. Dej vědět správci, ať ji přidá, a pak to zkus znovu."
   },
   "pdfFile": {
@@ -45,7 +45,7 @@
     "questions": "Otázky",
     "points": "Body",
     "template": "Šablona",
-    "grade": "Třída",
+    "grade": "Ročník",
     "changed": "Změněno",
     "actions": "Akce"
   },
@@ -58,8 +58,8 @@
     "searchPlaceholder": "název testu",
     "template": "Šablona",
     "allTemplates": "Všechny",
-    "grade": "Třída",
-    "allGrades": "Všechny třídy",
+    "grade": "Ročník",
+    "allGrades": "Všechny ročníky",
     "searching": "Hledám…"
   },
   "settings": {
@@ -76,7 +76,7 @@
     "blankLine": "prázdné = linka k doplnění",
     "template": "Šablona",
     "graded": "Test na známky (tiskne body a políčko na známku)",
-    "share": "Sdílet s kolegyněmi ze školy (uvidí ji a vytisknou, měnit ji nemohou)"
+    "share": "Sdílet s kolegyněmi ze školy (uvidí ho a vytisknou, měnit ho nemohou)"
   },
   "overview": {
     "title": "Testy",
@@ -86,7 +86,7 @@
     "create": "Vytvořit test",
     "noMatch": {
       "title": "Filtru nic neodpovídá",
-      "hint": "Zkus jiné slovo v názvu, jinou šablonu nebo třídu.",
+      "hint": "Zkus jiné slovo v názvu, jinou šablonu nebo ročník.",
       "clear": "Zrušit filtry"
     },
     "loadMore": "Načíst další ({{count}})"
@@ -100,24 +100,25 @@
     "preparingPrint": "Připravuji tisk…",
     "preparingPdf": "Připravuji PDF…",
     "menu": "Tisk a PDF",
-    "saveFirst": "Nejdřív ulož změny — tiskne se uložená podoba."
+    "saveFirst": "Neuložené změny se před tiskem uloží — tiskne se uložená podoba.",
+    "savedAndPrinting": "Změny jsou uložené, připravuji tisk."
   },
   "variant": {
-    "menu": "Verze písemky",
-    "easier": "Lehčí verze písemky",
-    "harder": "Těžší verze písemky",
-    "partial": "Verze písemky je dokončená jen částečně — zkontroluj otázky.",
-    "failed": "Verzi písemky se nepodařilo vytvořit.",
+    "menu": "Verze testu",
+    "easier": "Lehčí verze testu",
+    "harder": "Těžší verze testu",
+    "partial": "Verze testu je dokončená jen částečně — zkontroluj otázky.",
+    "failed": "Verzi testu se nepodařilo vytvořit.",
     "replaced": "{{count}} z hotových verzí",
     "generated": "{{count}} nově vygenerováno",
-    "doneEasier": "Lehčí verze písemky je hotová.",
-    "doneHarder": "Těžší verze písemky je hotová.",
+    "doneEasier": "Lehčí verze testu je hotová.",
+    "doneHarder": "Těžší verze testu je hotová.",
     "kept_one": "{{count}} otázka zůstala původní.",
     "kept_few": "{{count}} otázky zůstaly původní.",
     "kept_other": "{{count}} otázek zůstalo původních.",
     "progress": "Hotovo {{done}} z {{total}}",
     "preparing": "Připravuji…",
-    "notConfigured": "Verze písemky potřebuje generování, které není nastavené.",
+    "notConfigured": "Verze testu potřebuje generování, které není nastavené.",
     "askAdmin": "Dej vědět správci, ať ho zapne.",
     "titleEasier": "{{title}} – lehčí",
     "titleHarder": "{{title}} – těžší"
@@ -133,7 +134,6 @@
     "deleteTitle": "Smazat test „{{title}}“?",
     "deleteHint": "Test se smaže včetně poskládaných položek. Otázky v bance zůstanou zachované.",
     "irreversible": "Akci nejde vrátit zpět.",
-    "graded": "na známky",
     "ungraded": "bez známek",
     "variantsAB": "varianty A/B",
     "questions_one": "{{count}} otázka",
@@ -149,16 +149,17 @@
     "type": "Typ",
     "selectAll": "Vybrat vše",
     "selectAllCount": "Vybrat vše ({{count}})",
-    "empty": "V bance zatím nejsou schválené otázky — přidej materiály a schval otázky v Knihovně.",
-    "openLibrary": "Otevřít Knihovnu",
+    "empty": "V bance zatím nejsou schválené otázky — přidej materiály a schval otázky v Ročnících.",
+    "openLibrary": "Otevřít Ročníky",
     "noMatch": "Žádné otázky neodpovídají filtru",
     "selectTopic": "Vybrat všechny otázky tématu {{topic}}",
     "usedTimes": "V testu {{count}}×",
-    "addAgain": "Zařadit do testu ještě jednou"
+    "addAgain": "Zařadit do testu ještě jednou",
+    "allGrades": "Všechny ročníky"
   },
   "random": {
     "open": "Sestavit náhodně",
-    "intro": "Zaškrtni témata a řekni, kolik toho má být. Otázky se rozprostřou mezi vybraná témata i mezi typy. Vložením do osnovy se nic neukládá — dolaď si je a pak test ulož.",
+    "intro": "Zaškrtni témata a řekni, kolik toho má být. Otázky se rozprostřou mezi vybraná témata i mezi typy. Vložením na stránku se nic neukládá — dolaď si je a pak test ulož.",
     "topics": "Témata ({{count}})",
     "selectAll": "Vybrat vše",
     "clearSelection": "Zrušit výběr",
@@ -178,18 +179,17 @@
     "difficultyHard": "Těžká",
     "types": "Typy otázek",
     "allTypes": "Všechny",
-    "seed": "Číslo losování",
     "reshuffle": "Zamíchat znovu",
-    "mode": "V osnově už něco je",
+    "mode": "Na stránce už něco je",
     "modeAppend": "Přidat vylosované na konec",
-    "modeReplace": "Nahradit celou osnovu",
+    "modeReplace": "Nahradit vše na stránce",
     "drawn": "Vylosováno",
     "summary_one": "{{count}} otázka · {{points}} b.",
     "summary_few": "{{count}} otázky · {{points}} b.",
     "summary_other": "{{count}} otázek · {{points}} b.",
     "noTopic": "Bez tématu",
     "noTopicSelected": "Zatím není vybrané žádné téma — losuje se ze všech otázek v knihovně.",
-    "insert": "Vložit do osnovy"
+    "insert": "Vložit na stránku"
   },
   "page": {
     "title": "Stránka",
@@ -198,14 +198,14 @@
     "addInstruction": "+ Pokyn",
     "addPageBreak": "+ Nová strana",
     "addText": "+ Text",
-    "addFunFact": "+ Fun fact",
+    "addFunFact": "+ Zajímavost",
     "addTable": "+ Tabulka",
     "addTask": "+ Úloha",
     "untitled": "Nový test",
     "footer": "strana {{page}} / {{pages}}",
-    "emptyWorksheet": "Zatím prázdný list. Přidej text, fun fact, tabulku nebo úlohu tlačítky nahoře.",
-    "emptyTest": "Zatím prázdná písemka. Zaškrtni otázku v bance a objeví se tady na stránce.",
-    "noTemplate": "Bez šablony se neví, jak se písemka vytiskne. Vyber ji v nastavení testu.",
+    "emptyWorksheet": "Zatím prázdný list. Přidej text, zajímavost, tabulku nebo úlohu tlačítky nahoře.",
+    "emptyTest": "Zatím prázdný test. Zaškrtni otázku v bance a objeví se tady na stránce.",
+    "noTemplate": "Bez šablony se neví, jak se test vytiskne. Vyber ji v nastavení testu.",
     "itemCount": "Položek: ",
     "questionCount": "Otázek: ",
     "points": "Body: ",
@@ -217,7 +217,7 @@
     "instruction": "Pokyn",
     "pageBreak": "Zalomení strany",
     "text": "Krátký text",
-    "funFact": "Fun fact",
+    "funFact": "Zajímavost",
     "table": "Tabulka k doplnění",
     "task": "Úloha",
     "drag": "Přetáhnout pro změnu pořadí",
@@ -242,26 +242,29 @@
     "editInBankTitle": "Upravit otázku v bance",
     "editedInBank": "Otázka je upravená v bance i v testu — test ještě ulož.",
     "sampleAnswer": "Vzorová odpověď (netiskne se): ",
-    "puzzleGone": "Hlavolam už není k dispozici — odeber ho z písemky.",
-    "questionGone": "Otázka už není k dispozici — odeber ji z písemky.",
+    "puzzleGone": "Hlavolam už není k dispozici — odeber ho z testu.",
+    "questionGone": "Otázka už není k dispozici — odeber ji z testu.",
     "newPage": "nová strana",
     "instructionField": "Pokyn k vypracování",
-    "broken": "Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu."
+    "broken": "Tahle položka je poškozená a nevytiskne se. Odeber ji a vlož znovu.",
+    "removed": "Položka je odebraná ze stránky."
   },
   "builder": {
     "newSection": "Nová část",
     "copied": "Kopie je hotová — teď ji můžeš upravit.",
-    "titleRequired": "Vyplň název písemky.",
+    "titleRequired": "Vyplň název testu.",
     "questionRequired": "Přidej aspoň jednu otázku.",
-    "saveFailed": "Písemku se nepodařilo uložit.",
+    "saveFailed": "Test se nepodařilo uložit.",
     "editTitle": "Úprava testu",
     "newTitle": "Nový test",
     "backToTopic": "← Zpět do tématu {{topic}}",
-    "titleLabel": "Název písemky",
-    "titlePlaceholder": "Např. Čtvrtletní písemka – přírodopis",
-    "saveBeforeVariant": "Nejdřív ulož písemku — verze vzniká z uložené podoby, ne z rozpracované úpravy.",
-    "sharedReadOnly": "Sdílená písemka — pro úpravy si vytvoř kopii.",
-    "tabBank": "Banka"
+    "titleLabel": "Název testu",
+    "titlePlaceholder": "Např. Čtvrtletní test – přírodopis",
+    "saveBeforeVariant": "Nejdřív ulož test — verze vzniká z uložené podoby, ne z rozpracované úpravy.",
+    "sharedReadOnly": "Sdílený test — pro úpravy si vytvoř kopii.",
+    "tabBank": "Banka",
+    "tabPage": "Stránka ({{count}})",
+    "narrowHint": "Stránku pohodlněji upravíš na tabletu nebo počítači."
   },
   "copyTitle": "{{title}} (kopie)"
 }

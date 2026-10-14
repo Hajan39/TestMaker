@@ -6,14 +6,14 @@
   "intro": "Celá knihovna — předměty, témata, texty materiálů, otázky, šablony i hotové testy — se dá stáhnout do jednoho souboru a z něj zase nahrát zpátky. Hodí se před větším úklidem i při přesunu na jiný počítač.",
   "download": {
     "title": "Stáhnout zálohu",
-    "hint": "Uloží se jeden soubor JSON se vším, co v knihovně je. Fronta generování se nezálohuje — je to jen pracovní stav, ne obsah.",
+    "hint": "Uloží se jeden soubor se vším, co v knihovně je. Rozpracované generování otázek se nezálohuje — je to jen pracovní stav, ne obsah.",
     "busy": "Stahuji zálohu…",
     "failed": "Zálohu se nepodařilo stáhnout.",
     "notAFile": "Server neposlal soubor zálohy. Obnov stránku a zkus to znovu."
   },
   "restore": {
     "title": "Obnovit ze zálohy",
-    "hint": "Ze souboru se doplní, co v knihovně chybí, a co má stejné id, se přepíše podobou ze zálohy. Nic se nemaže, takže se tentýž soubor dá nahrát i dvakrát — podruhé se už nic nezdvojí.",
+    "hint": "Ze souboru se doplní, co v knihovně chybí, a co už v ní je, se přepíše podobou ze zálohy. Nic se nemaže, takže se tentýž soubor dá nahrát i dvakrát — podruhé se už nic nezdvojí.",
     "chooseFile": "Vybrat soubor zálohy",
     "readFailed": "Soubor se nepodařilo přečíst.",
     "willLoad": "Ze souboru {{file}} se naveze:",
@@ -26,7 +26,7 @@
   },
   "errors": {
     "restoreFailed": "Obnova se nepovedla.",
-    "invalidJson": "Soubor se nepodařilo přečíst — není to platný JSON. Vybrala jsi soubor zálohy?",
+    "invalidJson": "Soubor se nepodařilo přečíst — nejspíš to není záloha TestMakeru, nebo je poškozený.",
     "empty": "Soubor zálohy je prázdný.",
     "notBackup": "Tohle není záloha TestMakeru. Vyber soubor, který jsi stáhla tlačítkem Stáhnout zálohu.",
     "corrupted": "Záloha je poškozená — chybí v ní obsah knihovny. Nejspíš se nestáhla celá.",

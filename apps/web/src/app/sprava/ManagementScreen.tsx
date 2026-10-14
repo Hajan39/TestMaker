@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
+import { ChevronDown } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
@@ -21,6 +22,9 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -237,6 +241,8 @@ export function ManagementScreen({
   })
   /** The account a change is running on — its buttons stay disabled until then. */
   const working = updateMutation.isPending ? updateMutation.variables.id : null
+  // Accounts waiting for approval first — approving them is why the manager comes here.
+  const sortedUsers = [...users].sort((a, b) => Number(b.status === 'ceka') - Number(a.status === 'ceka'))
   const [onlyErrors, setOnlyErrors] = useState(false)
   const shownEvents = onlyErrors ? events.filter((event) => event.severity === 'chyba') : events
   /** A change that signs the teacher out — waits for confirmation. */
@@ -323,29 +329,14 @@ export function ManagementScreen({
             </AlertDialogContent>
           </AlertDialog>
 
-          <Card className="p-4">
-            <h2 className="font-medium text-fg">{t('admin:management.accounts.school')}</h2>
-            <p className="mt-1 mb-3 max-w-3xl text-sm text-fg-soft">{t('admin:management.accounts.schoolHint')}</p>
-            <SchoolForm
-              initial={{ name: school, googleDomain: googleDomain ?? '', googleAutoJoin, ...schoolDetails }}
-              submitLabel={t('admin:management.accounts.saveSchool')}
-              onSave={saveSchool}
-            />
-          </Card>
-
-          <Card className="p-4">
-            <h2 className="font-medium text-fg">{t('admin:management.accounts.newAccount')}</h2>
-            <NewAccountForm
-              onCreated={(created) => {
-                setPassword(created)
-                router.refresh()
-              }}
-            />
-          </Card>
-
-          <div className="space-y-2">
-            {users.map((account) => (
-              <Card key={account.id} className="flex-row flex-wrap items-center gap-3 p-3">
+          {/* The account list first: approving waiting accounts is the everyday
+              job here; the school's details change once in a long while. */}
+          <section className="space-y-2" aria-labelledby="accounts-heading">
+            <h2 id="accounts-heading" className="font-medium text-fg">
+              {t('admin:management.accounts.listHeading', { count: users.length })}
+            </h2>
+            {sortedUsers.map((account) => (
+              <Card key={account.id} className="flex flex-wrap items-center gap-3 p-3">
                 <div className="min-w-56 flex-1">
                   <p className="font-medium text-fg">
                     {account.name}
@@ -373,7 +364,9 @@ export function ManagementScreen({
                     <Badge variant="secondary">{t('admin:management.accounts.mustChangePassword')}</Badge>
                   ) : null}
                   <span className="ui-numeric text-xs text-fg-muted">
-                    {t('admin:management.accounts.lastLogin', { when: when(account.lastLoginAt) })}
+                    {account.lastLoginAt
+                      ? t('admin:management.accounts.lastLogin', { when: when(account.lastLoginAt) })
+                      : t('admin:management.accounts.neverLoggedIn')}
                   </span>
                 </div>
 
@@ -397,7 +390,10 @@ export function ManagementScreen({
                         )
                       }
                     >
-                      <SelectTrigger className="w-36">
+                      <SelectTrigger
+                        className="w-36"
+                        aria-label={`${t('admin:management.accounts.role')} – ${account.name}`}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -490,7 +486,38 @@ export function ManagementScreen({
                 )}
               </Card>
             ))}
-          </div>
+          </section>
+
+          <Card>
+            <h2 className="font-medium text-fg">{t('admin:management.accounts.newAccount')}</h2>
+            <NewAccountForm
+              onCreated={(created) => {
+                setPassword(created)
+                router.refresh()
+              }}
+            />
+          </Card>
+
+          <Card>
+            <Collapsible>
+              <h2>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" className="group -ml-2.5 gap-1.5 font-medium text-fg">
+                    <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+                    {t('admin:management.accounts.school')}
+                  </Button>
+                </CollapsibleTrigger>
+              </h2>
+              <CollapsibleContent>
+                <p className="mt-1 mb-3 max-w-3xl text-sm text-fg-soft">{t('admin:management.accounts.schoolHint')}</p>
+                <SchoolForm
+                  initial={{ name: school, googleDomain: googleDomain ?? '', googleAutoJoin, ...schoolDetails }}
+                  submitLabel={t('admin:management.accounts.saveSchool')}
+                  onSave={saveSchool}
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          </Card>
         </TabsContent>
 
         <TabsContent value="udalosti" className="space-y-3">
@@ -498,7 +525,7 @@ export function ManagementScreen({
             <Checkbox checked={onlyErrors} onCheckedChange={(checked) => setOnlyErrors(checked === true)} />
             {t('admin:management.events.onlyErrors')}
           </label>
-          <Card className="divide-y divide-line">
+          <Card className="divide-y divide-line p-0">
             {shownEvents.length === 0 ? (
               <p className="p-4 text-sm text-fg-soft">
                 {onlyErrors ? t('admin:management.events.noErrors') : t('admin:management.events.empty')}
@@ -538,7 +565,7 @@ export function ManagementScreen({
         </TabsContent>
 
         <TabsContent value="provoz" className="space-y-3">
-          <Card className="space-y-1 p-4 text-sm">
+          <Card className="space-y-1 text-sm">
             <p>{t('admin:management.operations.queue', queue)}</p>
             <p>
               {aiConfigured
@@ -560,7 +587,7 @@ export function ManagementScreen({
               .
             </p>
           </Card>
-          <Card className="p-4 text-sm">
+          <Card className="text-sm">
             <p className="text-fg-soft">{t('admin:management.operations.backupHint')}</p>
             <Button className="mt-2" variant="outline" size="sm" asChild>
               <a href="/zaloha">{t('admin:management.operations.openBackup')}</a>
@@ -572,11 +599,11 @@ export function ManagementScreen({
           <p className="max-w-3xl text-sm text-fg-soft">{t('admin:management.quality.intro')}</p>
 
           {aiQuality.models.length === 0 ? (
-            <Card className="p-4 text-sm text-fg-soft">{t('admin:management.quality.empty')}</Card>
+            <Card className="text-sm text-fg-soft">{t('admin:management.quality.empty')}</Card>
           ) : (
             <>
-              <Card className="divide-y divide-line">
-                <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+              <Card className="divide-y divide-line p-0">
+                <p className="ui-label p-3">
                   {t('admin:management.quality.models')}
                 </p>
                 {aiQuality.models.map((model) => {
@@ -607,8 +634,8 @@ export function ManagementScreen({
               </Card>
 
               {aiQuality.reasons.length > 0 ? (
-                <Card className="divide-y divide-line">
-                  <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                <Card className="divide-y divide-line p-0">
+                  <p className="ui-label p-3">
                     {t('admin:management.quality.topReasons')}
                   </p>
                   {aiQuality.reasons.map((row) => (
@@ -639,7 +666,7 @@ export function ManagementScreen({
               ) : null}
 
               {newRule ? (
-                <Card className="space-y-2 p-4">
+                <Card className="space-y-2">
                   <h3 className="font-medium text-fg">
                     {t('admin:management.quality.newRuleTitle', { reason: REGENERATE_REASONS[newRule.reason].label })}
                   </h3>
@@ -666,8 +693,8 @@ export function ManagementScreen({
               ) : null}
 
               {aiQuality.bySubject.length > 0 ? (
-                <Card className="divide-y divide-line">
-                  <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                <Card className="divide-y divide-line p-0">
+                  <p className="ui-label p-3">
                     {t('admin:management.quality.bySubject')}
                   </p>
                   {aiQuality.bySubject.map((row) => (
@@ -691,8 +718,8 @@ export function ManagementScreen({
             </>
           )}
 
-          <Card className="divide-y divide-line">
-            <p className="p-3 text-xs font-medium uppercase tracking-wide text-fg-muted">
+          <Card className="divide-y divide-line p-0">
+            <p className="ui-label p-3">
               {t('admin:management.quality.rules', { active: rules.filter((p) => p.active).length, max: maxRules })}
             </p>
             {rules.length === 0 ? (
@@ -763,7 +790,6 @@ function NewAccountForm({ onCreated }: { onCreated: (created: { email: string; p
     resolver: zodResolver(newAccountSchema()),
     defaultValues: { email: '', name: '', role: 'ucitelka' },
   })
-  const [email, name] = useWatch({ control, name: ['email', 'name'] })
   const error = errors.email?.message ?? errors.name?.message
 
   async function create(account: NewAccount) {
@@ -811,12 +837,8 @@ function NewAccountForm({ onCreated }: { onCreated: (created: { email: string; p
           )}
         />
       </div>
-      <BusyButton
-        type="submit"
-        busy={isSubmitting}
-        busyLabel={t('admin:management.accounts.creating')}
-        disabled={!email || !name}
-      >
+      {/* Always enabled: a disabled button gave no reason; submitting says what is missing. */}
+      <BusyButton type="submit" busy={isSubmitting} busyLabel={t('admin:management.accounts.creating')}>
         {t('admin:management.accounts.create')}
       </BusyButton>
       {error ? (

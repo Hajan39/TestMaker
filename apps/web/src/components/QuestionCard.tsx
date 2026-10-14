@@ -104,12 +104,16 @@ export function QuestionCard({
   return (
     <div className="flex gap-3">
       {canEdit ? (
-        <Checkbox
-          className="mt-0.5 shrink-0"
-          checked={selected}
-          onCheckedChange={onToggleSelect}
-          aria-label={t('library:questionCard.selectForTest')}
-        />
+        // The label only widens the click target around the 16 px box; the
+        // accessible name stays on the checkbox itself.
+        <label className="-m-1.5 shrink-0 self-start p-1.5">
+          <Checkbox
+            className="mt-0.5"
+            checked={selected}
+            onCheckedChange={onToggleSelect}
+            aria-label={t('library:questionCard.selectForTest')}
+          />
+        </label>
       ) : null}
       <div className="min-w-0 flex-1">
         <QuestionPreview question={question} />
@@ -132,7 +136,7 @@ export function QuestionCard({
           <Button
             size="sm"
             variant="ghost"
-            className="text-danger hover:text-danger"
+            className="text-fg-soft hover:text-danger"
             disabled={busy || aiBusy}
             onClick={onRemove}
           >

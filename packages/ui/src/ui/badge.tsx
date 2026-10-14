@@ -13,6 +13,7 @@ const badgeVariants = cva(
         // An "approved" badge on twenty bank rows would otherwise glow greener
         // than the buttons above it.
         status: "border-line bg-surface-muted text-fg-soft",
+        draft: "bg-draft-bg text-draft-fg",
         secondary:
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:

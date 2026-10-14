@@ -110,12 +110,20 @@ test.describe('library columns', () => {
   })
 })
 
+/** The "6. ročník" tile of PŘÍRODOPIS — tiles sit under their subject heading and show only the grade name. */
+function sixthGradeTile(page: Page) {
+  return page
+    .locator('section', { has: page.getByRole('heading', { name: 'PŘÍRODOPIS', exact: true }) })
+    .getByRole('link', { name: /6\. ročník/ })
+    .first()
+}
+
 test.describe('scrolling', () => {
   test('a long topic list can be scrolled to the end', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 700 })
     // The class with the most topics (over forty) — the content is reliably longer than the window.
     await page.goto('/')
-    await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
+    await sixthGradeTile(page).click()
     await page.waitForLoadState('networkidle')
 
     // Find the area that scrolls and check it can move down.
@@ -137,7 +145,7 @@ test.describe('topic tiles', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     // The seed has a long space-free name only in "6. ročník" of PŘÍRODOPIS.
     await page.goto('/')
-    await page.getByRole('link', { name: /PŘÍRODOPIS · 6\. ročník/ }).first().click()
+    await sixthGradeTile(page).click()
     // Navigation is client-side: the network goes idle before the page swaps
     // (reliably in WebKit), so wait for the class URL.
     await page.waitForURL(/\/tridy\//)

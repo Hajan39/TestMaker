@@ -312,7 +312,7 @@ describe('backup and restore', () => {
 
   it('a foreign file is rejected with a message and nothing is written', async () => {
     expect(() => parseBackup('{"neco":1}')).toThrow(/není záloha TestMakeru/i)
-    expect(() => parseBackup('nic')).toThrow(/platný JSON/i)
+    expect(() => parseBackup('nic')).toThrow(/nepodařilo přečíst/i)
 
     const response = await POST(jsonReq('/api/export', 'POST', { table: 'faktury', rows: [] }))
     expect(response.status).toBe(400)

@@ -167,7 +167,7 @@ export function RandomDialog({
               <div className="mt-1 max-h-64 space-y-2 overflow-y-auto rounded border border-line-soft p-2">
                 {tree.map(({ subject, grades }) => (
                   <div key={subject}>
-                    <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{subject}</p>
+                    <p className="ui-label">{subject}</p>
                     {grades.map(({ grade, topics: list }) => {
                       const ids = list.map((topic) => topic.id)
                       const all = ids.every((id) => selectedSet.has(id))
@@ -287,16 +287,11 @@ export function RandomDialog({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-36">
-                <Label htmlFor="random-seed">{t('tests:random.seed')}</Label>
-                <Input id="random-seed" value={seed} onChange={(event) => setSeed(event.target.value)} />
-              </div>
-              {/* The draw is repeatable: the same number gives the same test. */}
-              <Button type="button" variant="outline" onClick={() => setSeed(randomSeed())}>
-                {t('tests:random.reshuffle')}
-              </Button>
-            </div>
+            {/* The draw stays the same until the teacher asks for another one.
+                The number behind it is not shown — it meant nothing to her. */}
+            <Button type="button" size="sm" variant="outline" onClick={() => setSeed(randomSeed())}>
+              {t('tests:random.reshuffle')}
+            </Button>
 
             {hasDraft ? (
               <div>

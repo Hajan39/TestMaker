@@ -1,4 +1,7 @@
 {
+  "appShell": {
+    "skipToContent": "Přeskočit na obsah"
+  },
   "dataTable": {
     "sort": "Seřadit"
   },
@@ -66,6 +69,7 @@
       "rejected": "zamítnuto"
     },
     "manual": "vlastní",
+    "correct": "správná odpověď",
     "keyNote": "Pozn. do klíče: {{note}}",
     "modelAnswer": "Vzorová odpověď ({{lines}} ř.)",
     "drawingContent": "Co má kresba obsahovat ({{lines}} ř. místa)",

@@ -137,7 +137,7 @@ test.describe('picking questions for a test', () => {
     expect(indexA).toBeLessThan(indexC)
 
     // Test name = topic name.
-    await expect(page.getByLabel('Název písemky')).toHaveValue(/Výběr otázek do testu/)
+    await expect(page.getByLabel('Název testu')).toHaveValue(/Výběr otázek do testu/)
 
     // The header shows the class the test came from and a link back to the topic.
     const backLink = page.getByRole('link', { name: /Zpět do tématu/ })
@@ -146,7 +146,7 @@ test.describe('picking questions for a test', () => {
     await expect(backLink.locator('..')).toContainText(`${SUBJECT} · ${GRADE}`)
 
     // A second topic in another grade — with the default filter (the test's class)
-    // the bank shows only the own class's topic; after switching to "Všechny třídy"
+    // the bank shows only the own class's topic; after switching to "Všechny ročníky"
     // the other one too. Grade and topic names carry a timestamp — otherwise
     // grouping of similar topics would merge the new one into an old one from an earlier run.
     const otherGrade = `${GRADE} jiná třída ${Date.now()}`
@@ -160,7 +160,7 @@ test.describe('picking questions for a test', () => {
     await expect(bankOwnGrade).toHaveCount(0)
 
     await page.getByLabel('Ročník').click()
-    await page.getByRole('option', { name: 'Všechny třídy' }).click()
+    await page.getByRole('option', { name: 'Všechny ročníky' }).click()
     await expect(bankOwnGrade).toBeVisible()
 
     // The question from the other class is added to the outline via the bank and
@@ -225,11 +225,11 @@ test.describe('picking questions for a test', () => {
 
     await page.reload()
 
-    // The trigger shows "Všechny třídy", not blank and not a class missing from
+    // The trigger shows "Všechny ročníky", not blank and not a class missing from
     // the options. `getByLabel` would be ambiguous here — the library has other
     // topics whose checkbox "Vybrat všechny otázky tématu … ročník …" contains
     // the same name as a substring.
-    await expect(page.getByRole('combobox', { name: 'Ročník' })).toHaveText('Všechny třídy')
+    await expect(page.getByRole('combobox', { name: 'Ročník' })).toHaveText('Všechny ročníky')
 
     // The other class's topic is visible in the bank right away (no manual filter
     // switch), just collapsed like any other — expanding it shows its question.
@@ -267,7 +267,7 @@ test.describe('picking questions for a test', () => {
     const outline = page.locator('[data-slot="paper-sheet"] ol')
     await expect(outline.getByText(first)).toBeVisible()
     await expect(outline.getByText(second)).toBeVisible()
-    await expect(page.getByLabel('Název písemky')).toHaveValue('Test ze 2 témat')
+    await expect(page.getByLabel('Název testu')).toHaveValue('Test ze 2 témat')
 
     // Editing from the test changes the bank question and the test takes it.
     const edited = `${second} — opraveno`

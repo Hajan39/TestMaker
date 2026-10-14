@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { DeleteButton } from '../src'
 
 describe('DeleteButton', () => {
-  it('has red text on a neutral background', () => {
+  it('stays quiet on a neutral background and turns red on hover', () => {
     render(<DeleteButton label="Smazat téma" title="Smazat?" onConfirm={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Smazat téma' })).toHaveClass('text-danger')
+    expect(screen.getByRole('button', { name: 'Smazat téma' })).toHaveClass('text-fg-muted', 'hover:text-danger')
   })
 
   it('does not force the text colour on the destructive variant — otherwise red on red', () => {

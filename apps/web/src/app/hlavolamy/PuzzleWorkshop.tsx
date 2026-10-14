@@ -374,6 +374,13 @@ export function PuzzleWorkshop({
   const built = useMemo(() => (preview ? buildPuzzle(preview) : null), [preview])
   const problems = built ? puzzleProblems(built) : []
   const dirty = draftKey(draft) !== baseline
+  /**
+   * Did the teacher try to save an unfinished puzzle? A fresh page used to
+   * greet her with "Hlavolam potřebuje aspoň dvě slova" three times over —
+   * what is missing is listed only once there is something to judge.
+   */
+  const [attempted, setAttempted] = useState(false)
+  const showMissing = missing.length > 0 && (attempted || draft.entries.length > 0)
 
   /** Why printing and adding are not possible yet; `null` = they are. */
   const blockedReason = !content
@@ -381,6 +388,8 @@ export function PuzzleWorkshop({
     : problems.length > 0
       ? t('puzzles:workshop.blocked.problems')
       : null
+  // "See above what is missing" only makes sense while the list above is shown.
+  const showBlocked = blockedReason !== null && (problems.length > 0 || showMissing)
 
   // Unsaved changes are not lost without a warning when the tab closes.
   useEffect(() => {
@@ -399,6 +408,7 @@ export function PuzzleWorkshop({
   function resetTo(next: Draft): void {
     setDraft(next)
     setBaseline(draftKey(next))
+    setAttempted(false)
   }
 
   /** Asks whether to discard unsaved changes; without changes it proceeds right away. */
@@ -537,6 +547,7 @@ export function PuzzleWorkshop({
    */
   async function save(options: { quiet?: boolean } = {}): Promise<string | null> {
     if (!content) {
+      setAttempted(true)
       toast.error(missing[0] ?? t('puzzles:workshop.save.unfinished'))
       return null
     }
@@ -739,14 +750,57 @@ export function PuzzleWorkshop({
             </p>
           )}
         </div>
-        {/* The saved list sits below the workshop; on a phone nobody would dig down to it. */}
+        {/* A shortcut to the saved list — on a wide screen it sits under the preview. */}
         <a href="#ulozene-hlavolamy" className="text-sm text-fg-soft underline-offset-2 hover:underline">
           {t('puzzles:workshop.inLibrary', { count: list.length })}
         </a>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="space-y-4" aria-busy={opening !== null || undefined}>
+      {/* One column on a phone: saved puzzles first, so opening one does not mean
+          scrolling past the whole editor. On a wide screen the editor spans both
+          rows on the left and the saved list goes under the preview. The second
+          row is `1fr`, so the first one only takes the preview's height. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-rows-[auto_1fr]">
+        <Card className="scroll-mt-4 self-start xl:col-start-2 xl:row-start-2" id="ulozene-hlavolamy">
+          <h2 className="font-medium text-fg">{t('puzzles:workshop.saved.heading')}</h2>
+          {list.length === 0 ? (
+            <p className="mt-3 text-sm text-fg-muted">{t('puzzles:workshop.saved.empty')}</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-line" data-slot="puzzle-list">
+              {list.map((puzzle) => (
+                <li key={puzzle.id} className="flex flex-wrap items-center gap-2 py-2">
+                  <button
+                    type="button"
+                    disabled={opening !== null}
+                    className="min-w-0 flex-1 text-left text-sm text-fg hover:underline disabled:opacity-60"
+                    onClick={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
+                  >
+                    {opening === puzzle.id ? t('puzzles:workshop.openingShort') : puzzle.title}
+                  </button>
+                  <Badge variant="secondary">{t(`puzzles:kinds.${puzzle.kind}`)}</Badge>
+                  <span className="text-sm text-fg-muted">
+                    {puzzle.topicName ?? t('puzzles:workshop.saved.noTopic')} ·{' '}
+                    {t('puzzles:words', { count: puzzle.entryCount })}
+                  </span>
+                  <RowActions label={t('puzzles:workshop.saved.actions', { title: puzzle.title })}>
+                    <DropdownMenuItem
+                      onSelect={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
+                    >
+                      {t('common:actions.open')}
+                    </DropdownMenuItem>
+                    {canEdit ? (
+                      <DropdownMenuItem variant="destructive" onSelect={() => askRemove(puzzle.id, puzzle.title)}>
+                        {t('common:actions.delete')}
+                      </DropdownMenuItem>
+                    ) : null}
+                  </RowActions>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <div className="space-y-4 xl:col-start-1 xl:row-span-2 xl:row-start-1" aria-busy={opening !== null || undefined}>
           {opening ? (
             <p className="text-sm text-fg-muted" role="status" data-slot="puzzle-opening">
               {t('puzzles:workshop.opening')}
@@ -754,7 +808,7 @@ export function PuzzleWorkshop({
           ) : null}
           {/* Read-only viewers read and print puzzles but never change them — all fields are locked at once. */}
           <fieldset disabled={!canEdit} className="contents">
-          <Card className="space-y-4 p-4">
+          <Card className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="w-48">
                 <Label htmlFor="puzzle-kind">{t('puzzles:workshop.form.kind')}</Label>
@@ -853,17 +907,25 @@ export function PuzzleWorkshop({
                         : t('puzzles:workshop.form.range', { min: MIN_WORDS, max: maxRequest })}
                     </p>
                   </div>
-                  <div className="flex items-start pt-5">
+                  <div className="max-w-56 pt-5">
+                    {/* Words come from the topic's materials — without a topic
+                        there is nothing to take them from, so it says so up front. */}
                     <BusyButton
                       variant="outline"
                       busy={fetching}
                       busyLabel={t('puzzles:workshop.form.searching')}
-                      disabled={roomLeft < MIN_WORDS}
+                      disabled={roomLeft < MIN_WORDS || !draft.topicId}
+                      aria-describedby={draft.topicId ? undefined : 'puzzle-fetch-hint'}
                       onClick={() => void fetchWords()}
                     >
                       <Sparkles className="size-4" />
                       {t('puzzles:workshop.form.fetchWords')}
                     </BusyButton>
+                    {draft.topicId ? null : (
+                      <p id="puzzle-fetch-hint" className="mt-1 text-xs text-fg-muted" data-slot="puzzle-fetch-hint">
+                        {t('puzzles:workshop.fetch.noTopic')}
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -941,7 +1003,7 @@ export function PuzzleWorkshop({
           </Card>
           </fieldset>
 
-          <Card className="p-4">
+          <Card>
             <fieldset disabled={!canEdit} className="contents">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-medium text-fg">
@@ -1023,7 +1085,7 @@ export function PuzzleWorkshop({
               </ul>
             ) : null}
 
-            {missing.length > 0 ? (
+            {showMissing ? (
               <div className="mt-3 text-sm text-fg-soft" data-slot="puzzle-missing">
                 <p className="font-medium">{t('puzzles:workshop.missingHeading')}</p>
                 <ul className="mt-1 list-disc space-y-1 pl-5">
@@ -1046,7 +1108,7 @@ export function PuzzleWorkshop({
                 busy={printing === 'plain'}
                 busyLabel={t('puzzles:workshop.print.preparing')}
                 disabled={blockedReason !== null || printing !== null || saving || (!canEdit && (!draft.id || dirty))}
-                aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
+                aria-describedby={showBlocked ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(false)}
               >
                 {t('common:actions.print')}
@@ -1056,7 +1118,7 @@ export function PuzzleWorkshop({
                 busy={printing === 'key'}
                 busyLabel={t('puzzles:workshop.print.preparing')}
                 disabled={blockedReason !== null || printing !== null || saving || (!canEdit && (!draft.id || dirty))}
-                aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
+                aria-describedby={showBlocked ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(true)}
               >
                 {t('puzzles:workshop.print.withKey')}
@@ -1065,7 +1127,7 @@ export function PuzzleWorkshop({
                 <Button
                   variant="outline"
                   disabled={blockedReason !== null || saving}
-                  aria-describedby={blockedReason ? 'puzzle-blocked' : undefined}
+                  aria-describedby={showBlocked ? 'puzzle-blocked' : undefined}
                   onClick={() => void chooseTest()}
                 >
                   {t('puzzles:workshop.tests.button')}
@@ -1080,7 +1142,7 @@ export function PuzzleWorkshop({
                 </Button>
               ) : null}
             </div>
-            {blockedReason ? (
+            {showBlocked ? (
               <p id="puzzle-blocked" className="mt-2 text-sm text-fg-muted" data-slot="puzzle-blocked">
                 {blockedReason}
               </p>
@@ -1090,7 +1152,7 @@ export function PuzzleWorkshop({
           </Card>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 xl:col-start-2 xl:row-start-1">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-medium text-fg">{t('puzzles:workshop.preview.heading')}</h2>
             <label className="flex items-center gap-2 text-sm">
@@ -1111,7 +1173,7 @@ export function PuzzleWorkshop({
               hint={
                 !templateConfig
                   ? t('puzzles:workshop.preview.noTemplate')
-                  : (missing.find((message) => message !== titleMissing) ??
+                  : ((showMissing ? missing.find((message) => message !== titleMissing) : undefined) ??
                     t('puzzles:workshop.preview.needWords'))
               }
             />
@@ -1196,45 +1258,6 @@ export function PuzzleWorkshop({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Card className="scroll-mt-4 p-4" id="ulozene-hlavolamy">
-        <h2 className="font-medium text-fg">{t('puzzles:workshop.saved.heading')}</h2>
-        {list.length === 0 ? (
-          <p className="mt-3 text-sm text-fg-muted">{t('puzzles:workshop.saved.empty')}</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-line" data-slot="puzzle-list">
-            {list.map((puzzle) => (
-              <li key={puzzle.id} className="flex flex-wrap items-center gap-2 py-2">
-                <button
-                  type="button"
-                  disabled={opening !== null}
-                  className="min-w-0 flex-1 text-left text-sm text-fg hover:underline disabled:opacity-60"
-                  onClick={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
-                >
-                  {opening === puzzle.id ? t('puzzles:workshop.openingShort') : puzzle.title}
-                </button>
-                <Badge variant="secondary">{t(`puzzles:kinds.${puzzle.kind}`)}</Badge>
-                <span className="text-sm text-fg-muted">
-                  {puzzle.topicName ?? t('puzzles:workshop.saved.noTopic')} ·{' '}
-                  {t('puzzles:words', { count: puzzle.entryCount })}
-                </span>
-                <RowActions label={t('puzzles:workshop.saved.actions', { title: puzzle.title })}>
-                  <DropdownMenuItem
-                    onSelect={() => unlessDirty(t('puzzles:workshop.discard.actionOpen'), () => openPuzzle(puzzle.id))}
-                  >
-                    {t('common:actions.open')}
-                  </DropdownMenuItem>
-                  {canEdit ? (
-                    <DropdownMenuItem variant="destructive" onSelect={() => askRemove(puzzle.id, puzzle.title)}>
-                      {t('common:actions.delete')}
-                    </DropdownMenuItem>
-                  ) : null}
-                </RowActions>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
     </div>
   )
 }

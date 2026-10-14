@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { t } from '@testmaker/core/i18n'
 import { Badge, Card, EmptyState, PageShell } from '@testmaker/ui'
+import { TEMPLATE_KINDS } from '@testmaker/core/schema'
+import { KindMark } from '@/components/KindMark'
 import { TemplatePreview } from '@/components/TemplatePreview'
 import { loadTemplates } from '@/lib/tests'
 import { pageAccount } from '@/lib/user'
@@ -30,24 +32,37 @@ export default async function TemplatesPage() {
         {templates.length === 0 ? (
           <EmptyState title={t('tests:templates.empty.title')} hint={t('tests:templates.empty.hint')} />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {templates.map((template) => (
-              <Card key={template.id} className="overflow-hidden">
-                <TemplatePreview
-                  templateId={template.id}
-                  graded={template.config.showPoints}
-                  className="rounded-none border-0 border-b border-line"
-                />
-                <div className="p-4">
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-medium text-fg">{template.name}</h2>
-                    {template.builtIn ? <Badge variant="secondary">{t('tests:templates.builtIn')}</Badge> : null}
-                  </div>
-                  <p className="mt-1 text-sm text-fg-soft">{template.description}</p>
+          // Test and worksheet templates apart: each is offered only to its own kind.
+          TEMPLATE_KINDS.map((kind) => {
+            const group = templates.filter((template) => template.config.kind === kind)
+            if (group.length === 0) return null
+            return (
+              <section key={kind} className="space-y-3">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-fg">
+                  <KindMark kind={kind} />
+                  {kind === 'pracovni_list' ? t('worksheets:overview.title') : t('tests:overview.title')}
+                </h2>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {group.map((template) => (
+                    <Card key={template.id} className="overflow-hidden p-0">
+                      <TemplatePreview
+                        templateId={template.id}
+                        graded={template.config.showPoints}
+                        className="rounded-none border-0 border-b border-line"
+                      />
+                      <div className="p-4">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-fg">{template.name}</h3>
+                          {template.builtIn ? <Badge variant="secondary">{t('tests:templates.builtIn')}</Badge> : null}
+                        </div>
+                        <p className="mt-1 text-sm text-fg-soft">{template.description}</p>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
-              </Card>
-            ))}
-          </div>
+              </section>
+            )
+          })
         )}
       </div>
     </PageShell>

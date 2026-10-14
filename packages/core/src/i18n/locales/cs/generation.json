@@ -84,8 +84,8 @@
     "keepOpen": "Běží, dokud je tahle stránka otevřená.",
     "empty": {
       "title": "Nic se negeneruje",
-      "hint": "Otázky se sem dostanou z tématu tlačítkem „Vygenerovat otázky“ nebo hromadným generováním ve třídě.",
-      "action": "Do tříd"
+      "hint": "Otázky se sem dostanou z tématu tlačítkem „Vygenerovat otázky“ nebo hromadným generováním v ročníku.",
+      "action": "Do ročníků"
     },
     "sections": {
       "running": "Právě se tvoří",

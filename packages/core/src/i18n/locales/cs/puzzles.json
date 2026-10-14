@@ -12,7 +12,7 @@
   "words_other": "{{count}} slov",
   "workshop": {
     "title": "Hlavolamy",
-    "intro": "Osmisměrka a tajenka z materiálů tématu. Slova dodá model, mřížku skládá aplikace — vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.",
+    "intro": "Osmisměrka a tajenka z materiálů tématu. Slova se vytáhnou z materiálů (nebo je napíšeš sama), mřížku skládá aplikace — vytiskne se na papír vedle písemky, nebo se zařadí přímo do ní.",
     "readOnly": "Máš přístup jen pro čtení: uložené hlavolamy si otevřeš a vytiskneš, ale měnit je ani zakládat nové nemůžeš. Když potřebuješ víc, požádej správce školy o roli Učitel/ka.",
     "inLibrary_one": "{{count}} hlavolam v knihovně",
     "inLibrary_few": "{{count}} hlavolamy v knihovně",
@@ -37,7 +37,7 @@
     "missing": {
       "brokenRows_one": "Oprav řádek označený v seznamu slov.",
       "brokenRows_few": "Oprav {{count}} řádky označené v seznamu slov.",
-      "brokenRows_other": "Oprav {{count}} řádky označené v seznamu slov.",
+      "brokenRows_other": "Oprav {{count}} řádků označených v seznamu slov.",
       "tooFewWords": "Hlavolam potřebuje aspoň dvě slova.",
       "tooManyWords": "Hlavolam může mít nejvýš {{max}} slov — {{remove}} odeber.",
       "cols": "Sloupce: zadej číslo od {{min}} do {{max}}.",
@@ -62,14 +62,14 @@
       "actionOpen": "Otevření jiného hlavolamu"
     },
     "fetch": {
-      "noTopic": "Vyber nejdřív téma, ze kterého se mají slova vzít.",
+      "noTopic": "Slova se berou z materiálů tématu — nejdřív vyber téma.",
       "listFull": "Seznam je plný — hlavolam může mít nejvýš {{max}} slov.",
       "failed": "Slova se nepodařilo vytáhnout.",
       "rejected": "Nehodilo se: {{list}}.",
       "dropped_one": "{{count}} slovo se do hlavolamu nehodilo a vynechalo se.",
-      "dropped_few": "{{count}} slova se do hlavolamu nehodilo a vynechalo se.",
+      "dropped_few": "{{count}} slova se do hlavolamu nehodila a vynechala se.",
       "dropped_other": "{{count}} slov se do hlavolamu nehodilo a vynechalo se.",
-      "none": "Model nedodal žádné nové slovo.",
+      "none": "Nepřibylo žádné nové slovo.",
       "noneHint": "Zkus to znovu, vyber jiné téma, nebo slova napiš ručně. {{note}}",
       "fewAdded": "Přibylo jen {{added}} z {{requested}} požadovaných.",
       "fewAddedHint": "Materiály tématu jich víc asi nenabízejí. Zkus to znovu, nebo zbytek doplň ručně. {{note}}",
@@ -171,7 +171,7 @@
     "missingParams": "Chybí téma nebo druh hlavolamu.",
     "invalidData": "Neplatná data",
     "aiOffManual": "{{message}} Slova můžeš zatím napsat ručně.",
-    "noUsableWord": "Model nevrátil žádné použitelné slovo. Zkus to znovu.",
+    "noUsableWord": "Nepodařilo se najít žádné použitelné slovo. Zkus to znovu.",
     "unprintable": "Hlavolam se zatím nedá vytisknout: {{problem}} Oprav ho v Hlavolamech a ulož.",
     "unaddable": "Hlavolam se do písemky zařadit nedá: {{problem}} Oprav ho v Hlavolamech, ulož a zkus to znovu.",
     "chooseTest": "Vyber písemku, do které se má hlavolam zařadit.",
@@ -219,8 +219,8 @@
     "wordsearchDuplicate": "Slovo „{{word}}\" je v seznamu podruhé; v mřížce bude jen jednou.",
     "reversed": "Slovo „{{word}}\" je pozpátku slovo „{{other}}\" — žák ho v mřížce najde dvakrát. Jedno z nich vynech.",
     "hidden": "Slovo „{{word}}\" je schované ve slově „{{other}}\" — žák ho v mřížce najde víckrát. Nahraď ho jiným slovem, nebo ho vynech.",
-    "noRoom": "Slovo „{{word}}\" se do mřížky nevešlo. Zvětši mřížku, uber slova, nebo zkus jiný seed.",
-    "repeated": "Slovo „{{word}}\" se v mřížce složilo víckrát z písmen jiných slov. Zkus jiný seed, nebo slovo nahraď.",
-    "vulgar": "Z písmen slov se v mřížce složilo nevhodné slovo („{{word}}\"). Zkus jiný seed."
+    "noRoom": "Slovo „{{word}}\" se do mřížky nevešlo. Zvětši mřížku, uber slova, nebo klikni na Zamíchat znovu.",
+    "repeated": "Slovo „{{word}}\" se v mřížce složilo víckrát z písmen jiných slov. Klikni na Zamíchat znovu, nebo slovo nahraď.",
+    "vulgar": "Z písmen slov se v mřížce složilo nevhodné slovo („{{word}}\"). Klikni na Zamíchat znovu."
   }
 }

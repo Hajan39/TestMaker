@@ -38,8 +38,9 @@ function findActiveHref(pathname: string, nav: NavItem[]): string {
     return pathname === item.href || pathname.startsWith(`${item.href}/`)
   })
   if (match) return match.href
-  // A class page (/tridy/...) and a topic detail (/topics/...) belong to Classes.
-  if (pathname.startsWith('/tridy') || pathname.startsWith('/topics')) return '/'
+  // A class page, a topic detail, material import and the generation overview
+  // are all library work — they belong to Classes.
+  if (['/tridy', '/topics', '/import', '/generovani'].some((prefix) => pathname.startsWith(prefix))) return '/'
   return pathname
 }
 

@@ -163,11 +163,11 @@ export function LoadingCards({ count = 3, className }: { count?: number; classNa
 export function LoadingPaper({ className }: { className?: string }) {
   return (
     <div className={cn('aspect-[210/297] w-full bg-paper p-[8%]', className)}>
-      <Skeleton className="h-[3%] w-1/2" />
-      <Skeleton className="mt-[3%] h-[2%] w-1/3" />
+      <Skeleton className="h-[3%] w-1/2 bg-paper-line" />
+      <Skeleton className="mt-[3%] h-[2%] w-1/3 bg-paper-line" />
       <div className="mt-[8%] space-y-[3%]">
         {LINE_WIDTHS.concat(LINE_WIDTHS).map((width, index) => (
-          <Skeleton key={index} className="h-[2%]" style={{ width }} />
+          <Skeleton key={index} className="h-[2%] bg-paper-line" style={{ width }} />
         ))}
       </div>
     </div>

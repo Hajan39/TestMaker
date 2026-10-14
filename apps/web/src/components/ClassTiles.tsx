@@ -33,9 +33,9 @@ export function ClassTiles({ tree }: { tree: SubjectNode[] }) {
                 const questionCount = grade.topics.reduce((sum, topic) => sum + topic.questionCount, 0)
                 return (
                   <Link key={grade.id} href={`/tridy/${grade.id}`}>
-                    <Card className="p-4 hover:border-brand">
+                    <Card className="hover:border-brand">
                       <h3 className="min-w-0 flex-1 text-sm font-medium text-fg">
-                        {subject.name} · {grade.name || t('library:labels.noGrade')}
+                        {grade.name || t('library:labels.noGrade')}
                       </h3>
                       <p className="mt-1 text-sm text-fg-muted">
                         {t('library:count.topics', { count: grade.topics.length })} · {t('library:count.questions', { count: questionCount })}

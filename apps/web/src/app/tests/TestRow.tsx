@@ -188,8 +188,9 @@ export function TestActions({ row }: { row: TestRowData }) {
 }
 
 /**
- * Test badges: graded / ungraded, optionally variants A/B. A worksheet is never
- * graded — its badge says what it was made from.
+ * Test badges — only the exceptions: ungraded, variants A/B. Most tests are
+ * graded, and a "na známky" badge on every row said nothing. A worksheet is
+ * never graded — its badge says what it was made from.
  */
 export function TestBadges({ row }: { row: TestRowData }) {
   if (row.kind === 'pracovni_list') {
@@ -199,13 +200,10 @@ export function TestBadges({ row }: { row: TestRowData }) {
       </div>
     )
   }
+  if (row.graded && row.variants !== 2) return null
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {row.graded ? (
-        <Badge variant="status">{t('tests:row.graded')}</Badge>
-      ) : (
-        <Badge variant="secondary">{t('tests:row.ungraded')}</Badge>
-      )}
+      {row.graded ? null : <Badge variant="secondary">{t('tests:row.ungraded')}</Badge>}
       {row.variants === 2 ? <Badge variant="secondary">{t('tests:row.variantsAB')}</Badge> : null}
     </div>
   )

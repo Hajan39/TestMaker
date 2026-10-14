@@ -25,6 +25,7 @@ import {
 import { emptyHeader } from '@/components/test-builder/defaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
+import { KindMark } from '@/components/KindMark'
 
 /** The "Bez ročníku" (no grade) option — Select cannot use an empty value as an item. */
 const NO_GRADE = 'bez-rocniku'
@@ -134,8 +135,9 @@ export function NewWorksheetForm({
   const subject = subjects.find((item) => item.id === subjectId)
   const grade = subject?.grades.find((item) => item.id === gradeId)
   const allGrades = subjects.flatMap((item) => item.grades.map((g) => ({ id: g.id, label: `${item.name} · ${g.name}` })))
-  // One message under the form: what is missing, or what the server said.
-  const error = errors.topicId?.message ?? errors.title?.message ?? errors.root?.message ?? null
+  // What is missing goes under its field; what the server said, under the form.
+  const topicError = errors.topicId?.message ?? null
+  const titleError = errors.title?.message ?? null
 
   async function post(url: string, body: unknown): Promise<{ id: string; dropped?: number }> {
     const failure = t('worksheets:new.createFailed')
@@ -185,7 +187,10 @@ export function NewWorksheetForm({
 
   return (
     <div className="max-w-2xl space-y-5">
-      <h1 className="ui-page-title">{t('worksheets:new.title')}</h1>
+      <h1 className="ui-page-title flex items-center gap-2">
+        <KindMark kind="pracovni_list" />
+        {t('worksheets:new.title')}
+      </h1>
 
       <Card className="space-y-5 p-5">
         <Tabs value={source} onValueChange={(value) => setValue('source', value as WorksheetValues['source'])}>
@@ -246,7 +251,12 @@ export function NewWorksheetForm({
                 <div>
                   <Label htmlFor="list-topic">{t('worksheets:new.topic')}</Label>
                   <Select value={topicId} disabled={!grade} onValueChange={(value) => setValue('topicId', value)}>
-                    <SelectTrigger id="list-topic" className="w-full">
+                    <SelectTrigger
+                      id="list-topic"
+                      className="w-full"
+                      aria-invalid={topicError ? true : undefined}
+                      aria-describedby={topicError ? 'list-topic-error' : undefined}
+                    >
                       <SelectValue placeholder={t('worksheets:new.pickTopic')} />
                     </SelectTrigger>
                     <SelectContent>
@@ -258,6 +268,11 @@ export function NewWorksheetForm({
                     </SelectContent>
                   </Select>
                 </div>
+                {topicError ? (
+                  <p id="list-topic-error" className="text-sm text-danger sm:col-span-3">
+                    {topicError}
+                  </p>
+                ) : null}
               </div>
             )}
           </TabsContent>
@@ -271,8 +286,15 @@ export function NewWorksheetForm({
                   defaultValue=""
                   maxLength={200}
                   placeholder={t('worksheets:new.aboutPlaceholder')}
+                  aria-invalid={titleError ? true : undefined}
+                  aria-describedby={titleError ? 'list-title-error' : undefined}
                   {...register('title')}
                 />
+                {titleError ? (
+                  <p id="list-title-error" className="mt-1 text-sm text-danger">
+                    {titleError}
+                  </p>
+                ) : null}
               </div>
               <div>
                 <Label htmlFor="list-free-grade">{t('worksheets:new.grade')}</Label>
@@ -349,7 +371,11 @@ export function NewWorksheetForm({
           </div>
         ) : null}
 
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {errors.root?.message ? (
+          <p role="alert" className="text-sm text-danger">
+            {errors.root.message}
+          </p>
+        ) : null}
         {busy === 'generate' ? (
           <p className="text-sm text-fg-muted" role="status">
             {t('worksheets:new.generating')}

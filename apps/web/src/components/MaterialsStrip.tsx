@@ -65,87 +65,30 @@ export interface MaterialsStripHandle {
 
 /**
  * The materials strip of one topic. Upload files straight here, toggle
- * "Použít pro generování", delete and — in "Upravit téma" mode — rename, move
- * between topics, merge and delete the whole topic.
+ * "Použít pro generování", delete and — in "Upravit téma" mode — move a
+ * material to another topic. The topic itself is edited in `TopicManagePanel`.
  *
  * Everything here is called "téma" — navigation, tiles and filters all talk
  * about a topic, and a second name ("skupina") for the same thing left the
  * teacher unsure whether "Smazat skupinu" deleted the same thing as a topic elsewhere.
  */
-export const MaterialsStrip = forwardRef<
-  MaterialsStripHandle,
-  {
-    topicId: string
-    topicName: string
-    materials: GroupMaterial[]
-    /** The topic's generation card uses this to disable its button while files upload. */
-    onBusyChange?: (busy: boolean) => void
-  }
->(function MaterialsStrip({ topicId, topicName, materials, onBusyChange }, ref) {
+/**
+ * Topic editing state shared by the panel under the topic heading
+ * (`TopicManagePanel`) and the materials strip, whose rows offer moving a
+ * material to a sibling topic while editing is on. Lives in `TopicWorkspace`,
+ * which renders both.
+ */
+export function useTopicManage(topicId: string) {
   const router = useRouter()
-  const canEdit = useCanEdit()
-  const filesRef = useRef<HTMLInputElement>(null)
-
-  const [name, setName] = useState(topicName)
-  // Renaming via the topic heading (`InlineName`) changes `topicName` from
-  // outside — without adopting it, the Save button would restore the old name.
-  const [lastTopicName, setLastTopicName] = useState(topicName)
-  if (topicName !== lastTopicName) {
-    setLastTopicName(topicName)
-    setName(topicName)
-  }
+  const [manage, setManage] = useState(false)
   const [siblings, setSiblings] = useState<{ id: string; name: string }[]>([])
   const [gradeOptions, setGradeOptions] = useState<{ id: string; name: string }[]>([])
   const [currentGrade, setCurrentGrade] = useState('')
-  const [newGrade, setNewGrade] = useState('')
-  const [addingGrade, setAddingGrade] = useState(false)
-  const [mergeTarget, setMergeTarget] = useState('')
-  const [mergeOpen, setMergeOpen] = useState(false)
   // Sibling topic and grade options load only when editing opens. Until they
   // arrive the dropdowns are empty — if they stayed usable they would open
   // empty and look like a bug.
   const [optionsReady, setOptionsReady] = useState(false)
-  const [manage, setManage] = useState(false)
-  // Collapsed once the topic has materials — the screen is mainly about
-  // questions. Without materials the upload area shows right away, so the
-  // teacher knows where to start.
-  const [open, setOpen] = useState(materials.length === 0)
   const [error, setError] = useState<string | null>(null)
-
-  const [dragging, setDragging] = useState(false)
-  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
-  const [progress, setProgress] = useState({ done: 0, total: 0 })
-  const [skipped, setSkipped] = useState<IssueItem[]>([])
-  const [failed, setFailed] = useState<IssueItem[]>([])
-
-  useImperativeHandle(ref, () => ({
-    openUpload: () => {
-      setOpen(true)
-      filesRef.current?.click()
-    },
-    handleExternalDrop: (dataTransfer: DataTransfer) => {
-      if (uploadPhase !== 'idle') return
-      setOpen(true)
-      void filesFromDrop(dataTransfer).then(handleFiles)
-    },
-  }))
-
-  const uploadBusy = uploadPhase !== 'idle'
-
-  // The topic's generation card disables its button while files upload —
-  // otherwise generation could start over text that isn't fully saved yet.
-  useEffect(() => {
-    onBusyChange?.(uploadBusy)
-  }, [uploadBusy, onBusyChange])
-
-  // Closing or reloading the page mid-read or mid-save used to lose the
-  // upload in progress without a warning.
-  useEffect(() => {
-    if (!uploadBusy) return
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [uploadBusy])
 
   useEffect(() => {
     if (!manage) return
@@ -182,9 +125,8 @@ export const MaterialsStrip = forwardRef<
     onSuccess: (_data, { success }) => toast.success(success),
     onError: (callError) => setError(errorMessage(callError, t('library:materialsStrip.saveFailed'))),
   })
-  const busy = callMutation.isPending
 
-  /** Saves a topic change and announces it; returns whether it worked. Shows errors in the strip. */
+  /** Saves a topic change and announces it; returns whether it worked. Shows errors in the panel. */
   const call = (method: string, body: unknown, success: string): Promise<boolean> =>
     callMutation.mutateAsync({ method, body, success }).then(
       () => true,
@@ -195,18 +137,87 @@ export const MaterialsStrip = forwardRef<
     if (await call(method, body, success)) router.refresh()
   }
 
-  async function merge() {
-    const targetName =
-      siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? t('library:materialsStrip.selectedTopic')
-    const merged = await call(
-      'POST',
-      { sourceId: topicId, targetId: mergeTarget },
-      t('library:materialsStrip.merged', { name: targetName }),
-    )
-    setMergeOpen(false)
-    // The merged topic is gone — reloading the same page would end on "not found".
-    if (merged) router.push(`/topics/${mergeTarget}`)
+  return {
+    manage,
+    toggle: () => {
+      if (!manage) setOptionsReady(false)
+      setManage(!manage)
+    },
+    siblings,
+    gradeOptions,
+    currentGrade,
+    optionsReady,
+    error,
+    busy: callMutation.isPending,
+    call,
+    update,
   }
+}
+
+export type TopicManage = ReturnType<typeof useTopicManage>
+
+export const MaterialsStrip = forwardRef<
+  MaterialsStripHandle,
+  {
+    topicId: string
+    materials: GroupMaterial[]
+    /** Editing state from `TopicWorkspace` — while on, rows offer moving a material to another topic. */
+    topicManage: TopicManage
+    /** The topic's generation card uses this to disable its button while files upload. */
+    onBusyChange?: (busy: boolean) => void
+  }
+>(function MaterialsStrip({ topicId, materials, topicManage, onBusyChange }, ref) {
+  const router = useRouter()
+  const canEdit = useCanEdit()
+  const filesRef = useRef<HTMLInputElement>(null)
+  const { manage, siblings, optionsReady, busy, update } = topicManage
+
+  // Collapsed once the topic has materials — the screen is mainly about
+  // questions. Without materials the upload area shows right away, so the
+  // teacher knows where to start.
+  const [open, setOpen] = useState(materials.length === 0)
+  // Switching editing on reveals the rows — their move dropdowns are part of it.
+  const [lastManage, setLastManage] = useState(manage)
+  if (manage !== lastManage) {
+    setLastManage(manage)
+    if (manage) setOpen(true)
+  }
+  const [error, setError] = useState<string | null>(null)
+
+  const [dragging, setDragging] = useState(false)
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [skipped, setSkipped] = useState<IssueItem[]>([])
+  const [failed, setFailed] = useState<IssueItem[]>([])
+
+  useImperativeHandle(ref, () => ({
+    openUpload: () => {
+      setOpen(true)
+      filesRef.current?.click()
+    },
+    handleExternalDrop: (dataTransfer: DataTransfer) => {
+      if (uploadPhase !== 'idle') return
+      setOpen(true)
+      void filesFromDrop(dataTransfer).then(handleFiles)
+    },
+  }))
+
+  const uploadBusy = uploadPhase !== 'idle'
+
+  // The topic's generation card disables its button while files upload —
+  // otherwise generation could start over text that isn't fully saved yet.
+  useEffect(() => {
+    onBusyChange?.(uploadBusy)
+  }, [uploadBusy, onBusyChange])
+
+  // Closing or reloading the page mid-read or mid-save used to lose the
+  // upload in progress without a warning.
+  useEffect(() => {
+    if (!uploadBusy) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [uploadBusy])
 
   /** Extracts files in the browser and uploads them straight into this topic. */
   async function handleFiles(entries: FileEntry[]) {
@@ -290,7 +301,7 @@ export const MaterialsStrip = forwardRef<
   const skippedCount = materials.length - active.length
 
   return (
-    <Card className="gap-2 p-3">
+    <Card className="flex flex-col gap-2 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
@@ -305,22 +316,30 @@ export const MaterialsStrip = forwardRef<
             {skippedCount > 0 ? t('library:materialsStrip.skippedSuffix', { count: skippedCount }) : ''}
           </span>
         </button>
-        {canEdit ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              if (!manage) {
-                setOptionsReady(false)
-                setOpen(true)
-              }
-              setManage(!manage)
-            }}
-          >
-            {manage ? t('common:actions.done') : t('library:materialsStrip.editTopic')}
+        {/* Collapsed, the upload button in the body is out of sight — adding
+            materials must not depend on finding the toggle first. */}
+        {canEdit && !open ? (
+          <Button size="sm" variant="outline" disabled={uploadBusy} onClick={() => filesRef.current?.click()}>
+            <FileUp className="size-4" aria-hidden />
+            {t('library:materialsStrip.upload')}
           </Button>
         ) : null}
       </div>
+
+      {/* Outside the collapsible body, so the header button works while collapsed. */}
+      {canEdit ? (
+        <input
+          ref={filesRef}
+          type="file"
+          multiple
+          className="hidden"
+          data-testid="topic-material-files"
+          onChange={(event) => {
+            void handleFiles(entriesFromInput(event.target.files))
+            event.target.value = ''
+          }}
+        />
+      ) : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
@@ -348,17 +367,6 @@ export const MaterialsStrip = forwardRef<
                 void filesFromDrop(event.dataTransfer).then(handleFiles)
               }}
             >
-              <input
-                ref={filesRef}
-                type="file"
-                multiple
-                className="hidden"
-                data-testid="topic-material-files"
-                onChange={(event) => {
-                  void handleFiles(entriesFromInput(event.target.files))
-                  event.target.value = ''
-                }}
-              />
               <Button size="sm" variant="outline" disabled={uploadBusy} onClick={() => filesRef.current?.click()}>
                 <FileUp className="size-4" aria-hidden />
                 {t('library:materialsStrip.upload')}
@@ -414,157 +422,203 @@ export const MaterialsStrip = forwardRef<
           ) : null}
         </div>
       ) : null}
+    </Card>
+  )
+})
 
-      {open && manage ? (
-        <div className="mt-4 grid gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="topic-group-name">{t('library:materialsStrip.topicName')}</Label>
-            <div className="flex gap-2">
-              <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
+/**
+ * Editing the topic as a whole — rename, move to another grade, merge and
+ * delete. Opened by „Upravit téma“ next to the topic heading; the materials
+ * card below holds only materials.
+ */
+export function TopicManagePanel({
+  topicId,
+  topicName,
+  topicManage,
+}: {
+  topicId: string
+  topicName: string
+  topicManage: TopicManage
+}) {
+  const router = useRouter()
+  const { siblings, gradeOptions, currentGrade, optionsReady, error, busy, call, update } = topicManage
+  const [name, setName] = useState(topicName)
+  // Renaming via the topic heading (`InlineName`) changes `topicName` from
+  // outside — without adopting it, the Save button would restore the old name.
+  const [lastTopicName, setLastTopicName] = useState(topicName)
+  if (topicName !== lastTopicName) {
+    setLastTopicName(topicName)
+    setName(topicName)
+  }
+  const [newGrade, setNewGrade] = useState('')
+  const [addingGrade, setAddingGrade] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState('')
+  const [mergeOpen, setMergeOpen] = useState(false)
+
+  async function merge() {
+    const targetName =
+      siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? t('library:materialsStrip.selectedTopic')
+    const merged = await call(
+      'POST',
+      { sourceId: topicId, targetId: mergeTarget },
+      t('library:materialsStrip.merged', { name: targetName }),
+    )
+    setMergeOpen(false)
+    // The merged topic is gone — reloading the same page would end on "not found".
+    if (merged) router.push(`/topics/${mergeTarget}`)
+  }
+
+  return (
+    <Card className="flex flex-col gap-2 p-3" data-testid="topic-manage">
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="topic-group-name">{t('library:materialsStrip.topicName')}</Label>
+          <div className="flex gap-2">
+            <Input id="topic-group-name" value={name} onChange={(event) => setName(event.target.value)} />
+            <BusyButton
+              size="sm"
+              variant="outline"
+              busy={busy}
+              busyLabel={t('common:actions.saving')}
+              disabled={!name.trim() || name === topicName}
+              onClick={() => void update('PATCH', { id: topicId, name }, t('library:materialsStrip.renamed'))}
+            >
+              {t('common:actions.save')}
+            </BusyButton>
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="topic-group-grade">{t('library:import.grade')}</Label>
+          <Select
+            value={addingGrade ? 'new-grade' : currentGrade === '' ? 'no-grade' : currentGrade}
+            onValueChange={(value) => {
+              if (value === 'new-grade') {
+                setAddingGrade(true)
+                setNewGrade('')
+                return
+              }
+              setAddingGrade(false)
+              void update(
+                'PATCH',
+                { id: topicId, gradeName: value === 'no-grade' ? '' : value },
+                value === 'no-grade'
+                  ? t('library:materialsStrip.movedToNoGrade')
+                  : t('library:materialsStrip.movedToGrade', { grade: value }),
+              )
+            }}
+          >
+            <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady || busy}>
+              {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialsStrip.loadingGrades')}</span>}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="no-grade">{t('library:materialsStrip.noGrade')}</SelectItem>
+              {gradeOptions
+                .filter((grade) => grade.name !== '')
+                .map((grade) => (
+                  <SelectItem key={grade.id} value={grade.name}>
+                    {grade.name}
+                  </SelectItem>
+                ))}
+              <SelectItem value="new-grade">{t('library:materialsStrip.otherGrade')}</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {addingGrade ? (
+            <div className="mt-2 flex gap-2">
+              <Input
+                aria-label={t('library:materialsStrip.newGradeName')}
+                placeholder={t('library:materialsStrip.newGradePlaceholder')}
+                value={newGrade}
+                onChange={(event) => setNewGrade(event.target.value)}
+              />
               <BusyButton
                 size="sm"
                 variant="outline"
                 busy={busy}
-                busyLabel={t('common:actions.saving')}
-                disabled={!name.trim() || name === topicName}
-                onClick={() => void update('PATCH', { id: topicId, name }, t('library:materialsStrip.renamed'))}
+                busyLabel={t('library:materialsStrip.regrading')}
+                disabled={!newGrade.trim()}
+                onClick={() => {
+                  setAddingGrade(false)
+                  void update(
+                    'PATCH',
+                    { id: topicId, gradeName: newGrade },
+                    t('library:materialsStrip.movedToGrade', { grade: newGrade.trim() }),
+                  )
+                }}
               >
-                {t('common:actions.save')}
+                {t('library:materialsStrip.regrade')}
               </BusyButton>
             </div>
-          </div>
-          <div>
-            <Label htmlFor="topic-group-grade">{t('library:import.grade')}</Label>
-            <Select
-              value={addingGrade ? 'new-grade' : currentGrade === '' ? 'no-grade' : currentGrade}
-              onValueChange={(value) => {
-                if (value === 'new-grade') {
-                  setAddingGrade(true)
-                  setNewGrade('')
-                  return
-                }
-                setAddingGrade(false)
-                void update(
-                  'PATCH',
-                  { id: topicId, gradeName: value === 'no-grade' ? '' : value },
-                  value === 'no-grade'
-                    ? t('library:materialsStrip.movedToNoGrade')
-                    : t('library:materialsStrip.movedToGrade', { grade: value }),
-                )
-              }}
-            >
-              <SelectTrigger id="topic-group-grade" className="w-full" disabled={!optionsReady || busy}>
-                {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialsStrip.loadingGrades')}</span>}
+          ) : null}
+
+          <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.regradeHint')}</p>
+        </div>
+        <div>
+          <Label htmlFor="topic-group-merge-target">{t('library:materialsStrip.mergeLabel')}</Label>
+          <div className="flex gap-2">
+            <Select value={mergeTarget || 'none'} onValueChange={(value) => setMergeTarget(value === 'none' ? '' : value)}>
+              <SelectTrigger id="topic-group-merge-target" className="w-full" disabled={!optionsReady}>
+                {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialRow.loadingTopics')}</span>}
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="no-grade">{t('library:materialsStrip.noGrade')}</SelectItem>
-                {gradeOptions
-                  .filter((grade) => grade.name !== '')
-                  .map((grade) => (
-                    <SelectItem key={grade.id} value={grade.name}>
-                      {grade.name}
-                    </SelectItem>
-                  ))}
-                <SelectItem value="new-grade">{t('library:materialsStrip.otherGrade')}</SelectItem>
+                <SelectItem value="none">{t('library:materialsStrip.pickTopic')}</SelectItem>
+                {siblings.map((sibling) => (
+                  <SelectItem key={sibling.id} value={sibling.id}>
+                    {sibling.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-
-            {addingGrade ? (
-              <div className="mt-2 flex gap-2">
-                <Input
-                  aria-label={t('library:materialsStrip.newGradeName')}
-                  placeholder={t('library:materialsStrip.newGradePlaceholder')}
-                  value={newGrade}
-                  onChange={(event) => setNewGrade(event.target.value)}
-                />
-                <BusyButton
-                  size="sm"
-                  variant="outline"
-                  busy={busy}
-                  busyLabel={t('library:materialsStrip.regrading')}
-                  disabled={!newGrade.trim()}
-                  onClick={() => {
-                    setAddingGrade(false)
-                    void update(
-                      'PATCH',
-                      { id: topicId, gradeName: newGrade },
-                      t('library:materialsStrip.movedToGrade', { grade: newGrade.trim() }),
-                    )
-                  }}
-                >
-                  {t('library:materialsStrip.regrade')}
-                </BusyButton>
-              </div>
-            ) : null}
-
-            <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.regradeHint')}</p>
+            {/* Merging is irreversible: the topic disappears and materials the
+                target already has are discarded — so it asks just like delete. */}
+            <AlertDialog open={mergeOpen} onOpenChange={(next) => !busy && setMergeOpen(next)}>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="outline" disabled={!mergeTarget || busy}>
+                  {t('library:materialsStrip.merge')}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t('library:materialsStrip.mergeTitle', {
+                      source: topicName,
+                      target: siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? '',
+                    })}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2">
+                      <p>{t('library:materialsStrip.mergeDescription', { name: topicName })}</p>
+                      <p className="text-fg-muted">{t('library:materialsStrip.irreversible')}</p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={busy}>{t('common:actions.cancel')}</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={busy}
+                    aria-busy={busy || undefined}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      void merge()
+                    }}
+                  >
+                    {busy ? t('library:materialsStrip.merging') : t('library:materialsStrip.merge')}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
-          <div>
-            <Label htmlFor="topic-group-merge-target">{t('library:materialsStrip.mergeLabel')}</Label>
-            <div className="flex gap-2">
-              <Select value={mergeTarget || 'none'} onValueChange={(value) => setMergeTarget(value === 'none' ? '' : value)}>
-                <SelectTrigger id="topic-group-merge-target" className="w-full" disabled={!optionsReady}>
-                  {optionsReady ? <SelectValue /> : <span className="text-fg-muted">{t('library:materialRow.loadingTopics')}</span>}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('library:materialsStrip.pickTopic')}</SelectItem>
-                  {siblings.map((sibling) => (
-                    <SelectItem key={sibling.id} value={sibling.id}>
-                      {sibling.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {/* Merging is irreversible: the topic disappears and materials the
-                  target already has are discarded — so it asks just like delete. */}
-              <AlertDialog open={mergeOpen} onOpenChange={(next) => !busy && setMergeOpen(next)}>
-                <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={!mergeTarget || busy}>
-                    {t('library:materialsStrip.merge')}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t('library:materialsStrip.mergeTitle', {
-                        source: topicName,
-                        target: siblings.find((sibling) => sibling.id === mergeTarget)?.name ?? '',
-                      })}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription asChild>
-                      <div className="space-y-2">
-                        <p>{t('library:materialsStrip.mergeDescription', { name: topicName })}</p>
-                        <p className="text-fg-muted">{t('library:materialsStrip.irreversible')}</p>
-                      </div>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={busy}>{t('common:actions.cancel')}</AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={busy}
-                      aria-busy={busy || undefined}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        void merge()
-                      }}
-                    >
-                      {busy ? t('library:materialsStrip.merging') : t('library:materialsStrip.merge')}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-            <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.mergeHint')}</p>
-          </div>
-          <div className="sm:col-span-2 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
-            <p className="text-xs text-fg-muted">{t('library:materialsStrip.deleteHint')}</p>
-            <DeleteFromLibrary kind="topic" id={topicId} label={t('library:materialsStrip.deleteTopic')} redirectTo="/" />
-          </div>
+          <p className="mt-1 text-xs text-fg-muted">{t('library:materialsStrip.mergeHint')}</p>
         </div>
-      ) : null}
+        <div className="sm:col-span-2 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
+          <p className="text-xs text-fg-muted">{t('library:materialsStrip.deleteHint')}</p>
+          <DeleteFromLibrary kind="topic" id={topicId} label={t('library:materialsStrip.deleteTopic')} redirectTo="/" />
+        </div>
+      </div>
     </Card>
   )
-})
+}
 
 /**
  * Message after uploading into a topic. When nothing was imported (all files

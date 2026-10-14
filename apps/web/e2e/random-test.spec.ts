@@ -37,12 +37,12 @@ test.describe('randomly composed test', () => {
       .poll(async () => (await drawn()) !== before, { timeout: 15000, message: 'the draw did not change' })
       .toBe(true)
 
-    await dialog.getByRole('button', { name: 'Vložit do osnovy' }).click()
+    await dialog.getByRole('button', { name: 'Vložit na stránku' }).click()
     await expect(dialog).toBeHidden()
 
     // The outline has five questions and the test can be saved; counts are in the page footer.
     await expect(page.getByTestId('test-question-count')).toHaveAttribute('data-count', '5')
-    await page.getByLabel('Název písemky').fill('Náhodná písemka')
+    await page.getByLabel('Název testu').fill('Náhodná písemka')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
 

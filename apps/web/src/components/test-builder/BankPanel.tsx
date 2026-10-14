@@ -94,7 +94,7 @@ export function BankPanel({
   const someVisibleUsed = visibleQuestions.some((question) => isUsed(question.id))
 
   return (
-    <Card className="flex h-full flex-col p-4">
+    <Card className="flex h-full flex-col">
       <h2 className="text-sm font-semibold text-fg">{t('tests:bank.title')}</h2>
       <p className="mt-1 text-sm text-fg-muted">
         {t('tests:bank.intro')}
@@ -120,7 +120,7 @@ export function BankPanel({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-32">
+        <div className="w-48">
           <Label htmlFor="bank-grade-filter">{t('tests:bank.grade')}</Label>
           <Select
             value={filters.grade || 'vse'}
@@ -130,7 +130,7 @@ export function BankPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vse">{t('tests:filters.allGrades')}</SelectItem>
+              <SelectItem value="vse">{t('tests:bank.allGrades')}</SelectItem>
               {grades.map(([gradeId, label]) => (
                 <SelectItem key={gradeId} value={gradeId}>
                   {label}
@@ -200,82 +200,79 @@ export function BankPanel({
             // impassable wall. A topic opens by itself only when one of its questions is
             // in the outline, so the teacher sees where things came from. Manual expanding
             // is otherwise kept (React only touches `open` when the computed value changes).
-            <details
-              key={topic.id}
-              className="rounded border border-line-soft"
-              open={topic.questions.some((question) => isUsed(question.id))}
-            >
-              <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-fg-soft">
-                {/* The topic checkbox takes all its questions that pass the
-                    filter — for a review of a whole grade it would otherwise be
-                    clicking one by one. `stopPropagation` keeps it from also
-                    toggling the topic open. */}
-                <span
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  className="flex items-center"
-                >
-                  <Checkbox
-                    checked={
-                      topic.questions.every((question) => isUsed(question.id))
-                        ? true
-                        : topic.questions.some((question) => isUsed(question.id))
-                          ? 'indeterminate'
-                          : false
-                    }
-                    onCheckedChange={() =>
-                      onToggleMany(
-                        topic.questions,
-                        !topic.questions.every((question) => isUsed(question.id)),
-                      )
-                    }
-                    aria-label={t('tests:bank.selectTopic', { topic: topic.label })}
-                  />
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  {topic.label} <span className="font-normal text-fg-muted">({topic.questions.length})</span>
-                </span>
-              </summary>
-              <ul className="divide-y divide-line-soft px-3 pb-2">
-                {topic.questions.map((question) => {
-                  const count = usedCounts.get(question.id) ?? 0
-                  return (
-                    <li key={question.id} className="flex items-start gap-2 py-2">
-                      <label className="flex min-w-0 flex-1 items-start gap-2">
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={count > 0}
-                          onCheckedChange={() => onToggle(question)}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <QuestionPreview question={question} showAnswers={false} />
-                        </div>
-                      </label>
-                      {/* Usage count and adding another occurrence. The button is
-                          deliberately outside <label>, otherwise the click would
-                          also flip the checkbox and remove the question instead. */}
-                      {count > 0 ? (
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Badge variant="secondary" title={t('tests:bank.usedTimes', { count })} data-testid="question-used-count" data-count={count}>
-                            {count}&times;
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2"
-                            aria-label={t('tests:bank.addAgain')}
-                            title={t('tests:bank.addAgain')}
-                            onClick={() => onAddAgain(question)}
-                          >
-                            +
-                          </Button>
-                        </div>
-                      ) : null}
-                    </li>
+            <div key={topic.id} className="flex items-start gap-2 rounded border border-line-soft pl-3">
+              {/* The topic checkbox takes all its questions that pass the
+                  filter — for a review of a whole grade it would otherwise be
+                  clicking one by one. It sits beside <summary>, not inside it:
+                  a control inside another control is unreachable for some
+                  screen readers. */}
+              <Checkbox
+                className="mt-2.5"
+                checked={
+                  topic.questions.every((question) => isUsed(question.id))
+                    ? true
+                    : topic.questions.some((question) => isUsed(question.id))
+                      ? 'indeterminate'
+                      : false
+                }
+                onCheckedChange={() =>
+                  onToggleMany(
+                    topic.questions,
+                    !topic.questions.every((question) => isUsed(question.id)),
                   )
-                })}
-              </ul>
-            </details>
+                }
+                aria-label={t('tests:bank.selectTopic', { topic: topic.label })}
+              />
+              <details
+                className="min-w-0 flex-1"
+                open={topic.questions.some((question) => isUsed(question.id))}
+              >
+                <summary className="flex cursor-pointer items-center gap-2 py-2 pr-3 text-sm font-medium text-fg-soft">
+                  <span className="min-w-0 flex-1 truncate">
+                    {topic.label} <span className="font-normal text-fg-muted">({topic.questions.length})</span>
+                  </span>
+                </summary>
+                <ul className="divide-y divide-line-soft pr-3 pb-2">
+                  {topic.questions.map((question) => {
+                    const count = usedCounts.get(question.id) ?? 0
+                    return (
+                      <li key={question.id} className="flex items-start gap-2 py-2">
+                        <label className="flex min-w-0 flex-1 items-start gap-2">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={count > 0}
+                            onCheckedChange={() => onToggle(question)}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <QuestionPreview question={question} showAnswers={false} />
+                          </div>
+                        </label>
+                        {/* Usage count and adding another occurrence. The button is
+                            deliberately outside <label>, otherwise the click would
+                            also flip the checkbox and remove the question instead. */}
+                        {count > 0 ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge variant="secondary" title={t('tests:bank.usedTimes', { count })} data-testid="question-used-count" data-count={count}>
+                              {count}&times;
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2"
+                              aria-label={t('tests:bank.addAgain')}
+                              title={t('tests:bank.addAgain')}
+                              onClick={() => onAddAgain(question)}
+                            >
+                              +
+                            </Button>
+                          </div>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </details>
+            </div>
           ))
         )}
       </div>

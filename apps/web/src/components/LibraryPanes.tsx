@@ -30,7 +30,8 @@ export function LibraryPanes({
   return (
     <ThreePane
       first={<LibrarySidebar tree={tree} activeGradeId={grade?.id} />}
-      second={<TopicList grade={grade} activeTopicId={activeTopicId} />}
+      // Without a selected grade there are no topics to list — skip the column.
+      second={grade ? <TopicList grade={grade} activeTopicId={activeTopicId} /> : undefined}
       contentLabel={contentLabel}
     >
       {children}

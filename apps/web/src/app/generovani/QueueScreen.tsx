@@ -168,14 +168,17 @@ export function QueueScreen({
         <p className="mt-1 text-sm text-fg-muted">{t('generation:queue.intro')}</p>
       </div>
 
-      <StatRow
-        items={[
-          { value: counts.running, label: t('generation:queue.stats.running') },
-          { value: counts.queued, label: t('generation:queue.stats.queued') },
-          { value: counts.error, label: t('generation:queue.stats.error'), tone: counts.error > 0 ? 'draft' : 'default' },
-          { value: counts.done, label: t('generation:queue.stats.done') },
-        ]}
-      />
+      {/* Four zeros above the empty state would say the same thing four times. */}
+      {jobs.length > 0 ? (
+        <StatRow
+          items={[
+            { value: counts.running, label: t('generation:queue.stats.running') },
+            { value: counts.queued, label: t('generation:queue.stats.queued') },
+            { value: counts.error, label: t('generation:queue.stats.error'), tone: counts.error > 0 ? 'draft' : 'default' },
+            { value: counts.done, label: t('generation:queue.stats.done') },
+          ]}
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {aiConfigured && counts.queued > 0 ? (
@@ -235,7 +238,7 @@ export function QueueScreen({
           title={t('generation:queue.empty.title')}
           hint={t('generation:queue.empty.hint')}
           action={
-            <Link href="/">
+            <Link href="/?vse=1">
               <Button size="sm" variant="outline">
                 {t('generation:queue.empty.action')}
               </Button>
@@ -284,7 +287,7 @@ function Section({
 }) {
   if (jobs.length === 0) return null
   return (
-    <Card className="p-4" data-testid={`queue-section-${id}`}>
+    <Card data-testid={`queue-section-${id}`}>
       <h2 className="text-sm font-semibold text-fg">{title}</h2>
       <ul className="mt-2 divide-y divide-line-soft">
         {jobs.map((job) => (

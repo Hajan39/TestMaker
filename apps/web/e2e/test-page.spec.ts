@@ -120,6 +120,11 @@ test.describe('test page', () => {
     await first.getByRole('button', { name: 'Odebrat' }).click()
     await expect(summary).toContainText('Otázek: 1')
     await expect.poll(order).toEqual([before[0]])
+
+    // Removing is immediate, so the toast puts the item back in its place.
+    await page.getByRole('button', { name: 'Vrátit', exact: true }).click()
+    await expect(summary).toContainText('Otázek: 2')
+    await expect.poll(order).toEqual([before[1], before[0]])
   })
 
   test('the page count on screen matches the page count of the downloaded PDF', async ({ page, request }) => {
@@ -134,7 +139,7 @@ test.describe('test page', () => {
     await expect(sheets(page)).toHaveCount(2)
     await expect(page.locator('dl').filter({ hasText: 'Odhad stran:' })).toContainText('Odhad stran: 2')
 
-    await page.getByLabel('Název písemky').fill('Zkouška počtu stran')
+    await page.getByLabel('Název testu').fill('Zkouška počtu stran')
     await page.getByRole('button', { name: 'Uložit' }).click()
     await page.waitForURL((url) => /\/tests\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith('/new'))
     const testId = new URL(page.url()).pathname.split('/').pop()!

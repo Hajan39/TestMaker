@@ -16,13 +16,13 @@
     "createEmptyInstead": "Můžeš ale založit prázdný list a vyplnit ho ručně.",
     "briefIncomplete": "Zadání listu není úplné — vyber téma, nebo napiš, o čem má list být (nejvýš 200 znaků), a zkus to znovu.",
     "topicGone": "Téma už v knihovně není, vyber jiné.",
-    "invalidTextVariant": "Text v listu nemá platnou variantu (text, nebo fun fact).",
+    "invalidTextVariant": "Text v listu nemá platnou variantu (text, nebo zajímavost).",
     "invalidTable": "Tabulku nejde uložit: každý řádek musí mít tolik buněk, kolik je sloupců (nejvýš 6 sloupců a 12 řádků), a aspoň jedna buňka musí zůstat prázdná k doplnění.",
     "emptyTask": "Úloha v listu nemá žádné zadání. Doplň ji, nebo ji odeber.",
     "timedOut": "Generování listu trvalo příliš dlouho a zastavilo se. Zkus to znovu s kratším pokynem (třeba méně stránek nebo položek), případně zapni „Vycházet jen z materiálů“."
   },
   "text": {
-    "funFactLabel": "Text fun factu",
+    "funFactLabel": "Text zajímavosti",
     "textLabel": "Krátký text",
     "funFactPlaceholder": "Zajímavost k tématu",
     "textPlaceholder": "Krátký text k tématu"
@@ -47,7 +47,7 @@
     "title": "Pracovní listy",
     "add": "Nový pracovní list",
     "emptyTitle": "Zatím žádný pracovní list",
-    "emptyHint": "Nech model připravit list k tématu nebo podle vlastního zadání a pak ho uprav jako písemku.",
+    "emptyHint": "Nech si připravit list k tématu nebo podle vlastního zadání a pak ho uprav jako test.",
     "create": "Vytvořit pracovní list"
   },
   "row": {
@@ -75,13 +75,13 @@
     "about": "O čem má list být",
     "aboutPlaceholder": "Např. Vánoce v Evropě",
     "noGrade": "Bez ročníku",
-    "instructions": "Pokyn pro model (nepovinné)",
-    "instructionsPlaceholder": "Např. víc tabulek, jeden fun fact, na 20 minut",
+    "instructions": "Pokyn pro generování (nepovinné)",
+    "instructionsPlaceholder": "Např. víc tabulek, jedna zajímavost, na 20 minut",
     "ownText": "Vlastní text (nepovinné)",
     "ownTextPlaceholder": "Sem můžeš vložit text, ze kterého má list vycházet — třeba úryvek z učebnice.",
     "onlyMaterials": "Vycházet jen z materiálů",
-    "onlyMaterialsHint": "Když volbu vypneš, model smí přidat vlastní příklady, příběhy a obecné znalosti k tématu. Takové položky označí „ověř“, ať je zkontroluješ.",
-    "notConfigured": "Generování listu není nastavené, takže ho model připravit nemůže. Založ prázdný list a vyplň ho ručně.",
+    "onlyMaterialsHint": "Když volbu vypneš, smí list obsahovat i vlastní příklady, příběhy a obecné znalosti k tématu. Takové položky se označí „ověř“, ať je zkontroluješ.",
+    "notConfigured": "Generování listu není nastavené, takže se list připravit sám nedá. Založ prázdný list a vyplň ho ručně.",
     "generating": "List se připravuje. Když stránku opustíš, dokončí se i tak a najdeš ho v přehledu pracovních listů.",
     "creating": "Zakládám…",
     "createBlank": "Založit prázdný list",
@@ -98,14 +98,17 @@
     "editTitle": "Úprava pracovního listu",
     "titleLabel": "Název listu",
     "titlePlaceholder": "Např. Sopky – procvičování",
-    "dropped_one": "{{count}} položku model nevrátil v pořádku a vynechala se. Chybějící kus můžeš přidat ručně.",
-    "dropped_few": "{{count}} položky model nevrátil v pořádku a vynechaly se. Chybějící kus můžeš přidat ručně.",
-    "dropped_other": "{{count}} položek model nevrátil v pořádku a vynechaly se. Chybějící kus můžeš přidat ručně.",
-    "toCheck_one": "Ke kontrole: {{count}} položka. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
+    "dropped_one": "{{count}} položka se nevygenerovala v pořádku a vynechala se. Chybějící kus můžeš přidat ručně.",
+    "dropped_few": "{{count}} položky se nevygenerovaly v pořádku a vynechaly se. Chybějící kus můžeš přidat ručně.",
+    "dropped_other": "{{count}} položek se nevygenerovalo v pořádku a vynechalo se. Chybějící kus můžeš přidat ručně.",
+    "toCheck_one": "Ke kontrole: {{count}} položka. Její obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
     "toCheck_few": "Ke kontrole: {{count}} položky. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
     "toCheck_other": "Ke kontrole: {{count}} položek. Jejich obsah nevychází z materiálů — ověř ho a značku „ověř“ pak odškrtni kliknutím.",
     "editTask": "Upravit úlohu",
     "newTask": "Nová úloha",
-    "onlyMaterialsHint": "Platí pro přegenerování položek. Když volbu vypneš, model smí přidat vlastní příklady a obecné znalosti; takové položky označí „ověř“."
+    "onlyMaterialsHint": "Platí pro přegenerování položek. Když volbu vypneš, smí nové položky obsahovat i vlastní příklady a obecné znalosti; takové se označí „ověř“."
+  },
+  "filters": {
+    "searchPlaceholder": "název listu"
   }
 }

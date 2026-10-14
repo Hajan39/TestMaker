@@ -38,35 +38,35 @@
     "details": {
       "street": {
         "label": "Ulice a číslo",
-        "placeholder": "Školní 12"
+        "placeholder": "Např. Školní 12"
       },
       "city": {
         "label": "Město",
-        "placeholder": "Brno"
+        "placeholder": "Např. Brno"
       },
       "postalCode": {
         "label": "PSČ",
-        "placeholder": "602 00"
+        "placeholder": "Např. 602 00"
       },
       "website": {
         "label": "Web",
-        "placeholder": "www.skola.cz"
+        "placeholder": "Např. www.skola.cz"
       },
       "email": {
         "label": "E-mail školy",
-        "placeholder": "info@skola.cz"
+        "placeholder": "Např. info@skola.cz"
       },
       "phone": {
         "label": "Telefon",
-        "placeholder": "+420 …"
+        "placeholder": "Např. +420 …"
       },
       "ico": {
         "label": "IČO",
-        "placeholder": "12345678"
+        "placeholder": "Např. 12345678"
       },
       "principal": {
         "label": "Ředitel/ka",
-        "placeholder": "Mgr. Jana Nováková"
+        "placeholder": "Např. Mgr. Jana Nováková"
       }
     },
     "detailsLegend": "Adresa a kontakty"
@@ -211,7 +211,7 @@
     "loading": "Načítám správu školy…",
     "noAccess": "Do správy má přístup jen správce školy.",
     "title": "Správa — {{school}}",
-    "intro": "Účty učitelek, záznam událostí a stav provozu. Třídy i otázky v nich jsou společné pro celou školu; písemky a hlavolamy patří té, kdo je vytvořila.",
+    "intro": "Účty učitelek, záznam událostí a stav provozu. Ročníky, témata i otázky v nich jsou společné pro celou školu; testy, pracovní listy a hlavolamy patří té, kdo je vytvořila.",
     "tabs": {
       "accounts": "Účty",
       "events": "Události a chyby",
@@ -255,7 +255,9 @@
       "approved": "Účet schválen s rolí {{role}}.",
       "approve": "Schválit",
       "unblocked": "Účet zpřístupněn.",
-      "unblock": "Zpřístupnit"
+      "unblock": "Zpřístupnit",
+      "listHeading": "Účty ve škole ({{count}})",
+      "neverLoggedIn": "zatím se nepřihlásil/a"
     },
     "events": {
       "empty": "Zatím se nic nestalo.",
@@ -270,7 +272,7 @@
       "aiNotConfigured": "Generování otázek: není nastavené.",
       "googleDomain": ", Google pro doménu {{domain}}",
       "noGoogle": ", bez přihlášení přes Google",
-      "backupHint": "Záloha celé školy je na vlastní stránce — stáhne se jeden soubor JSON a stejnou cestou se dá nahrát zpátky.",
+      "backupHint": "Záloha celé školy je na vlastní stránce — stáhne se jeden soubor a stejnou cestou se dá nahrát zpátky.",
       "openBackup": "Otevřít zálohu"
     },
     "quality": {

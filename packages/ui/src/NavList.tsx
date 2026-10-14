@@ -33,7 +33,7 @@ export function NavList({
           <span
             className={cn(
               'flex w-full items-center gap-1.5 rounded-[var(--radius-inner)] px-2 py-1 text-sm',
-              active ? 'bg-brand-bg font-semibold text-brand' : 'text-fg-soft hover:bg-surface-muted',
+              active ? 'bg-brand-bg font-semibold text-brand' : 'text-fg-soft hover:bg-line-soft',
             )}
           >
             {item.flag ? (
@@ -46,7 +46,7 @@ export function NavList({
               {item.label}
             </span>
             {typeof item.count === 'number' ? (
-              <span className={cn('ui-numeric text-xs', active ? 'text-brand/70' : 'text-fg-muted')}>
+              <span className={cn('ui-numeric text-xs', active ? 'text-brand' : 'text-fg-muted')}>
                 {item.count}
               </span>
             ) : null}

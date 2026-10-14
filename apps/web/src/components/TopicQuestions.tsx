@@ -81,8 +81,10 @@ export const TopicQuestions = forwardRef<
      * „Verze: …" row on the card. The key is the root question's id, not the question's own.
      */
     variantLinks: Record<string, VariantLink[]>
+    /** Questions generated on this page visit — tinted so the teacher sees what is new. */
+    freshIds?: ReadonlySet<string>
   }
->(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount, variantLinks }, ref) {
+>(function TopicQuestions({ topic, defaultTemplateId, questions, usage, rejectedCount, variantLinks, freshIds }, ref) {
   const router = useRouter()
   const canEdit = useCanEdit()
   const [creating, setCreating] = useState(false)
@@ -449,7 +451,7 @@ export const TopicQuestions = forwardRef<
   }
 
   return (
-    <Card className="gap-3 p-4">
+    <Card className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-sm font-semibold text-fg">{t('library:topicQuestions.heading', { count: active.length })}</h2>
         <div className="flex flex-wrap items-end gap-2">
@@ -572,7 +574,7 @@ export const TopicQuestions = forwardRef<
               key={question.id}
               data-question-id={question.id}
               className={
-                highlightedId === question.id
+                highlightedId === question.id || freshIds?.has(question.id)
                   ? 'rounded-[var(--radius-inner)] bg-brand-bg py-3 transition-colors'
                   : 'py-3 transition-colors'
               }

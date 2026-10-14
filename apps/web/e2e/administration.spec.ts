@@ -85,12 +85,15 @@ test.describe('manager', () => {
 
   test('edits the domain of their school', async ({ page }) => {
     await page.goto('/sprava')
+    // The school's details are folded away under the account list.
+    await page.getByRole('button', { name: 'Škola', exact: true }).click()
     const school = page.locator('[data-slot="card"]').filter({ hasText: 'Uložit školu' })
     await school.getByLabel('Doména Google').fill('@Vyvoj-E2E.cz')
     await school.getByRole('button', { name: 'Uložit školu' }).click()
     await expect(page.getByTestId('toast-school-saved')).toBeVisible()
 
     await page.reload()
+    await page.getByRole('button', { name: 'Škola', exact: true }).click()
     await expect(
       page.locator('[data-slot="card"]').filter({ hasText: 'Uložit školu' }).getByLabel('Doména Google'),
     ).toHaveValue('vyvoj-e2e.cz')
@@ -102,7 +105,7 @@ test.describe('manager', () => {
     await expect(page.getByRole('button', { name: /^Škola:/ })).toHaveCount(0)
 
     await page.goto('/sprava')
-    await page.getByLabel('Role').click()
+    await page.getByLabel('Role', { exact: true }).click()
     await expect(page.getByRole('option', { name: 'Učitel/ka' })).toBeVisible()
     await expect(page.getByRole('option', { name: 'Administrátor' })).toHaveCount(0)
   })

@@ -63,7 +63,7 @@ export function AdminScreen({
 
       {aiUsage}
 
-      <Card className="p-4">
+      <Card>
         <h2 className="mb-3 font-medium text-fg">{t('admin:schools.newSchool')}</h2>
         <SchoolForm
           initial={EMPTY}
@@ -74,7 +74,7 @@ export function AdminScreen({
 
       <div className="space-y-2">
         {schools.map((school) => (
-          <Card key={school.id} className="space-y-3 p-4">
+          <Card key={school.id} className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-medium text-fg">{school.name}</h2>
               {school.id === homeSchool ? <Badge variant="secondary">{t('admin:schools.home')}</Badge> : null}

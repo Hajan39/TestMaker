@@ -116,9 +116,12 @@ export function SortableTopics({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-fg-muted">
-        <p>
-          {manualOrder ? t('library:sortableTopics.manualHint') : t('library:sortableTopics.alphabeticalHint')}
-        </p>
+        {/* With a single topic there is nothing to sort. */}
+        {topics.length > 1 ? (
+          <p>
+            {manualOrder ? t('library:sortableTopics.manualHint') : t('library:sortableTopics.alphabeticalHint')}
+          </p>
+        ) : null}
         {manualOrder ? (
           <Button
             size="sm"

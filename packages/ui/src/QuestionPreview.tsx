@@ -2,6 +2,7 @@ import type { Question, QuestionContent } from '@testmaker/core/schema'
 import { questionTypeLabel } from '@testmaker/core/schema'
 import { t } from '@testmaker/core/i18n'
 import { displayOrder } from '@testmaker/core/pdf/layout'
+import { Check } from 'lucide-react'
 import { Badge } from './ui/badge'
 import { cn } from './cn'
 
@@ -37,7 +38,7 @@ export function QuestionPreview({
           <Badge variant="status">{t('ui:questionPreview.status.approved')}</Badge>
         ) : null}
         {showStatus && 'status' in question && question.status === 'draft' ? (
-          <Badge className="bg-draft-bg text-draft-fg">{t('ui:questionPreview.status.draft')}</Badge>
+          <Badge variant="draft">{t('ui:questionPreview.status.draft')}</Badge>
         ) : null}
         {showStatus && 'status' in question && question.status === 'rejected' ? (
           <Badge variant="destructive">{t('ui:questionPreview.status.rejected')}</Badge>
@@ -86,6 +87,7 @@ function Body({
               )}
             >
               {LETTERS[i]}) {option}
+              {showAnswers && i === question.payload.correctIndex ? <CorrectMark /> : null}
             </li>
           ))}
         </ul>
@@ -102,7 +104,10 @@ function Body({
                 showAnswers && question.payload.correctIndices.includes(i) && 'font-medium text-brand',
               )}
             >
-              ☐ {option}
+              {showAnswers && question.payload.correctIndices.includes(i) ? '☑' : '☐'} {option}
+              {showAnswers && question.payload.correctIndices.includes(i) ? (
+                <span className="sr-only"> – {t('ui:questionPreview.correct')}</span>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -224,5 +229,15 @@ function Answer({
       <span className="font-medium text-fg-muted">{label}: </span>
       {children}
     </p>
+  )
+}
+
+/** Marks the correct option by more than colour alone. */
+function CorrectMark() {
+  return (
+    <>
+      <Check aria-hidden className="ml-1.5 inline size-3.5 align-[-0.125em]" />
+      <span className="sr-only"> – {t('ui:questionPreview.correct')}</span>
+    </>
   )
 }

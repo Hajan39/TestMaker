@@ -37,12 +37,17 @@ function columnsFor(kind: TestKind): ColumnDef<TestRowData>[] {
       ),
     },
     ...counts,
-    { accessorKey: 'templateName', header: () => t('tests:table.template'), meta: { className: 'text-fg-soft' } },
+    // The softer colour goes on the cell content, not `meta.className` — that
+    // one lands on the header too and would make these headers differ from the rest.
+    {
+      accessorKey: 'templateName',
+      header: () => t('tests:table.template'),
+      cell: ({ row }) => <span className="text-fg-soft">{row.original.templateName}</span>,
+    },
     {
       accessorKey: 'gradeLabel',
       header: () => t('tests:table.grade'),
-      cell: ({ row }) => row.original.gradeLabel ?? '',
-      meta: { className: 'text-fg-soft' },
+      cell: ({ row }) => <span className="text-fg-soft">{row.original.gradeLabel ?? ''}</span>,
     },
     {
       accessorKey: 'updatedAt',

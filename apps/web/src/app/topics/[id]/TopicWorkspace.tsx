@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AI_QUESTION_TYPES, type Question } from '@testmaker/core/schema'
-import { Button, Card, EmptyState, toast } from '@testmaker/ui'
+import { Button, Card, EmptyState, StatRow, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 import {
   AiUnavailable,
@@ -14,19 +15,26 @@ import {
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
 import { ClaudeCodeImport } from '@/components/ClaudeCodeImport'
+import { InlineName } from '@/components/InlineName'
 import type { GroupMaterial } from '@/components/MaterialRow'
-import { MaterialsStrip, type MaterialsStripHandle } from '@/components/MaterialsStrip'
+import {
+  MaterialsStrip,
+  TopicManagePanel,
+  useTopicManage,
+  type MaterialsStripHandle,
+} from '@/components/MaterialsStrip'
 import { TopicQuestions, type TestUsage, type TopicQuestionsHandle, type VariantLink } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { errorMessage } from '@/lib/requestJson'
 import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
-import { useCanEdit } from '@/components/Permissions'
+import { useCanEdit, useCanManage } from '@/components/Permissions'
 
 export function TopicWorkspace({
   topic,
   defaultTemplateId,
   materials,
   questions,
+  usableQuestionCount,
   usage,
   rejectedCount,
   variantLinks,
@@ -43,6 +51,8 @@ export function TopicWorkspace({
   /** The topic's materials — passed unchanged to the materials strip below the main action. */
   materials: GroupMaterial[]
   questions: Question[]
+  /** Draft and approved questions in the topic, counted on the server (the list is cut off by a limit). */
+  usableQuestionCount: number
   /** Tests that already contain the questions — only those the caller can see. */
   usage: Record<string, TestUsage[]>
   /** Number of the topic's deleted (rejected) questions — for the „Smazané" toggle. */
@@ -55,11 +65,13 @@ export function TopicWorkspace({
   listLimit: number
   /** Too little usable text (without duplicates) for a test — generation stays possible, just not as the default choice. */
   lowContent: boolean
-  /** The topic's usable text in characters — the same number the page shows in `StatRow`. */
+  /** The topic's usable text in characters — shown in `StatRow` and checked before generating. */
   usableCharCount: number
   ai: { configured: boolean; provider: string; model: string; problems: string[] }
 }) {
   const canEdit = useCanEdit()
+  const canManage = useCanManage()
+  const topicManage = useTopicManage(topic.id)
   const router = useRouter()
   const [settings, setSettings] = useState<SimpleGenerateSettings>(DEFAULT_SIMPLE_SETTINGS)
   const [generating, setGenerating] = useState(false)
@@ -101,6 +113,10 @@ export function TopicWorkspace({
     const known = new Set(questions.map((question) => question.id))
     return [...fresh.filter((question) => !known.has(question.id)), ...questions]
   }, [fresh, questions])
+  const freshIds = useMemo(() => new Set(fresh.map((question) => question.id)), [fresh])
+  // The server count lags behind a run in progress — fresh questions not yet in
+  // `questions` are added, so the number on top grows with the list below.
+  const questionCount = usableQuestionCount + shownQuestions.length - questions.length
 
   // Show only what really goes to the model: generation always skips
   // duplicate content, manually excluded materials and scans without a text
@@ -205,6 +221,46 @@ export function TopicWorkspace({
         if (canEdit) materialsStripRef.current?.handleExternalDrop(event.dataTransfer)
       }}
     >
+      <div>
+        <p className="text-sm text-fg-muted">
+          <Link href={`/tridy/${topic.gradeId}`} className="hover:text-brand">
+            ← {topic.subjectName}
+            {topic.gradeName ? ` · ${topic.gradeName}` : ''}
+          </Link>
+        </p>
+        {/* Name and its actions on one row; numbers one level below, in a single
+            place — material and question counts used to repeat in every card. */}
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          <InlineName
+            kind="topic"
+            id={topic.id}
+            name={topic.name}
+            as="h1"
+            className="ui-page-title"
+            label={t('library:topicPage.rename')}
+          />
+          {canEdit ? (
+            <Button size="sm" variant="ghost" aria-expanded={topicManage.manage} onClick={topicManage.toggle}>
+              {topicManage.manage ? t('common:actions.done') : t('library:materialsStrip.editTopic')}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Rename, regrade, merge and delete — right under the name they change,
+          so the materials card holds only materials. */}
+      {topicManage.manage ? (
+        <TopicManagePanel topicId={topic.id} topicName={topic.name} topicManage={topicManage} />
+      ) : null}
+
+      <StatRow
+        items={[
+          { id: 'materials', value: usable.length, label: t('library:word.materials', { count: usable.length }) },
+          { value: usableCharCount.toLocaleString('cs'), label: t('library:topicPage.charsAvailable') },
+          { value: questionCount, label: t('library:word.questions', { count: questionCount }) },
+        ]}
+      />
+
       {/* A topic with no content gets one clear prompt instead of the
           generation card and materials strip — both would just show their own
           empty states side by side. It disappears once something is added
@@ -239,7 +295,7 @@ export function TopicWorkspace({
       ) : ai.configured && canEdit ? (
         /* A viewer browses and prints the topic but does not generate — the
            card would only offer a button that ends in a refusal. */
-        <Card className="gap-2 p-3">
+        <Card className="flex flex-col gap-2 p-3">
           {/* The card used to be a heading, two paragraphs and only then a
               button. Only one thing matters: the button, how many questions
               will be created and where to fine-tune it — the rest belongs in
@@ -269,7 +325,7 @@ export function TopicWorkspace({
                     ? t('generation:topicGeneration.tooLittleText')
                     : t('generation:topicGeneration.willCreate', { questions: t('library:count.questions', { count: settings.count }), materials: t('library:count.materialsGenitive', { count: usable.length }) })}
             </span>
-            <div className="ml-auto">
+            <div className="sm:ml-auto">
               <SimpleGenerateSettingsForm value={settings} onChange={setSettings} disabled={generating} />
             </div>
           </div>
@@ -304,14 +360,16 @@ export function TopicWorkspace({
         <AiUnavailable problems={ai.problems} />
       ) : null}
 
-      {canEdit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
+      {/* Uploading questions written in Claude Code is the owner's own workflow,
+          not something a teacher should have to decode. */}
+      {canManage && canEdit && !showEmptyState ? <ClaudeCodeImport topicId={topic.id} /> : null}
 
       <div className={showEmptyState ? 'hidden' : undefined}>
         <MaterialsStrip
           ref={materialsStripRef}
           topicId={topic.id}
-          topicName={topic.name}
           materials={materials}
+          topicManage={topicManage}
           onBusyChange={setMaterialsUploading}
         />
       </div>
@@ -331,6 +389,7 @@ export function TopicWorkspace({
           usage={usage}
           rejectedCount={rejectedCount}
           variantLinks={variantLinks}
+          freshIds={freshIds}
         />
       </div>
     </div>

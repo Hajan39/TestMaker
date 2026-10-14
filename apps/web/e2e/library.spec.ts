@@ -84,7 +84,7 @@ test.describe('manual library management', () => {
       // The change shows in the home page tile too. The sidebar link now carries
       // the same name, so look only in the content area.
       await page.goto('/?vse=1')
-      const introContent = page.getByRole('region', { name: 'Třídy' })
+      const introContent = page.getByRole('region', { name: 'Ročníky' })
       await expect(introContent.getByText(GRADE_NEW, { exact: false })).toBeVisible()
 
       // --- Two grades with the same name are refused, with the reason -----
