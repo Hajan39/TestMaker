@@ -4,6 +4,7 @@ import { sampleRenderableTest } from '@testmaker/core/pdf'
 import { renderTestToBuffer } from '@testmaker/core/pdf/node'
 import { t } from '@testmaker/core/i18n'
 import { db, templates } from '@/db'
+import { loadGradeScale } from '@/lib/schools'
 import { inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
@@ -21,8 +22,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .limit(1)
   if (!row) return new Response(t('tests:api.templateNotFound'), { status: 404 })
 
-  const buffer = await renderTestToBuffer(
-    sampleRenderableTest(
+  // The key of the sample prints the school's own grade scale, as a real test would.
+  const { scale: gradeScale } = await loadGradeScale(account)
+  const buffer = await renderTestToBuffer({
+    ...sampleRenderableTest(
       {
         id: row.id,
         name: row.name,
@@ -32,7 +35,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
       graded,
     ),
-  )
+    gradeScale,
+  })
 
   return new Response(new Uint8Array(buffer), {
     headers: {

@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/sqlite-core'
 import type {
   Block,
+  GradeScale,
   PuzzleContent,
   PuzzleEntry,
   QuestionContent,
@@ -56,6 +57,8 @@ export const schools = sqliteTable(
     ico: text('ico'),
     /** Name of the principal. */
     principal: text('principal'),
+    /** The school's grade scale for the key (`GradeScale`); empty means the built-in one. */
+    gradeScale: text('grade_scale', { mode: 'json' }).$type<GradeScale>(),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [

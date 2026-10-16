@@ -43,6 +43,7 @@ import { newId } from './ids'
 import { callRecorder } from './aiUsage'
 import { toQuestion } from './questions'
 import { toPuzzle } from './puzzles'
+import { loadGradeScale } from './schools'
 
 /**
  * A test is private: its author sees it and, if she shares it (`visibility`),
@@ -513,6 +514,7 @@ export async function loadRenderableTest(
     withKey: options.withKey,
     filled: options.filled ?? false,
     assets: await loadAssets(scope, items),
+    gradeScale: (await loadGradeScale(scope)).scale,
   }
 }
 

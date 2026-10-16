@@ -17,7 +17,16 @@ import { sanitizeText } from './text'
 const LIGHT = '0.6pt solid #999'
 
 /** One generic document driven by `template.config` — no template is hard-coded. */
-export function TestDocument({ test, template, items, variant, withKey, filled = false, assets }: RenderableTest) {
+export function TestDocument({
+  test,
+  template,
+  items,
+  variant,
+  withKey,
+  filled = false,
+  assets,
+  gradeScale,
+}: RenderableTest) {
   const config = template.config
   // A puzzle in variant B gets a different seed — grid and key then use the same one.
   const ordered = buildVariant(items, variant, test.id).map((item) =>
@@ -170,6 +179,7 @@ export function TestDocument({ test, template, items, variant, withKey, filled =
           variant={variant}
           variantLabel={variantLabel}
           totalPoints={total}
+          gradeScale={gradeScale}
         />
       ) : null}
     </Document>
@@ -415,6 +425,7 @@ function KeyPage({
   variant,
   variantLabel,
   totalPoints,
+  gradeScale,
 }: {
   test: RenderableTest['test']
   config: TemplateConfig
@@ -422,6 +433,7 @@ function KeyPage({
   variant: 'A' | 'B'
   variantLabel: 'A' | 'B' | null
   totalPoints: number
+  gradeScale: RenderableTest['gradeScale']
 }) {
   let index = -1
   return (
@@ -445,8 +457,8 @@ function KeyPage({
             {t('pdf:key.totalPoints', { points: formatPoints(totalPoints) })}
           </Text>
           {/* The school's grade table for this total, so the teacher grades straight from the key. */}
-          {formatGradeBoundaries(totalPoints) ? (
-            <Text style={{ fontSize: 9, color: '#555' }}>{formatGradeBoundaries(totalPoints)}</Text>
+          {formatGradeBoundaries(totalPoints, gradeScale) ? (
+            <Text style={{ fontSize: 9, color: '#555' }}>{formatGradeBoundaries(totalPoints, gradeScale)}</Text>
           ) : null}
         </View>
       ) : (

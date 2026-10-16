@@ -9,6 +9,7 @@ import { loadPromptRules, MAX_ACTIVE_PROMPT_RULES } from '@/lib/promptRules'
 import { authMode } from '@/lib/session'
 import { roleCanManage } from '@/lib/role'
 import { EMPTY_DETAILS, detailsFromRow } from '@/lib/schoolDetails'
+import { loadGradeScale } from '@/lib/schools'
 import { pageAccount } from '@/lib/user'
 import { ManagementScreen } from './ManagementScreen'
 import { MANAGEMENT_TABS, tabFrom, TAB_PARAM } from '@/lib/tabs'
@@ -40,7 +41,7 @@ export default async function ManagementPage({
     )
   }
 
-  const [accounts, events, [school], queue, aiQuality, rules] = await Promise.all([
+  const [accounts, events, [school], queue, aiQuality, rules, gradeScale] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -92,6 +93,7 @@ export default async function ManagementPage({
     countJobs(account),
     loadAiQuality(account),
     loadPromptRules(account),
+    loadGradeScale(account),
   ])
   const ai = aiStatus()
 
@@ -120,6 +122,7 @@ export default async function ManagementPage({
         aiQuality={aiQuality}
         rules={rules}
         maxRules={MAX_ACTIVE_PROMPT_RULES}
+        gradeScale={gradeScale}
         aiConfigured={ai.configured}
         aiProblems={ai.problems}
         authModeValue={authMode()}

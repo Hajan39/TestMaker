@@ -2,6 +2,7 @@ import 'server-only'
 import { and, asc, count, eq, ne } from 'drizzle-orm'
 import { z } from 'zod'
 import { t } from '@testmaker/core/i18n'
+import { DEFAULT_GRADE_SCALE, gradeScaleSchema, type GradeScale } from '@testmaker/core/schema'
 import { db, schools, users } from '@/db'
 import { seedTemplates } from '@/db/templates'
 import { newId } from '@/lib/ids'
@@ -189,4 +190,26 @@ async function freeSlug(base: string): Promise<string> {
     const [taken] = await db.select({ id: schools.id }).from(schools).where(eq(schools.slug, slug)).limit(1)
     if (!taken) return slug
   }
+}
+
+/**
+ * The school's grade scale for the key — the built-in one when the school has
+ * none, or when a stored one no longer passes the schema (an old shape must not
+ * stop a test from printing).
+ */
+export async function loadGradeScale(scope: Scope): Promise<{ scale: GradeScale; custom: boolean }> {
+  const [row] = await db
+    .select({ gradeScale: schools.gradeScale })
+    .from(schools)
+    .where(eq(schools.id, scope.schoolId))
+    .limit(1)
+  const parsed = gradeScaleSchema.safeParse(row?.gradeScale)
+  return parsed.success ? { scale: parsed.data, custom: true } : { scale: DEFAULT_GRADE_SCALE, custom: false }
+}
+
+/** Stores the school's grade scale; `null` returns it to the built-in one. Manager of that school only. */
+export async function saveGradeScale(scope: Scope, scale: GradeScale | null): Promise<SchoolResult> {
+  if (!roleCanManage(scope.role)) return notFound()
+  await db.update(schools).set({ gradeScale: scale }).where(eq(schools.id, scope.schoolId))
+  return { ok: true, id: scope.schoolId }
 }

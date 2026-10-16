@@ -1,0 +1,1 @@
+ALTER TABLE `schools` ADD `grade_scale` text;

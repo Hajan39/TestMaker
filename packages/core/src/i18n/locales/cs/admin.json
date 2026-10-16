@@ -181,7 +181,9 @@
     "ucet-upraven": "Účet upraven",
     "ucet-zablokovan": "Účet zablokován",
     "ucet-zalozen": "Účet založen",
-    "zmena-hesla": "Změna vlastního hesla"
+    "zmena-hesla": "Změna vlastního hesla",
+    "hodnoceni-upraveno": "Tabulka hodnocení změněna",
+    "hodnoceni-vychozi": "Tabulka hodnocení vrácena na výchozí"
   },
   "eventDetail": {
     "yes": "ano",
@@ -216,7 +218,8 @@
       "accounts": "Účty",
       "events": "Události a chyby",
       "operations": "Provoz",
-      "aiQuality": "AI kvalita"
+      "aiQuality": "AI kvalita",
+      "grades": "Hodnocení"
     },
     "accounts": {
       "emailInvalid": "Zadej platný e-mail, třeba jmeno@skola.cz.",
@@ -299,6 +302,41 @@
       "enabling": "Zapínám…",
       "disable": "Vypnout",
       "enable": "Zapnout"
+    },
+    "grades": {
+      "intro": "Podle téhle tabulky se na klíči k písemce vypíše, od kolika bodů je která známka. Řádek platí pro písemku s přesně tolika body; pro ostatní počty bodů se hranice spočítají z procent.",
+      "custom": "Škola má vlastní tabulku.",
+      "builtIn": "Platí výchozí tabulka.",
+      "percentsHeading": "Procenta pro ostatní počty bodů",
+      "percentFor": "Známka {{grade}} od (%)",
+      "tableHeading": "Tabulka bodů",
+      "total": "Body",
+      "grade": "Známka {{grade}}",
+      "cellFrom_one": "{{count}} bod, známka {{grade}}, od",
+      "cellFrom_few": "{{count}} body, známka {{grade}}, od",
+      "cellFrom_other": "{{count}} bodů, známka {{grade}}, od",
+      "cellTo_one": "{{count}} bod, známka {{grade}}, do",
+      "cellTo_few": "{{count}} body, známka {{grade}}, do",
+      "cellTo_other": "{{count}} bodů, známka {{grade}}, do",
+      "removeRow_one": "Odebrat řádek {{count}} bod",
+      "removeRow_few": "Odebrat řádek {{count}} body",
+      "removeRow_other": "Odebrat řádek {{count}} bodů",
+      "newTotal": "Nový řádek – počet bodů",
+      "addRow": "Přidat řádek",
+      "rowExists": "Řádek pro {{total}} bodů už v tabulce je.",
+      "rowInvalid": "Zadej celý počet bodů od 1 do 200.",
+      "rowError_one": "{{count}} bod: {{message}}",
+      "rowError_few": "{{count}} body: {{message}}",
+      "rowError_other": "{{count}} bodů: {{message}}",
+      "saved": "Hodnocení uloženo.",
+      "saveFailed": "Hodnocení se nepodařilo uložit.",
+      "reset": "Vrátit výchozí",
+      "resetting": "Vracím…",
+      "resetTitle": "Vrátit výchozí tabulku?",
+      "resetDescription": "Vlastní úpravy tabulky i procent se zahodí a znovu bude platit výchozí tabulka školy. Už vytištěné písemky se nemění.",
+      "resetConfirm": "Vrátit výchozí",
+      "resetDone": "Platí zase výchozí tabulka.",
+      "remove": "Odebrat"
     }
   }
 }

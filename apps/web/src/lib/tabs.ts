@@ -7,5 +7,5 @@ export function tabFrom<T extends string>(tabs: readonly T[], value: string | nu
 }
 
 /** Tabs of the management page, in order; the first one is the default. */
-export const MANAGEMENT_TABS = ['ucty', 'udalosti', 'provoz', 'ai-kvalita'] as const
+export const MANAGEMENT_TABS = ['ucty', 'udalosti', 'provoz', 'ai-kvalita', 'hodnoceni'] as const
 export type ManagementTab = (typeof MANAGEMENT_TABS)[number]

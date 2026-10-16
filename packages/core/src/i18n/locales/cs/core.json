@@ -58,5 +58,16 @@
   "worksheetTable": {
     "rowLength": "Každý řádek tabulky musí mít tolik buněk, kolik je sloupců.",
     "needsBlank": "Tabulka potřebuje aspoň jednu prázdnou buňku k doplnění."
+  },
+  "gradeScale": {
+    "points": "Zadej celé číslo bodů od 0 do 200.",
+    "percent": "Zadej procento od 0 do 100.",
+    "percentsOrder": "Procento pro známku {{grade}} musí být nižší než pro známku {{better}}.",
+    "firstFrom": "Známka 1 musí začínat na plném počtu bodů ({{total}}).",
+    "lastTo": "Známka 5 musí končit na 0 bodech.",
+    "reversed": "U známky {{grade}} musí být „od“ aspoň tolik jako „do“.",
+    "gap": "Mezi známkou {{better}} a {{grade}} chybí body – známka {{grade}} má začínat na {{expected}}.",
+    "overlap": "Známka {{grade}} smí začínat nejvýš tam, kde končí známka {{better}} ({{max}}).",
+    "duplicateTotal": "Řádek pro {{total}} bodů je v tabulce dvakrát."
   }
 }

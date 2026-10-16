@@ -3,6 +3,7 @@ import { t } from '../i18n'
 import { questionContentSchema, type Question, type QuestionContent } from './question'
 import { parsePuzzleSnapshot, toPuzzleSnapshot, type Puzzle, type PuzzleContent } from './puzzle'
 import type { Template } from './template'
+import type { GradeScale } from './gradeScale'
 
 /**
  * Test item — a test is not limited to a plain list of questions. The fifth
@@ -366,6 +367,8 @@ export interface RenderableTest {
   filled?: boolean
   /** Data of images used in the test (assetId → data URL). */
   assets: Record<string, string>
+  /** The school's grade scale for the key; the built-in one when absent. */
+  gradeScale?: GradeScale
 }
 
 /** Total points of the test. */

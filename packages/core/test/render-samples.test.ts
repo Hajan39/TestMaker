@@ -17,6 +17,7 @@ import { registerServerFonts } from '../src/pdf/node'
 import { extractPdf } from '../src/extract/pdf'
 import type { ResolvedTestItem } from '../src/schema/test'
 import { puzzleContentSchema } from '../src/schema/puzzle'
+import { DEFAULT_GRADE_SCALE, type GradeScaleRow } from '../src/schema/gradeScale'
 import { makeItems, makeQuestion, makeTemplate, makeTest, makeWorksheetItems, TALL_IMAGE_DATA_URL } from './fixtures'
 
 registerServerFonts()
@@ -100,6 +101,34 @@ it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async
       }
     }
   }
+})
+
+it.runIf(process.env.RENDER_SAMPLES)('prints the school’s own grade row on the key', async () => {
+  mkdirSync(OUT, { recursive: true })
+  const path = resolve(OUT, 'klasicka-vlastni-hodnoceni.pdf')
+  // The sample test has 19 points; the school corrected that row of its table.
+  const gradeScale = {
+    ...DEFAULT_GRADE_SCALE,
+    rows: DEFAULT_GRADE_SCALE.rows.map((row) =>
+      row.total === 19
+        ? { total: 19, ranges: [[19, 18], [17, 15], [14, 9], [8, 4], [3, 0]] as GradeScaleRow['ranges'] }
+        : row,
+    ),
+  }
+  await renderToFile(
+    createElement(TestDocument, {
+      test: makeTest({ graded: true }),
+      template: makeTemplate('klasicka'),
+      items: makeItems(),
+      variant: 'A',
+      withKey: true,
+      assets: {},
+      gradeScale,
+    }) as never,
+    path,
+  )
+  await checkSample(path, ['Známky: 1: 19–18 · 2: 17–15 · 3: 14–9 · 4: 8–4 · 5: 3–0'])
+  expect(await pdfText(path)).not.toContain('1: 19–17')
 })
 
 /**

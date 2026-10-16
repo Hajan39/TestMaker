@@ -45,8 +45,9 @@ import {
   Textarea,
   toast,
 } from '@testmaker/ui'
-import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
+import { REGENERATE_REASONS, type GradeScale, type RegenerateReason } from '@testmaker/core/schema'
 import { SchoolForm, type SchoolSettings } from '@/components/SchoolForm'
+import { GradeScaleForm } from './GradeScaleForm'
 import type { SchoolDetails } from '@/lib/schoolDetails'
 import type { AiQuality } from '@/lib/aiQuality'
 import type { PromptRule } from '@/lib/promptRules'
@@ -149,6 +150,7 @@ export function ManagementScreen({
   authModeValue,
   rules,
   maxRules,
+  gradeScale,
 }: {
   /** Tab from `?karta=` — a reload returns to the tab that was open. */
   initialTab?: ManagementTab
@@ -169,6 +171,8 @@ export function ManagementScreen({
   rules: PromptRule[]
   /** The maximum number of active rules (`MAX_ACTIVE_PROMPT_RULES`). */
   maxRules: number
+  /** The school's grade scale (`loadGradeScale`); `custom: false` while it is the built-in one. */
+  gradeScale: { scale: GradeScale; custom: boolean }
 }) {
   const router = useRouter()
   const [tab, setTab] = useUrlTab(MANAGEMENT_TABS, initialTab)
@@ -282,6 +286,7 @@ export function ManagementScreen({
           <TabsTrigger value="udalosti">{t('admin:management.tabs.events')}</TabsTrigger>
           <TabsTrigger value="provoz">{t('admin:management.tabs.operations')}</TabsTrigger>
           <TabsTrigger value="ai-kvalita">{t('admin:management.tabs.aiQuality')}</TabsTrigger>
+          <TabsTrigger value="hodnoceni">{t('admin:management.tabs.grades')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ucty" className="space-y-4">
@@ -759,6 +764,10 @@ export function ManagementScreen({
               ))
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="hodnoceni">
+          <GradeScaleForm initial={gradeScale.scale} custom={gradeScale.custom} />
         </TabsContent>
       </Tabs>
     </div>

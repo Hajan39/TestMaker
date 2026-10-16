@@ -1,5 +1,6 @@
 import { t } from '../i18n'
 import type { Question } from '../schema/question'
+import type { GradeScale } from '../schema/gradeScale'
 import { gradeBoundaries } from '../compose/gradeScale'
 import { partialScoring } from '../compose/scoring'
 import { formatPoints } from './layout'
@@ -77,8 +78,8 @@ export function formatAcceptedAnswers(question: Question): string | null {
  * Grade boundaries for the key: "Známky: 1: 45–41 · 2: 40–34 · …";
  * null when the test has no points.
  */
-export function formatGradeBoundaries(total: number): string | null {
-  const ranges = gradeBoundaries(total)
+export function formatGradeBoundaries(total: number, scale?: GradeScale): string | null {
+  const ranges = gradeBoundaries(total, scale)
   if (!ranges) return null
   const list = ranges
     .map(({ grade, from, to }) =>
