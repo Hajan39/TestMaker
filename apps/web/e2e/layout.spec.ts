@@ -119,6 +119,29 @@ function sixthGradeTile(page: Page) {
 }
 
 test.describe('scrolling', () => {
+  // The app frame fills the window and scrolls inside; the document itself must
+  // never scroll too — a second scrollbar that runs pages past the content.
+  for (const path of ['/', 'topic', '/tests/new', '/listy']) {
+    test(`the document does not scroll next to the app frame: ${path}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 800 })
+      await page.goto(path === 'topic' ? await testTopicPath(page.request) : path)
+      await page.waitForLoadState('networkidle')
+      const { overflow, culprits } = await page.evaluate(() => {
+        const limit = document.documentElement.clientHeight
+        // Elements reaching below the window whose position escapes the frame's scrolling.
+        const culprits = Array.from(document.querySelectorAll('body *'))
+          .filter((el) => {
+            const style = getComputedStyle(el)
+            return (style.position === 'absolute' || style.position === 'fixed') && el.getBoundingClientRect().bottom > limit
+          })
+          .slice(0, 5)
+          .map((el) => `${el.tagName.toLowerCase()}.${el.className}`)
+        return { overflow: document.documentElement.scrollHeight - limit, culprits }
+      })
+      expect(overflow, `the page is taller than the window outside the app frame: ${culprits.join(' | ')}`).toBeLessThanOrEqual(0)
+    })
+  }
+
   test('a long topic list can be scrolled to the end', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 700 })
     // The class with the most topics (over forty) — the content is reliably longer than the window.

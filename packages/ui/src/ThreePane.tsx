@@ -42,15 +42,15 @@ export function ThreePane({
             {second ? <TabsTrigger value="second">{secondLabel}</TabsTrigger> : null}
             <TabsTrigger value="content">{contentLabel}</TabsTrigger>
           </TabsList>
-          <TabsContent value="first" className="min-h-0 flex-1 overflow-y-auto bg-surface-muted p-3">
+          <TabsContent value="first" className="relative min-h-0 flex-1 overflow-y-auto bg-surface-muted p-3">
             {first}
           </TabsContent>
           {second ? (
-            <TabsContent value="second" className="min-h-0 flex-1 overflow-y-auto p-3">
+            <TabsContent value="second" className="relative min-h-0 flex-1 overflow-y-auto p-3">
               {second}
             </TabsContent>
           ) : null}
-          <TabsContent value="content" className="surface-content min-h-0 flex-1 overflow-y-auto p-5">
+          <TabsContent value="content" className="surface-content relative min-h-0 flex-1 overflow-y-auto p-5">
             {children}
           </TabsContent>
         </Tabs>
@@ -62,19 +62,19 @@ export function ThreePane({
     <div className="flex h-full min-h-0">
       <aside
         aria-label={firstLabel}
-        className="surface-chrome w-60 shrink-0 overflow-y-auto border-r border-line bg-surface-muted p-3"
+        className="surface-chrome relative w-60 shrink-0 overflow-y-auto border-r border-line bg-surface-muted p-3"
       >
         {first}
       </aside>
       {second ? (
         <aside
           aria-label={secondLabel}
-          className="surface-chrome hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block"
+          className="surface-chrome relative hidden w-70 shrink-0 overflow-y-auto border-r border-line p-3 xl:block"
         >
           {second}
         </aside>
       ) : null}
-      <section aria-label={contentLabel} className="surface-content min-w-0 flex-1 overflow-y-auto p-5">
+      <section aria-label={contentLabel} className="surface-content relative min-w-0 flex-1 overflow-y-auto p-5">
         {children}
       </section>
     </div>

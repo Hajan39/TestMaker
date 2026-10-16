@@ -69,7 +69,7 @@ export function AppShell({
           <ThemeToggle />
         </div>
       </header>
-      <main id="main" tabIndex={-1} className="surface-content outline-none min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
+      <main id="main" tabIndex={-1} className="surface-content relative outline-none min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
     </div>
   )
 }
