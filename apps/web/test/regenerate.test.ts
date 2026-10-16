@@ -34,7 +34,7 @@ const modelReturns: typeof generateQuestions = async () => ({
   questions: [REPLACEMENT],
   rejected: [],
   chunks: 1,
-  failedCalls: [],
+  failedCalls: [], similar: 0,
   models: ['google:gemini-flash-latest'],
 })
 
@@ -48,7 +48,7 @@ const modelReturnsNothing: typeof generateQuestions = async () => ({
   questions: [],
   rejected: [{ index: 0, errors: ['nesmysl'] }],
   chunks: 1,
-  failedCalls: [],
+  failedCalls: [], similar: 0,
   models: ['google:gemini-flash-latest'],
 })
 

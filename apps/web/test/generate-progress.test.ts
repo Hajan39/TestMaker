@@ -69,7 +69,7 @@ beforeEach(async () => {
       questions: [question('Kde probíhá fotosyntéza?'), question('Co při fotosyntéze vzniká?')],
       rejected: [{ index: 0, errors: ['Správná odpověď chybí mezi možnostmi'] }],
       chunks: 1,
-      failedCalls: [],
+      failedCalls: [], similar: 0,
       models: ['google:gemini-flash-latest'],
     }
   }

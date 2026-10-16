@@ -237,7 +237,7 @@ describe('wiring into generation', () => {
     await generateForTopic(ACCOUNT, topicId, { count: 1, types: ['single_choice'], difficulty: 2 }, {
       generate: async (_request, options) => {
         options?.onCall?.(EVENT)
-        return { questions: [], rejected: [], chunks: 1, failedCalls: [], models: [] }
+        return { questions: [], rejected: [], chunks: 1, failedCalls: [], similar: 0, models: [] }
       },
     })
     await vi.waitFor(async () => {

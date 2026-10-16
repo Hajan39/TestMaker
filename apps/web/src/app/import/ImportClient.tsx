@@ -15,6 +15,7 @@ import {
   triageEntries,
   uploadMaterials,
   type FileEntry,
+  type UploadSummary,
   type ImportDestination,
 } from '@/lib/importClient'
 import { IssueList, skipLabel, type IssueItem } from '@/components/importIssues'
@@ -63,13 +64,16 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
   const router = useRouter()
   const folderRef = useRef<HTMLInputElement>(null)
   const filesRef = useRef<HTMLInputElement>(null)
+  // Original files by `relativePath`, kept from reading until the import —
+  // `uploadMaterials` stores them next to the text when Blob is configured.
+  const originalFiles = useRef(new Map<string, File>())
   const [phase, setPhase] = useState<Phase>('idle')
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [groups, setGroups] = useState<PreviewGroup[]>([])
   const [skipped, setSkipped] = useState<Failure[]>([])
   const [failed, setFailed] = useState<Failure[]>([])
-  const [summary, setSummary] = useState<{ imported: number; duplicates: number } | null>(null)
+  const [summary, setSummary] = useState<UploadSummary | null>(null)
   const [destinations, setDestinations] = useState<ImportDestination[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -107,6 +111,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     setDestinations([])
     setGroups([])
     setFailed([])
+    originalFiles.current = new Map()
 
     const { accepted, skipped: skippedFiles } = triageEntries(entries)
     setSkipped(skippedFiles.map((item) => ({ ...item, code: item.reason, reason: skipLabel(item.reason) ?? item.reason })))
@@ -130,8 +135,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
       await extractAll(accepted, (result) => {
         done += 1
         setProgress({ done, total: accepted.length })
-        if (result.status === 'ok' && result.material) extracted.push(result.material)
-        else if (result.status === 'error') {
+        if (result.status === 'ok' && result.material) {
+          extracted.push(result.material)
+          const entry = accepted[result.id]
+          if (entry) originalFiles.current.set(result.material.relativePath, entry.file)
+        } else if (result.status === 'error') {
           failures.push({ relativePath: result.relativePath, reason: result.reason ?? t('library:import.errorReason') })
         } else if (result.status === 'skipped') {
           emptySkips.push({
@@ -204,6 +212,7 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
     setError(null)
     try {
       const result = await uploadMaterials(materials, {
+        files: originalFiles.current,
         onProgress: (done, total) => setProgress({ done, total }),
       })
       setSummary(result)
@@ -321,6 +330,11 @@ export function ImportClient({ library }: { library: LibraryHint[] }) {
             {t('library:import.imported', { materials: t('library:count.materials', { count: summary.imported }) })}
             {summary.duplicates > 0 ? t('library:import.alreadyInLibrary', { duplicates: summary.duplicates }) : ''}.
           </p>
+          {summary.originalsFailed > 0 ? (
+            <p className="mt-1 text-sm text-fg-muted" data-testid="import-originals-failed">
+              {t('library:materialPreview.originalsFailed', { count: summary.originalsFailed })}
+            </p>
+          ) : null}
           <p className="mt-1 text-sm text-fg-muted">{t('library:import.whereNext')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {destinations.map((destination) => (

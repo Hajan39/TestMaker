@@ -2,9 +2,9 @@ import { expect, test, type APIRequestContext } from '@playwright/test'
 import { testTopicPath } from './fixtures'
 
 /**
- * Question generation in a topic: the card shows only the button, count and
- * difficulty — no type selection and no "Doplnit na celkový počet" mode (that's
- * only for bulk generation). An excluded (or missing) material disables
+ * Question generation in a topic: the card shows the button, count, difficulty
+ * and question types — no "Doplnit na celkový počet" mode (that's only for bulk
+ * generation). An excluded (or missing) material disables
  * generation with an explanation, and a topic with no content at all offers an
  * empty state with two paths.
  */
@@ -76,16 +76,17 @@ async function ensureEmptyTopic(request: APIRequestContext, name: string): Promi
 }
 
 test.describe('question generation in a topic', () => {
-  test('the card shows only count and difficulty, default count is 10', async ({ page, request }) => {
+  test('the card shows count, difficulty and types, default count is 10', async ({ page, request }) => {
     const path = await testTopicPath(request)
     await page.goto(path)
 
     const generate = page.getByRole('button', { name: 'Vygenerovat otázky' })
     test.skip((await generate.count()) === 0, 'Generation is not configured.')
 
-    // No type selection or top-up mode — those belong to bulk generation only.
+    // No top-up mode (the collapsed bulk settings) — that belongs to bulk generation only.
     await expect(page.getByRole('button', { name: 'Nastavení generování' })).toHaveCount(0)
     await expect(page.getByTestId('generate-settings-full')).toHaveCount(0)
+    await expect(page.getByRole('group', { name: 'Typy otázek' }).getByRole('checkbox')).toHaveCount(8)
 
     // `#generate-difficulty`, not the generic label — the question filter below
     // has a difficulty with the same name.
@@ -117,6 +118,9 @@ test.describe('question generation in a topic', () => {
     const generate = page.getByRole('button', { name: 'Vygenerovat otázky' })
     test.skip((await generate.count()) === 0, 'Generation is not configured.')
     await expect(generate).toBeEnabled()
+    // A topic without questions has nothing to repeat yet — no "materials running out" warning.
+    await expect(page.getByTestId('generate-hint')).toHaveAttribute('data-state', 'will-create')
+    await expect(page.getByTestId('exhausted-topic-warning')).toHaveCount(0)
 
     const stripHeader = page.getByRole('button', { name: /^Materiály/ })
     if ((await stripHeader.getAttribute('aria-expanded')) !== 'true') await stripHeader.click()

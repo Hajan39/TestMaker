@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
-import { AI_SETTINGS } from '@testmaker/core/ai'
+import { AI_SETTINGS, questionSummary } from '@testmaker/core/ai'
 import {
   normalizeEvidence,
   parseQuestionSnapshot,
@@ -136,7 +136,10 @@ export function questionPrompt(question: { payload: unknown }): string {
 }
 
 /**
- * Prompts of the topic's questions for the "avoid these" list in the prompt.
+ * The topic's questions for the "avoid these" list in the prompt and for
+ * recognising repeats, one line each: prompt → correct answer
+ * (`questionSummary`). All statuses count — a deleted (rejected) question is
+ * one the teacher did not want, so a reworded copy of it is unwanted too.
  *
  * Takes exactly as many as fit in the prompt (`AI_SETTINGS.avoidLimit`), newest
  * first: those are what the model must avoid most, since they were generated
@@ -149,12 +152,19 @@ export async function loadAvoidPrompts(
   limit: number = AI_SETTINGS.avoidLimit,
 ): Promise<string[]> {
   const rows = await db
-    .select({ payload: questions.payload })
+    .select({ type: questions.type, payload: questions.payload })
     .from(questions)
     .where(and(inSchool(scope, questions), eq(questions.topicId, topicId)))
     .orderBy(desc(questions.createdAt), desc(questions.id))
     .limit(limit)
-  return rows.map((row) => questionPrompt(row))
+  return rows.map((row) => {
+    try {
+      return questionSummary(row as QuestionContent)
+    } catch {
+      // An old row whose payload no longer matches its type — the prompt alone still helps.
+      return questionPrompt(row)
+    }
+  })
 }
 
 /** One version of a root question, as the question card in the overview needs it. */

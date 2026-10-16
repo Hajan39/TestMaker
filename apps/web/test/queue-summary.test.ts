@@ -38,4 +38,18 @@ describe('queue run summary', () => {
   it('counts are declined for two and three as well', () => {
     expect(runSummary({ processed: 3, errors: 0, questions: 2 }).text).toBe('Hotovo: 2 otázky z 3 témat.')
   })
+
+  it('says the materials are running out when many questions were dropped as repeats', () => {
+    expect(runSummary({ processed: 2, errors: 0, questions: 12, requested: 20, similar: 8 })).toEqual({
+      tone: 'warning',
+      text: 'Hotovo: 12 otázek z 2 témat. Část otázek nevznikla — opakovaly by to, co už v tématech je. Pro další otázky přidej materiály.',
+    })
+  })
+
+  it('a single repeat out of many is not worth the warning', () => {
+    expect(runSummary({ processed: 2, errors: 0, questions: 19, requested: 20, similar: 1 })).toEqual({
+      tone: 'success',
+      text: 'Hotovo: 19 otázek z 2 témat.',
+    })
+  })
 })

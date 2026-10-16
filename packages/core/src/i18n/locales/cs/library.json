@@ -204,7 +204,16 @@
     "explanation": "Poznámka do klíče (nepovinné)",
     "explanationPlaceholder": "Proč je odpověď správně — vytiskne se jen do klíče pro učitele.",
     "editTitle": "Upravit otázku",
-    "newTitle": "Nová otázka"
+    "newTitle": "Nová otázka",
+    "complete": {
+      "button": "Doplnit odpovědi",
+      "busy": "Doplňuji odpovědi…",
+      "notFound": "V materiálech tématu odpověď není.",
+      "useGeneral": "Doplnit z obecných znalostí",
+      "failed": "Odpovědi se nepodařilo doplnit.",
+      "notFromMaterials": "Odpověď nevychází z materiálů tématu — zkontroluj ji.",
+      "notConfigured": "Doplnění odpovědí modelem není nastavené — odpovědi vyplň ručně."
+    }
   },
   "libraryApi": {
     "itemGone": "Tahle položka už v knihovně není — mezitím ji nejspíš někdo smazal. Obnov stránku.",
@@ -231,6 +240,24 @@
     "deleteDescription": "Materiál „{{name}}\" zmizí z tématu. Otázky, které z něj vznikly, zůstanou.",
     "deleteFailed": "Materiál se nepodařilo smazat.",
     "deleted": "Materiál „{{name}}“ smazán."
+  },
+  "materialPreview": {
+    "open": "Náhled",
+    "openAria": "Náhled: {{name}}",
+    "description": "Text, který aplikace z materiálu přečetla a ze kterého generuje otázky.",
+    "excluded": "Vyřazený z generování",
+    "duplicate": "Stejný obsah jako jiný materiál — při generování se vynechává",
+    "loading": "Načítám text…",
+    "loadFailed": "Text materiálu se nepodařilo načíst.",
+    "empty": "Z materiálu se nepodařilo přečíst žádný text.",
+    "downloadText": "Stáhnout text",
+    "downloadOriginal": "Stáhnout originál",
+    "downloadOriginalAria": "Stáhnout originál: {{name}}",
+    "originalMissing": "Originál souboru tu není — u starších materiálů se neukládal.",
+    "originalRefused": "Originál souboru se nepodařilo uložit.",
+    "originalsFailed_one": "Text je uložený, ale originál {{count}} souboru se nepodařilo uschovat — stáhnout půjde jen přečtený text.",
+    "originalsFailed_few": "Text je uložený, ale originály {{count}} souborů se nepodařilo uschovat — stáhnout půjde jen přečtený text.",
+    "originalsFailed_other": "Text je uložený, ale originály {{count}} souborů se nepodařilo uschovat — stáhnout půjde jen přečtený text."
   },
   "importClient": {
     "partiallySaved": "Část souborů se uložila, zbytek ne — nahraj je znovu, uložené se nezdvojí.",

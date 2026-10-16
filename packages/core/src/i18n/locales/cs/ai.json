@@ -72,5 +72,9 @@
     "dropped_one": "({{count}} položka byla vadná a vynechala se.)",
     "dropped_few": "({{count}} položky byly vadné a vynechaly se.)",
     "dropped_other": "({{count}} položek bylo vadných a vynechalo se.)"
+  },
+  "completion": {
+    "broken": "Model vrátil odpovědi, které se do otázky nehodí, a nic se nezměnilo. Zkus to znovu, nebo odpovědi doplň ručně.",
+    "noMaterials": "Téma nemá žádné materiály, ve kterých by se odpověď dala najít."
   }
 }

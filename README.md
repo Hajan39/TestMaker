@@ -289,6 +289,7 @@ prostředí:
 | `GOOGLE_CLIENT_SECRET` | k témuž |
 | `GOOGLE_REDIRECT_URI` | `https://<adresa>/api/prihlaseni/google/zpet` |
 | `GOOGLE_HD` | doména školních účtů, např. `zsnekde.cz` |
+| `BLOB_READ_WRITE_TOKEN` | volitelně, úložiště originálů materiálů (Vercel Blob, soukromý přístup); doplní ho Vercel sám po připojení Blob úložiště k projektu. Bez něj se ukládá jen přečtený text a „Stáhnout originál“ se nenabízí |
 
 Pořadí při prvním nasazení je závazné, jinak se dovnitř nedostane nikdo:
 migrace (`pnpm db:migrate` proti Tursu) → založení prvního správce skriptem

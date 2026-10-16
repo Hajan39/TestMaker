@@ -39,6 +39,16 @@ async function checkSample(path: string, expectedText: string[]): Promise<void> 
   for (const needle of expectedText) expect(text, path).toContain(needle)
 }
 
+/** Partial scoring of the sample matching question (3 points, 3 pairs). */
+const SCORING_LINE = 'bez chyby 3 b. · 1 chyba 2 b. · 2 chyby 1 b. · 3 a víc chyb 0 b.'
+
+/** Other accepted answers of the sample short-answer question ("tři", also "3"). */
+const ACCEPTED_LINE = 'Uznej také: 3'
+
+async function pdfText(path: string): Promise<string> {
+  return (await extractPdf(new Uint8Array(readFileSync(path)))).text
+}
+
 it.runIf(process.env.RENDER_SAMPLES)('generates the filled-in teacher copy', async () => {
   mkdirSync(OUT, { recursive: true })
   for (const variant of ['A', 'B'] as const) {
@@ -56,7 +66,7 @@ it.runIf(process.env.RENDER_SAMPLES)('generates the filled-in teacher copy', asy
       path,
     )
     // Answers are written into the test itself — no separate key page.
-    await checkSample(path, ['Dýchací soustava', 'dutinou nosní', 'plicní sklípky', 'tři'])
+    await checkSample(path, ['Dýchací soustava', 'dutinou nosní', 'plicní sklípky', 'tři', SCORING_LINE, ACCEPTED_LINE])
   }
 })
 
@@ -76,7 +86,18 @@ it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async
         }) as never,
         path,
       )
-      await checkSample(path, ['Dýchací soustava', 'Část A – Stavba dýchací soustavy'])
+      await checkSample(path, ['Dýchací soustava', 'Část A – Stavba dýchací soustavy', ACCEPTED_LINE])
+      // Partial scoring belongs to the key of a graded test; a worksheet is not graded.
+      // Partial scoring and grade boundaries belong to the key of a graded test only.
+      const text = await pdfText(path)
+      if (slug === 'pracovni-list') {
+        expect(text, path).not.toContain('bez chyby')
+        expect(text, path).not.toContain('Známky:')
+      } else {
+        expect(text, path).toContain(SCORING_LINE)
+        // The sample test has 19 points — its row of the school table.
+        expect(text, path).toContain('Známky: 1: 19–17 · 2: 16–14 · 3: 13–8 · 4: 7–4 · 5: 3–0')
+      }
     }
   }
 })
@@ -112,6 +133,8 @@ it.runIf(process.env.RENDER_SAMPLES)('generates a header and images sample', asy
   )
   // This is why the sample exists: teacher, class and note must be printed.
   await checkSample(headerPath, ['Mgr. Nováková', '8.A', 'Bez kalkulačky'])
+  // The pupils' paper of a graded test with a multiple choice question: no scoring hints.
+  expect(await pdfText(headerPath)).not.toContain('bez chyby')
 
   const missingImageQuestion = makeQuestion({
     type: 'short_answer',

@@ -4,6 +4,7 @@ import type { Block } from '../schema/blocks'
 import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
 import { answerLines } from '../schema/test'
+import { formatAcceptedAnswers } from './answerKey'
 import { numberedBlanks, tableBlankNumbers } from './layout'
 import { displayOrder } from './shuffle'
 import { LETTERS } from './styles'
@@ -135,15 +136,21 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride, f
         </View>
       )
 
-    case 'short_answer':
+    case 'short_answer': {
+      // The teacher's filled-in copy also lists the other answers she accepts.
+      const accepted = filled ? formatAcceptedAnswers(question) : null
       return (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 6 }}>
-          <Text>{t('pdf:question.answerLabel')}</Text>
-          <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, minHeight: 14 }}>
-            {filled ? <Text style={{ color: ANSWER }}>{sanitizeText(question.payload.answer)}</Text> : null}
+        <View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 6 }}>
+            <Text>{t('pdf:question.answerLabel')}</Text>
+            <View style={{ flex: 1, borderBottom: LIGHT, marginLeft: 6, minHeight: 14 }}>
+              {filled ? <Text style={{ color: ANSWER }}>{sanitizeText(question.payload.answer)}</Text> : null}
+            </View>
           </View>
+          {accepted ? <Text style={{ color: ANSWER, fontSize: 8, marginTop: 2 }}>{sanitizeText(accepted)}</Text> : null}
         </View>
       )
+    }
 
     case 'single_choice':
     case 'multi_choice': {

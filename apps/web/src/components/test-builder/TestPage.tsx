@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { paginate } from '@testmaker/core/pdf/estimate'
-import { formatAnswer, questionLabel } from '@testmaker/core/pdf/layout'
+import { formatAcceptedAnswers, formatAnswer, formatPartialScoring, questionLabel } from '@testmaker/core/pdf/layout'
 import { itemQuestion, resolveQuestionStyle, type ResolvedTestItem, type Template, type TestHeaderConfig } from '@testmaker/core/schema'
 import { Fragment, useId, useMemo, useState } from 'react'
 import {
@@ -428,6 +428,9 @@ function PageRow({
   const missing = Boolean(item.questionMissing) && !worksheet
   const config = template.config
   const question = item.question
+  // Same line as in the PDF key; worksheets are not graded, so they get none.
+  const scoring =
+    revealed && graded && question ? formatPartialScoring(question, item.pointsOverride ?? question.points) : null
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -606,7 +609,17 @@ function PageRow({
             >
               <span className="font-medium">{t('tests:page.sampleAnswer')}</span>
               {formatAnswer(question, 'A')}
+              {formatAcceptedAnswers(question) ? (
+                <span className="block text-xs text-fg-muted" data-testid="accepted-answers">
+                  {formatAcceptedAnswers(question)}
+                </span>
+              ) : null}
               {question.explanation ? <span className="text-fg-muted"> — {question.explanation}</span> : null}
+              {scoring ? (
+                <span className="block text-fg-muted" data-testid="partial-scoring">
+                  {scoring}
+                </span>
+              ) : null}
             </p>
           ) : null}
         </>

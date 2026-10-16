@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db, grades, materials, questions, topics } from '@/db'
 import { recomputeTopicContent } from '@/lib/duplicates'
 import { newId } from '@/lib/ids'
+import { deleteOriginals } from '@/lib/originals'
 import { inSchool, withScope, type Scope } from '@/lib/user'
 import { t } from '@testmaker/core/i18n'
 
@@ -180,15 +181,14 @@ export async function POST(request: Request) {
       .where(and(inSchool(account, materials), eq(materials.topicId, targetId)))
   ).map((row) => row.hash)
   if (targetHashes.length > 0) {
-    await db
-      .delete(materials)
-      .where(
-        and(
-          inSchool(account, materials),
-          eq(materials.topicId, sourceId),
-          inArray(materials.contentHash, targetHashes),
-        ),
-      )
+    const dropped = and(
+      inSchool(account, materials),
+      eq(materials.topicId, sourceId),
+      inArray(materials.contentHash, targetHashes),
+    )
+    const originals = await db.select({ pathname: materials.originalPathname }).from(materials).where(dropped)
+    await db.delete(materials).where(dropped)
+    await deleteOriginals(originals.map((row) => row.pathname))
   }
 
   await db

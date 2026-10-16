@@ -1,6 +1,8 @@
 'use client'
 
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
+import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { AI_QUESTION_TYPES, questionTypeLabel, type QuestionType } from '@testmaker/core/schema'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import {
@@ -54,13 +56,6 @@ export function GenerateSettingsForm({
   const countId = useId()
   const modeId = useId()
   const difficultyId = useId()
-
-  const toggleType = (type: QuestionType) => {
-    const types = value.types.includes(type)
-      ? value.types.filter((item) => item !== type)
-      : [...value.types, type]
-    if (types.length > 0) onChange({ ...value, types })
-  }
 
   return (
     <Collapsible data-testid="generate-settings-full">
@@ -125,40 +120,98 @@ export function GenerateSettingsForm({
           </div>
         </div>
 
-        <div>
-          <div className="flex items-center gap-3">
-            <Label>{t('generation:generateDialog.types')}</Label>
-            {/* There are nine types; clicking them back one by one is needless work.
-                The opposite button is missing on purpose — generating with
-                no type makes no sense. */}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={disabled || value.types.length === AI_QUESTION_TYPES.length}
-              className="h-6 px-1.5 text-xs"
-              onClick={() => onChange({ ...value, types: [...AI_QUESTION_TYPES] })}
-            >
-              {t('generation:generateDialog.selectAll')}
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {AI_QUESTION_TYPES.map((type) => (
-              <label key={type} className="flex items-center gap-1.5 text-sm text-fg-soft">
-                <Checkbox
-                  checked={value.types.includes(type)}
-                  disabled={disabled}
-                  onCheckedChange={() => toggleType(type)}
-                />
-                {questionTypeLabel(type)}
-              </label>
-            ))}
-          </div>
-        </div>
+        <QuestionTypesField
+          value={value.types}
+          onChange={(types) => onChange({ ...value, types })}
+          disabled={disabled}
+        />
         {note}
       </CollapsibleContent>
     </Collapsible>
   )
+}
+
+/**
+ * Which question types to generate — in a topic and in bulk generation alike.
+ * An empty choice is allowed while clicking, but explained right here and the
+ * caller disables generation (`types.length === 0`); silently refusing to
+ * untick the last box looked like a broken checkbox.
+ */
+export function QuestionTypesField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: QuestionType[]
+  onChange: (next: QuestionType[]) => void
+  disabled?: boolean
+}) {
+  const errorId = useId()
+  const empty = value.length === 0
+  // Kept in `AI_QUESTION_TYPES` order — generation schedules types in that order (`distributeTypes`).
+  const toggle = (type: QuestionType) =>
+    onChange(AI_QUESTION_TYPES.filter((item) => (item === type ? !value.includes(item) : value.includes(item))))
+
+  return (
+    <fieldset aria-describedby={empty ? errorId : undefined} aria-invalid={empty || undefined}>
+      <legend className="ui-label mb-2">{t('generation:generateDialog.types')}</legend>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {AI_QUESTION_TYPES.map((type) => (
+          <label key={type} className="flex items-center gap-1.5 text-sm text-fg-soft">
+            <Checkbox checked={value.includes(type)} disabled={disabled} onCheckedChange={() => toggle(type)} />
+            {questionTypeLabel(type)}
+          </label>
+        ))}
+        {/* There are nine types; clicking them back one by one is needless work. */}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={disabled || value.length === AI_QUESTION_TYPES.length}
+          className="h-6 px-1.5 text-xs"
+          onClick={() => onChange([...AI_QUESTION_TYPES])}
+        >
+          {t('generation:generateDialog.selectAll')}
+        </Button>
+      </div>
+      {empty ? (
+        <p id={errorId} className="mt-1.5 text-sm text-danger" data-testid="generate-types-error">
+          {t('generation:generateDialog.typesRequired')}
+        </p>
+      ) : null}
+    </fieldset>
+  )
+}
+
+/**
+ * The teacher's last choice of question types, the same in every topic and in
+ * bulk generation, remembered in the browser (zustand `persist`, like the
+ * question cart). Unknown types from an older version are ignored; when
+ * nothing usable is stored — or storage is unavailable — all types are used.
+ * An empty choice is never stored: it is not a valid choice to come back to.
+ */
+const useTypesStore = create<{ types: QuestionType[]; setTypes: (types: QuestionType[]) => void }>()(
+  persist((set) => ({ types: [...AI_QUESTION_TYPES], setTypes: (types) => set({ types }) }), {
+    name: 'testmaker:typy-otazek',
+    storage: createJSONStorage(() => localStorage),
+    partialize: (store) => (store.types.length > 0 ? { types: store.types } : {}),
+    merge: (stored, current) => {
+      const saved = (stored as { types?: unknown } | undefined)?.types
+      const known = Array.isArray(saved) ? AI_QUESTION_TYPES.filter((type) => saved.includes(type)) : []
+      return { ...current, types: known.length > 0 ? known : current.types }
+    },
+    // The server and the first browser pass render all types; the stored choice comes right after.
+    skipHydration: true,
+  }),
+)
+
+export function useRememberedTypes(): [QuestionType[], (types: QuestionType[]) => void] {
+  useEffect(() => {
+    void useTypesStore.persist.rehydrate()
+  }, [])
+  const types = useTypesStore((store) => store.types)
+  const setTypes = useTypesStore((store) => store.setTypes)
+  return [types, setTypes]
 }
 
 /**
@@ -194,11 +247,10 @@ export function useGenerateSettings(initial: GenerateSettings = DEFAULT_SETTINGS
 }
 
 /**
- * Generation settings right in the topic: just count and difficulty. Type
- * selection and the "Doplnit na celkový počet" mode are deliberately missing —
- * in a topic it always generates all types the model can attempt and always
- * adds new questions. Those options suit bulk generation (`GenerateSettingsForm`
- * above), not a single topic where they'd only slow things down.
+ * Generation settings right in the topic: count and difficulty; question types
+ * sit in their own row (`QuestionTypesField`). The "Doplnit na celkový počet"
+ * mode is deliberately missing — a topic always adds new questions; topping up
+ * suits bulk generation (`GenerateSettingsForm` above).
  */
 export interface SimpleGenerateSettings {
   count: number

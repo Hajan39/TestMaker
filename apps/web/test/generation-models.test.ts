@@ -45,7 +45,7 @@ const twoModels: typeof generateQuestions = async (_request, options) => {
     questions: [...first, ...second],
     rejected: [],
     chunks: 1,
-    failedCalls: [],
+    failedCalls: [], similar: 0,
     models: ['google:gemini-flash-latest', 'google:gemini-flash-lite-latest'],
   }
 }
@@ -108,7 +108,7 @@ describe('school rules are passed to batch generation', () => {
       generate: async (request, options) => {
         schoolRules = request.schoolRules
         await options?.onBatch?.([question(1), question(2)], { model: 'google:gemini-flash-latest' })
-        return { questions: [question(1), question(2)], rejected: [], chunks: 1, failedCalls: [], models: ['google:gemini-flash-latest'] }
+        return { questions: [question(1), question(2)], rejected: [], chunks: 1, failedCalls: [], similar: 0, models: ['google:gemini-flash-latest'] }
       },
     })
     expect(schoolRules).toEqual(['Piš kratší zadání.'])

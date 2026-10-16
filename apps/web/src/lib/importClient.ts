@@ -2,7 +2,9 @@
 
 import type { ExtractedMaterial } from '@testmaker/core/schema'
 import { isImageFile, needsDom, processedFromText, processFile, skipReason } from '@testmaker/core/extract'
+import { upload } from '@vercel/blob/client'
 import { imageToText } from '@/lib/imageText'
+import { MAX_ORIGINAL_BYTES } from '@/lib/materials'
 import type { ExtractResponse } from '@/workers/extract.worker'
 import { jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
@@ -151,22 +153,40 @@ export interface UploadOptions {
   topicId?: string
   batchSize?: number
   onProgress?: (done: number, total: number) => void
+  /**
+   * Original files by `relativePath`. Each newly saved material gets its file
+   * uploaded to Blob storage when the server offers a place for it.
+   */
+  files?: Map<string, File>
 }
 
-/** Sends materials in batches; returns a summary. */
-export async function uploadMaterials(
-  items: ExtractedMaterial[],
-  options: UploadOptions = {},
-): Promise<{ imported: number; duplicates: number }> {
-  const { topicId, batchSize = 10, onProgress } = options
+export interface UploadSummary {
+  imported: number
+  duplicates: number
+  /** Materials saved with their text whose original could not be stored. */
+  originalsFailed: number
+}
+
+/**
+ * Sends materials in batches; returns a summary. The text is saved first and
+ * the original uploaded only afterwards — a failed original upload costs the
+ * download, never the material itself.
+ */
+export async function uploadMaterials(items: ExtractedMaterial[], options: UploadOptions = {}): Promise<UploadSummary> {
+  const { topicId, batchSize = 10, onProgress, files } = options
   let imported = 0
   let duplicates = 0
+  let originalsFailed = 0
 
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize)
     // The server sends a readable explanation (invalid data, topic not found);
     // a raw response body (say an HTML error page) would tell the teacher nothing.
-    const result = await requestJson<{ imported: number; duplicates: number }>(
+    const result = await requestJson<{
+      imported: number
+      duplicates: number
+      created: { id: string; relativePath: string; originalPathname: string | null }[]
+    }>(
       '/api/materials',
       jsonBody('POST', { materials: batch, ...(topicId ? { topicId } : {}) }),
       imported + duplicates > 0
@@ -175,10 +195,36 @@ export async function uploadMaterials(
     )
     imported += result.imported ?? 0
     duplicates += result.duplicates ?? 0
+
+    for (const created of result.created ?? []) {
+      const file = files?.get(created.relativePath)
+      // No pathname = the server keeps no originals (Blob not configured).
+      if (!created.originalPathname || !file || file.size > MAX_ORIGINAL_BYTES) continue
+      const contentType = batch.find((item) => item.relativePath === created.relativePath)?.mimeType
+      try {
+        await uploadOriginal(created.id, created.originalPathname, file, contentType || 'application/octet-stream')
+      } catch (error) {
+        console.error('Original upload failed:', created.relativePath, error)
+        originalsFailed += 1
+      }
+    }
     onProgress?.(Math.min(i + batchSize, items.length), items.length)
   }
 
-  return { imported, duplicates }
+  return { imported, duplicates, originalsFailed }
+}
+
+/** Uploads one original straight to Blob storage and links it to its material. */
+async function uploadOriginal(materialId: string, pathname: string, file: File, contentType: string): Promise<void> {
+  const route = `/api/materials/${encodeURIComponent(materialId)}/original`
+  await upload(pathname, file, {
+    access: 'private',
+    handleUploadUrl: route,
+    contentType,
+    // Parts upload in parallel and retry on their own — worth it for big presentations.
+    multipart: file.size > 8 * 1024 * 1024,
+  })
+  await requestJson(route, { method: 'PUT' }, t('library:materialPreview.originalRefused'))
 }
 
 /** Where to continue after import: straight into the topic, or into its grade. */

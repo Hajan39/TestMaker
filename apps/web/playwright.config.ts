@@ -52,6 +52,8 @@ export default defineConfig({
       // this key it would not go through anyway.
       AI_MODELS: 'google:e2e',
       GOOGLE_GENERATIVE_AI_API_KEY: 'e2e',
+      // Originals stay off: a token from `.env.local` would upload test files to the real Blob store.
+      BLOB_READ_WRITE_TOKEN: '',
       // Own build folder: otherwise the server won't start next to `pnpm dev`.
       NEXT_DIST_DIR: '.next-e2e',
     },

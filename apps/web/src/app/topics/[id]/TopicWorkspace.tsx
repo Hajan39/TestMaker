@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AI_QUESTION_TYPES, type Question } from '@testmaker/core/schema'
+import type { Question } from '@testmaker/core/schema'
+import { AI_SETTINGS } from '@testmaker/core/ai/settings'
 import { Button, Card, EmptyState, StatRow, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 import {
   AiUnavailable,
   DEFAULT_SIMPLE_SETTINGS,
   ProgressLine,
+  QuestionTypesField,
   SimpleGenerateSettingsForm,
+  useRememberedTypes,
   type SimpleGenerateSettings,
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
@@ -26,6 +29,7 @@ import {
 import { TopicQuestions, type TestUsage, type TopicQuestionsHandle, type VariantLink } from '@/components/TopicQuestions'
 import { generateQuestionsStream } from '@/lib/generateClient'
 import { errorMessage } from '@/lib/requestJson'
+import { materialExhausted } from '@/lib/queueSummary'
 import { isUsableMaterial, MIN_GENERATE_CHARS } from '@/lib/materials'
 import { useCanEdit, useCanManage } from '@/components/Permissions'
 
@@ -74,6 +78,7 @@ export function TopicWorkspace({
   const topicManage = useTopicManage(topic.id)
   const router = useRouter()
   const [settings, setSettings] = useState<SimpleGenerateSettings>(DEFAULT_SIMPLE_SETTINGS)
+  const [types, setTypes] = useRememberedTypes()
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -84,7 +89,13 @@ export function TopicWorkspace({
    */
   const [fresh, setFresh] = useState<Question[]>([])
   /** A finished run: the summary stays on screen even after the toast disappears. */
-  const [outcome, setOutcome] = useState<{ text: string; created: number; rejected: number } | null>(null)
+  const [outcome, setOutcome] = useState<{
+    text: string
+    created: number
+    rejected: number
+    similar: number
+    exhausted: boolean
+  } | null>(null)
   const [doneCount, setDoneCount] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const materialsStripRef = useRef<MaterialsStripHandle>(null)
@@ -126,6 +137,12 @@ export function TopicWorkspace({
   // The same threshold generation enforces on the server (`MIN_GENERATE_CHARS`) —
   // the button is disabled before the teacher would wait for an error message.
   const tooLittleText = usableCharCount < MIN_GENERATE_CHARS
+  // Rough capacity of the materials (`questionsPer1000Chars`): beyond it new
+  // questions mostly reword the existing ones, so the teacher is told before
+  // she waits for a run that ends half empty. A thin topic already has its own
+  // warning (`lowContent`) saying the same.
+  const capacity = (usableCharCount / 1000) * AI_SETTINGS.questionsPer1000Chars
+  const nearlyExhausted = !lowContent && questionCount > 0 && questionCount + settings.count > capacity
   // A topic with no content at all (no material, no question) gets a single
   // prompt instead of the generation card and materials strip — both would
   // just show their own empty states side by side.
@@ -165,11 +182,10 @@ export function TopicWorkspace({
     }
 
     try {
-      // Types and mode are not chosen in a topic — everything the model can do
-      // is always sent, and new questions are always added (never „doplnit na
-      // celkový počet"); that is for bulk generation, not for a single topic.
+      // New questions are always added in a topic (never „doplnit na celkový
+      // počet"); that is for bulk generation, not for a single topic.
       await generateQuestionsStream(
-        { topicId: topic.id, count: settings.count, difficulty: settings.difficulty, types: [...AI_QUESTION_TYPES] },
+        { topicId: topic.id, count: settings.count, difficulty: settings.difficulty, types },
         (event) => {
           started = true
           if (event.type === 'done' || event.type === 'error') finished = true
@@ -186,7 +202,13 @@ export function TopicWorkspace({
             // The detailed summary (what was discarded, how often the model
             // failed) has one place — a lasting line in the card. The toast only
             // says it is done, so the same sentence isn't read twice side by side.
-            setOutcome({ text: summarizeRun(event), created: event.created, rejected: event.rejected })
+            setOutcome({
+              text: summarizeRun(event),
+              created: event.created,
+              rejected: event.rejected,
+              similar: event.similar ?? 0,
+              exhausted: materialExhausted(event),
+            })
             toast.success(
               event.created > 0
                 ? t('generation:topicGeneration.doneToast', { count: event.created })
@@ -303,7 +325,7 @@ export function TopicWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={lowContent ? 'outline' : 'default'}
-              disabled={generating || usable.length === 0 || tooLittleText || materialsUploading}
+              disabled={generating || usable.length === 0 || tooLittleText || materialsUploading || types.length === 0}
               onClick={() => void generate()}
             >
               {t('generation:topicGeneration.generate')}
@@ -330,6 +352,14 @@ export function TopicWorkspace({
             </div>
           </div>
 
+          <QuestionTypesField value={types} onChange={setTypes} disabled={generating} />
+
+          {nearlyExhausted ? (
+            <p className="text-sm text-fg-muted" data-testid="exhausted-topic-warning">
+              {t('generation:topicGeneration.nearlyExhausted')}
+            </p>
+          ) : null}
+
           {lowContent ? (
             <p className="text-sm text-fg-muted" data-testid="thin-topic-warning">
               {t('generation:topicGeneration.lowContent')}
@@ -350,6 +380,8 @@ export function TopicWorkspace({
               data-testid="generation-outcome"
               data-created={outcome.created}
               data-rejected={outcome.rejected}
+              data-similar={outcome.similar}
+              data-exhausted={outcome.exhausted}
             >
               {outcome.text}
             </p>
@@ -404,15 +436,24 @@ export function TopicWorkspace({
  */
 function summarizeRun(event: {
   created: number
+  requested?: number
   rejected: number
+  similar?: number
   failedCalls: number
   sources: number
   models?: string[]
 }): string {
-  if (event.created === 0) {
+  // Many questions dropped as repeats: the materials have little new left, and
+  // „try again" would only produce more repeats — the advice is to add materials.
+  const exhausted = materialExhausted(event)
+  if (event.created === 0 && !exhausted) {
     return t('generation:topicGeneration.summaryNone')
   }
-  const parts = [t('generation:topicGeneration.summaryCreated', { questions: t('library:count.questions', { count: event.created }) })]
+  const parts = [
+    exhausted
+      ? t('generation:topicGeneration.summaryExhausted', { created: event.created, count: event.requested ?? 0 })
+      : t('generation:topicGeneration.summaryCreated', { questions: t('library:count.questions', { count: event.created }) }),
+  ]
   if (event.rejected > 0) {
     // The sentence must not depend on the count: „1 otázka — byly neúplné“ did not agree.
     parts.push(t('generation:topicGeneration.summaryRejected', { questions: t('library:count.questions', { count: event.rejected }) }))

@@ -16,6 +16,7 @@ import { buildSystemPrompt, buildUserPrompt, type GenerationRequest } from './pr
 import { readAiLadder, type AiConfig } from './provider'
 import { referencesSource } from './sourceReference'
 import { AI_SETTINGS } from './settings'
+import { contentWords, wordSimilarity } from '../extract/similarity'
 
 const responseSchema = z.object({
   questions: z.array(aiQuestionContentSchema).min(1),
@@ -28,6 +29,12 @@ export interface GenerationResult {
   chunks: number
   /** Calls from which nothing at all could be used. */
   failedCalls: { reason: string }[]
+  /**
+   * Questions dropped as repeats of one already in the topic or in this run
+   * (`duplicateCheck`). Counted apart from `rejected`: many of them mean the
+   * material has run out of new things to ask, not that the model failed.
+   */
+  similar: number
   /**
    * Models that actually answered in this run, in the order they were taken
    * from the ladder (`provider:model`). When there are several, questions
@@ -360,6 +367,7 @@ export async function generateQuestions(
   const rejected: GenerationResult['rejected'] = []
   const failedCalls: GenerationResult['failedCalls'] = []
   const isDuplicate = duplicateCheck(request.avoid ?? [])
+  let similar = 0
 
   for (const [index, chunk] of chunks.entries()) {
     const remaining = request.count - accepted.length
@@ -375,7 +383,7 @@ export async function generateQuestions(
         count: batchSize,
         types: batchTypes.length > 0 ? batchTypes : request.types,
         // Newly created questions go first so trimming the list does not lose them.
-        avoid: [...accepted.map(promptOf), ...(request.avoid ?? [])],
+        avoid: [...accepted.map(questionSummary), ...(request.avoid ?? [])],
       })
 
       let produced: QuestionContent[] = []
@@ -409,7 +417,10 @@ export async function generateQuestions(
           continue
         }
         const normalized = withDefaultPoints(normalizeGeneratedQuestion(question))
-        if (isDuplicate(normalized)) continue
+        if (isDuplicate(normalized)) {
+          similar += 1
+          continue
+        }
         batch.push(normalized)
       }
 
@@ -425,6 +436,7 @@ export async function generateQuestions(
     rejected,
     chunks: chunks.length,
     failedCalls,
+    similar,
     models: ladder.used,
   }
 }
@@ -481,20 +493,95 @@ export function questionKey(question: QuestionContent): string {
   return dedupeKey(prompt)
 }
 
+/** Separates the prompt from the answer in `questionSummary`. */
+export const SUMMARY_ANSWER_SEPARATOR = ' → '
+
 /**
- * Duplicate check for one run (generation or file upload). Questions from the
- * run are compared by their full fingerprint (`questionKey`). Existing topic
- * questions are available only as prompts (`existing`), so the prompt is
- * compared with them. Returns `true` for a duplicate; otherwise remembers
- * the question.
+ * A question in one line: what it asks and its correct answer — for the
+ * model's list of questions already in the topic, for the Claude Code file
+ * and for recognising repeats (`duplicateCheck`). Without the answer two
+ * different generic prompts ("Doplň…", "Vyber…") look the same and a reworded
+ * question on the same fact looks different. Distractors are left out: they
+ * are not what the question asks about. Trimmed to `avoidItemMaxLength`, so
+ * the stored, listed and compared text is the same everywhere.
+ */
+export function questionSummary(question: QuestionContent): string {
+  const p = question.payload as Record<string, unknown>
+  const prompt = typeof p.prompt === 'string' ? p.prompt.trim() : ''
+  const withAnswer = (answer: string) => (prompt ? `${prompt}${SUMMARY_ANSWER_SEPARATOR}${answer}` : answer)
+  let text: string
+  switch (question.type) {
+    case 'open':
+    case 'draw':
+    case 'short_answer':
+      text = withAnswer(question.payload.answer)
+      break
+    case 'single_choice':
+      text = withAnswer(question.payload.options[question.payload.correctIndex] ?? '')
+      break
+    case 'multi_choice':
+      text = withAnswer(question.payload.correctIndices.map((i) => question.payload.options[i] ?? '').join(', '))
+      break
+    case 'true_false':
+      // The generic prompt says nothing; the statements and their truth are the content.
+      text = question.payload.statements.map((s) => `${s.isTrue ? '✓' : '✗'} ${s.text}`).join('; ')
+      break
+    case 'fill_blank': {
+      const blanks = [...question.payload.blanks]
+      text = question.payload.text.replace(/___/g, () => blanks.shift() ?? '___')
+      break
+    }
+    case 'matching':
+      text = question.payload.pairs
+        .map(([l, r]) => `${question.payload.left[l] ?? ''} = ${question.payload.right[r] ?? ''}`)
+        .join('; ')
+      break
+    case 'ordering':
+      text = withAnswer(question.payload.items.join(', '))
+      break
+    case 'table_fill':
+      text = withAnswer(question.payload.answers.join(', '))
+      break
+    case 'label_image':
+      text = withAnswer(question.payload.labels.join(', '))
+      break
+  }
+  text = text.replace(/\s+/g, ' ').trim()
+  return text.length > AI_SETTINGS.avoidItemMaxLength ? `${text.slice(0, AI_SETTINGS.avoidItemMaxLength)}…` : text
+}
+
+/**
+ * Is a question (its `contentWords`) a repeat of another? Word overlap from
+ * `similarQuestionThreshold` on; with very few words only a full match counts
+ * (see `similarMinWords`).
+ */
+function isSimilar(a: string[], b: string[]): boolean {
+  const similarity = wordSimilarity(a, b)
+  if (Math.min(a.length, b.length) < AI_SETTINGS.similarMinWords) return similarity === 1
+  return similarity >= AI_SETTINGS.similarQuestionThreshold
+}
+
+/**
+ * Duplicate check for one run (generation or file upload). A question is a
+ * duplicate when it is the same as one earlier in the run (`questionKey`),
+ * when its prompt is the prompt of an existing question, or when it asks
+ * about the same thing as an existing or earlier question in other words
+ * (word overlap of `questionSummary`, see `similarQuestionThreshold`).
+ * `existing` are `questionSummary` lines of the topic's questions — older
+ * callers passing bare prompts still work, a prompt is a summary without an
+ * answer. Returns `true` for a duplicate; otherwise remembers the question.
  */
 export function duplicateCheck(existing: string[]): (question: QuestionContent) => boolean {
-  const existingKeys = new Set(existing.map(dedupeKey))
+  const existingKeys = new Set(existing.map((item) => dedupeKey(item.split(SUMMARY_ANSWER_SEPARATOR)[0] ?? item)))
+  const known = existing.map(contentWords)
   const seen = new Set<string>()
   return (question) => {
     const key = questionKey(question)
+    const words = contentWords(questionSummary(question))
     if (seen.has(key) || existingKeys.has(dedupeKey(promptOf(question)))) return true
+    if (known.some((other) => isSimilar(words, other))) return true
     seen.add(key)
+    known.push(words)
     return false
   }
 }

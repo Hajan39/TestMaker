@@ -85,6 +85,8 @@ export function QueueScreen({
     let created = 0
     let done = 0
     let failed = 0
+    let requested = 0
+    let similar = 0
     try {
       await drainQueue(
         (step) => {
@@ -93,6 +95,8 @@ export function QueueScreen({
           if (!step.processed) return
           done += 1
           created += step.created ?? 0
+          requested += step.requested ?? 0
+          similar += step.similar ?? 0
           if (step.error) failed += 1
           void refresh()
         },
@@ -100,7 +104,7 @@ export function QueueScreen({
       )
       // Per-topic errors used to be dropped and a green "Hotovo" showed after
       // seven failed topics. The result now decides the tone.
-      const summary = runSummary({ processed: done, errors: failed, questions: created })
+      const summary = runSummary({ processed: done, errors: failed, questions: created, requested, similar })
       const message =
         summary.tone === 'error' ? toast.error : summary.tone === 'warning' ? toast.warning : toast.success
       message(summary.text, {

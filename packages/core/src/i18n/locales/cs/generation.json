@@ -8,6 +8,13 @@
     "noteLabel": "Napiš poznámku a pak vyber důvod",
     "notePlaceholder": "Co konkrétně přepsat…"
   },
+  "convert": {
+    "menu": "Převést na jiný typ",
+    "busy": "Převádím…",
+    "done": "Otázka převedena na typ „{{type}}“.",
+    "failed": "Otázku se nepodařilo převést.",
+    "sameType": "Otázka už tento typ má — vyber jiný."
+  },
   "variant": {
     "easier": "Lehčí verze",
     "harder": "Těžší verze",
@@ -42,7 +49,8 @@
     "empty": "Fronta byla prázdná, nic se negenerovalo.",
     "allFailed": "Nepovedlo se ani jedno téma.",
     "unfinished": "Nedokončeno: {{topics}}.",
-    "done": "Hotovo: {{questions}} z {{topics}}."
+    "done": "Hotovo: {{questions}} z {{topics}}.",
+    "exhausted": "Část otázek nevznikla — opakovaly by to, co už v tématech je. Pro další otázky přidej materiály."
   },
   "queue": {
     "loadFailed": "Přehled generování se nepodařilo načíst.",
@@ -152,6 +160,7 @@
     "hardPlural": "Těžké",
     "types": "Typy otázek",
     "selectAll": "Vybrat vše",
+    "typesRequired": "Vyber aspoň jeden typ otázek.",
     "notConfigured": "Generování není nastavené."
   },
   "topicGeneration": {
@@ -177,7 +186,11 @@
     "summaryCreated": "Vytvořeno {{questions}}.",
     "summaryRejected": "Zahozeno: {{questions}} — neúplné nebo si odporovaly.",
     "summaryFailedCalls": "{{count}}× model odpověděl něčím, co se nedalo použít.",
-    "summaryMixedModels": "Otázky psalo víc různých modelů, kvalita se může lišit."
+    "summaryMixedModels": "Otázky psalo víc různých modelů, kvalita se může lišit.",
+    "summaryExhausted_one": "Vzniklo jen {{created}} z {{count}} otázky — ostatní by opakovaly to, co už v tématu je. Pro další otázky přidej materiály.",
+    "summaryExhausted_few": "Vzniklo jen {{created}} z {{count}} otázek — ostatní by opakovaly to, co už v tématu je. Pro další otázky přidej materiály.",
+    "summaryExhausted_other": "Vzniklo jen {{created}} z {{count}} otázek — ostatní by opakovaly to, co už v tématu je. Pro další otázky přidej materiály.",
+    "nearlyExhausted": "Z těchto materiálů už vzniklo hodně otázek, další se budou spíš opakovat. Přidej materiály, nebo jich vygeneruj méně."
   },
   "generationStatus": {
     "running": "Generuji otázky",

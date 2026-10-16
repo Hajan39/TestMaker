@@ -18,6 +18,7 @@ import { t } from '@testmaker/core/i18n'
 import {
   DEFAULT_SETTINGS,
   GenerateSettingsForm,
+  useRememberedTypes,
   type GenerateSettings,
 } from '@/components/GenerateDialog'
 import { announceGeneration } from '@/components/GenerationStatus'
@@ -48,6 +49,8 @@ export function BulkGenerate({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<GenerateSettings>(DEFAULT_SETTINGS)
+  // Types are the teacher's remembered choice, shared with generation in a topic.
+  const [types, setTypes] = useRememberedTypes()
   const [skipWithQuestions, setSkipWithQuestions] = useState(true)
   const [status, setStatus] = useState<string | null>(null)
   const [errors, setErrors] = useState<string[]>([])
@@ -65,7 +68,7 @@ export function BulkGenerate({
       // previously the count was read from the error response, reporting "Ve frontě undefined témat".
       const queued = await requestJson<{ enqueued: number; skipped: number }>(
         '/api/jobs',
-        jsonBody('POST', { ...scope, ...settings, skipWithQuestions }),
+        jsonBody('POST', { ...scope, ...settings, types, skipWithQuestions }),
         t('generation:bulkGenerate.enqueueFailed'),
       )
       const enqueued = queued.enqueued ?? 0
@@ -82,6 +85,8 @@ export function BulkGenerate({
       let created = 0
       let done = 0
       let failed = 0
+      let requested = 0
+      let similar = 0
       setStatus(t('generation:bulkGenerate.enqueued', { topics: t('library:count.topics', { count: enqueued }) }))
       // So the toolbar knows about the work in progress even when the panel is closed.
       announceGeneration()
@@ -92,6 +97,8 @@ export function BulkGenerate({
           if (!step.processed) return
           done += 1
           created += step.created ?? 0
+          requested += step.requested ?? 0
+          similar += step.similar ?? 0
           if (step.error) {
             failed += 1
             setErrors((current) => [...current, step.error as string])
@@ -109,7 +116,7 @@ export function BulkGenerate({
 
       // The same sentence as on the generation overview, from the same function —
       // so one run isn't reported two different ways in two places.
-      setStatus(runSummary({ processed: done, errors: failed, questions: created }).text)
+      setStatus(runSummary({ processed: done, errors: failed, questions: created, requested, similar }).text)
       router.refresh()
     },
     onError: (error) => {
@@ -150,7 +157,14 @@ export function BulkGenerate({
                 {' '}{t('generation:bulkGenerate.overviewAfter')}
               </p>
 
-              <GenerateSettingsForm value={settings} onChange={setSettings} disabled={running} />
+              <GenerateSettingsForm
+                value={{ ...settings, types }}
+                onChange={(next) => {
+                  setSettings(next)
+                  setTypes(next.types)
+                }}
+                disabled={running}
+              />
 
               <label className="flex items-center gap-2 text-sm text-fg-soft">
                 <Checkbox
@@ -163,7 +177,12 @@ export function BulkGenerate({
 
               <div className="flex flex-wrap items-center gap-2">
                 {scopes.map((scope) => (
-                  <Button key={scope.label} size="sm" disabled={running} onClick={() => startMutation.mutate(scope)}>
+                  <Button
+                    key={scope.label}
+                    size="sm"
+                    disabled={running || types.length === 0}
+                    onClick={() => startMutation.mutate(scope)}
+                  >
                     {scope.label}
                   </Button>
                 ))}

@@ -1,10 +1,12 @@
 import 'server-only'
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
-import { generateQuestions, type AiCallListener } from '@testmaker/core/ai'
+import { generateQuestions, questionSummary, type AiCallListener } from '@testmaker/core/ai'
 import {
   AI_QUESTION_TYPES,
   REGENERATE_REASONS,
+  type AiQuestionType,
   type Question,
+  type QuestionContent,
   type QuestionType,
   type RegenerateReason,
 } from '@testmaker/core/schema'
@@ -71,7 +73,14 @@ export async function resolveCount(
 
 export interface GenerateOutcome {
   created: number
+  /** How many questions the run aimed for (after `resolveCount`). */
+  requested: number
   rejected: number
+  /**
+   * Dropped as repeats of questions already in the topic. Many of them mean
+   * the materials have little new left to ask about.
+   */
+  similar: number
   /** Calls that yielded nothing usable. */
   failedCalls: number
   topicId: string
@@ -209,7 +218,7 @@ export async function generateForTopic(
 ): Promise<GenerateOutcome> {
   const wanted = await resolveCount(scope, topicId, params)
   if (wanted <= 0) {
-    return { created: 0, rejected: 0, failedCalls: 0, topicId, sources: 0, models: [] }
+    return { created: 0, requested: 0, rejected: 0, similar: 0, failedCalls: 0, topicId, sources: 0, models: [] }
   }
 
   const source = await loadTopicSource(scope, topicId)
@@ -271,7 +280,9 @@ export async function generateForTopic(
 
   return {
     created,
+    requested: wanted,
     rejected: result.rejected.length,
+    similar: result.similar,
     failedCalls: result.failedCalls.length,
     topicId,
     sources: source.sources,
@@ -533,5 +544,100 @@ export async function createVariant(
     .where(and(inSchool(scope, questions), eq(questions.id, variantId!)))
     .limit(1)
   if (!row) throw new Error(t('generation:generation.variantSaveFailed'))
+  return toQuestion(row)
+}
+
+/** The question in one line for the prompt — as `loadAvoidPrompts` writes it, so it can be found in that list. */
+function summaryOf(row: QuestionRow): string {
+  try {
+    return questionSummary(row as unknown as QuestionContent)
+  } catch {
+    return questionPrompt(row)
+  }
+}
+
+/**
+ * Converts a question to another type via the model: the same fact and the
+ * same correct answer in a different form (an open question becomes a
+ * choice with the original answer as the correct option, …). Like
+ * `regenerateQuestion` the replacement is inserted first and only then is
+ * the original rejected — it lands in "Smazané" and can be restored. Tests
+ * that use the original keep their frozen snapshot, as with regeneration.
+ *
+ * The original is left out of the "avoid" list: it is being replaced, and
+ * the conversion asks about the same thing on purpose, so the duplicate
+ * filter would always throw it away. The other questions of the topic stay.
+ * Difficulty and points are the original's — it is the same knowledge.
+ *
+ * `generate` can be injected in tests; the app never passes it.
+ */
+export async function convertQuestion(
+  scope: Scope,
+  questionId: string,
+  targetType: AiQuestionType,
+  options: { signal?: AbortSignal; generate?: typeof generateQuestions } = {},
+): Promise<Question> {
+  const { original, topicId, source, avoid, schoolRules } = await loadRegenerationContext(scope, questionId)
+  if (original.type === targetType) throw new Error(t('generation:convert.sameType'))
+
+  const originalSummary = summaryOf(original)
+  const ownIndex = avoid.indexOf(originalSummary)
+  if (ownIndex !== -1) avoid.splice(ownIndex, 1)
+
+  const difficulty = (original.difficulty as 1 | 2 | 3) ?? 2
+  const generate = options.generate ?? generateQuestions
+  const result = await generate(
+    {
+      text: source.text,
+      topicName: source.topicName,
+      subjectName: source.subjectName,
+      gradeName: source.gradeName || null,
+      count: 1,
+      types: [targetType],
+      difficulty,
+      avoid,
+      schoolRules,
+      ...(original.sourceQuote?.trim() ? { focus: original.sourceQuote } : {}),
+      conversionOf: { originalType: original.type, originalSummary },
+    },
+    { signal: options.signal, onCall: callRecorder(scope, 'otazky') },
+  )
+
+  const generated = result.questions[0]
+  if (!generated || generated.type !== targetType) throw new Error(t('generation:generation.noReplacement'))
+  const replacement = { ...generated, difficulty, points: original.points }
+
+  const [replacementId] = await insertQuestions(scope, [replacement], { topicId, source: 'ai' })
+  const usedModel = result.models[0]
+  if (replacementId && usedModel) {
+    await db.update(questions).set({ model: usedModel }).where(eq(questions.id, replacementId))
+  }
+  await db
+    .update(questions)
+    .set({ status: 'rejected', reviewedBy: scope.userId, reviewedAt: new Date().toISOString() })
+    .where(and(inSchool(scope, questions), eq(questions.id, questionId)))
+
+  // Same rule as for regeneration (only AI originals). The reason enum has
+  // no "converted" value and a new one would need a migration, so the reason
+  // stays empty and the note says what happened (internal, not shown in the UI).
+  if (original.source === 'ai') {
+    await db.insert(questionFeedback).values({
+      id: newId(),
+      schoolId: scope.schoolId,
+      questionId,
+      replacementId,
+      model: original.model ?? null,
+      reason: null,
+      note: `converted to ${targetType}`,
+      createdBy: scope.userId,
+    })
+  }
+
+  const [row] = await db
+    .select()
+    .from(questions)
+    .where(and(inSchool(scope, questions), eq(questions.id, replacementId!)))
+    .limit(1)
+  if (!row) throw new Error(t('generation:generation.replacementSaveFailed'))
   return toQuestion(row)
 }

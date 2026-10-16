@@ -15,6 +15,9 @@ export const queryKeys = {
   library: {
     search: (needle: string) => ['library', 'search', needle] as const,
   },
+  materials: {
+    text: (id: string) => ['materials', 'text', id] as const,
+  },
 }
 
 export type JobCounts = Pick<QueueCounts, 'queued' | 'running' | 'error'> & { topicId?: string }
@@ -39,4 +42,14 @@ export async function fetchJobList(): Promise<JobList> {
   )
   const { jobs = [], ...counts } = data
   return { counts: counts as QueueCounts, jobs }
+}
+
+/** Extracted text of one material, for its preview. */
+export async function fetchMaterialText(id: string): Promise<string> {
+  const data = await requestJson<{ text: string }>(
+    `/api/materials/${encodeURIComponent(id)}/text`,
+    undefined,
+    t('library:materialPreview.loadFailed'),
+  )
+  return data.text ?? ''
 }

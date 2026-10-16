@@ -289,6 +289,13 @@ export const materials = sqliteTable(
     duplicateScore: real('duplicate_score'),
     /** The teacher manually excluded the material from generation — the text stays in the library. */
     excluded: integer('excluded', { mode: 'boolean' }).notNull().default(false),
+    /**
+     * Pathname of the original file in private Vercel Blob storage
+     * (`lib/originals.ts`); `null` for materials uploaded before originals were
+     * kept or without Blob configured. Its size and type are `sizeBytes` and
+     * `mimeType` — the same file, so they are not stored twice.
+     */
+    originalPathname: text('original_pathname'),
     createdAt: text('created_at').notNull().default(now),
   },
   (table) => [

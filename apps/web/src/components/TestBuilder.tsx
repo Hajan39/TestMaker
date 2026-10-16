@@ -809,7 +809,7 @@ export function TestBuilder({
 
       {questionDialog ? (
         <QuestionEditor
-          topicId=""
+          topicId={test?.topicId ?? ''}
           question={editedQuestion}
           title={editedQuestion ? t('worksheets:builder.editTask') : t('worksheets:builder.newTask')}
           onClose={() => setQuestionDialog(null)}

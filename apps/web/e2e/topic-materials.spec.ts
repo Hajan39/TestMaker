@@ -5,7 +5,8 @@ import JSZip from 'jszip'
  * The topic's materials strip: uploading files straight here (no detour via
  * `/import`), re-uploading the same file doesn't duplicate it, an unsupported
  * file ends up among the skipped, and the "Použít pro generování" toggle
- * changes the strip header count right away.
+ * changes the strip header count right away, and the preview shows the
+ * extracted text.
  *
  * The `nahled` role (no upload, toggle or delete) is in `role.spec.ts` — it
  * runs under the sign-in config this file doesn't have.
@@ -284,6 +285,35 @@ test.describe('topic materials strip', () => {
       })
       await expect(duplicateCheckbox).not.toBeChecked()
       await expect(duplicateCheckbox).toBeDisabled()
+    } finally {
+      await cleanup(page.request, topicId)
+    }
+  })
+
+  test('the preview shows the extracted text and downloads it as .txt', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    try {
+      await page.goto(`/topics/${topicId}`)
+      await expandStrip(page)
+
+      await page.getByRole('button', { name: 'Náhled: Úvodní materiál.txt' }).click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialog.getByTestId('material-preview-text')).toContainText(
+        'Úvodní materiál založený přes API, aby téma existovalo.',
+      )
+      await expect(dialog.getByTestId('material-preview-meta')).toContainText('znaků')
+
+      const download = page.waitForEvent('download')
+      await dialog.getByRole('button', { name: 'Stáhnout text' }).click()
+      const file = await download
+      expect(file.suggestedFilename()).toBe('Úvodní materiál.txt')
+      const saved = await file.createReadStream()
+      const chunks: Buffer[] = []
+      for await (const chunk of saved) chunks.push(chunk as Buffer)
+      expect(Buffer.concat(chunks).toString('utf8')).toContain('aby téma existovalo.')
+
+      // Without Blob storage (as in this run) no original is kept, so none is offered.
+      await expect(page.getByRole('link', { name: /Stáhnout originál/ })).toHaveCount(0)
     } finally {
       await cleanup(page.request, topicId)
     }

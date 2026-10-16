@@ -2,9 +2,9 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { aiNotConfiguredMessage, isAiConfigured } from '@testmaker/core/ai'
 import { t } from '@testmaker/core/i18n'
-import { REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
+import { AI_QUESTION_TYPES, REGENERATE_REASONS, type RegenerateReason } from '@testmaker/core/schema'
 import { db, questions } from '@/db'
-import { isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
+import { convertQuestion, isTopicBusy, regenerateQuestion, topicBusyMessage } from '@/lib/generation'
 import { inSchool, withScope } from '@/lib/user'
 import { reportAiFailure } from '@/lib/aiFailure'
 
@@ -17,6 +17,8 @@ const bodySchema = z.object({
   reason: z.enum(Object.keys(REGENERATE_REASONS) as [string, ...string[]]).optional(),
   /** The teacher's own note on top of the reason. */
   note: z.string().max(1000).optional(),
+  /** Convert to this type instead of regenerating the same type (same fact, same answer). */
+  targetType: z.enum(AI_QUESTION_TYPES).optional(),
 })
 
 /**
@@ -51,11 +53,14 @@ export async function POST(request: Request) {
   }
 
   const [original] = await db
-    .select({ id: questions.id, topicId: questions.topicId })
+    .select({ id: questions.id, topicId: questions.topicId, type: questions.type })
     .from(questions)
     .where(and(inSchool(account, questions), eq(questions.id, parsed.data.id)))
     .limit(1)
   if (!original) return Response.json({ error: t('generation:regenerateApi.questionGone') }, { status: 404 })
+  if (parsed.data.targetType === original.type) {
+    return Response.json({ error: t('generation:convert.sameType') }, { status: 400 })
+  }
   if (!original.topicId) {
     return Response.json(
       { error: t('generation:generation.questionWithoutTopic') },
@@ -72,11 +77,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const question = await regenerateQuestion(account, parsed.data.id, {
-      signal: request.signal,
-      reason: parsed.data.reason as RegenerateReason | undefined,
-      note: parsed.data.note,
-    })
+    const question = parsed.data.targetType
+      ? await convertQuestion(account, parsed.data.id, parsed.data.targetType, { signal: request.signal })
+      : await regenerateQuestion(account, parsed.data.id, {
+          signal: request.signal,
+          reason: parsed.data.reason as RegenerateReason | undefined,
+          note: parsed.data.note,
+        })
     return Response.json({ question })
   } catch (error) {
     // Provider messages are English and technical; translate them.

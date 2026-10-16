@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, grades, materials, questions, subjects, testItems, tests, topics } from '@/db'
 import { createLibraryItem, renameLibraryItem } from '@/lib/library'
+import { deleteOriginals } from '@/lib/originals'
 import { canManage, withScope, inSchool, writeAudit, type Scope } from '@/lib/user'
 import { t } from '@testmaker/core/i18n'
 
@@ -108,6 +109,8 @@ export async function DELETE(request: Request) {
       if (!impact) return Response.json({ error: t('library:libraryApi.itemGone') }, { status: 404 })
 
       // Database cascades take care of everything below; foreign keys are on.
+      // Blob storage is outside the database, so originals are listed first.
+      const originals = await originalsUnder(account, kind.data, id)
       if (kind.data === 'subject') {
         await db.delete(subjects).where(and(inSchool(account, subjects), eq(subjects.id, id)))
       }
@@ -117,6 +120,7 @@ export async function DELETE(request: Request) {
       if (kind.data === 'topic') {
         await db.delete(topics).where(and(inSchool(account, topics), eq(topics.id, id)))
       }
+      await deleteOriginals(originals)
 
       await writeAudit({
         schoolId: account.schoolId,
@@ -130,6 +134,19 @@ export async function DELETE(request: Request) {
     },
     { write: true },
   )
+}
+
+/** Stored originals of all materials under the item. */
+async function originalsUnder(scope: Scope, kind: Kind, id: string): Promise<(string | null)[]> {
+  const under =
+    kind === 'subject' ? eq(grades.subjectId, id) : kind === 'grade' ? eq(topics.gradeId, id) : eq(topics.id, id)
+  const rows = await db
+    .select({ pathname: materials.originalPathname })
+    .from(materials)
+    .innerJoin(topics, eq(topics.id, materials.topicId))
+    .innerJoin(grades, eq(grades.id, topics.gradeId))
+    .where(and(inSchool(scope, materials), isNotNull(materials.originalPathname), under))
+  return rows.map((row) => row.pathname)
 }
 
 /** Counts what lies under the given item, without deleting. */

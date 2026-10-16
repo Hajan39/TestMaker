@@ -24,3 +24,12 @@ export function isUsableMaterial(material: MaterialUsability): boolean {
  * before the teacher would wait for a generation error.
  */
 export const MIN_GENERATE_CHARS = 200
+
+/**
+ * Largest original file kept in Blob storage (`lib/originals.ts`). Blob would
+ * take far more, but teaching materials are documents and presentations of a
+ * few MB; anything bigger is usually a video or a scanned book that would
+ * only eat storage. Such a file still gets its text saved, just no
+ * downloadable original — the browser doesn't even try to upload it.
+ */
+export const MAX_ORIGINAL_BYTES = 100 * 1024 * 1024

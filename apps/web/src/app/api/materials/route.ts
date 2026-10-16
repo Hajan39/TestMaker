@@ -6,6 +6,7 @@ import { db, materials, topics } from '@/db'
 import { newId } from '@/lib/ids'
 import { linkDuplicates, recomputeTopicContent } from '@/lib/duplicates'
 import { ensureTopic } from '@/lib/library'
+import { deleteOriginals, originalPathname, originalsConfigured } from '@/lib/originals'
 import { inSchool, withScope } from '@/lib/user'
 import { t } from '@testmaker/core/i18n'
 
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
           contentHash: materials.contentHash,
           topicId: materials.topicId,
           excluded: materials.excluded,
+          originalPathname: materials.originalPathname,
         })
         .from(materials)
         .where(
@@ -78,6 +80,11 @@ export async function POST(request: Request) {
   let sameContent = 0
   let replaced = 0
   const touchedTopics = new Set<string>()
+  // New materials with the pathname the browser may upload the original to
+  // (`/api/materials/[id]/original`); without Blob it is `null` and the
+  // browser skips the upload.
+  const created: { id: string; relativePath: string; originalPathname: string | null }[] = []
+  const storeOriginals = originalsConfigured()
 
   for (const material of parsed.data.materials) {
     const prior = priorByPath.get(material.relativePath)
@@ -102,6 +109,7 @@ export async function POST(request: Request) {
       // A file at this path was imported before, but with different content —
       // the old version is replaced so the topic doesn't keep both.
       await db.delete(materials).where(and(inSchool(account, materials), eq(materials.id, prior.id)))
+      await deleteOriginals([prior.originalPathname])
       known.delete(knownKey(prior.topicId, prior.contentHash))
       priorByPath.delete(material.relativePath)
       touchedTopics.add(prior.topicId)
@@ -137,6 +145,11 @@ export async function POST(request: Request) {
     known.add(knownKey(topicId, material.contentHash))
     touchedTopics.add(topicId)
     imported += 1
+    created.push({
+      id,
+      relativePath: material.relativePath,
+      originalPathname: storeOriginals ? originalPathname(account, id, material.fileName) : null,
+    })
 
     // Mark the same content in another format (a PDF printed from a
     // presentation) so the same questions aren't generated from it twice.
@@ -146,7 +159,7 @@ export async function POST(request: Request) {
 
   for (const topicId of touchedTopics) await recomputeTopicContent(account, topicId)
 
-  return NextResponse.json({ imported, duplicates, sameContent, replaced })
+  return NextResponse.json({ imported, duplicates, sameContent, replaced, created })
   }, { write: true })
 }
 
@@ -157,11 +170,12 @@ export async function DELETE(request: Request) {
       const id = new URL(request.url).searchParams.get('id')
       if (!id) return NextResponse.json({ error: t('api:invalidRequest') }, { status: 400 })
       const [row] = await db
-        .select({ topicId: materials.topicId })
+        .select({ topicId: materials.topicId, originalPathname: materials.originalPathname })
         .from(materials)
         .where(and(inSchool(account, materials), eq(materials.id, id)))
         .limit(1)
       await db.delete(materials).where(and(inSchool(account, materials), eq(materials.id, id)))
+      await deleteOriginals([row?.originalPathname ?? null])
       // Materials pointing at the deleted one as a duplicate are handled by the
       // foreign key (`set null`) — here we only recompute the topic's usable text.
       if (row) await recomputeTopicContent(account, row.topicId)

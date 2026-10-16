@@ -235,6 +235,7 @@ export const MaterialsStrip = forwardRef<
     setProgress({ done: 0, total: accepted.length })
 
     const extracted: ExtractedMaterial[] = []
+    const files = new Map<string, File>()
     const failures: IssueItem[] = []
     // Extraction finishes but the file has no text (`status: 'skipped'` from
     // `processFile`) — it belongs among the skipped next to those dropped by
@@ -246,8 +247,11 @@ export const MaterialsStrip = forwardRef<
       await extractAll(accepted, (result) => {
         done += 1
         setProgress({ done, total: accepted.length })
-        if (result.status === 'ok' && result.material) extracted.push(result.material)
-        else if (result.status === 'error') {
+        if (result.status === 'ok' && result.material) {
+          extracted.push(result.material)
+          const entry = accepted[result.id]
+          if (entry) files.set(result.material.relativePath, entry.file)
+        } else if (result.status === 'error') {
           failures.push({ relativePath: result.relativePath, reason: result.reason ?? t('library:import.errorReason') })
         } else if (result.status === 'skipped') {
           emptySkips.push({
@@ -273,8 +277,12 @@ export const MaterialsStrip = forwardRef<
     try {
       const result = await uploadMaterials(extracted, {
         topicId,
+        files,
         onProgress: (uploadDone, uploadTotal) => setProgress({ done: uploadDone, total: uploadTotal }),
       })
+      if (result.originalsFailed > 0) {
+        toast(t('library:materialPreview.originalsFailed', { count: result.originalsFailed }))
+      }
       toast.success(uploadSummaryMessage(result), {
         testId: result.imported === 0 ? 'toast-materials-already-in-topic' : 'toast-materials-uploaded',
       })

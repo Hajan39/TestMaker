@@ -1,9 +1,11 @@
 'use client'
 
-import { useId } from 'react'
+import { useId, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import type { AnswerCompletion } from '@testmaker/core/ai'
 import {
   DEFAULT_POINTS,
   questionTypeLabel,
@@ -32,6 +34,7 @@ import {
 import { emptyPayload } from '@/lib/questionDefaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { PayloadFields } from './PayloadFields'
+import { useAiConfigured } from './useRegenerateQuestion'
 import { t } from '@testmaker/core/i18n'
 
 /**
@@ -116,8 +119,10 @@ export function QuestionEditorForm({
     register,
     control,
     handleSubmit,
+    getValues,
     setValue,
     setError,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<z.input<ReturnType<typeof formSchema>>, unknown, QuestionContent>({
     resolver: zodResolver(formSchema(question?.blocks ?? [])),
@@ -136,8 +141,12 @@ export function QuestionEditorForm({
   // A card being edited and „Nová otázka" can be on screen side by side —
   // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
+  const completion = useCompleteAnswers(topicId, getValues, setValue, setError, clearErrors)
+  const payload = useWatch({ control, name: 'payload' })
+  const promptFilled = String(payload?.prompt ?? '').trim().length >= 3
 
   function changeType(next: QuestionType) {
+    completion.reset()
     setValue('type', next)
     setValue('payload', emptyPayload(next))
     setValue('points', DEFAULT_POINTS[next])
@@ -217,6 +226,8 @@ export function QuestionEditorForm({
         />
       </div>
 
+      {type !== 'label_image' ? <CompleteAnswers completion={completion} promptFilled={promptFilled} /> : null}
+
       <div className="mt-4">
         <Label htmlFor={`question-editor-explanation-${uid}`}>{t('library:questionEditor.explanation')}</Label>
         <Textarea
@@ -238,6 +249,115 @@ export function QuestionEditorForm({
         </Button>
       </div>
     </>
+  )
+}
+
+type FormApi = ReturnType<typeof useForm<z.input<ReturnType<typeof formSchema>>, unknown, QuestionContent>>
+
+/**
+ * "Doplnit odpovědi": the model fills the empty answer fields of the form.
+ * Step one keeps to the topic's materials; when the answer is not there,
+ * nothing changes until the teacher confirms general knowledge (step two),
+ * and then the form warns that the answer is not from the materials.
+ * Nothing is saved — the teacher reviews the values and saves as usual.
+ */
+function useCompleteAnswers(
+  topicId: string,
+  getValues: FormApi['getValues'],
+  setValue: FormApi['setValue'],
+  setError: FormApi['setError'],
+  clearErrors: FormApi['clearErrors'],
+) {
+  const configured = useAiConfigured()
+  /** Reason the materials do not hold the answer; `null` while no confirmation is pending. */
+  const [notFound, setNotFound] = useState<string | null>(null)
+  const [fromGeneral, setFromGeneral] = useState(false)
+  const mutation = useMutation({
+    mutationFn: (allowGeneralKnowledge: boolean) => {
+      const { type, payload, explanation, points, difficulty } = getValues()
+      return requestJson<AnswerCompletion>(
+        '/api/questions/complete',
+        jsonBody('POST', { topicId, question: { type, payload, explanation, points, difficulty }, allowGeneralKnowledge }),
+        t('library:questionEditor.complete.failed'),
+      )
+    },
+    onMutate: () => clearErrors('root'),
+    onSuccess: (result) => {
+      if (result.status === 'not_found') {
+        setNotFound(result.reason ?? '')
+        return
+      }
+      if (result.status !== 'filled' || !result.question) return
+      setNotFound(null)
+      setValue('payload', result.question.payload as Record<string, unknown>, { shouldDirty: true })
+      if (result.question.explanation && !getValues('explanation').trim()) {
+        setValue('explanation', result.question.explanation, { shouldDirty: true })
+      }
+      setFromGeneral(result.fromMaterials === false)
+    },
+    onError: (error) => setError('root', { message: errorMessage(error, t('library:questionEditor.complete.failed')) }),
+  })
+  return {
+    configured,
+    notFound,
+    fromGeneral,
+    busy: mutation.isPending,
+    run: (allowGeneralKnowledge: boolean) => mutation.mutate(allowGeneralKnowledge),
+    reset: () => {
+      setNotFound(null)
+      setFromGeneral(false)
+    },
+  }
+}
+
+function CompleteAnswers({
+  completion,
+  promptFilled,
+}: {
+  completion: ReturnType<typeof useCompleteAnswers>
+  promptFilled: boolean
+}) {
+  const { configured, notFound, fromGeneral, busy, run, reset } = completion
+  // Without a model the button is not offered; the teacher learns why instead of clicking into an error.
+  if (configured === null) return null
+  if (!configured) {
+    return (
+      <p className="mt-3 text-sm text-fg-muted" data-testid="complete-answers-not-configured">
+        {t('library:questionEditor.complete.notConfigured')}
+      </p>
+    )
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      <Button size="sm" variant="outline" disabled={!promptFilled || busy} onClick={() => run(false)}>
+        {busy ? t('library:questionEditor.complete.busy') : t('library:questionEditor.complete.button')}
+      </Button>
+      {notFound !== null ? (
+        <div
+          className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg"
+          data-testid="complete-answers-not-found"
+        >
+          <p className="font-medium">{t('library:questionEditor.complete.notFound')}</p>
+          {notFound ? <p>{notFound}</p> : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" disabled={busy} onClick={() => run(true)}>
+              {t('library:questionEditor.complete.useGeneral')}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
+              {t('common:actions.cancel')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {fromGeneral ? (
+        <p
+          className="rounded-[var(--radius-inner)] bg-draft-bg px-3 py-2 text-sm text-draft-fg"
+          data-testid="complete-answers-warning"
+        >
+          {t('library:questionEditor.complete.notFromMaterials')}
+        </p>
+      ) : null}
+    </div>
   )
 }
 

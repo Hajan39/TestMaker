@@ -103,7 +103,17 @@ neposílej originální soubory — jsou velké a limit požadavku na Vercelu je
 Jediná výjimka jsou fotky (HEIC/JPEG/PNG nahrané samostatně, ne ve složce):
 prohlížeč je zmenší podle `AI_SETTINGS.imageText` a pošle modelu k přepisu
 (`/api/materials/image-text`); když model není nebo došly limity, přečte text
-Tesseract přímo v prohlížeči. Fotka se nikde neukládá.
+Tesseract přímo v prohlížeči. Zmenšená fotka pro model se nikde neukládá.
+
+Druhá výjimka jsou originály materiálů: když je nastavený `BLOB_READ_WRITE_TOKEN`,
+prohlížeč po uložení textu nahraje originální soubor (fotky taky) přímo do
+soukromého úložiště Vercel Blob (`upload()` z `@vercel/blob/client`), nikdy
+přes tělo požadavku na naše API. Server jen podepíše token pro jedno pevné
+místo `materials/<škola>/<materiál>/<název>` (`/api/materials/[id]/original`,
+limit `MAX_ORIGINAL_BYTES` v `lib/materials.ts`) a stahování jde zase přes tutéž
+cestu s kontrolou školy — adresa blobu se do prohlížeče nedostane. Když
+nahrání originálu selže, materiál zůstane uložený, jen bez originálu. Bez
+tokenu vše funguje jako dřív a náhled textu taky.
 
 **Generuje se ze skupiny, ne ze souboru.** Vstupem generování je téma se všemi
 svými materiály. Materiál označený jako duplicitní obsah se vynechává.

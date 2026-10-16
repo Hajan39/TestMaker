@@ -1,0 +1,1 @@
+ALTER TABLE `materials` ADD `original_pathname` text;

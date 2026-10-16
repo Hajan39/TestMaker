@@ -72,7 +72,8 @@ describe('the "avoid these questions" list', () => {
     await seedSequence(topicId, ['Nejstarší', 'Prostřední', 'Nejnovější'])
 
     const avoid = await loadAvoidPrompts(ACCOUNT, topicId, 2)
-    expect(avoid).toEqual(['Nejnovější', 'Prostřední'])
+    // Each line carries the correct answer, so the model sees what was asked and answered.
+    expect(avoid).toEqual(['Nejnovější → V plicních sklípcích', 'Prostřední → V plicních sklípcích'])
   })
 
   it('the default cap matches how many fit into the prompt', async () => {
@@ -95,6 +96,6 @@ describe('the "avoid these questions" list', () => {
     await seedSequence(topicId, ['Naše'])
     await seedSequence(other.topicId, ['Cizí'])
 
-    expect(await loadAvoidPrompts(ACCOUNT, topicId)).toEqual(['Naše'])
+    expect(await loadAvoidPrompts(ACCOUNT, topicId)).toEqual(['Naše → V plicních sklípcích'])
   })
 })

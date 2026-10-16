@@ -20,6 +20,10 @@ export type GenerateEvent =
       type: 'done'
       created: number
       rejected: number
+      /** How many questions the run aimed for; missing from older servers. */
+      requested?: number
+      /** Dropped as repeats of questions already in the topic; missing from older servers. */
+      similar?: number
       failedCalls: number
       topicId: string
       sources: number
@@ -125,14 +129,27 @@ export async function drainQueue(
    * really processed — the last request on an empty queue processes none, and
    * counting it as a topic meant one too many in every summary.
    */
-  onStep: (info: { processed: boolean; created?: number; error?: string; remaining: number }) => void,
+  onStep: (info: {
+    processed: boolean
+    created?: number
+    requested?: number
+    similar?: number
+    error?: string
+    remaining: number
+  }) => void,
   shouldStop: () => boolean,
 ): Promise<void> {
   for (;;) {
     if (shouldStop()) return
     const failure = t('generation:generateClient.queueStopped')
     const response = await fetchOrOffline('/api/jobs/run', { method: 'POST' }, failure)
-    const result = await readJson<{ processed: boolean; created?: number; remaining: number }>(response)
+    const result = await readJson<{
+      processed: boolean
+      created?: number
+      requested?: number
+      similar?: number
+      remaining: number
+    }>(response)
     // The server explains in plain words (missing key, expired session);
     // a bare "queue failed (503)" told the teacher nothing.
     if (!response.ok) throw responseError(response, result, failure)
@@ -142,6 +159,8 @@ export async function drainQueue(
     onStep({
       processed: result.processed,
       created: result.created,
+      requested: result.requested,
+      similar: result.similar,
       error: result.error,
       remaining: result.remaining,
     })

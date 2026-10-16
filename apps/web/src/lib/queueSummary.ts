@@ -1,4 +1,14 @@
 import { t } from '@testmaker/core/i18n'
+import { AI_SETTINGS } from '@testmaker/core/ai/settings'
+
+/**
+ * Did the run fall short because the materials have little new left to ask
+ * about? True when a large share of the requested questions was dropped as
+ * repeats of questions already there (`exhaustedSimilarShare`).
+ */
+export function materialExhausted({ similar = 0, requested = 0 }: { similar?: number; requested?: number }): boolean {
+  return similar > 0 && similar >= requested * AI_SETTINGS.exhaustedSimilarShare
+}
 
 /**
  * How a queue run ended. Computed in two places (generation overview and the
@@ -13,6 +23,10 @@ export interface QueueRun {
   errors: number
   /** How many questions were created in total. */
   questions: number
+  /** How many questions the processed topics aimed for in total. */
+  requested?: number
+  /** How many were dropped as repeats of questions already in their topic. */
+  similar?: number
 }
 
 /**
@@ -30,7 +44,7 @@ export interface RunSummary {
  * Sentence about a queue run's result. Counted one way — how many topics
  * succeeded and how many didn't; "done × remaining" in one sentence contradicted itself.
  */
-export function runSummary({ processed, errors, questions }: QueueRun): RunSummary {
+export function runSummary({ processed, errors, questions, requested, similar }: QueueRun): RunSummary {
   if (processed === 0) {
     return { tone: 'empty', text: t('generation:queueSummary.empty') }
   }
@@ -43,6 +57,8 @@ export function runSummary({ processed, errors, questions }: QueueRun): RunSumma
     questions: t('library:count.questions', { count: questions }),
     topics: t('library:count.topicsGenitive', { count: succeeded }),
   })
-  if (errors === 0) return { tone: 'success', text: done }
-  return { tone: 'warning', text: `${done} ${unfinished}` }
+  // Running out of material is worth noticing, so it is never a plain green "Hotovo".
+  const exhausted = materialExhausted({ similar, requested }) ? ` ${t('generation:queueSummary.exhausted')}` : ''
+  if (errors === 0) return { tone: exhausted ? 'warning' : 'success', text: `${done}${exhausted}` }
+  return { tone: 'warning', text: `${done}${exhausted} ${unfinished}` }
 }

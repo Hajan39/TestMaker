@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { Question } from '@testmaker/core/schema'
-import { REGENERATE_REASONS, type QuestionType, type RegenerateReason } from '@testmaker/core/schema'
+import {
+  AI_QUESTION_TYPES,
+  REGENERATE_REASONS,
+  questionTypeLabel,
+  type AiQuestionType,
+  type QuestionType,
+  type RegenerateReason,
+} from '@testmaker/core/schema'
 import {
   BusyButton,
   Button,
@@ -11,6 +18,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   Textarea,
 } from '@testmaker/ui'
@@ -30,7 +40,8 @@ const REASONS = Object.entries(REGENERATE_REASONS) as [
  * The main part regenerates right away, keeping the existing behaviour (one
  * click, no reason). The arrow next to it opens a menu of seven reasons with
  * an optional note — picking a label regenerates with that reason straight
- * away (the note can be filled in beforehand).
+ * away (the note can be filled in beforehand). A submenu converts the
+ * question to another AI type (same fact, same answer — `convertQuestion`).
  *
  * Without a configured model the button is not offered at all (otherwise the
  * teacher would click and only learn from an error). That decision and the
@@ -55,10 +66,11 @@ export function RegenerateButton({
   /** The card uses it to disable editing and deleting while the model works on the question. */
   onBusyChange?: (busy: boolean) => void
 }) {
-  const { available, busy, run } = useRegenerateQuestion(questionId, type, onDone)
+  const { available, busy, run, convert } = useRegenerateQuestion(questionId, type, onDone)
   const variant = useQuestionVariant({ id: questionId, type, difficulty }, onVariantCreated)
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
+  const [converting, setConverting] = useState(false)
   const anyBusy = busy || variant.busyDirection !== null
   useEffect(() => {
     onBusyChange?.(anyBusy)
@@ -72,6 +84,12 @@ export function RegenerateButton({
     void run(reason, noteText)
   }
 
+  function pickType(targetType: AiQuestionType) {
+    setOpen(false)
+    setConverting(true)
+    void convert(targetType).finally(() => setConverting(false))
+  }
+
   return (
     <div className="inline-flex shrink-0">
       <BusyButton
@@ -79,7 +97,7 @@ export function RegenerateButton({
         variant="ghost"
         className="rounded-r-none"
         busy={busy}
-        busyLabel={t('generation:regenerate.busy')}
+        busyLabel={converting ? t('generation:convert.busy') : t('generation:regenerate.busy')}
         disabled={variant.busyDirection !== null}
         onClick={() => void run()}
       >
@@ -118,6 +136,17 @@ export function RegenerateButton({
               {label}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>{t('generation:convert.menu')}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {AI_QUESTION_TYPES.filter((target) => target !== type).map((target) => (
+                <DropdownMenuItem key={target} onSelect={() => pickType(target)}>
+                  {questionTypeLabel(target)}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
           {(['easier', 'harder'] as const).map((direction) => {
             const label = direction === 'easier' ? t('generation:variant.easier') : t('generation:variant.harder')

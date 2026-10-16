@@ -13,7 +13,7 @@ import { buildPuzzle, markedOffsets, puzzleProblems, type BuiltPuzzle, type Cryp
 
 export { LETTERS, questionLabel } from './styles'
 export { displayOrder } from './shuffle'
-export { formatAnswer } from './answerKey'
+export { formatAcceptedAnswers, formatAnswer, formatGradeBoundaries, formatPartialScoring } from './answerKey'
 export * from './decorations'
 
 /** Points with a decimal comma per Czech convention, integers without a trailing zero. */

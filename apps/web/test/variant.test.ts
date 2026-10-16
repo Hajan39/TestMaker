@@ -33,7 +33,7 @@ const modelReturns: typeof generateQuestions = async () => ({
   questions: [VERSION],
   rejected: [],
   chunks: 1,
-  failedCalls: [],
+  failedCalls: [], similar: 0,
   models: ['google:gemini-flash-latest'],
 })
 

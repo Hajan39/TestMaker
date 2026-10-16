@@ -74,6 +74,19 @@ async function stubOnlyErrors(page: Page): Promise<void> {
 }
 
 /** Stubs a listing with every state — the API cannot produce one this varied. */
+/**
+ * Opens the overview and waits for the first stubbed job list. The page first
+ * renders the server's real data; the stub only takes over with the first
+ * poll (~3 s), which under load can outlast an assertion's default timeout.
+ */
+async function openWithStubbedJobs(page: Page): Promise<void> {
+  const stubbed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/jobs' && new URL(response.url()).searchParams.get('vypis') === '1',
+  )
+  await page.goto('/generovani')
+  await stubbed
+}
+
 async function stubJobs(page: Page): Promise<void> {
   const now = Date.now()
   await page.route(
@@ -173,10 +186,11 @@ test.describe('generation overview', () => {
     await page.goto('/')
     const indicator = page.getByRole('link', { name: /Ve frontě čeká|Generuji otázky/ })
     await expect(indicator).toBeVisible()
-    await indicator.click()
-
     // It is a single topic and nothing failed — the indicator leads straight to
-    // it, not to the general overview that would need further clicking.
+    // it, not to the general overview that would need further clicking. Checking
+    // the link first also keeps the click from racing a cold page load.
+    await expect(indicator).toHaveAttribute('href', `/topics/${topicId}`)
+    await indicator.click()
     await expect(page).toHaveURL(`/topics/${topicId}`)
   })
 
@@ -225,7 +239,7 @@ test.describe('generation overview', () => {
     await enqueue(request)
     await stubJobs(page)
 
-    await page.goto('/generovani')
+    await openWithStubbedJobs(page)
     // The screen polls by itself while something waits — the stubbed listing
     // arrives with the first such poll.
     await expect(page.getByTestId('queue-section-running')).toBeVisible()
@@ -263,7 +277,7 @@ test.describe('generation overview', () => {
     await stubOnlyErrors(page)
     await page.setViewportSize({ width: 390, height: 780 })
 
-    await page.goto('/generovani')
+    await openWithStubbedJobs(page)
     const submitLabel = page.getByRole('button', { name: 'Zkusit znovu', exact: true }).first()
     await expect(submitLabel).toBeVisible()
 
@@ -278,7 +292,7 @@ test.describe('generation overview', () => {
     await enqueue(request)
     await stubJobs(page)
 
-    await page.goto('/generovani')
+    await openWithStubbedJobs(page)
     await expect(page.getByTestId('queue-section-running')).toBeVisible()
 
     for (const theme of ['light', 'dark'] as const) {
@@ -301,7 +315,7 @@ test.describe('generation overview', () => {
     await enqueue(request)
     await stubOnlyErrors(page)
 
-    await page.goto('/generovani')
+    await openWithStubbedJobs(page)
     await expect(page.getByRole('button', { name: 'Zkusit znovu vše' })).toBeVisible()
 
     for (const theme of ['light', 'dark'] as const) {

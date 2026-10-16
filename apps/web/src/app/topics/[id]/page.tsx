@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNotNull } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { RememberClass } from '@/components/RememberClass'
 import { db, grades, materials, subjects, topics } from '@/db'
@@ -7,6 +7,7 @@ import { countQuestions, loadQuestions, loadVariantLinks } from '@/lib/questions
 import { loadTemplates, loadTestUsageForQuestions } from '@/lib/tests'
 import { defaultTemplateId } from '@/components/test-builder/defaults'
 import { isUsableMaterial } from '@/lib/materials'
+import { originalsConfigured } from '@/lib/originals'
 import { TopicWorkspace } from './TopicWorkspace'
 import { inSchool, pageAccount } from '@/lib/user'
 
@@ -47,6 +48,10 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         duplicateOfId: materials.duplicateOfId,
         duplicateScore: materials.duplicateScore,
         excluded: materials.excluded,
+        // Only whether there is one — the blob pathname stays on the server.
+        hasOriginal: isNotNull(materials.originalPathname).mapWith(
+          (value) => Boolean(value) && originalsConfigured(),
+        ),
       })
       .from(materials)
       .where(and(inSchool(account, materials), eq(materials.topicId, id)))

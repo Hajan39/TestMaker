@@ -75,6 +75,9 @@ async function runOne() {
       processed: true,
       jobId: job.id,
       created: outcome.created,
+      // For the run summary: many repeats mean the topics' materials are running out.
+      requested: outcome.requested,
+      similar: outcome.similar,
       remaining: await remaining(),
     })
   } catch (error) {

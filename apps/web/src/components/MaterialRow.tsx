@@ -15,6 +15,7 @@ import {
   cn,
   toast,
 } from '@testmaker/ui'
+import { MaterialPreview, OriginalDownload } from '@/components/MaterialPreview'
 import { useCanEdit } from '@/components/Permissions'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
@@ -29,10 +30,13 @@ export interface GroupMaterial {
   duplicateScore: number | null
   /** Manually excluded from generation — the material stays in the topic, it just isn't used. */
   excluded: boolean
+  /** A downloadable original is stored (only newer uploads, only with Blob configured). */
+  hasOriginal: boolean
 }
 
 /**
- * One material row in the strip: name, text size, duplicate note, the
+ * One material row in the strip: name, text size, duplicate note, preview
+ * (and download of the original when stored), the
  * "Použít pro generování" toggle and delete. Moving to another topic is offered
  * only in "Upravit téma" mode — it changes the filing, not the material itself.
  */
@@ -130,6 +134,9 @@ export function MaterialRow({
             : ''}
         </span>
       ) : null}
+
+      <MaterialPreview material={material} excluded={excludedOverride} />
+      {material.hasOriginal ? <OriginalDownload material={material} compact /> : null}
 
       {canEdit ? (
         <label className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">

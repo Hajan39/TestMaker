@@ -14,7 +14,11 @@ export interface GenerationRequest {
   difficulty: 1 | 2 | 3 | 'mix'
   /** Optional style sample (an example of the teacher's test). */
   styleSample?: string
-  /** Prompts generation should avoid (already existing questions). */
+  /**
+   * Questions already in the topic that generation should not repeat, one
+   * line each (`questionSummary`: prompt → correct answer). A bare prompt
+   * works too.
+   */
   avoid?: string[]
   /**
    * Quote (`evidence.quote`) of the question being replaced. When set,
@@ -37,6 +41,13 @@ export interface GenerationRequest {
    * avoid the same question in other words.
    */
   variantOf?: { direction: 'easier' | 'harder'; originalPrompt: string }
+  /**
+   * Conversion of an existing question to another type (the target is in
+   * `types`): the same fact and the same correct answer, only a different
+   * form. `originalSummary` is the original's `questionSummary`
+   * (prompt → correct answer).
+   */
+  conversionOf?: { originalType: QuestionType; originalSummary: string }
   /**
    * Rules the school added itself in Management (`promptRules`, active
    * only). They are created by the admin explicitly saving a recurring
@@ -164,7 +175,9 @@ export function buildUserPrompt(request: GenerationRequest): string {
   if (request.avoid?.length) {
     sections.push(
       '',
-      'Tyto otázky už existují, vytvoř jiné (ani parafráze):',
+      'Tyto otázky už v tématu jsou (zadání → správná odpověď).',
+      'Ptej se na fakta a pojmy z materiálu, na které se tu ještě nikdo neptá. Neptej se na totéž jinými slovy,',
+      'neptej se na stejnou odpověď z druhé strany a střídej, na co se ptáš (pojem, příčina, následek, pořadí, srovnání, příklad).',
       ...request.avoid.slice(0, AI_SETTINGS.avoidLimit).map((q) => `- ${truncateAvoidItem(q)}`),
     )
   }
@@ -189,6 +202,16 @@ export function buildUserPrompt(request: GenerationRequest): string {
     sections.push(
       '',
       `Vytvoř ${word} verzi této otázky na stejnou látku — ne tutéž otázku jinými slovy: ${request.variantOf.originalPrompt}`,
+    )
+  }
+
+  if (request.conversionOf) {
+    const { originalType, originalSummary } = request.conversionOf
+    sections.push(
+      '',
+      `Převeď tuto otázku typu ${originalType} (${questionTypeLabel(originalType)}) na požadovaný typ (zadání → správná odpověď): ${originalSummary}`,
+      'Zachovej stejný fakt, stejnou znalost i stejnou správnou odpověď — měň jen podobu otázky podle pravidel požadovaného typu.',
+      'Když nový typ potřebuje možnosti nebo tvrzení, původní správná odpověď je ta správná a ostatní doplň jako věrohodné, ale podle materiálu jednoznačně chybné.',
     )
   }
 

@@ -16,6 +16,7 @@ export {
 export {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuCheckboxItem,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from './ui/dropdown-menu'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs'
 export { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip'

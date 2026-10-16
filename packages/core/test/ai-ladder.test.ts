@@ -25,11 +25,17 @@ const REQUEST = {
   difficulty: 2 as const,
 }
 
-/** A usable question, so the batch is not rejected by validation. */
+/** A made-up word unique to `n` — distinct answers keep the questions from looking like repeats. */
+function word(n: number): string {
+  const letters = 'abcdefghijklmnopqrstuvwxyz'
+  return `${letters[n % 26]}${letters[Math.floor(n / 26) % 26]}mon`
+}
+
+/** A usable question, so the batch is not rejected by validation (nor dropped as a repeat). */
 function question(order: number): QuestionContent {
   return {
     type: 'short_answer',
-    payload: { prompt: `Otázka číslo ${order}?`, answer: 'odpověď', acceptedAnswers: [] },
+    payload: { prompt: `Otázka číslo ${order}?`, answer: `${word(order)} ${word(order + 100)}`, acceptedAnswers: [] },
     blocks: [],
     points: 1,
     difficulty: 2,

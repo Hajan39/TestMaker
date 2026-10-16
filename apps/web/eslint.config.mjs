@@ -15,6 +15,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright output (traces, screenshots). Not source code — and a running
+    // test deletes it mid-scan, which crashed lint with ENOENT.
+    "test-results/**",
+    "playwright-report/**",
+    "e2e/screenshots/**",
   ]),
 ]);
 

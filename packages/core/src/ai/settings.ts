@@ -38,8 +38,43 @@ export const AI_SETTINGS = {
    * (`loadAvoidPrompts`) — otherwise it would pick more than fits the prompt.
    */
   avoidLimit: 80,
-  /** Longer prompts in the avoid list are trimmed — the start is enough to tell them apart. */
-  avoidItemMaxLength: 100,
+  /**
+   * Longer items in the avoid list are trimmed — the start is enough to tell
+   * them apart. An item is the prompt with its correct answer
+   * (`questionSummary`), so it needs more room than a bare prompt; the same
+   * trimmed text is also what new questions are compared with
+   * (`similarQuestionThreshold`).
+   */
+  avoidItemMaxLength: 160,
+  /**
+   * From this word overlap on (`wordSimilarity` of the question with its
+   * correct answer, 0–1) a new question counts as a repeat of one already in
+   * the topic or the run and is dropped. Measured on Czech examples
+   * (test/question-similarity.test.ts): a paraphrase of the same fact with
+   * the same answer scores 0.6–0.9, a different fact from the same chapter
+   * 0.1–0.35. 0.5 sits in the gap; lower would start dropping different
+   * questions on the same term, higher would let rewordings through.
+   */
+  similarQuestionThreshold: 0.5,
+  /**
+   * With fewer content words than this the overlap says little (one shared
+   * term already makes half) — such a question is a repeat only when all its
+   * words match.
+   */
+  similarMinWords: 3,
+  /**
+   * Rough number of distinct questions a material holds per 1 000 usable
+   * characters (about half a textbook page carries two or three facts worth
+   * asking about). When the topic's questions plus the requested ones exceed
+   * it, the generate card warns that new questions will mostly repeat.
+   */
+  questionsPer1000Chars: 3,
+  /**
+   * Share of the requested questions dropped as repeats from which the run
+   * summary says that the material is running out, not just that a few were
+   * discarded.
+   */
+  exhaustedSimilarShare: 0.25,
   /**
    * Most points taken over from the model for open answers and drawings
    * (other types compute points themselves, see `pointsByScope`). More would
@@ -120,6 +155,15 @@ export const AI_SETTINGS = {
     minItems: 3,
     /** More items do not fit a worksheet for one lesson; the excess is dropped. */
     maxItems: 20,
+  },
+  /** Completing the answers of a teacher's own question (`completeAnswers.ts`). */
+  answerCompletion: {
+    /** Maximum characters of topic material sent with one question; one call, so like a worksheet. */
+    materialChars: 40_000,
+    /** Chunk size used to sample a long material evenly across the text. */
+    materialChunkChars: 2_000,
+    /** Options a choice question is completed up to (the teacher's own options are always kept). */
+    choiceOptions: 4,
   },
   /**
    * Text from photos (a textbook page shot on a phone). The browser shrinks

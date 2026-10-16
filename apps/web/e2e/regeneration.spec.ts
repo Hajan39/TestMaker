@@ -149,6 +149,34 @@ test.describe('regenerating with a reason', () => {
     })
   })
 
+  test('converting to another type offers the other AI types and swaps the card', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka na převod ${Date.now()}`
+    await addQuestion(page.request, topicId, prompt)
+    const requests = await mockRegenerate(page, topicId, prompt)
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: 'Přegenerovat s důvodem' }).click()
+    await page.getByRole('menuitem', { name: 'Převést na jiný typ' }).click()
+    const choice = page.getByRole('menuitem', { name: 'Výběr jedné možnosti' })
+    await expect(choice).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Volná odpověď' })).toBeVisible()
+    // The question is a short answer — its own type is not offered.
+    await expect(page.getByRole('menuitem', { name: 'Krátká odpověď' })).toHaveCount(0)
+    // Keyboard, not a mouse path: moving the pointer straight across the main
+    // menu would close the submenu before the click lands.
+    await choice.press('Enter')
+
+    await expect(row).toHaveCount(0)
+    await expect(page.getByTestId('toast-question-converted')).toContainText('Výběr jedné možnosti')
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ targetType: 'single_choice' })
+    expect(requests[0]).not.toHaveProperty('reason')
+  })
+
   test('the whole menu is visible on mobile too (360 px)', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 })
     const topicId = await ensureTopic(page.request)

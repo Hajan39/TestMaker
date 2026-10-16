@@ -84,7 +84,7 @@ beforeEach(async () => {
       questions: [QUESTION],
       rejected: [],
       chunks: 1,
-      failedCalls: [],
+      failedCalls: [], similar: 0,
       models: ['google:gemini-flash-latest'],
     }
   }

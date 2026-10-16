@@ -3,7 +3,15 @@
   "no": "NE",
   "points": "({{points}} b.)",
   "answerKey": {
-    "orderingLine": "{{line}}. řádek → {{number}}"
+    "orderingLine": "{{line}}. řádek → {{number}}",
+    "scoring": {
+      "noError": "bez chyby {{points}} b.",
+      "errors_one": "{{count}} chyba {{points}} b.",
+      "errors_few": "{{count}} chyby {{points}} b.",
+      "errors_other": "{{count}} chyb {{points}} b.",
+      "errorsOrMore": "{{n}} a víc chyb {{points}} b."
+    },
+    "alsoAccept": "Uznej také: {{answers}}"
   },
   "sanitize": {
     "squareRoot": "odmocnina ",
@@ -36,7 +44,10 @@
     "title": "Klíč – {{title}}",
     "variant": "(varianta {{variant}})",
     "totalPoints": "Celkem {{points}} bodů",
-    "solution": "Řešení – {{title}}"
+    "solution": "Řešení – {{title}}",
+    "grades": "Známky: {{list}}",
+    "gradeRange": "{{grade}}: {{from}}–{{to}}",
+    "gradeSingle": "{{grade}}: {{from}}"
   },
   "footer": {
     "variant": "varianta {{variant}}",

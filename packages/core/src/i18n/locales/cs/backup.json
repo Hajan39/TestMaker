@@ -6,7 +6,7 @@
   "intro": "Celá knihovna — předměty, témata, texty materiálů, otázky, šablony i hotové testy — se dá stáhnout do jednoho souboru a z něj zase nahrát zpátky. Hodí se před větším úklidem i při přesunu na jiný počítač.",
   "download": {
     "title": "Stáhnout zálohu",
-    "hint": "Uloží se jeden soubor se vším, co v knihovně je. Rozpracované generování otázek se nezálohuje — je to jen pracovní stav, ne obsah.",
+    "hint": "Uloží se jeden soubor se vším, co v knihovně je. Rozpracované generování otázek se nezálohuje — je to jen pracovní stav, ne obsah. Originální soubory materiálů v zálohu nejsou, jen jejich přečtený text; zůstávají v úložišti, dokud materiál nesmažeš.",
     "busy": "Stahuji zálohu…",
     "failed": "Zálohu se nepodařilo stáhnout.",
     "notAFile": "Server neposlal soubor zálohy. Obnov stránku a zkus to znovu."

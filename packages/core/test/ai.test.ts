@@ -7,11 +7,12 @@ import {
   pickChunks,
   promptOf,
   questionKey,
+  questionSummary,
   salvageQuestions,
   splitIntoBatches,
   withDefaultPoints,
 } from '../src/ai/generate'
-import { buildSystemPrompt, buildUserPrompt, describeGradeAudience } from '../src/ai/prompts/questions'
+import { buildSystemPrompt, buildUserPrompt, describeGradeAudience, QUESTION_TYPE_HINTS } from '../src/ai/prompts/questions'
 import { describeAiError } from '../src/ai/errors'
 import {
   AI_QUESTION_TYPES,
@@ -194,6 +195,30 @@ describe('prompty', () => {
       variantOf: { direction: 'harder', originalPrompt: 'Čím je poháněn koloběh vody?' },
     })
     expect(harder).toContain('Vytvoř těžší verzi této otázky na stejnou látku')
+  })
+
+  it('conversion to another type keeps the original prompt and answer and states the target type rules', () => {
+    const original = {
+      type: 'open' as const,
+      payload: { prompt: 'Co pohání koloběh vody?', lines: 4, answer: 'Sluneční energie' },
+      blocks: [],
+      points: 2,
+      difficulty: 2 as const,
+    }
+    const prompt = buildUserPrompt({
+      text: 'x',
+      topicName: 't',
+      subjectName: 's',
+      gradeName: null,
+      count: 1,
+      types: ['single_choice'],
+      difficulty: 2,
+      conversionOf: { originalType: 'open', originalSummary: questionSummary(original) },
+    })
+    expect(prompt).toContain('Převeď tuto otázku typu open')
+    expect(prompt).toContain('Co pohání koloběh vody? → Sluneční energie')
+    expect(prompt).toContain('stejnou správnou odpověď')
+    expect(prompt).toContain(`- single_choice (Výběr jedné možnosti) × 1: ${QUESTION_TYPE_HINTS.single_choice}`)
   })
 
   it('covers all types the AI may generate', () => {

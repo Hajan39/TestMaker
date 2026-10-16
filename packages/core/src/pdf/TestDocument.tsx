@@ -4,7 +4,7 @@ import type { Question } from '../schema/question'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig, type TemplateTheme } from '../schema/template'
 import { itemQuestion, type RenderableTest, type ResolvedTestItem } from '../schema/test'
-import { formatAnswer } from './answerKey'
+import { formatAcceptedAnswers, formatAnswer, formatGradeBoundaries, formatPartialScoring } from './answerKey'
 import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
 import { decorationColor, decorationShapes, formatPoints, PAGE_HEIGHT, PAGE_WIDTH, puzzleForVariant } from './layout'
 import { QuestionBody } from './QuestionBody'
@@ -297,6 +297,8 @@ function QuestionView({
   const label = questionLabel(index, config.numbering)
   const points = item.pointsOverride ?? question.points
   const showPoints = config.showPoints && graded
+  // Partial scoring belongs to the teacher's filled-in copy only, never to the pupils' paper.
+  const scoring = filled && graded ? formatPartialScoring(question, points) : null
   const prompt = (question.payload as { prompt?: string }).prompt ?? ''
 
   return (
@@ -344,6 +346,7 @@ function QuestionView({
         assets={assets}
         filled={filled}
       />
+      {scoring ? <Text style={{ fontSize: 8, color: '#555', marginTop: 3 }}>{scoring}</Text> : null}
     </View>
   )
 }
@@ -437,9 +440,15 @@ function KeyPage({
         {variantLabel ? ` ${t('pdf:key.variant', { variant: variantLabel })}` : ''}
       </Text>
       {test.graded ? (
-        <Text style={{ fontSize: 9, color: '#555', marginBottom: 10 }}>
-          {t('pdf:key.totalPoints', { points: formatPoints(totalPoints) })}
-        </Text>
+        <View style={{ marginBottom: 10 }}>
+          <Text style={{ fontSize: 9, color: '#555' }}>
+            {t('pdf:key.totalPoints', { points: formatPoints(totalPoints) })}
+          </Text>
+          {/* The school's grade table for this total, so the teacher grades straight from the key. */}
+          {formatGradeBoundaries(totalPoints) ? (
+            <Text style={{ fontSize: 9, color: '#555' }}>{formatGradeBoundaries(totalPoints)}</Text>
+          ) : null}
+        </View>
       ) : (
         <View style={{ marginBottom: 10 }} />
       )}
@@ -472,6 +481,8 @@ function KeyPage({
         index += 1
         const question = item.question
         const points = item.pointsOverride ?? question.points
+        const scoring = test.graded ? formatPartialScoring(question, points) : null
+        const accepted = formatAcceptedAnswers(question)
         return (
           <View key={item.id} style={{ marginTop: 6 }} wrap={false}>
             <Text>
@@ -481,11 +492,15 @@ function KeyPage({
                 <Text style={{ color: '#555', fontSize: 8 }}> {t('pdf:points', { points: formatPoints(points) })}</Text>
               ) : null}
             </Text>
+            {accepted ? (
+              <Text style={{ fontSize: 8, color: '#555', marginLeft: 14 }}>{sanitizeText(accepted)}</Text>
+            ) : null}
             {question.explanation ? (
               <Text style={{ fontSize: 8, color: '#555', marginLeft: 14 }}>
                 {sanitizeText(question.explanation)}
               </Text>
             ) : null}
+            {scoring ? <Text style={{ fontSize: 8, color: '#555', marginLeft: 14 }}>{scoring}</Text> : null}
           </View>
         )
       })}
