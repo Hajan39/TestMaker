@@ -56,8 +56,8 @@ const itemSchema = z.object({
 
 const testSchema = z.object({
   title: z.string().min(1).max(200),
-  /** Sharing with colleagues; private by default. */
-  visibility: z.enum(['soukrome', 'skola']).default('soukrome'),
+  /** Sharing with colleagues; shared with the school by default (the author can hide it). */
+  visibility: z.enum(['soukrome', 'skola']).default('skola'),
   description: z.string().max(1000).nullable().default(null),
   graded: z.boolean().default(true),
   templateId: z.string().min(1),

@@ -210,7 +210,8 @@ export async function copyTest(
     id,
     schoolId: scope.schoolId,
     ownerId: scope.userId,
-    visibility: 'soukrome',
+    // A copy (also a test version) is shared with the school like any new test.
+    visibility: 'skola',
     // A worksheet copy stays a worksheet with its brief — otherwise it would show among tests.
     kind: source.kind,
     topicId: source.topicId,
@@ -618,6 +619,8 @@ export async function createGeneratedWorksheet(
       id,
       schoolId: scope.schoolId,
       ownerId: scope.userId,
+      // Shared with the school like a hand-made worksheet; the author can hide it.
+      visibility: 'skola',
       kind: 'pracovni_list',
       title: result.title,
       topicId: loaded.topicId,

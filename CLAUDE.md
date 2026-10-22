@@ -133,7 +133,10 @@ v Claude Code příkazem `/otazky` a nahrávají se do tématu jako soubor.
 **Každý dotaz má rozsah.** Funkce v `apps/web/src/lib/*` berou jako první
 parametr `Scope` (škola, uživatel, role) z `lib/user.ts` a doplňují ho do
 podmínky (`inSchool()`, `ownedBy()`, `visibleTest()`). Knihovna a banka jsou
-společné pro školu, písemky a hlavolamy patří své autorce. Cizí věc se tváří
+společné pro školu, písemky a hlavolamy patří své autorce — upravovat je smí
+jen ona. Testy a pracovní listy jsou ale ve výchozím stavu sdílené se školou
+(`visibility = 'skola'`: kolegyně je čtou, tisknou a kopírují); autorka je může
+skrýt (`soukrome`). Cizí věc se tváří
 jako neexistující — vrací se `null` a 404, ne 403; z odpovědi nemá být poznat,
 že vůbec je. Kontrola v `proxy.ts` je jen hrubé síto podle role, ne
 bezpečnostní hranice: rozhoduje se vždycky až nad databází.

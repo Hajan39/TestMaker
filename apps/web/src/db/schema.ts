@@ -596,7 +596,8 @@ export const tests = sqliteTable(
     /**
      * `soukrome` is visible only to the author, `skola` to colleagues too —
      * when someone falls ill, their test must be printable without composing
-     * it again.
+     * it again. The app creates tests as `skola` explicitly; the column default
+     * stays `soukrome` because changing it would rebuild the table in SQLite.
      */
     visibility: text('visibility').notNull().default('soukrome').$type<'soukrome' | 'skola'>(),
     /**

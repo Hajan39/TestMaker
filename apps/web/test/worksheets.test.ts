@@ -148,9 +148,25 @@ describe('overviews and scope', () => {
   })
 
   it('someone else\'s private worksheet looks nonexistent', async () => {
-    const id = await createWorksheet()
+    const id = await createWorksheet({ visibility: 'soukrome' })
     const colleague = await seedAccount()
     expect(await loadTest(colleague, id)).toBeNull()
     expect(await loadTestItems(colleague, id)).toEqual([])
+  })
+
+  it('a new worksheet is shared with the school by default — readable, not editable by a colleague', async () => {
+    const id = await createWorksheet()
+    const colleague = await seedAccount()
+    expect(await loadTest(colleague, id)).toMatchObject({ id, visibility: 'skola' })
+    expect((await loadTestItems(colleague, id)).length).toBeGreaterThan(0)
+    const [row] = await db.select({ ownerId: tests.ownerId }).from(tests).where(eq(tests.id, id))
+    expect(row!.ownerId).toBe(ACCOUNT.userId)
+  })
+
+  it('a copy is shared with the school by default', async () => {
+    const id = await createWorksheet({ visibility: 'soukrome' })
+    const copy = await copyTest(ACCOUNT, id)
+    const [row] = await db.select({ visibility: tests.visibility }).from(tests).where(eq(tests.id, copy!.id))
+    expect(row!.visibility).toBe('skola')
   })
 })

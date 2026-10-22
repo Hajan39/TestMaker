@@ -112,8 +112,9 @@ export function TestBuilder({
     // The key is no longer set on the test but chosen at print time ("Zadání
     // pro žáky" / "Vyplněná pro mě"). The DB column stays; nothing changes it.
     showKey: test?.showKey ?? true,
-    // A test is private by default; it is shared only when the author asks.
-    visibility: test?.visibility ?? 'soukrome',
+    // A test is shared with the school by default — colleagues can read, print
+    // and copy it; only the author edits. She can hide it in the settings.
+    visibility: test?.visibility ?? 'skola',
     // A worksheet keeps to its materials unless the teacher allowed more.
     onlyMaterials: parseWorksheetBrief(test?.brief)?.onlyMaterials ?? true,
   }))
