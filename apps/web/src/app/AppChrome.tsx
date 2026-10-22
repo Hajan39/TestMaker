@@ -31,7 +31,9 @@ export function AppChrome({
   const canEdit = account === null || account.role !== 'nahled'
   const canManage = account === null || roleCanManage(account.role)
   // The bar has no business on the login page or during a forced password change.
-  if (NO_NAVIGATION.includes(pathname)) return <>{children}</>
+  // A print link is opened by people without an account — the bar would only
+  // offer them a sign-in they cannot use.
+  if (NO_NAVIGATION.includes(pathname) || pathname.startsWith('/tisk/')) return <>{children}</>
   return (
     <QueryProvider>
       <PermissionsProvider canEdit={canEdit} canManage={canManage}>

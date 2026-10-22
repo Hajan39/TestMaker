@@ -8,6 +8,8 @@ import { loadTemplates, loadTest, loadTestItems } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
 import { inSchool, pageAccount } from '@/lib/user'
 import { aiStatus } from '@/lib/ai'
+import { isMailConfigured } from '@/lib/mail'
+import { shareSecret } from '@/lib/share'
 import { testPath } from './paths'
 
 /**
@@ -76,6 +78,7 @@ export async function TestEditorPage({
         ai={aiStatus()}
         dropped={worksheet && dropped > 0 ? dropped : 0}
         mine={test.ownerId === account.userId}
+        share={{ available: shareSecret() !== null, mail: isMailConfigured() }}
       />
     </PageShell>
   )

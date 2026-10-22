@@ -34,7 +34,7 @@ export type Person = keyof typeof ACCOUNTS
 export default defineConfig({
   testDir: './e2e',
   testMatch:
-    /login\.(spec|setup)\.ts|role\.spec\.ts|management\.spec\.ts|ownership\.spec\.ts|administration\.spec\.ts/,
+    /login\.(spec|setup)\.ts|role\.spec\.ts|management\.spec\.ts|ownership\.spec\.ts|administration\.spec\.ts|share\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
@@ -63,6 +63,9 @@ export default defineConfig({
       E2E_DATABASE_FILE: 'e2e-login.db',
       NEXT_DIST_DIR: '.next-e2e-login',
       AUTH_SECRET: 'e2e-tajemstvi-na-podpis-cookie',
+      // E-mail stays off: a key from `.env.local` would send real mail.
+      BREVO_API_KEY: '',
+      MAIL_FROM: '',
     },
     reuseExistingServer: false,
     timeout: 120_000,

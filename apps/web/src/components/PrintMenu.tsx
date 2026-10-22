@@ -15,6 +15,9 @@ import {
   toast,
 } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
+import { useMutation } from '@tanstack/react-query'
+import { errorMessage } from '@/lib/requestJson'
+import { ShareLinkDialog, requestShareLink } from '@/components/ShareLinkDialog'
 
 /**
  * Printing and downloading a test in one place.
@@ -132,6 +135,7 @@ export function PrintMenu({
   variants,
   unsaved = false,
   ensureSaved,
+  share,
 }: {
   /** `null` for a test that was never saved. */
   testId: string | null
@@ -140,9 +144,31 @@ export function PrintMenu({
   unsaved?: boolean
   /** Saves the test and resolves to its id; `null` when saving failed (the caller shows why). */
   ensureSaved?: () => Promise<string | null>
+  /**
+   * Print link for the author (left out for a colleague's test). `available`
+   * is false without `AUTH_SECRET`; `mail` says whether e-mail is configured.
+   */
+  share?: { available: boolean; mail: boolean }
 }) {
   // Rendering the PDF takes seconds; without this the click seemed to do nothing.
   const [work, setWork] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+  const shareMutation = useMutation({ mutationFn: requestShareLink })
+
+  /** The link points at the saved test, so unsaved changes are saved first. */
+  async function openShare() {
+    setWork(t('tests:share.creating'))
+    try {
+      const id = unsaved || !testId ? ((await ensureSaved?.()) ?? null) : testId
+      if (!id) return
+      setShareOpen(true)
+      shareMutation.mutate(id)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setWork(null)
+    }
+  }
 
   async function run(action: PrintAction) {
     setWork(action.busyLabel)
@@ -183,8 +209,30 @@ export function PrintMenu({
             </DropdownMenuLabel>
           ) : null}
           <PrintMenuItems testId={testId ?? ''} variants={variants} onRun={(action) => void run(action)} />
+          {share ? (
+            <>
+              <DropdownMenuSeparator />
+              {share.available ? (
+                <DropdownMenuItem onSelect={() => void openShare()}>{t('tests:share.menuItem')}</DropdownMenuItem>
+              ) : (
+                <DropdownMenuLabel className="text-xs font-normal text-fg-soft" data-testid="share-unavailable">
+                  {t('tests:share.unavailable')}
+                </DropdownMenuLabel>
+              )}
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+      {share ? (
+        <ShareLinkDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          link={shareMutation.data ?? null}
+          pending={shareMutation.isPending}
+          error={shareMutation.error ? errorMessage(shareMutation.error, t('tests:share.createFailed')) : null}
+          mail={share.mail}
+        />
+      ) : null}
     </>
   )
 }

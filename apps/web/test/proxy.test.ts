@@ -119,6 +119,18 @@ describe('app gate', () => {
     expect((await proxy(get('/api/logout'))).status).toBe(200)
     expect((await proxy(get('/api/prihlaseni/google'))).status).toBe(200)
   })
+
+  it('the print link page and its PDF are reachable without a cookie, nothing next to them is', async () => {
+    process.env.AUTH_SECRET = 'secret'
+    const page = await proxy(get('/tisk/abc.def'))
+    expect(page.status).toBe(200)
+    expect(page.headers.get('location')).toBeNull()
+    expect((await proxy(get('/api/tisk/abc.def?varianta=B'))).status).toBe(200)
+    // Only the token paths are public: the bare prefix and look-alikes still need sign-in.
+    expect((await proxy(get('/tisk'))).status).toBe(307)
+    expect((await proxy(get('/tiskarna'))).status).toBe(307)
+    expect((await proxy(get('/api/tests/1/share', { cookie: '' }))).status).toBe(401)
+  })
 })
 
 describe('what each role gets through the gate', () => {

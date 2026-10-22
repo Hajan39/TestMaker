@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Fonts for server-side PDF rendering must be bundled into the serverless function.
     '/api/tests/**': ['../../packages/core/assets/fonts/**'],
+    '/api/tisk/**': ['../../packages/core/assets/fonts/**'],
   },
 }
 

@@ -6,6 +6,8 @@ import { loadTemplates } from '@/lib/tests'
 import { TestBuilder } from '@/components/TestBuilder'
 import { pageAccount } from '@/lib/user'
 import { aiStatus } from '@/lib/ai'
+import { isMailConfigured } from '@/lib/mail'
+import { shareSecret } from '@/lib/share'
 
 export const dynamic = 'force-dynamic'
 export function generateMetadata(): Metadata {
@@ -32,6 +34,7 @@ export default async function NewTestPage() {
         items={[]}
         role={account.role}
         ai={aiStatus()}
+        share={{ available: shareSecret() !== null, mail: isMailConfigured() }}
       />
     </PageShell>
   )

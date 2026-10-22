@@ -290,6 +290,16 @@ prostředí:
 | `GOOGLE_REDIRECT_URI` | `https://<adresa>/api/prihlaseni/google/zpet` |
 | `GOOGLE_HD` | doména školních účtů, např. `zsnekde.cz` |
 | `BLOB_READ_WRITE_TOKEN` | volitelně, úložiště originálů materiálů (Vercel Blob, soukromý přístup); doplní ho Vercel sám po připojení Blob úložiště k projektu. Bez něj se ukládá jen přečtený text a „Stáhnout originál“ se nenabízí |
+| `APP_URL` | volitelně, adresa aplikace pro odkazy na tisk (např. vlastní doména); bez ní se vezme adresa, na kterou přišel požadavek |
+| `BREVO_API_KEY` | volitelně, odesílání odkazu na tisk e-mailem (Brevo); bez něj tlačítko „Poslat mi odkaz e-mailem“ chybí a dialog vysvětlí proč |
+| `MAIL_FROM` | adresa odesílatele ověřená v Brevu; bez ní se e-mail neposílá |
+| `MAIL_FROM_NAME` | volitelně, jméno odesílatele; výchozí „TestMaker“ |
+
+Odkaz na tisk platí 7 dní a podepisuje se `AUTH_SECRET` — změnou tajemství
+přestanou platit všechny vydané odkazy. E-mail přes Brevo zapneš takto:
+1. Založ si účet na brevo.com (bezplatný tarif stačí).
+2. V **Senders, Domains & Dedicated IPs** přidej a ověř adresu odesílatele — tu dej do `MAIL_FROM`.
+3. V **SMTP & API → API keys** vytvoř klíč a dej ho do `BREVO_API_KEY`.
 
 Pořadí při prvním nasazení je závazné, jinak se dovnitř nedostane nikdo:
 migrace (`pnpm db:migrate` proti Tursu) → založení prvního správce skriptem

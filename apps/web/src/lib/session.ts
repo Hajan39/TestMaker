@@ -52,14 +52,14 @@ export interface Session {
 
 const encoder = new TextEncoder()
 
-function base64urlEncode(text: string): string {
+export function base64urlEncode(text: string): string {
   const bytes = encoder.encode(text)
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function base64urlDecode(value: string): string | null {
+export function base64urlDecode(value: string): string | null {
   try {
     const padded = value.replace(/-/g, '+').replace(/_/g, '/')
     const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
@@ -70,7 +70,7 @@ function base64urlDecode(value: string): string | null {
   }
 }
 
-async function hmac(data: string, secret: string): Promise<string> {
+export async function hmac(data: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     encoder.encode(secret),
@@ -184,7 +184,10 @@ export function isPublicPath(pathname: string): boolean {
     pathname === '/login' ||
     pathname === '/api/login' ||
     pathname === '/api/logout' ||
-    pathname.startsWith('/api/prihlaseni/google')
+    pathname.startsWith('/api/prihlaseni/google') ||
+    // Time-limited print link: the signed token in the path is the permission.
+    pathname.startsWith('/tisk/') ||
+    pathname.startsWith('/api/tisk/')
   )
 }
 

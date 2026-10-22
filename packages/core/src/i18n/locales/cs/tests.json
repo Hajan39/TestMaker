@@ -266,5 +266,42 @@
     "tabPage": "Stránka ({{count}})",
     "narrowHint": "Stránku pohodlněji upravíš na tabletu nebo počítači."
   },
+  "share": {
+    "menuItem": "Odkaz na tisk (7 dní)",
+    "unavailable": "Odkaz na tisk funguje jen s přihlašováním — tady chybí AUTH_SECRET.",
+    "dialogTitle": "Odkaz na tisk",
+    "dialogDescription": "Kdo dostane odkaz, stáhne si a vytiskne test bez přihlášení.",
+    "creating": "Připravuji odkaz…",
+    "linkLabel": "Odkaz na tisk",
+    "copy": "Kopírovat",
+    "copied": "Odkaz je zkopírovaný.",
+    "copyFailed": "Odkaz se nepodařilo zkopírovat. Označ ho v poli a zkopíruj ručně.",
+    "validUntil": "Platí do {{date}}.",
+    "pupilsOnly": "Odkaz otevře jen zadání pro žáky, ne řešení.",
+    "createFailed": "Odkaz se nepodařilo vytvořit.",
+    "secretMissing": "Odkaz na tisk tu nejde vytvořit — aplikace běží bez přihlašování (chybí AUTH_SECRET).",
+    "email": "Poslat mi odkaz e-mailem",
+    "sending": "Posílám…",
+    "emailSent": "Odkaz jsem poslal na {{email}}.",
+    "emailFailed": "E-mail se nepodařilo odeslat. Zkus to za chvíli znovu, nebo odkaz zkopíruj a pošli si ho sama.",
+    "emailNotConfigured": "Posílání e-mailů tu není nastavené, odkaz si zkopíruj. Zapnout ho může správce aplikace (BREVO_API_KEY a MAIL_FROM).",
+    "emailLimit": "Za poslední hodinu už odešlo dost e-mailů s odkazem. Zkus to později, nebo odkaz zkopíruj.",
+    "mail": {
+      "subject": "Odkaz na tisk: {{title}}",
+      "intro": "Odkaz na tisk testu „{{title}}“:",
+      "validUntil": "Odkaz platí do {{date}}.",
+      "pupilsOnly": "Otevře jen zadání pro žáky, bez řešení.",
+      "footer": "Poslal TestMaker na tvou žádost."
+    },
+    "page": {
+      "metaTitle": "Tisk testu – TestMaker",
+      "validUntil": "Odkaz platí do {{date}}.",
+      "print": "Vytisknout{{suffix}}",
+      "download": "Stáhnout PDF{{suffix}}",
+      "preparing": "Připravuji PDF…",
+      "expiredTitle": "Odkaz už neplatí",
+      "expiredHint": "Požádej autora o nový."
+    }
+  },
   "copyTitle": "{{title}} (kopie)"
 }

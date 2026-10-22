@@ -21,6 +21,8 @@ const PORT = Number(process.env.E2E_PORT ?? 3100)
 
 export default defineConfig({
   testDir: './e2e',
+  // Needs a signed-in author and an anonymous visitor — runs in `playwright.login.config.ts`.
+  testIgnore: /share\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   // The suite is long and the last tests run on a machine that has been

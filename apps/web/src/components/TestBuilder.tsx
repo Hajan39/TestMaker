@@ -67,6 +67,7 @@ export function TestBuilder({
   ai,
   dropped = 0,
   mine = true,
+  share,
 }: {
   topics: PickerTopic[]
   templates: Template[]
@@ -94,6 +95,8 @@ export function TestBuilder({
    * copy is offered for edits.
    */
   mine?: boolean
+  /** Print link settings from the server (`shareSecret()`, `isMailConfigured()`); offered only to the author. */
+  share?: { available: boolean; mail: boolean }
 }) {
   const router = useRouter()
   const readOnly = !mine
@@ -752,6 +755,7 @@ export function TestBuilder({
             variants={settings.variants}
             unsaved={!readOnly && (dirty || !savedId)}
             ensureSaved={savedForPrint}
+            share={readOnly ? undefined : share}
           />
           {readOnly ? (
             <Button size="sm" disabled={copying} aria-busy={copying || undefined} onClick={() => savedId && copyMutation.mutate(savedId)}>
