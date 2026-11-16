@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { shuffleChoices, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
 import {
   Button,
@@ -124,18 +124,10 @@ export function PayloadFields({
           </div>
           <div>
             <Label htmlFor={id('accepted-answers')}>{t('library:payloadFields.acceptedAnswers')}</Label>
-            <Input
+            <ListInput
               id={id('accepted-answers')}
-              value={list('acceptedAnswers').join('; ')}
-              onChange={(event) =>
-                set(
-                  'acceptedAnswers',
-                  event.target.value
-                    .split(';')
-                    .map((value) => value.trim())
-                    .filter(Boolean),
-                )
-              }
+              items={list('acceptedAnswers')}
+              onChange={(next) => set('acceptedAnswers', next)}
             />
           </div>
         </div>
@@ -261,23 +253,11 @@ export function PayloadFields({
           </div>
           <div>
             <Label htmlFor={id('blanks')}>{t('library:payloadFields.blanks')}</Label>
-            <Input
-              id={id('blanks')}
-              value={blanks.join('; ')}
-              onChange={(event) =>
-                set('blanks', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
-              }
-            />
+            <ListInput id={id('blanks')} items={blanks} onChange={(next) => set('blanks', next)} />
           </div>
           <div>
             <Label htmlFor={id('wordbank')}>{t('library:payloadFields.wordBank')}</Label>
-            <Input
-              id={id('wordbank')}
-              value={list('wordBank').join('; ')}
-              onChange={(event) =>
-                set('wordBank', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
-              }
-            />
+            <ListInput id={id('wordbank')} items={list('wordBank')} onChange={(next) => set('wordBank', next)} />
           </div>
         </div>
       )
@@ -360,14 +340,7 @@ export function PayloadFields({
           {prompt}
           <div>
             <Label htmlFor={id('headers')}>{t('library:payloadFields.headers')}</Label>
-            <Input
-              id={id('headers')}
-              value={headers.join('; ')}
-              onChange={(event) => {
-                const next = event.target.value.split(';').map((value) => value.trim())
-                set('headers', next)
-              }}
-            />
+            <ListInput id={id('headers')} items={headers} keepEmpty onChange={(next) => set('headers', next)} />
           </div>
           <div>
             <Label>{t('library:payloadFields.rows')}</Label>
@@ -402,13 +375,7 @@ export function PayloadFields({
             <Label htmlFor={id('table-answers')}>
               {t('library:payloadFields.tableAnswers')}
             </Label>
-            <Input
-              id={id('table-answers')}
-              value={answers.join('; ')}
-              onChange={(event) =>
-                set('answers', event.target.value.split(';').map((value) => value.trim()).filter(Boolean))
-              }
-            />
+            <ListInput id={id('table-answers')} items={answers} onChange={(next) => set('answers', next)} />
             <p className="mt-1 text-xs text-fg-muted">
               {t('library:payloadFields.tableStats', { blankCount, answers: answers.length })}
             </p>
@@ -420,6 +387,52 @@ export function PayloadFields({
     default:
       return prompt
   }
+}
+
+const parseList = (text: string, keepEmpty: boolean) => {
+  const items = text.split(';').map((value) => value.trim())
+  return keepEmpty ? items : items.filter(Boolean)
+}
+
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((value, i) => value === b[i])
+
+/**
+ * A list typed as one line, items separated by a semicolon.
+ *
+ * Keeps the typed text in its own state: rebuilding it from the parsed list on
+ * every keystroke would drop a just-typed trailing `;` (the empty item after it
+ * is filtered out), so the separator could never be typed. The text is
+ * replaced only when the list changes from outside (e.g. AI completion).
+ */
+function ListInput({
+  id,
+  items,
+  keepEmpty = false,
+  onChange,
+}: {
+  id: string
+  items: string[]
+  keepEmpty?: boolean
+  onChange: (next: string[]) => void
+}) {
+  const [text, setText] = useState(() => items.join('; '))
+  const [seen, setSeen] = useState(items)
+  if (!sameList(seen, items)) {
+    setSeen(items)
+    if (!sameList(parseList(text, keepEmpty), items)) setText(items.join('; '))
+  }
+  return (
+    <Input
+      id={id}
+      value={text}
+      onChange={(event) => {
+        const next = parseList(event.target.value, keepEmpty)
+        setText(event.target.value)
+        setSeen(next)
+        onChange(next)
+      }}
+    />
+  )
 }
 
 function ColumnEditor({

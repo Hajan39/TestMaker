@@ -180,6 +180,29 @@ test.describe('topic questions', () => {
     await expect(row).toContainText(editedPrompt)
   })
 
+  test('several accepted answers can be typed separated by a semicolon', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka s více odpověďmi ${Date.now()}`
+    const questionId = await addQuestion(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await row.getByRole('button', { name: 'Upravit' }).click()
+
+    // Typed key by key, as the teacher does — `fill` would set the whole value
+    // at once and miss the moment right after the semicolon.
+    const field = row.getByLabel('Další uznávané odpovědi')
+    await field.pressSequentially('první; druhá')
+    await expect(field).toHaveValue('první; druhá')
+
+    await row.getByRole('button', { name: 'Uložit' }).click()
+    await expect(row.getByRole('button', { name: 'Upravit' })).toBeVisible()
+    const saved = await page.request.get(`/api/questions/${questionId}`)
+    expect(saved.ok()).toBe(true)
+    const { question } = (await saved.json()) as { question: { payload: { acceptedAnswers: string[] } } }
+    expect(question.payload.acceptedAnswers).toEqual(['první', 'druhá'])
+  })
+
   test('deleting a card can be undone right away', async ({ page }) => {
     const topicId = await ensureTopic(page.request)
     const prompt = `Otázka ke smazání ${Date.now()}`
