@@ -90,6 +90,19 @@ describe('queue listing', () => {
     expect(jobs[0]?.createdCount).toBe(3)
   })
 
+  it('a job the server cut off does not keep the toolbar spinning', async () => {
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { jobId } = await seedJob('running', { startedAt: longAgo })
+    // A direct generation (the topic page), not a queue job — it fails right away.
+    await db
+      .update(generationJobs)
+      .set({ params: { ...PARAMS, direct: true } })
+      .where(eq(generationJobs.id, jobId))
+
+    const body = (await (await GET(req('/api/jobs'))).json()) as { running: number; error: number }
+    expect(body).toMatchObject({ running: 0, error: 1 })
+  })
+
   it('is ordered the way it is read: running, queued, failed, done', async () => {
     await seedJob('done', { producedCount: 5 })
     await seedJob('error', { error: 'Něco se pokazilo' })

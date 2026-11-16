@@ -32,7 +32,7 @@ import {
   SelectValue,
   Textarea,
 } from '@testmaker/ui'
-import { emptyPayload } from '@/lib/questionDefaults'
+import { emptyPayload, switchPayload } from '@/lib/questionDefaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { PayloadFields } from './PayloadFields'
 import { useAiConfigured } from './useRegenerateQuestion'
@@ -149,8 +149,8 @@ export function QuestionEditorForm({
 
   function changeType(next: QuestionType) {
     completion.reset()
+    setValue('payload', switchPayload(getValues('type'), next, getValues('payload')))
     setValue('type', next)
-    setValue('payload', emptyPayload(next))
     setValue('points', DEFAULT_POINTS[next])
   }
 

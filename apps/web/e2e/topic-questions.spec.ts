@@ -163,8 +163,6 @@ test.describe('topic questions', () => {
     // on top) — the edit in progress must not close or lose its typed text.
     await page.getByRole('button', { name: 'Nová otázka' }).click()
     const newForm = page.getByTestId('new-question-form')
-    // Type first — switching the type clears the prompt (another type has a
-    // different answer shape), so it would erase whatever was typed earlier.
     await newForm.getByLabel('Typ').click()
     await page.getByRole('option', { name: 'Krátká odpověď' }).click()
     await newForm.getByLabel('Zadání').fill(`Vedlejší otázka ${Date.now()}`)
@@ -247,6 +245,21 @@ test.describe('topic questions', () => {
     }).toPass()
 
     await page.getByRole('button', { name: 'Zrušit výběr' }).click()
+  })
+
+  test('switching the type of a new question keeps the prompt already written', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    await page.goto(`/topics/${topicId}`)
+    await page.getByRole('button', { name: 'Nová otázka' }).click()
+    const form = page.getByTestId('new-question-form')
+
+    const prompt = `Napsáno před změnou typu ${Date.now()}`
+    await form.getByLabel('Zadání').fill(prompt)
+    await form.getByLabel('Typ').click()
+    await page.getByRole('option', { name: 'Krátká odpověď' }).click()
+
+    await expect(form.getByLabel('Zadání')).toHaveValue(prompt)
+    await expect(form.getByLabel('Správná odpověď')).toBeVisible()
   })
 
   test('deleting a card can be undone right away', async ({ page }) => {

@@ -51,7 +51,12 @@ const PARAMS: GenerationJobParams = { count: 1, types: ['single_choice'], diffic
 
 /** A queued job over a topic with a long enough material. */
 async function queueJob(
-  options: { status?: 'queued' | 'running'; startedAt?: string | null; text?: string } = {},
+  options: {
+    status?: 'queued' | 'running'
+    startedAt?: string | null
+    text?: string
+    params?: Partial<GenerationJobParams>
+  } = {},
 ): Promise<{ jobId: string; topicId: string }> {
   const { topicId } = await seedTopic()
   await seedMaterial(topicId, { text: options.text ?? TEXT })
@@ -61,7 +66,7 @@ async function queueJob(
     schoolId: ACCOUNT.schoolId,
     requestedBy: ACCOUNT.userId,
     topicId,
-    params: PARAMS,
+    params: { ...PARAMS, ...options.params },
     status: options.status ?? 'queued',
     startedAt: options.startedAt ?? null,
   })
@@ -193,6 +198,29 @@ describe('stuck jobs', () => {
 
     await POST()
     expect((await jobRow(jobId))?.status).toBe('done')
+  })
+
+  it('a job cut off a second time fails instead of going round the queue forever', async () => {
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { jobId } = await queueJob({ status: 'running', startedAt: longAgo, params: { attempts: 1 } })
+
+    const body = (await (await POST()).json()) as { processed: boolean }
+    expect(body.processed).toBe(false)
+    const row = await jobRow(jobId)
+    expect(row?.status).toBe('error')
+    expect(row?.error).toContain('podruhé')
+    expect(model.calls).toBe(0)
+  })
+
+  it('a requeued job remembers it was cut off once', async () => {
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { jobId } = await queueJob({ status: 'running', startedAt: longAgo })
+    const { expireStaleJobs } = await import('@/lib/jobs')
+
+    expect(await expireStaleJobs(null)).toEqual({ failed: 0, requeued: 1 })
+    const row = await jobRow(jobId)
+    expect(row?.status).toBe('queued')
+    expect(row?.params.attempts).toBe(1)
   })
 
   it('a freshly running job is left alone — it is being worked on', async () => {

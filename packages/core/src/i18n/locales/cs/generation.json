@@ -38,7 +38,8 @@
     "replacementSaveFailed": "Náhradu se nepodařilo uložit",
     "noVariant": "Model nevrátil použitelnou verzi. Zkus to prosím znovu.",
     "variantSaveFailed": "Verzi se nepodařilo uložit",
-    "interrupted": "Generování se přerušilo — server ho po několika minutách ukončil. Zkus to znovu, případně s menším počtem otázek."
+    "interrupted": "Generování se přerušilo — server ho po několika minutách ukončil. Zkus to znovu, případně s menším počtem otázek.",
+    "interruptedAgain": "Generování tématu se přerušilo podruhé — server ho po několika minutách ukončil. Zkus to znovu s menším počtem otázek, nebo z tématu vyřaď část materiálů."
   },
   "generateClient": {
     "startFailed": "Generování se nepodařilo spustit.",

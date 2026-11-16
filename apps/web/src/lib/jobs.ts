@@ -56,7 +56,9 @@ export const DONE_LIMIT = 20
  * never recorded their end — they would spin in the toolbar forever and keep
  * their topic locked (`claimTopic`). A direct generation is marked as failed
  * (the teacher may retry it from the overview); a queue job goes back to the
- * queue. Called wherever the queue is read or a topic claimed, so it needs no
+ * queue once — cut off a second time, it fails too, otherwise a topic too big
+ * for one run would spin as "running" forever without producing anything.
+ * Called wherever the queue is read or a topic claimed, so it needs no
  * scheduler; without a scope (the queue runner) it covers all schools.
  *
  * Claims from before the `direct` flag are recognised by starting the moment
@@ -71,10 +73,12 @@ export async function expireStaleJobs(scope: Scope | null): Promise<{ failed: nu
   )
   const direct = sql`(json_extract(${generationJobs.params}, '$.direct') = 1
     or abs(julianday(${generationJobs.startedAt}) - julianday(${generationJobs.createdAt})) * 86400 < 2)`
+  const retried = sql`coalesce(json_extract(${generationJobs.params}, '$.attempts'), 0) >= 1`
 
-  const failed = await db
+  const finishedAt = new Date().toISOString()
+  const failedDirect = await db
     .update(generationJobs)
-    .set({ status: 'error', error: t('generation:generation.interrupted'), finishedAt: new Date().toISOString() })
+    .set({ status: 'error', error: t('generation:generation.interrupted'), finishedAt })
     .where(and(stale, direct))
     .returning({
       id: generationJobs.id,
@@ -82,6 +86,17 @@ export async function expireStaleJobs(scope: Scope | null): Promise<{ failed: nu
       topicId: generationJobs.topicId,
       requestedBy: generationJobs.requestedBy,
     })
+  const failedAgain = await db
+    .update(generationJobs)
+    .set({ status: 'error', error: t('generation:generation.interruptedAgain'), finishedAt })
+    .where(and(stale, retried))
+    .returning({
+      id: generationJobs.id,
+      schoolId: generationJobs.schoolId,
+      topicId: generationJobs.topicId,
+      requestedBy: generationJobs.requestedBy,
+    })
+  const failed = [...failedDirect, ...failedAgain]
   for (const job of failed) {
     await writeAudit({
       schoolId: job.schoolId,
@@ -99,15 +114,24 @@ export async function expireStaleJobs(scope: Scope | null): Promise<{ failed: nu
 
   const requeued = await db
     .update(generationJobs)
-    .set({ status: 'queued', startedAt: null })
+    .set({
+      status: 'queued',
+      startedAt: null,
+      params: sql`json_set(${generationJobs.params}, '$.attempts', coalesce(json_extract(${generationJobs.params}, '$.attempts'), 0) + 1)`,
+    })
     .where(stale)
     .returning({ id: generationJobs.id })
 
   return { failed: failed.length, requeued: requeued.length }
 }
 
-/** Counts per state — a cheap query for the toolbar indicator. */
+/**
+ * Counts per state — a cheap query for the toolbar indicator. Clears stuck
+ * jobs first: the indicator is what the teacher watches, and a job the server
+ * cut off would keep it spinning until somebody started another generation.
+ */
 export async function countJobs(scope: Scope): Promise<QueueCounts> {
+  await expireStaleJobs(scope)
   await expireStaleJobs(scope)
   const rows = await db
     .select({ status: generationJobs.status, value: count() })
@@ -244,7 +268,15 @@ export async function retryFailedJobs(scope: Scope, ids?: string[]): Promise<num
 
   await db
     .update(generationJobs)
-    .set({ status: 'queued', error: null, startedAt: null, finishedAt: null, producedCount: 0 })
+    // A retry by the teacher is a fresh start — the cut-off count goes too.
+    .set({
+      status: 'queued',
+      error: null,
+      startedAt: null,
+      finishedAt: null,
+      producedCount: 0,
+      params: sql`json_remove(${generationJobs.params}, '$.attempts')`,
+    })
     .where(inArray(generationJobs.id, toRetry))
   return toRetry.length
 }

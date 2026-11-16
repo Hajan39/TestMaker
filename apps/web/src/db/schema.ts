@@ -562,6 +562,12 @@ export interface GenerationJobParams {
    * the server cuts it off it fails; a queue job goes back to the queue instead.
    */
   direct?: boolean
+  /**
+   * How many times a queue job was cut off and put back into the queue. A job
+   * that keeps hitting the time limit would otherwise spin forever as
+   * "running" without producing anything (`expireStaleJobs`).
+   */
+  attempts?: number
 }
 
 export const templates = sqliteTable(
