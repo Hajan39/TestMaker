@@ -104,11 +104,22 @@ export const trueFalsePayloadSchema = z.object({
     .max(12),
 })
 
+/**
+ * A blank in fill-in text: any unbroken run of underscores, however long.
+ * Teachers type two, three or ten — counting them exactly is not their job.
+ */
+export const BLANK_MARK = /_+/g
+
+/** Number of blanks in a fill-in text. */
+export function countBlanks(text: string): number {
+  return (text.match(BLANK_MARK) ?? []).length
+}
+
 export const fillBlankPayloadSchema = z.object({
   prompt: z.string().default('Doplň chybějící výrazy.'),
-  /** Text with blanks marked by `___` (three underscores). */
+  /** Text with blanks marked by a run of underscores (`___`, see `BLANK_MARK`). */
   text: z.string().min(5),
-  /** Correct expressions in order of the `___` occurrences. */
+  /** Correct expressions in order of the blanks in the text. */
   blanks: z.array(z.string().min(1)).min(1).max(20),
   /** Extra words on offer (optional word bank below the prompt). */
   wordBank: z.array(z.string().min(1)).max(30).default([]),
@@ -534,7 +545,7 @@ export function validateQuestionContent(q: QuestionContent): string[] {
       break
     }
     case 'fill_blank': {
-      const placeholders = (q.payload.text.match(/___/g) ?? []).length
+      const placeholders = countBlanks(q.payload.text)
       if (placeholders !== q.payload.blanks.length) {
         errors.push(t('core:validation.blanksMismatch', { placeholders, blanks: q.payload.blanks.length }))
       }

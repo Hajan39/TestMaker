@@ -1,7 +1,7 @@
 import { Image, Text, View } from '@react-pdf/renderer'
 import { t } from '../i18n'
 import type { Block } from '../schema/blocks'
-import type { Question } from '../schema/question'
+import { BLANK_MARK, type Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
 import { answerLines } from '../schema/test'
 import { formatAcceptedAnswers } from './answerKey'
@@ -210,7 +210,7 @@ function AnswerArea({ question, style, config, variant, assets, linesOverride, f
           {filled ? (
             <Text style={{ lineHeight: 1.9 }}>
               {sanitizeText(question.payload.text)
-                .split('___')
+                .split(BLANK_MARK)
                 .map((part, i, parts) => (
                   <Text key={i}>
                     {part}

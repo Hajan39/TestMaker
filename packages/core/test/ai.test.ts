@@ -963,6 +963,14 @@ describe('fill in the blank: number of gaps must match blanks', () => {
     })
     expect(validateQuestionContent(parsed)).toEqual([])
   })
+
+  it('a blank is any run of underscores, not just three', () => {
+    const parsed = questionContentSchema.parse({
+      type: 'fill_blank',
+      payload: { prompt: 'Doplň.', text: 'Voda vře při _ °C, mrzne při __________ °C a taje při ____.', blanks: ['100', '0', '0'] },
+    })
+    expect(validateQuestionContent(parsed)).toEqual([])
+  })
 })
 
 describe('explaining model errors', () => {

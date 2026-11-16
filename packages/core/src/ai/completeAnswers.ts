@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { t } from '../i18n'
 import {
+  countBlanks,
   normalizeMatchingPayload,
   normalizeOrderingPayload,
   questionContentSchema,
@@ -131,7 +132,7 @@ function mergePayload(draft: QuestionDraft, a: CompletionResponse): Record<strin
     }
 
     case 'fill_blank': {
-      const count = (str(p.text).match(/___/g) ?? []).length
+      const count = countBlanks(str(p.text))
       const own = strings(p.blanks)
       return { ...p, blanks: own.length === count ? own : strings(a.blanks) }
     }

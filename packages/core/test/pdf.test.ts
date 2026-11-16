@@ -389,6 +389,18 @@ describe('answer numbering on paper and in the key', () => {
     expect(text).toContain('(1) dutinou nosní, (2) hrtanu')
   })
 
+  it('a blank of any number of underscores becomes one numbered line', async () => {
+    const base = sampleQuestions.find((q) => q.type === 'fill_blank')!
+    const question = {
+      ...base,
+      payload: { ...base.payload, text: 'Vzduch vstupuje do těla _ a pokračuje do __________.' },
+    } as typeof base
+    const text = await renderWithKey(question)
+    expect(text).toContain('(1) ______________')
+    expect(text).toContain('(2) ______________')
+    expect(text).not.toContain('(3)')
+  })
+
   it('empty cells of a fill-in table are numbered the same as in the key', async () => {
     const question = sampleQuestions.find((q) => q.type === 'table_fill')!
     const text = await renderWithKey(question)

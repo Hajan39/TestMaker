@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { t } from '../i18n'
 import {
+  BLANK_MARK,
   AI_QUESTION_TYPES,
   DEFAULT_POINTS,
   pointsByScope,
@@ -528,7 +529,7 @@ export function questionSummary(question: QuestionContent): string {
       break
     case 'fill_blank': {
       const blanks = [...question.payload.blanks]
-      text = question.payload.text.replace(/___/g, () => blanks.shift() ?? '___')
+      text = question.payload.text.replace(BLANK_MARK, (mark) => blanks.shift() ?? mark)
       break
     }
     case 'matching':

@@ -9,6 +9,7 @@
  */
 
 import type { PuzzleContent, PuzzleEntry } from '../schema/puzzle'
+import { BLANK_MARK } from '../schema/question'
 import { buildPuzzle, markedOffsets, puzzleProblems, type BuiltPuzzle, type CryptogramResult } from '../puzzle/index'
 
 export { LETTERS, questionLabel } from './styles'
@@ -40,7 +41,7 @@ export const WORKSHEET_LAYOUT = {
 } as const
 
 /**
- * Fill-in question text with the blanks (`___`) replaced by a numbered line.
+ * Fill-in question text with the blanks (`___`, any length) replaced by a numbered line.
  * The key refers to the blanks by the same numbers, so answers need not be
  * matched by their order in the text.
  */
@@ -48,7 +49,7 @@ export function numberedBlanks(text: string): string {
   let blankNumber = 0
   return (
     text
-      .replace(/___/g, () => {
+      .replace(BLANK_MARK, () => {
         blankNumber += 1
         return ` (${blankNumber}) ______________ `
       })

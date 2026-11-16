@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { shuffleChoices, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
+import { countBlanks, shuffleChoices, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
 import {
   Button,
   Checkbox,
@@ -240,7 +240,7 @@ export function PayloadFields({
     case 'fill_blank': {
       const blanks = list('blanks')
       const text = str('text')
-      const placeholders = (text.match(/___/g) ?? []).length
+      const placeholders = countBlanks(text)
       return (
         <div className="space-y-3">
           {prompt}

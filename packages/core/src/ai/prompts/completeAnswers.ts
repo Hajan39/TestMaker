@@ -1,4 +1,4 @@
-import { questionTypeLabel, type QuestionType } from '../../schema/question'
+import { countBlanks, questionTypeLabel, type QuestionType } from '../../schema/question'
 import { AI_SETTINGS } from '../settings'
 import { describeGradeAudience } from './questions'
 
@@ -31,7 +31,7 @@ export interface AnswerCompletionRequest {
   allowGeneralKnowledge: boolean
 }
 
-const blanksIn = (text: unknown) => (typeof text === 'string' ? (text.match(/___/g) ?? []).length : 0)
+const blanksIn = (text: unknown) => (typeof text === 'string' ? countBlanks(text) : 0)
 const nullCells = (rows: unknown) =>
   Array.isArray(rows) ? rows.flat().filter((cell) => cell === null || cell === '').length : 0
 
