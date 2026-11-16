@@ -9,6 +9,7 @@ import type { AnswerCompletion } from '@testmaker/core/ai'
 import {
   DEFAULT_POINTS,
   questionTypeLabel,
+  tidyPayload,
   QUESTION_TYPES,
   questionContentSchema,
   validateQuestionContent,
@@ -71,6 +72,7 @@ function formSchema(blocks: Question['blocks']) {
       }
       const parsed = questionContentSchema.safeParse({
         ...value,
+        payload: tidyPayload(value.type, value.payload),
         explanation: value.explanation.trim() || undefined,
         blocks,
       })

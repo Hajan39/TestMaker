@@ -203,6 +203,52 @@ test.describe('topic questions', () => {
     expect(question.payload.acceptedAnswers).toEqual(['první', 'druhá'])
   })
 
+  test('a comma separates accepted answers too, and an empty option row does not block saving', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka s čárkou ${Date.now()}`
+    const questionId = await addQuestion(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await row.getByRole('button', { name: 'Upravit' }).click()
+    await row.getByLabel('Další uznávané odpovědi').pressSequentially('první, druhá, 3,5')
+    await row.getByRole('button', { name: 'Uložit' }).click()
+    await expect(row.getByRole('button', { name: 'Upravit' })).toBeVisible()
+
+    const saved = await page.request.get(`/api/questions/${questionId}`)
+    const { question } = (await saved.json()) as { question: { payload: { acceptedAnswers: string[] } } }
+    expect(question.payload.acceptedAnswers).toEqual(['první', 'druhá', '3,5'])
+  })
+
+  test('the selection bar does not cover the last question', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    // Enough cards for the list to scroll.
+    for (let i = 0; i < 8; i++) await addQuestion(page.request, topicId, { prompt: `Výplň ${Date.now()} ${i}`, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const rows = page.locator('li[data-question-id]')
+    await rows.first().getByRole('checkbox', { name: 'Vybrat do testu' }).click()
+    const bar = page.getByTestId('selection-bar')
+    await expect(bar).toBeVisible()
+
+    // Scroll whatever scrolls the list all the way down.
+    const last = rows.last()
+    await last.evaluate((element) => {
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        if (node.scrollHeight > node.clientHeight + 1 && getComputedStyle(node).overflowY !== 'visible') {
+          node.scrollTop = node.scrollHeight
+        }
+      }
+    })
+    await expect(async () => {
+      const lastBox = (await last.boundingBox())!
+      const barBox = (await bar.locator('xpath=..').boundingBox())!
+      expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(barBox.y)
+    }).toPass()
+
+    await page.getByRole('button', { name: 'Zrušit výběr' }).click()
+  })
+
   test('deleting a card can be undone right away', async ({ page }) => {
     const topicId = await ensureTopic(page.request)
     const prompt = `Otázka ke smazání ${Date.now()}`

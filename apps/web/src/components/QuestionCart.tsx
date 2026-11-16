@@ -137,6 +137,21 @@ export function useQuestionCart(): CartApi {
   return cart
 }
 
+/**
+ * Keeps the page's bottom free for the floating bar: publishes the bar's
+ * height as `--bottom-overlay`, which `AppShell` adds below the content —
+ * otherwise the last question of a list would stay hidden under the bar.
+ */
+function reserveSpace(bar: HTMLDivElement) {
+  const root = document.documentElement
+  const observer = new ResizeObserver(() => root.style.setProperty('--bottom-overlay', `${bar.offsetHeight}px`))
+  observer.observe(bar)
+  return () => {
+    observer.disconnect()
+    root.style.removeProperty('--bottom-overlay')
+  }
+}
+
 /** Pages where a bar for a new test would be in the way: building a test or worksheet. */
 const NO_BAR = [/^\/tests\/./, /^\/listy\/./]
 
@@ -187,7 +202,7 @@ function CartBar({ templateId }: { templateId: string }) {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
+    <div ref={reserveSpace} className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
       <div className="pointer-events-auto mx-auto max-w-3xl shadow-lg">
         <SelectionBar
           count={cart.items.length}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { countBlanks, shuffleChoices, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
+import { countBlanks, shuffleChoices, splitList, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
 import {
   Button,
   Checkbox,
@@ -389,19 +389,15 @@ export function PayloadFields({
   }
 }
 
-const parseList = (text: string, keepEmpty: boolean) => {
-  const items = text.split(';').map((value) => value.trim())
-  return keepEmpty ? items : items.filter(Boolean)
-}
-
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((value, i) => value === b[i])
 
 /**
- * A list typed as one line, items separated by a semicolon.
+ * A list typed as one line, items separated by a semicolon or a comma
+ * (`splitList`).
  *
  * Keeps the typed text in its own state: rebuilding it from the parsed list on
- * every keystroke would drop a just-typed trailing `;` (the empty item after it
- * is filtered out), so the separator could never be typed. The text is
+ * every keystroke would drop a just-typed trailing separator (the empty item
+ * after it is filtered out), so it could never be typed. The text is
  * replaced only when the list changes from outside (e.g. AI completion).
  */
 function ListInput({
@@ -419,14 +415,14 @@ function ListInput({
   const [seen, setSeen] = useState(items)
   if (!sameList(seen, items)) {
     setSeen(items)
-    if (!sameList(parseList(text, keepEmpty), items)) setText(items.join('; '))
+    if (!sameList(splitList(text, keepEmpty), items)) setText(items.join('; '))
   }
   return (
     <Input
       id={id}
       value={text}
       onChange={(event) => {
-        const next = parseList(event.target.value, keepEmpty)
+        const next = splitList(event.target.value, keepEmpty)
         setText(event.target.value)
         setSeen(next)
         onChange(next)

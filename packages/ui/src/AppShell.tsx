@@ -69,7 +69,10 @@ export function AppShell({
           <ThemeToggle />
         </div>
       </header>
-      <main id="main" tabIndex={-1} className="surface-content relative outline-none min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
+      {/* `--bottom-overlay`: height of a bar floating over the bottom of the
+          page (the question cart). The padding keeps the end of the content,
+          and of the panes filling `main`, above it instead of under it. */}
+      <main id="main" tabIndex={-1} className="surface-content relative outline-none min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[var(--bottom-overlay,0px)]">{children}</main>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 export * from './blocks'
 export * from './question'
+export * from './tidy'
 export * from './puzzle'
 export * from './template'
 export * from './builtInTemplates'
