@@ -19,6 +19,7 @@ import {
 } from '@testmaker/core/schema'
 import {
   Button,
+  DecimalInput,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -193,13 +194,19 @@ export function QuestionEditorForm({
         </div>
         <div className={onSubmit ? 'hidden' : 'w-24'}>
           <Label htmlFor={`question-editor-points-${uid}`}>{t('library:questionEditor.points')}</Label>
-          <Input
-            id={`question-editor-points-${uid}`}
-            type="number"
-            min={0}
-            step={0.5}
-            defaultValue={question?.points ?? DEFAULT_POINTS.single_choice}
-            {...register('points', { setValueAs: (value) => Number(value) || 0 })}
+          <Controller
+            control={control}
+            name="points"
+            render={({ field }) => (
+              <DecimalInput
+                id={`question-editor-points-${uid}`}
+                min={0}
+                max={100}
+                value={field.value}
+                onValueChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
           />
         </div>
         <div className="w-36">

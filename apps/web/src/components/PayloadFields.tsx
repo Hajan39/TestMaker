@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { countBlanks, shuffleChoices, splitList, type QuestionContent, type QuestionType } from '@testmaker/core/schema'
 import {
   Button,
@@ -45,6 +45,7 @@ export function PayloadFields({
   // fixed ids would then repeat and `htmlFor` would point at another field.
   const uid = useId()
   const id = (name: string) => `payload-${name}-${uid}`
+  const textRef = useRef<HTMLTextAreaElement>(null)
 
   const prompt = (
     <div>
@@ -160,14 +161,20 @@ export function PayloadFields({
             <div className="space-y-2">
               {options.map((option, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <Checkbox checked={correctIndices.includes(index)} onCheckedChange={() => toggleCorrect(index)} />
+                  <Checkbox
+                    aria-label={t('library:payloadFields.optionCorrect', { number: index + 1 })}
+                    checked={correctIndices.includes(index)}
+                    onCheckedChange={() => toggleCorrect(index)}
+                  />
                   <Input
+                    aria-label={t('library:payloadFields.optionText', { number: index + 1 })}
                     value={option}
                     onChange={(event) => set('options', replaceAt(options, index, event.target.value))}
                   />
                   <Button
                     size="sm"
                     variant="ghost"
+                    aria-label={t('library:payloadFields.removeOption', { number: index + 1 })}
                     onClick={() => set('options', options.filter((_, i) => i !== index))}
                   >
                     {t('library:payloadFields.remove')}
@@ -197,6 +204,7 @@ export function PayloadFields({
               {statements.map((statement, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <Checkbox
+                    aria-label={t('library:payloadFields.statementTrue', { number: index + 1 })}
                     checked={statement.isTrue}
                     onCheckedChange={() =>
                       set(
@@ -206,6 +214,7 @@ export function PayloadFields({
                     }
                   />
                   <Input
+                    aria-label={t('library:payloadFields.statementText', { number: index + 1 })}
                     value={statement.text}
                     onChange={(event) =>
                       set('statements', replaceAt(statements, index, { ...statement, text: event.target.value }))
@@ -214,6 +223,7 @@ export function PayloadFields({
                   <Button
                     size="sm"
                     variant="ghost"
+                    aria-label={t('library:payloadFields.removeStatement', { number: index + 1 })}
                     onClick={() => set('statements', statements.filter((_, i) => i !== index))}
                   >
                     {t('library:payloadFields.remove')}
@@ -241,15 +251,43 @@ export function PayloadFields({
       const blanks = list('blanks')
       const text = str('text')
       const placeholders = countBlanks(text)
+      // The underscore is on the second symbol page of phone and tablet
+      // keyboards; the button puts a blank where the cursor is on any of them.
+      const insertBlank = () => {
+        const field = textRef.current
+        const start = field?.selectionStart ?? text.length
+        const end = field?.selectionEnd ?? text.length
+        const before = text.slice(0, start)
+        const after = text.slice(end)
+        // A blank glued to a word would read as part of it — keep a space
+        // around; at the end of the text the space is ready for the next word.
+        const mark = `${before && !/\s$/.test(before) ? ' ' : ''}___${/^[\s.,;:!?]/.test(after) ? '' : ' '}`
+        set('text', before + mark + after)
+        const caret = before.length + mark.length
+        requestAnimationFrame(() => {
+          field?.focus()
+          field?.setSelectionRange(caret, caret)
+        })
+      }
       return (
         <div className="space-y-3">
           {prompt}
           <div>
             <Label htmlFor={id('fillblank-text')}>{t('library:payloadFields.fillBlankText')}</Label>
-            <Textarea id={id('fillblank-text')} value={text} onChange={(event) => set('text', event.target.value)} />
-            <p className="mt-1 text-xs text-fg-muted">
-              {t('library:payloadFields.blankStats', { placeholders, blanks: blanks.length })}
-            </p>
+            <Textarea
+              ref={textRef}
+              id={id('fillblank-text')}
+              value={text}
+              onChange={(event) => set('text', event.target.value)}
+            />
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-fg-muted">
+                {t('library:payloadFields.blankStats', { placeholders, blanks: blanks.length })}
+              </p>
+              <Button size="sm" variant="outline" onClick={insertBlank}>
+                {t('library:payloadFields.insertBlank')}
+              </Button>
+            </div>
           </div>
           <div>
             <Label htmlFor={id('blanks')}>{t('library:payloadFields.blanks')}</Label>
@@ -446,8 +484,17 @@ function ColumnEditor({
       <div className="space-y-2">
         {items.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
-            <Input value={item} onChange={(event) => onChange(replaceAt(items, index, event.target.value))} />
-            <Button size="sm" variant="ghost" onClick={() => onChange(items.filter((_, i) => i !== index))}>
+            <Input
+              aria-label={t('library:payloadFields.columnItem', { column: label, number: index + 1 })}
+              value={item}
+              onChange={(event) => onChange(replaceAt(items, index, event.target.value))}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t('library:payloadFields.removeColumnItem', { column: label, number: index + 1 })}
+              onClick={() => onChange(items.filter((_, i) => i !== index))}
+            >
               {t('library:payloadFields.remove')}
             </Button>
           </div>

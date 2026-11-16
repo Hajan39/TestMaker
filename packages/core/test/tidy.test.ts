@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitList, tidyPayload } from '../src/schema/tidy'
+import { formatDecimal, parseDecimal, splitList, tidyPayload } from '../src/schema/tidy'
 
 describe('splitList', () => {
   it('a semicolon separates items', () => {
@@ -20,6 +20,10 @@ describe('splitList', () => {
 
   it('pasted lines separate', () => {
     expect(splitList('první\ndruhá, s čárkou')).toEqual(['první', 'druhá, s čárkou'])
+  })
+
+  it('a row pasted from Excel or a Word table separates by tabs', () => {
+    expect(splitList('první\tdruhá, s čárkou\t3,5')).toEqual(['první', 'druhá, s čárkou', '3,5'])
   })
 
   it('empty items are dropped, unless kept on purpose', () => {
@@ -75,5 +79,26 @@ describe('tidyPayload', () => {
         [1, 1],
       ],
     })
+  })
+})
+
+describe('parseDecimal', () => {
+  it('reads a decimal comma and a dot alike', () => {
+    expect(parseDecimal('1,5')).toBe(1.5)
+    expect(parseDecimal('1.5')).toBe(1.5)
+    expect(parseDecimal(' 2 ')).toBe(2)
+    expect(parseDecimal(',5')).toBe(0.5)
+    expect(parseDecimal('1 000')).toBe(1000)
+  })
+
+  it('anything else is not a number, rather than zero', () => {
+    expect(parseDecimal('')).toBeNull()
+    expect(parseDecimal('abc')).toBeNull()
+    expect(parseDecimal('1,5,5')).toBeNull()
+  })
+
+  it('writes numbers back the Czech way', () => {
+    expect(formatDecimal(1.5)).toBe('1,5')
+    expect(formatDecimal(2)).toBe('2')
   })
 })

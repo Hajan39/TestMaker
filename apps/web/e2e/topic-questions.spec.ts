@@ -262,6 +262,42 @@ test.describe('topic questions', () => {
     await expect(form.getByLabel('Správná odpověď')).toBeVisible()
   })
 
+  test('half points can be typed with a decimal comma', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    const prompt = `Otázka za půl bodu ${Date.now()}`
+    const questionId = await addQuestion(page.request, topicId, { prompt, difficulty: 1 })
+
+    await page.goto(`/topics/${topicId}`)
+    const row = page.locator('li[data-question-id]', { hasText: prompt })
+    await row.getByRole('button', { name: 'Upravit' }).click()
+    const points = row.getByLabel('Body', { exact: true })
+    await points.fill('')
+    await points.pressSequentially('1,5')
+    await expect(points).toHaveValue('1,5')
+    await row.getByRole('button', { name: 'Uložit' }).click()
+    await expect(row.getByRole('button', { name: 'Upravit' })).toBeVisible()
+
+    const saved = await page.request.get(`/api/questions/${questionId}`)
+    const { question } = (await saved.json()) as { question: { points: number } }
+    expect(question.points).toBe(1.5)
+  })
+
+  test('a blank can be inserted with a button, without typing underscores', async ({ page }) => {
+    const topicId = await ensureTopic(page.request)
+    await page.goto(`/topics/${topicId}`)
+    await page.getByRole('button', { name: 'Nová otázka' }).click()
+    const form = page.getByTestId('new-question-form')
+    await form.getByLabel('Typ').click()
+    await page.getByRole('option', { name: 'Doplňování do textu' }).click()
+
+    const text = form.getByLabel(/Text s vynechávkami/)
+    await text.fill('Voda vře při')
+    await form.getByRole('button', { name: 'Vložit místo k doplnění' }).click()
+    // The cursor stays after the blank, so typing goes on right there.
+    await page.keyboard.type('°C.')
+    await expect(text).toHaveValue('Voda vře při ___ °C.')
+  })
+
   test('deleting a card can be undone right away', async ({ page }) => {
     const topicId = await ensureTopic(page.request)
     const prompt = `Otázka ke smazání ${Date.now()}`

@@ -30,6 +30,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DecimalInput,
   Input,
   PaperHeader,
   PaperPuzzle,
@@ -459,14 +460,13 @@ function PageRow({
         {item.kind === 'question' && graded ? (
           <label className="flex items-center gap-1 text-xs text-fg-muted">
             {t('tests:page.pointsShort')}
-            <Input
+            <DecimalInput
               className="h-6 w-14 px-1 text-xs"
-              type="number"
               min={0}
-              step={0.5}
+              max={100}
               aria-label={t('tests:page.questionPoints')}
               value={item.pointsOverride ?? question?.points ?? 0}
-              onChange={(event) => onPatch(item.key, { pointsOverride: Math.max(0, Number(event.target.value) || 0) })}
+              onValueChange={(points) => onPatch(item.key, { pointsOverride: points })}
             />
           </label>
         ) : null}

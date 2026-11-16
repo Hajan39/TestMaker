@@ -11,12 +11,31 @@ import type { QuestionType } from './question'
  * Splits a list typed on one line. A semicolon separates items; without one,
  * a comma does too — except between digits, so „3,5“ stays one number. Once
  * a semicolon appears, commas belong to the items („Praha, Brno; Ostrava“).
- * New lines (pasted lists) always separate.
+ * New lines and tabs (a list or a table row pasted from Word or Excel) always
+ * separate. Every keyboard has at least the comma on its first page, phones
+ * and tablets included.
  */
 export function splitList(text: string, keepEmpty = false): string[] {
-  const separator = /[;\n]/.test(text) ? /[;\n]/ : /(?<!\d),|,(?!\d)/
+  const separator = /[;\n\t]/.test(text) ? /[;\n\t]/ : /(?<!\d),|,(?!\d)/
   const items = text.split(separator).map((item) => item.trim())
   return keepEmpty ? items : items.filter(Boolean)
+}
+
+/**
+ * A number typed by a person: Czech keyboards (and the numeric pad on them)
+ * give a decimal comma, others a dot — both mean the same. Spaces are ignored
+ * („1 000“). Returns `null` for anything that is not a number, so the caller
+ * can say so instead of silently saving zero.
+ */
+export function parseDecimal(text: string): number | null {
+  const normalized = text.replace(/\s/g, '').replace(',', '.')
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(normalized)) return null
+  return Number(normalized)
+}
+
+/** A number written the Czech way, with a decimal comma. */
+export function formatDecimal(value: number): string {
+  return String(value).replace('.', ',')
 }
 
 type Payload = Record<string, unknown>

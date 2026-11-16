@@ -47,6 +47,7 @@ export { EmptyState } from './EmptyState'
 export { Mark } from './Mark'
 export { PrintButton } from './PrintButton'
 export { BusyButton } from './BusyButton'
+export { DecimalInput } from './DecimalInput'
 export { printPdf, downloadPdf } from './print'
 export {
   Delayed, LoadingLines, LoadingList, LoadingHeading, LoadingTiles, LoadingTable,
