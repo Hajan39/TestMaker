@@ -130,6 +130,9 @@ describe('POST /api/worksheets/generate', () => {
     expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'table', 'question'])
     expect(items.every((item) => !item.needsCheck)).toBe(true)
     expect(items[3]!.question?.payload).toMatchObject({ prompt: 'Kde je Etna?' })
+    // Word bank starts switched off; the teacher turns it on per task.
+    expect(items[3]!.wordBankHidden).toBe(true)
+    expect(items[0]!.wordBankHidden).toBe(false)
   })
 
   it('makes one worksheet from two topics: both materials under their names, joined title, first topic on the row', async () => {

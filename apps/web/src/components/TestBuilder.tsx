@@ -196,6 +196,8 @@ export function TestBuilder({
       text: null,
       pointsOverride: null,
       linesOverride: null,
+      // Word bank is off by default; the teacher turns it on per question.
+      wordBankHidden: true,
       question,
       puzzleId: null,
       puzzle: null,
@@ -437,7 +439,8 @@ export function TestBuilder({
       case 'table':
         return { ...base, table: item.content }
       case 'question':
-        return { ...base, question: worksheetQuestion(item.question) }
+        // A regenerated task keeps the teacher's word bank choice; a new one starts without it.
+        return { ...base, wordBankHidden: previous.wordBankHidden ?? true, question: worksheetQuestion(item.question) }
     }
   }
 

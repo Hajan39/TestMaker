@@ -599,7 +599,8 @@ function worksheetItemRow(item: WorksheetItemDraft) {
     case 'table':
       return { ...base, content: item.content }
     case 'question':
-      return { ...base, questionSnapshot: serializeQuestionSnapshot(item.question) }
+      // Word bank is off by default; the teacher turns it on per task.
+      return { ...base, questionSnapshot: serializeQuestionSnapshot(item.question), wordBankHidden: true }
   }
 }
 
