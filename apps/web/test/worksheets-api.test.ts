@@ -40,9 +40,13 @@ vi.mock('@testmaker/core/ai', async (importOriginal) => {
 
 const { POST: generate } = await import('@/app/api/worksheets/generate/route')
 const { POST: regenerate } = await import('@/app/api/worksheets/[id]/items/[itemId]/regenerate/route')
-const { auditLog, db, materials, testItems, tests, topics } = await import('@/db')
+const { auditLog, db, materials, schools, testItems, tests, topics } = await import('@/db')
 const { loadTest, loadTestItems } = await import('@/lib/tests')
 const { jsonReq, seedMaterial, seedTemplate, seedTopic, seedAccount } = await import('./helpers')
+const { TEST_SCHOOL_ID } = await import('./setup')
+
+/** Numbers the extra topics and schools, so their ids stay unique without randomness. */
+let seeded = 0
 
 const text = (value: string, fromMaterials = true) => ({ kind: 'text', variant: 'text', text: value, fromMaterials })
 const LIST = {
@@ -86,11 +90,28 @@ async function topicWithMaterials(): Promise<{ topicId: string; gradeId: string 
   return { topicId, gradeId }
 }
 
+/** Another topic in the same grade with one material. */
+async function secondTopic(gradeId: string, name = 'Zemětřesení'): Promise<string> {
+  const id = `tema-${name}-${++seeded}`
+  await db.insert(topics).values({ id, schoolId: TEST_SCHOOL_ID, gradeId, name })
+  await seedMaterial(id, { fileName: name === 'Zemětřesení' ? 'zeme.txt' : `${name}.txt`, text: `${name} vzniká v zemské kůře. `.repeat(5) })
+  return id
+}
+
+/** A topic that belongs to another school. */
+async function foreignTopic(gradeId: string): Promise<string> {
+  const schoolId = `cizi-skola-${++seeded}`
+  await db.insert(schools).values({ id: schoolId, name: 'Cizí škola', slug: schoolId })
+  const id = `cizi-tema-${schoolId}`
+  await db.insert(topics).values({ id, schoolId, gradeId, name: 'Cizí téma' })
+  return id
+}
+
 describe('POST /api/worksheets/generate', () => {
   it('saves the worksheet and items from a topic, takes the grade from the topic and skips duplicate material', async () => {
     const { topicId, gradeId } = await topicWithMaterials()
     const response = await generate(
-      jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicId, instructions: 'víc tabulek', ownText: '' }),
+      jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [topicId], instructions: 'víc tabulek', ownText: '' }),
     )
     expect(response.status).toBe(200)
     const { id, dropped } = (await response.json()) as { id: string; dropped: number }
@@ -103,12 +124,50 @@ describe('POST /api/worksheets/generate', () => {
 
     const test = await loadTest((await import('./helpers')).ACCOUNT, id)
     expect(test).toMatchObject({ kind: 'pracovni_list', graded: false, topicId, gradeId, title: 'Sopky a zemětřesení' })
-    expect(JSON.parse(test!.brief!)).toEqual({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: true })
+    expect(JSON.parse(test!.brief!)).toEqual({ title: 'Sopky', topicIds: [topicId], instructions: 'víc tabulek', ownText: '', onlyMaterials: true })
 
     const items = await loadTestItems((await import('./helpers')).ACCOUNT, id)
     expect(items.map((item) => item.kind)).toEqual(['heading', 'text', 'table', 'question'])
     expect(items.every((item) => !item.needsCheck)).toBe(true)
     expect(items[3]!.question?.payload).toMatchObject({ prompt: 'Kde je Etna?' })
+  })
+
+  it('makes one worksheet from two topics: both materials under their names, joined title, first topic on the row', async () => {
+    const { topicId, gradeId } = await topicWithMaterials()
+    const second = await secondTopic(gradeId)
+    const response = await generate(
+      jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [topicId, second, topicId] }),
+    )
+    expect(response.status).toBe(200)
+    const { id } = (await response.json()) as { id: string }
+
+    const request = model.requests[0]!
+    expect(request.title).toBe('Sopky a Zemětřesení')
+    expect(request.materials).toMatch(/^## Téma: Sopky\n=== sopky.txt ===\nSopka vzniká/)
+    expect(request.materials).toContain('## Téma: Zemětřesení\n=== zeme.txt ===\nZemětřesení vzniká')
+    expect(request.materials).not.toContain('DUPLICITNÍ')
+    expect(model.prompts[0]).toContain('Téma listu: Sopky a Zemětřesení')
+
+    const [row] = await db.select().from(tests).where(eq(tests.id, id))
+    expect(row).toMatchObject({ topicId, gradeId })
+    expect(JSON.parse(row!.brief!)).toMatchObject({ title: 'Sopky a Zemětřesení', topicIds: [topicId, second] })
+  })
+
+  it('a topic of another school among the chosen ones fails the whole request with 404', async () => {
+    const { topicId, gradeId } = await topicWithMaterials()
+    const foreign = await foreignTopic(gradeId)
+    const before = (await db.select().from(tests)).length
+    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [topicId, foreign] }))
+    expect(response.status).toBe(404)
+    expect(model.requests).toHaveLength(0)
+    expect((await db.select().from(tests)).length).toBe(before)
+  })
+
+  it('an empty topic list is an incomplete brief (400)', async () => {
+    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [] }))
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: string }).error).toMatch(/vyber téma/)
+    expect(model.requests).toHaveLength(0)
   })
 
   it('saves a free-form brief with a foreign grade without grade and topic', async () => {
@@ -129,9 +188,9 @@ describe('POST /api/worksheets/generate', () => {
 
   it('a topic that disappeared meanwhile returns 404 with advice and saves nothing', async () => {
     const before = (await db.select().from(tests)).length
-    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicId: 'neni' }))
+    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: ['neni'] }))
     expect(response.status).toBe(404)
-    expect(((await response.json()) as { error: string }).error).toBe('Téma už v knihovně není, vyber jiné.')
+    expect(((await response.json()) as { error: string }).error).toBe('Některé z vybraných témat už v knihovně není, vyber jiné.')
     expect((await db.select().from(tests)).length).toBe(before)
   })
 
@@ -173,7 +232,7 @@ describe('POST /api/worksheets/generate', () => {
 describe('POST /api/worksheets/[id]/items/[itemId]/regenerate', () => {
   async function listId(): Promise<string> {
     const { topicId } = await topicWithMaterials()
-    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicId }))
+    const response = await generate(jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [topicId] }))
     return ((await response.json()) as { id: string }).id
   }
   const params = (id: string, itemId = 'nova') => ({ params: Promise.resolve({ id, itemId }) })
@@ -210,6 +269,25 @@ describe('POST /api/worksheets/[id]/items/[itemId]/regenerate', () => {
     await db.update(tests).set({ ownerId: colleague.userId }).where(eq(tests.id, id))
     const response = await regenerate(jsonReq('/x', 'POST', { target: { kind: 'text' }, existing: [] }), params(id))
     expect(response.status).toBe(404)
+  })
+
+  it('regenerates from all the worksheet topics, dropping one deleted meanwhile', async () => {
+    const { topicId, gradeId } = await topicWithMaterials()
+    const second = await secondTopic(gradeId)
+    const third = await secondTopic(gradeId, 'Gejzíry')
+    const created = await generate(
+      jsonReq('/api/worksheets/generate', 'POST', { source: 'topic', topicIds: [topicId, second, third] }),
+    )
+    const { id } = (await created.json()) as { id: string }
+    await db.delete(topics).where(eq(topics.id, third))
+    model.answer = { item: text('Nová věta.') }
+    model.requests = []
+    const response = await regenerate(jsonReq('/x', 'POST', { target: { kind: 'text' }, existing: [] }), params(id))
+    expect(response.status).toBe(200)
+    expect(model.requests[0]!.title).toBe('Sopky a Zemětřesení')
+    expect(model.requests[0]!.materials).toContain('magma')
+    expect(model.requests[0]!.materials).toContain('Zemětřesení vzniká')
+    expect(model.requests[0]!.materials).not.toContain('Gejzíry')
   })
 
   it('a deleted topic does not matter — it regenerates from the title', async () => {

@@ -21,7 +21,7 @@ import { PrintMenuItems } from '@/components/PrintMenu'
 import { RowActions } from '@/components/RowActions'
 import { errorMessage, requestJson } from '@/lib/requestJson'
 import { t } from '@testmaker/core/i18n'
-import type { TestKind } from '@testmaker/core/schema'
+import type { TestKind, TestVisibility } from '@testmaker/core/schema'
 import { testPath } from './paths'
 import { formatDate } from '@testmaker/core/dates'
 import { KindMark } from '@/components/KindMark'
@@ -41,8 +41,9 @@ export interface TestRowData {
   topicName: string | null
   /** All items except page breaks — counted instead of questions for a worksheet. */
   itemCount: number
-  /** Own test; one shared by a colleague can only be opened, printed and copied. */
+  /** Own test; a colleague's can be opened, printed and copied — edited only when shared for editing. */
   mine: boolean
+  visibility: TestVisibility
   updatedAt: string
 }
 
@@ -124,7 +125,7 @@ export function TestActions({ row }: { row: TestRowData }) {
         busy={pdfWork ?? (copying ? t('tests:row.copying') : null)}
       >
         <DropdownMenuItem asChild>
-          <Link href={testPath(row.kind, row.id)}>{row.mine ? t('common:actions.edit') : t('common:actions.open')}</Link>
+          <Link href={testPath(row.kind, row.id)}>{row.mine || row.visibility === 'skola_uprava' ? t('common:actions.edit') : t('common:actions.open')}</Link>
         </DropdownMenuItem>
         {/* The menu closes on click — copying shows in place of the
             three-dot button, just like printing. */}

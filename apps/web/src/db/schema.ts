@@ -18,6 +18,8 @@ import type {
   RegenerateReason,
   TemplateConfig,
   TestHeaderConfig,
+  TestVisibility,
+  VariantOptions,
 } from '@testmaker/core/schema'
 import type { Role, UserStatus } from '../lib/role'
 
@@ -596,10 +598,11 @@ export const tests = sqliteTable(
     /**
      * `soukrome` is visible only to the author, `skola` to colleagues too —
      * when someone falls ill, their test must be printable without composing
-     * it again. The app creates tests as `skola` explicitly; the column default
-     * stays `soukrome` because changing it would rebuild the table in SQLite.
+     * it again; `skola_uprava` lets colleagues edit it as well. The app creates
+     * tests as `skola` explicitly; the column default stays `soukrome` because
+     * changing it would rebuild the table in SQLite.
      */
-    visibility: text('visibility').notNull().default('soukrome').$type<'soukrome' | 'skola'>(),
+    visibility: text('visibility').notNull().default('soukrome').$type<TestVisibility>(),
     /**
      * A test or a worksheet. A worksheet shares the editor, templates and
      * printing with tests, but has its own tab and always prints without
@@ -634,6 +637,8 @@ export const tests = sqliteTable(
     gradeId: text('grade_id').references(() => grades.id, { onDelete: 'set null' }),
     header: text('header', { mode: 'json' }).notNull().$type<TestHeaderConfig>(),
     variants: integer('variants').notNull().default(1),
+    /** How variant B is built (`variantOptionsSchema`); `null` = defaults. */
+    variantOptions: text('variant_options', { mode: 'json' }).$type<VariantOptions>(),
     showKey: integer('show_key', { mode: 'boolean' }).notNull().default(true),
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),

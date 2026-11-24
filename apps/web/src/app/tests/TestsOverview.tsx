@@ -83,8 +83,10 @@ export async function TestsOverview({ kind, params }: { kind: TestKind; params: 
         `,
         // The worksheet topic; a deleted topic becomes empty and the worksheet shows as free-form.
         topicName: topics.name,
-        // A colleague's shared test can be opened and copied, not edited or deleted.
+        // A colleague's shared test can be opened and copied, edited only when
+        // shared for editing, never deleted.
         mine: sql<boolean>`${tests.ownerId} = ${account.userId}`.mapWith(Boolean),
+        visibility: tests.visibility,
         questionCount: sql<number>`(
           select count(*) from ${testItems}
           where ${testItems.testId} = ${tests.id} and ${testItems.kind} = 'question'

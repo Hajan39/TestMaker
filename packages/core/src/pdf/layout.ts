@@ -12,7 +12,7 @@ import type { PuzzleContent, PuzzleEntry } from '../schema/puzzle'
 import { buildPuzzle, markedOffsets, puzzleProblems, type BuiltPuzzle, type CryptogramResult } from '../puzzle/index'
 
 export { LETTERS, questionLabel } from './styles'
-export { displayOrder } from './shuffle'
+export { buildVariant, displayOrder } from './shuffle'
 export { formatAcceptedAnswers, formatAnswer, formatGradeBoundaries, formatPartialScoring } from './answerKey'
 export * from './decorations'
 

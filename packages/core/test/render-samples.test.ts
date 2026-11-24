@@ -91,6 +91,9 @@ it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async
       // Partial scoring belongs to the key of a graded test; a worksheet is not graded.
       // Partial scoring and grade boundaries belong to the key of a graded test only.
       const text = await pdfText(path)
+      // Two variants: the letter follows the title on the key, not "(varianta X)".
+      expect(text, path).toContain(`Klíč – Dýchací soustava ${variant}`)
+      expect(text, path).not.toContain('varianta')
       if (slug === 'pracovni-list') {
         expect(text, path).not.toContain('bez chyby')
         expect(text, path).not.toContain('Známky:')
@@ -101,6 +104,30 @@ it.runIf(process.env.RENDER_SAMPLES)('generates samples of all templates', async
       }
     }
   }
+})
+
+it.runIf(process.env.RENDER_SAMPLES)('prints variant B with reversed question order', async () => {
+  mkdirSync(OUT, { recursive: true })
+  const path = resolve(OUT, 'klasicka-B-opacne.pdf')
+  await renderToFile(
+    createElement(TestDocument, {
+      test: makeTest({ variantOptions: { order: 'reverse', shuffleOptions: false, seed: 0 } }),
+      template: makeTemplate('klasicka'),
+      items: makeItems(),
+      variant: 'B',
+      withKey: true,
+      assets: {},
+    }) as never,
+    path,
+  )
+  const text = await pdfText(path)
+  // The sample has one section, so the whole test runs backwards: last question first.
+  const prompts = ['Kolik laloků má pravá plíce?', 'Doplň chybějící výrazy.', 'Kde probíhá výměna plynů v plicích?']
+  const positions = prompts.map((prompt) => text.indexOf(prompt))
+  expect(positions.every((position) => position >= 0), path).toBe(true)
+  expect([...positions].sort((a, b) => a - b), path).toEqual(positions)
+  // Options are not shuffled: the first question keeps variant A's option order.
+  expect(text.indexOf('V průdušnici'), path).toBeLessThan(text.indexOf('V plicních sklípcích'))
 })
 
 it.runIf(process.env.RENDER_SAMPLES)('prints the school’s own grade row on the key', async () => {

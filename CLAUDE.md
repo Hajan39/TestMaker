@@ -136,7 +136,9 @@ podmínky (`inSchool()`, `ownedBy()`, `visibleTest()`). Knihovna a banka jsou
 společné pro školu, písemky a hlavolamy patří své autorce — upravovat je smí
 jen ona. Testy a pracovní listy jsou ale ve výchozím stavu sdílené se školou
 (`visibility = 'skola'`: kolegyně je čtou, tisknou a kopírují); autorka je může
-skrýt (`soukrome`). Cizí věc se tváří
+skrýt (`soukrome`), nebo sdílet k úpravám (`skola_uprava`: kolegyně je mohou
+i upravit a uložit přes `editableTest()`, platí poslední uložení). Smazat,
+změnit sdílení a poslat odkaz na tisk smí i tak jen autorka. Cizí věc se tváří
 jako neexistující — vrací se `null` a 404, ne 403; z odpovědi nemá být poznat,
 že vůbec je. Kontrola v `proxy.ts` je jen hrubé síto podle role, ne
 bezpečnostní hranice: rozhoduje se vždycky až nad databází.

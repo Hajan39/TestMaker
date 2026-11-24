@@ -22,7 +22,16 @@ const brief = {
 }
 
 const bodySchema = z.discriminatedUnion('source', [
-  z.object({ source: z.literal('topic'), topicId: z.string().min(1), ...brief }),
+  z.object({
+    source: z.literal('topic'),
+    /** One or more topics; repeated ids count once. */
+    topicIds: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(S.maxTopics)
+      .transform((ids) => [...new Set(ids)]),
+    ...brief,
+  }),
   z.object({
     source: z.literal('free'),
     title: z.string().trim().min(1).max(200),
@@ -55,7 +64,7 @@ export async function POST(request: Request) {
         )
       }
       const body = parsed.data
-      const source = body.source === 'topic' ? { topicId: body.topicId } : { title: body.title, gradeId: body.gradeId }
+      const source = body.source === 'topic' ? { topicIds: body.topicIds } : { title: body.title, gradeId: body.gradeId }
 
       // Deliberately not `request.signal`: if the teacher closes the page, the
       // worksheet still finishes, is saved and shows up in the overview. Only our
@@ -79,7 +88,7 @@ export async function POST(request: Request) {
         const message = await reportAiFailure(account, {
           action: 'list-chyba',
           entity: 'topic',
-          entityId: body.source === 'topic' ? body.topicId : null,
+          entityId: body.source === 'topic' ? body.topicIds[0]! : null,
           error,
         })
         if (deadline.aborted) return Response.json({ error: t('worksheets:api.timedOut') }, { status: 504 })

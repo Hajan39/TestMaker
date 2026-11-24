@@ -56,3 +56,12 @@ void i18n.init({
 })
 
 export const t = i18n.t.bind(i18n)
+
+/**
+ * Names joined as a sentence in the current language ("Kostra, svaly a kůže").
+ * Czech puts a no-break space after "a"; a title gets an ordinary one so it can
+ * be found by typing.
+ */
+export function formatList(items: string[]): string {
+  return new Intl.ListFormat(i18n.language, { type: 'conjunction' }).format(items).replace(/ /g, ' ')
+}

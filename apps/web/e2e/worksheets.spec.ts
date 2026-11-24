@@ -54,6 +54,29 @@ test.describe('worksheets', () => {
     }
   })
 
+  test('a worksheet from two library topics is named after both', async ({ page }) => {
+    await page.goto('/listy/new')
+    await page.getByRole('combobox', { name: 'Předmět' }).click()
+    await page.getByRole('option', { name: 'ZEMĚPIS', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Ročník' }).click()
+    await page.getByRole('option', { name: '6. ročník', exact: true }).click()
+
+    // Nothing ticked: the form asks for at least one topic.
+    await page.getByRole('button', { name: 'Založit prázdný list' }).click()
+    await expect(page.getByTestId('worksheet-topic-error')).toBeVisible()
+
+    const topics = page.getByRole('group', { name: 'Témata' })
+    await topics.getByRole('checkbox', { name: 'Podnebné pásy' }).click()
+    await topics.getByRole('checkbox', { name: 'Mapa a měřítko' }).click()
+    await expect(topics.getByRole('checkbox', { name: 'Mapa a měřítko' })).toBeChecked()
+    await expect(page.getByTestId('worksheet-topic-error')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Založit prázdný list' }).click()
+
+    await expect(page).toHaveURL(/\/listy\/[^/]+$/, { timeout: 30_000 })
+    // In the library's order, not the order of clicking.
+    await expect(page.getByLabel('Název listu')).toHaveValue('Mapa a měřítko a Podnebné pásy')
+  })
+
   test('a worksheet is not among tests and a test is not among worksheets', async ({ page }) => {
     const testTitle = `E2E písemka mimo listy ${Date.now()}`
     const created = await page.request.post('/api/tests', {

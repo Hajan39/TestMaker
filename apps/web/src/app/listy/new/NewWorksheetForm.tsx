@@ -24,7 +24,7 @@ import {
 } from '@testmaker/ui'
 import { emptyHeader } from '@/components/test-builder/defaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
-import { t } from '@testmaker/core/i18n'
+import { formatList, t } from '@testmaker/core/i18n'
 import { KindMark } from '@/components/KindMark'
 
 /** The "Bez ročníku" (no grade) option — Select cannot use an empty value as an item. */
@@ -37,7 +37,7 @@ export interface WorksheetSubject {
 }
 
 /** The form's shape, by source; built on each render so the messages follow the current language. */
-function worksheetSchema() {
+function worksheetSchema(maxTopics: number) {
   const brief = {
     subjectId: z.string(),
     gradeId: z.string(),
@@ -49,13 +49,16 @@ function worksheetSchema() {
   return z.discriminatedUnion('source', [
     z.object({
       source: z.literal('topic'),
-      topicId: z.string().min(1, t('worksheets:new.missingTopic')),
+      topicIds: z
+        .array(z.string())
+        .min(1, t('worksheets:new.missingTopic'))
+        .max(maxTopics, t('worksheets:new.tooManyTopics', { count: maxTopics })),
       title: z.string(),
       ...brief,
     }),
     z.object({
       source: z.literal('free'),
-      topicId: z.string(),
+      topicIds: z.array(z.string()),
       title: z.string().trim().min(1, t('worksheets:new.missingTitle')),
       ...brief,
     }),
@@ -79,8 +82,8 @@ export function NewWorksheetForm({
   /** Template of an empty worksheet — the first in order, as for a new test. */
   templateId: string
   ai: { configured: boolean; problems: string[] }
-  /** Limits of the instruction and own text from `AI_SETTINGS.worksheet` — the server enforces them too. */
-  limits: { instructionsMax: number; ownTextMax: number }
+  /** Limits of the instruction, own text and topic count from `AI_SETTINGS.worksheet` — the server enforces them too. */
+  limits: { instructionsMax: number; ownTextMax: number; maxTopics: number }
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState<'generate' | 'blank' | null>(null)
@@ -92,12 +95,12 @@ export function NewWorksheetForm({
     setError,
     formState: { errors },
   } = useForm<z.input<ReturnType<typeof worksheetSchema>>, unknown, WorksheetValues>({
-    resolver: zodResolver(worksheetSchema()),
+    resolver: zodResolver(worksheetSchema(limits.maxTopics)),
     defaultValues: {
       source: subjects.length > 0 ? 'topic' : 'free',
       subjectId: '',
       gradeId: '',
-      topicId: '',
+      topicIds: [],
       title: '',
       freeGradeId: '',
       instructions: '',
@@ -131,12 +134,19 @@ export function NewWorksheetForm({
     control,
     name: ['source', 'subjectId', 'gradeId', 'freeGradeId'],
   })
-  const topicId = useWatch({ control, name: 'topicId' })
+  const topicIds = useWatch({ control, name: 'topicIds' })
   const subject = subjects.find((item) => item.id === subjectId)
   const grade = subject?.grades.find((item) => item.id === gradeId)
   const allGrades = subjects.flatMap((item) => item.grades.map((g) => ({ id: g.id, label: `${item.name} · ${g.name}` })))
   // What is missing goes under its field; what the server said, under the form.
-  const topicError = errors.topicId?.message ?? null
+  const topicError = errors.topicIds?.message ?? null
+  // Kept in the grade's order, so the worksheet title lists the topics as the library does.
+  const toggleTopic = (id: string) =>
+    setValue(
+      'topicIds',
+      (grade?.topics ?? []).filter((item) => (item.id === id ? !topicIds.includes(item.id) : topicIds.includes(item.id))).map((item) => item.id),
+      { shouldValidate: Boolean(topicError) },
+    )
   const titleError = errors.title?.message ?? null
 
   async function post(url: string, body: unknown): Promise<{ id: string; dropped?: number }> {
@@ -154,14 +164,14 @@ export function NewWorksheetForm({
         const { id, dropped } = await post(
           '/api/worksheets/generate',
           values.source === 'topic'
-            ? { source: values.source, topicId: values.topicId, ...brief }
+            ? { source: values.source, topicIds: values.topicIds, ...brief }
             : { source: values.source, title: values.title, gradeId: values.freeGradeId || null, ...brief },
         )
         if (mounted.current) router.push(dropped ? `/listy/${id}?vynechano=${dropped}` : `/listy/${id}`)
       } else {
         const name =
           values.source === 'topic'
-            ? (grade?.topics.find((item) => item.id === values.topicId)?.name ?? '')
+            ? formatList((grade?.topics ?? []).filter((item) => values.topicIds.includes(item.id)).map((item) => item.name))
             : values.title
         const { id } = await post('/api/tests', {
           kind: 'pracovni_list',
@@ -169,9 +179,10 @@ export function NewWorksheetForm({
           description: null,
           graded: false,
           templateId,
-          topicId: values.source === 'topic' ? values.topicId : null,
+          // The first topic keeps overviews and filters working; all of them are in the brief.
+          topicId: values.source === 'topic' ? values.topicIds[0] : null,
           gradeId: values.source === 'topic' ? values.gradeId : values.freeGradeId || null,
-          brief: JSON.stringify({ title: name, ...brief }),
+          brief: JSON.stringify({ title: name, ...(values.source === 'topic' ? { topicIds: values.topicIds } : {}), ...brief }),
           header: emptyHeader(),
           variants: 1,
           showKey: true,
@@ -203,7 +214,7 @@ export function NewWorksheetForm({
             {subjects.length === 0 ? (
               <p className="text-sm text-fg-muted">{t('worksheets:new.emptyLibrary')}</p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="list-subject">{t('worksheets:new.subject')}</Label>
                   <Select
@@ -211,7 +222,7 @@ export function NewWorksheetForm({
                     onValueChange={(value) => {
                       setValue('subjectId', value)
                       setValue('gradeId', '')
-                      setValue('topicId', '')
+                      setValue('topicIds', [])
                     }}
                   >
                     <SelectTrigger id="list-subject" className="w-full">
@@ -233,7 +244,7 @@ export function NewWorksheetForm({
                     disabled={!subject}
                     onValueChange={(value) => {
                       setValue('gradeId', value)
-                      setValue('topicId', '')
+                      setValue('topicIds', [])
                     }}
                   >
                     <SelectTrigger id="list-grade" className="w-full">
@@ -248,31 +259,30 @@ export function NewWorksheetForm({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label htmlFor="list-topic">{t('worksheets:new.topic')}</Label>
-                  <Select value={topicId} disabled={!grade} onValueChange={(value) => setValue('topicId', value)}>
-                    <SelectTrigger
-                      id="list-topic"
-                      className="w-full"
-                      aria-invalid={topicError ? true : undefined}
-                      aria-describedby={topicError ? 'list-topic-error' : undefined}
-                    >
-                      <SelectValue placeholder={t('worksheets:new.pickTopic')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {grade?.topics.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
+                <fieldset
+                  className="sm:col-span-2"
+                  aria-invalid={topicError ? true : undefined}
+                  aria-describedby={topicError ? 'list-topic-error' : undefined}
+                >
+                  <legend className="ui-label mb-2">{t('worksheets:new.topics')}</legend>
+                  {grade ? (
+                    <div className="grid max-h-64 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                      {grade.topics.map((item) => (
+                        <label key={item.id} className="flex items-center gap-1.5 text-sm text-fg-soft">
+                          <Checkbox checked={topicIds.includes(item.id)} onCheckedChange={() => toggleTopic(item.id)} />
                           {item.name}
-                        </SelectItem>
+                        </label>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {topicError ? (
-                  <p id="list-topic-error" className="text-sm text-danger sm:col-span-3">
-                    {topicError}
-                  </p>
-                ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-fg-muted">{t('worksheets:new.pickTopic')}</p>
+                  )}
+                  {topicError ? (
+                    <p id="list-topic-error" className="mt-1.5 text-sm text-danger" data-testid="worksheet-topic-error">
+                      {topicError}
+                    </p>
+                  ) : null}
+                </fieldset>
               </div>
             )}
           </TabsContent>

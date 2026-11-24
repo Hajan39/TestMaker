@@ -19,6 +19,7 @@ import {
   buildWorksheetItemPrompt,
   buildWorksheetPrompt,
   buildWorksheetSystemPrompt,
+  topicMaterialsHeading,
   type WorksheetRequest,
   type WorksheetTarget,
 } from './prompts/worksheet'
@@ -191,6 +192,34 @@ function checkOptions(request: WorksheetRequest): CheckOptions {
 
 function hasSource(request: WorksheetRequest): boolean {
   return Boolean(request.materials.trim() || request.ownText.trim())
+}
+
+/**
+ * Materials of one or more topics as one text for `WorksheetRequest.materials`,
+ * each topic under its heading. Over `budget` the topics share it the way files
+ * share it in `fitMaterials`: a short topic goes in whole and the rest is split
+ * equally among the long ones, so a later topic is never cut off.
+ */
+export function combineTopicMaterials(
+  topics: { name: string; text: string }[],
+  budget: number = S.materialChars,
+): string {
+  const sections = topics
+    .filter((topic) => topic.text.trim())
+    .map((topic) => ({ heading: topicMaterialsHeading(topic.name), text: topic.text.trim() }))
+  const separator = '\n\n'
+  let left = budget - separator.length * Math.max(sections.length - 1, 0)
+  left -= sections.reduce((sum, section) => sum + section.heading.length + 1, 0)
+  const allowance = new Array<number>(sections.length).fill(0)
+  const bySize = sections.map((_, i) => i).sort((a, b) => sections[a]!.text.length - sections[b]!.text.length)
+  bySize.forEach((index, order) => {
+    const share = Math.max(Math.floor(left / (bySize.length - order)), 0)
+    allowance[index] = Math.min(sections[index]!.text.length, share)
+    left -= allowance[index]!
+  })
+  return sections
+    .map((section, i) => `${section.heading}\n${fitMaterials(section.text, allowance[i]!, S.materialChunkChars)}`)
+    .join(separator)
 }
 
 function materialsFor(request: WorksheetRequest): string {

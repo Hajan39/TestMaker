@@ -42,7 +42,11 @@ export default async function NewWorksheetPage() {
         subjects={subjects}
         templateId={defaultTemplateId(templates, 'pracovni_list')}
         ai={{ configured, problems }}
-        limits={{ instructionsMax: AI_SETTINGS.worksheet.instructionsMax, ownTextMax: AI_SETTINGS.worksheet.ownTextMax }}
+        limits={{
+          instructionsMax: AI_SETTINGS.worksheet.instructionsMax,
+          ownTextMax: AI_SETTINGS.worksheet.ownTextMax,
+          maxTopics: AI_SETTINGS.worksheet.maxTopics,
+        }}
       />
     </PageShell>
   )

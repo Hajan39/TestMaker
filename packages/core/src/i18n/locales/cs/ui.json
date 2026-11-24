@@ -37,7 +37,6 @@
     },
     "header": {
       "titlePlaceholder": "Název písemky",
-      "variantB": "(varianta B)",
       "points": "Body: ______ / {{total}}",
       "grade": "Známka: ______",
       "teacher": "Vyučující: {{teacher}}",

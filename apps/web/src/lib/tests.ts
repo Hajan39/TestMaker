@@ -2,6 +2,7 @@ import 'server-only'
 import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
   parseItemContent,
+  parseVariantOptions,
   parseWorksheetBrief,
   type WorksheetBrief,
   resolveTestItemPuzzle,
@@ -30,14 +31,15 @@ import {
   type TestItemRow,
 } from '@/db'
 import {
+  combineTopicMaterials,
   generateWorksheet,
   regenerateWorksheetItem,
   type WorksheetItemDraft,
   type WorksheetRequest,
   type WorksheetTarget,
 } from '@testmaker/core/ai'
-import { t } from '@testmaker/core/i18n'
-import { inSchool, visibleTest, ownedBy, type Scope } from './user'
+import { formatList, t } from '@testmaker/core/i18n'
+import { editableTest, inSchool, visibleTest, ownedBy, type Scope } from './user'
 import { loadTopicSource } from './generation'
 import { newId } from './ids'
 import { callRecorder } from './aiUsage'
@@ -150,6 +152,7 @@ export async function loadTest(scope: Scope, testId: string): Promise<Test | nul
     gradeId: row.gradeId,
     header: row.header,
     variants: row.variants === 2 ? 2 : 1,
+    variantOptions: parseVariantOptions(row.variantOptions),
     showKey: row.showKey,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -225,6 +228,8 @@ export async function copyTest(
     gradeId: source.gradeId,
     header: source.header,
     variants: source.variants,
+    // The settings carry over; a shuffled B still differs, since the seed includes the test id.
+    variantOptions: source.variantOptions,
     showKey: source.showKey,
     createdAt: now,
     updatedAt: now,
@@ -521,33 +526,42 @@ export async function loadRenderableTest(
 
 /* ------------------------------------------------------- worksheets */
 
-/** What a worksheet is made from: a library topic or a free-form brief. */
-export type WorksheetSource = { topicId: string } | { title: string; gradeId: string | null }
+/** What a worksheet is made from: library topics (at least one) or a free-form brief. */
+export type WorksheetSource = { topicIds: string[] } | { title: string; gradeId: string | null }
 
 /**
- * Model request built from a topic (materials without duplicates and skipped
- * ones) or from a free-form brief. A foreign or deleted topic returns `null`;
+ * Model request built from topics (materials without duplicates and skipped
+ * ones, each topic under its heading; subject and grade from the first topic)
+ * or from a free-form brief. Any foreign or deleted topic returns `null`;
  * a foreign grade of a free-form brief is silently dropped.
  */
 export async function loadWorksheetRequest(
   scope: Scope,
   source: WorksheetSource,
-  brief: { instructions: string; ownText: string; onlyMaterials?: boolean },
-): Promise<{ request: WorksheetRequest; topicId: string | null; gradeId: string | null } | null> {
-  if ('topicId' in source) {
-    const topic = await resolveTopic(scope, source.topicId)
-    const loaded = topic ? await loadTopicSource(scope, topic.id) : null
-    if (!topic || !loaded) return null
+  { instructions, ownText, onlyMaterials }: { instructions: string; ownText: string; onlyMaterials?: boolean },
+): Promise<{ request: WorksheetRequest; topicIds: string[]; gradeId: string | null } | null> {
+  // Only these fields: a saved brief also carries its old title, which must not win.
+  const brief = { instructions, ownText, onlyMaterials }
+  if ('topicIds' in source) {
+    const loaded = []
+    for (const topicId of source.topicIds) {
+      const topic = await resolveTopic(scope, topicId)
+      const topicSource = topic ? await loadTopicSource(scope, topic.id) : null
+      if (!topic || !topicSource) return null
+      loaded.push({ topic, source: topicSource })
+    }
+    const [first] = loaded
+    if (!first) return null
     return {
       request: {
-        title: loaded.topicName,
-        subjectName: loaded.subjectName,
-        gradeName: loaded.gradeName || null,
-        materials: loaded.text,
+        title: formatList(loaded.map((item) => item.source.topicName)),
+        subjectName: first.source.subjectName,
+        gradeName: first.source.gradeName || null,
+        materials: combineTopicMaterials(loaded.map((item) => ({ name: item.source.topicName, text: item.source.text }))),
         ...brief,
       },
-      topicId: topic.id,
-      gradeId: topic.gradeId,
+      topicIds: loaded.map((item) => item.topic.id),
+      gradeId: first.topic.gradeId,
     }
   }
 
@@ -568,7 +582,7 @@ export async function loadWorksheetRequest(
       materials: '',
       ...brief,
     },
-    topicId: null,
+    topicIds: [],
     gradeId,
   }
 }
@@ -610,6 +624,7 @@ export async function createGeneratedWorksheet(
   const id = newId()
   const brief: WorksheetBrief = {
     title: loaded.request.title,
+    ...(loaded.topicIds.length > 0 ? { topicIds: loaded.topicIds } : {}),
     instructions: input.instructions,
     ownText: input.ownText,
     onlyMaterials: input.onlyMaterials,
@@ -623,7 +638,8 @@ export async function createGeneratedWorksheet(
       visibility: 'skola',
       kind: 'pracovni_list',
       title: result.title,
-      topicId: loaded.topicId,
+      // The first topic keeps overviews and filters working; all of them are in the brief.
+      topicId: loaded.topicIds[0] ?? null,
       gradeId: loaded.gradeId,
       brief: JSON.stringify(brief),
       graded: false,
@@ -645,7 +661,7 @@ export async function createGeneratedWorksheet(
 }
 
 /**
- * A new version of one item of an own worksheet — from the same brief and
+ * A new version of one item of an editable worksheet — from the same brief and
  * topic materials. A foreign worksheet or a written test returns `null`.
  * Nothing is saved: the editor swaps the item and it is saved with the worksheet.
  */
@@ -659,16 +675,21 @@ export async function regenerateWorksheetPart(
   const [row] = await db
     .select({ title: tests.title, topicId: tests.topicId, gradeId: tests.gradeId, brief: tests.brief })
     .from(tests)
-    .where(and(eq(tests.id, testId), ownedBy(scope, tests), eq(tests.kind, 'pracovni_list')))
+    .where(and(eq(tests.id, testId), editableTest(scope, tests), eq(tests.kind, 'pracovni_list')))
     .limit(1)
   if (!row) return null
   const saved = parseWorksheetBrief(row.brief) ?? { title: '', instructions: '', ownText: '', onlyMaterials: true }
   const brief = { ...saved, onlyMaterials: options.onlyMaterials ?? saved.onlyMaterials }
   const title = brief.title || row.title
   // A deleted topic doesn't take the worksheet along (`topic_id` is cleared) —
-  // it is then regenerated as a free-form brief from title and grade.
+  // the remaining topics are used; with none left it is regenerated as a
+  // free-form brief from title and grade.
+  const savedIds = brief.topicIds ?? (row.topicId ? [row.topicId] : [])
+  const topicIds = (await Promise.all(savedIds.map((id) => resolveTopic(scope, id)))).flatMap((topic) =>
+    topic ? [topic.id] : [],
+  )
   const loaded =
-    (row.topicId ? await loadWorksheetRequest(scope, { topicId: row.topicId }, brief) : null) ??
+    (topicIds.length > 0 ? await loadWorksheetRequest(scope, { topicIds }, brief) : null) ??
     (await loadWorksheetRequest(scope, { title, gradeId: row.gradeId }, brief))
   return regenerateWorksheetItem(loaded!.request, target, existing, {
     signal: options.signal,

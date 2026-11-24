@@ -5,7 +5,7 @@ import { db, testItems, tests } from '@/db'
 import { newId } from '@/lib/ids'
 import { loadPuzzle, puzzleBlockingProblems } from '@/lib/puzzles'
 import { buildPuzzleSnapshots } from '@/lib/tests'
-import { inSchool, withScope, ownedBy } from '@/lib/user'
+import { editableTest, inSchool, withScope } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const [test] = await db
     .select({ id: tests.id, title: tests.title })
     .from(tests)
-    .where(and(eq(tests.id, parsed.data.testId), ownedBy(account, tests)))
+    .where(and(eq(tests.id, parsed.data.testId), editableTest(account, tests)))
     .limit(1)
   if (!test) return Response.json({ error: t('puzzles:errors.testNotFound') }, { status: 404 })
 
@@ -73,7 +73,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   await db
     .update(tests)
     .set({ updatedAt: new Date().toISOString() })
-    .where(and(eq(tests.id, test.id), ownedBy(account, tests)))
+    .where(and(eq(tests.id, test.id), editableTest(account, tests)))
 
   return Response.json({ testId: test.id, testTitle: test.title })
     },

@@ -5,6 +5,8 @@ import type {
   TableItemContent,
   TestHeaderConfig,
   TextItemContent,
+  TestVisibility,
+  VariantOptions,
 } from '@testmaker/core/schema'
 
 /** Points formatting has a single definition — the same one the PDF prints. */
@@ -77,9 +79,11 @@ export interface TestSettingsValue {
   templateId: string
   header: TestHeaderConfig
   variants: 1 | 2
+  /** How variant B is built; only shown and meaningful with two variants. */
+  variantOptions: VariantOptions
   showKey: boolean
-  /** `soukrome` is visible only to the author, `skola` also to colleagues. */
-  visibility: 'soukrome' | 'skola'
+  /** Sharing with colleagues, see `testVisibilitySchema`. */
+  visibility: TestVisibility
   /**
    * Worksheet only: keep strictly to the materials when regenerating items.
    * Stored in the worksheet brief; ignored for written tests.

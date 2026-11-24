@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_SETTINGS,
   checkWorksheetItems,
+  combineTopicMaterials,
   generateWorksheet,
   regenerateWorksheetItem,
   worksheetItemFailedMessage,
@@ -276,5 +277,41 @@ describe('regenerating a single item', () => {
     await expect(
       regenerateWorksheetItem(REQUEST, { kind: 'table' }, [], { models: MODELS, callModel: fake({ item: text() }) }),
     ).rejects.toThrow(/znovu/)
+  })
+})
+
+describe('materials of several topics', () => {
+  it('puts each topic under its heading in the given order', () => {
+    const text = combineTopicMaterials([
+      { name: 'Kostra', text: '=== kosti.txt ===\nKostra má přes dvě stě kostí.' },
+      { name: 'Prázdné', text: '  ' },
+      { name: 'Svaly', text: '=== svaly.txt ===\nSvaly se smršťují.' },
+    ])
+    expect(text).toBe(
+      '## Téma: Kostra\n=== kosti.txt ===\nKostra má přes dvě stě kostí.\n\n## Téma: Svaly\n=== svaly.txt ===\nSvaly se smršťují.',
+    )
+  })
+
+  it('over the budget a short topic goes in whole and a long one does not crowd out the topic after it', () => {
+    const short = '=== kosti.txt ===\nKostra má přes dvě stě kostí.'
+    const long = `=== svaly.txt ===\n${'Svaly se smršťují a povolují. '.repeat(400)}`
+    const last = `=== kuze.txt ===\n${'Kůže chrání tělo před ztrátou vody. '.repeat(400)}`
+    const budget = 6_000
+    const text = combineTopicMaterials(
+      [
+        { name: 'Kostra', text: short },
+        { name: 'Svaly', text: long },
+        { name: 'Kůže', text: last },
+      ],
+      budget,
+    )
+    expect(text.length).toBeLessThanOrEqual(budget)
+    expect(text).toContain(short)
+    const [, muscles, skin] = text.split(/\n\n(?=## Téma: )/)
+    expect(muscles).toMatch(/^## Téma: Svaly\n=== svaly.txt ===\nSvaly/)
+    expect(skin).toMatch(/^## Téma: Kůže\n=== kuze.txt ===\nKůže/)
+    // The two long topics share what the short one left, roughly half each.
+    expect(Math.abs(muscles!.length - skin!.length)).toBeLessThan(budget / 10)
+    expect(skin!.length).toBeGreaterThan(budget / 3)
   })
 })

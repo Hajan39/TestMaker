@@ -122,7 +122,6 @@ export function PaperHeader({
   config,
   graded,
   totalPoints,
-  variant = 'A',
 }: {
   title: string
   description?: string | null
@@ -130,7 +129,6 @@ export function PaperHeader({
   config: TemplateConfig
   graded: boolean
   totalPoints: number
-  variant?: 'A' | 'B'
 }) {
   if (!config.header.show) return null
   const pt = (value: number) => `calc(${value} * var(--paper-pt, 1.3333px))`
@@ -163,7 +161,6 @@ export function PaperHeader({
                 ? title.toUpperCase()
                 : title
               : t('ui:paper.header.titlePlaceholder')}
-            {variant === 'B' ? `  ${t('ui:paper.header.variantB')}` : ''}
           </h3>
           {showScore ? (
             <div

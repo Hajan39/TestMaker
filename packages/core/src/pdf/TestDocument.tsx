@@ -29,7 +29,7 @@ export function TestDocument({
 }: RenderableTest) {
   const config = template.config
   // A puzzle in variant B gets a different seed — grid and key then use the same one.
-  const ordered = buildVariant(items, variant, test.id).map((item) =>
+  const ordered = buildVariant(items, variant, test.id, test.variantOptions).map((item) =>
     item.kind === 'puzzle' && item.puzzle
       ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) }
       : item.kind === 'question' && item.question
@@ -43,17 +43,16 @@ export function TestDocument({
   )
 
   let questionIndex = -1
-  // A standalone puzzle (see `loadRenderablePuzzle`) has no variant —
-  // "variant A" in the key and footer would only confuse.
-  const standalonePuzzle = ordered.length === 1 && ordered[0]?.kind === 'puzzle' && test.variants === 1
-  // Worksheets are not split into variants in the app — "variant A" would only confuse.
-  const variantLabel =
-    (standalonePuzzle || (test.kind === 'pracovni_list' && test.variants === 1)) && variant === 'A' ? null : variant
+  // The letter belongs to the title only when there is something to tell
+  // apart: "Kostra A" / "Kostra B". A single-variant test, a worksheet or a
+  // standalone puzzle (all `variants === 1`) prints its plain title.
+  const title =
+    test.variants === 2 || variant === 'B' ? t('pdf:header.variantTitle', { title: test.title, variant }) : test.title
   const firstContent = ordered.findIndex((item) => item.kind !== 'page_break')
   const heading = { title: test.title, description: test.description }
 
   return (
-    <Document title={test.title} author={test.header.teacher || undefined}>
+    <Document title={title} author={test.header.teacher || undefined}>
       <Page
         size="A4"
         style={{
@@ -66,7 +65,7 @@ export function TestDocument({
       >
         <PageDecoration theme={config.theme} />
         {config.header.show ? (
-          <Header test={test} config={config} totalPoints={total} variant={variant} />
+          <Header test={test} title={title} config={config} totalPoints={total} />
         ) : null}
 
         {ordered.map((item, index) => {
@@ -168,7 +167,7 @@ export function TestDocument({
           return null
         })}
 
-        {config.footer ? <Footer variant={variantLabel} testTitle={test.title} /> : null}
+        {config.footer ? <Footer title={title} /> : null}
       </Page>
 
       {withKey ? (
@@ -177,7 +176,7 @@ export function TestDocument({
           config={config}
           items={ordered}
           variant={variant}
-          variantLabel={variantLabel}
+          title={title}
           totalPoints={total}
           gradeScale={gradeScale}
         />
@@ -188,14 +187,15 @@ export function TestDocument({
 
 function Header({
   test,
+  title,
   config,
   totalPoints,
-  variant,
 }: {
   test: RenderableTest['test']
+  /** Title with the variant letter when the test has two variants. */
+  title: string
   config: TemplateConfig
   totalPoints: number
-  variant: 'A' | 'B'
 }) {
   const showScore = config.header.scoreBox && test.graded
   const values: Record<string, string> = {
@@ -221,8 +221,7 @@ function Header({
               color: config.theme.accent,
             }}
           >
-            {sanitizeText(config.header.title.uppercase ? test.title.toUpperCase() : test.title)}
-            {variant === 'B' ? `  ${t('pdf:header.variantB')}` : ''}
+            {sanitizeText(config.header.title.uppercase ? title.toUpperCase() : title)}
           </Text>
           {showScore ? (
             <View style={{ width: 110, border: '1pt solid #111', padding: 4 }}>
@@ -423,7 +422,7 @@ function KeyPage({
   config,
   items,
   variant,
-  variantLabel,
+  title,
   totalPoints,
   gradeScale,
 }: {
@@ -431,7 +430,8 @@ function KeyPage({
   config: TemplateConfig
   items: ResolvedTestItem[]
   variant: 'A' | 'B'
-  variantLabel: 'A' | 'B' | null
+  /** Title with the variant letter when the test has two variants. */
+  title: string
   totalPoints: number
   gradeScale: RenderableTest['gradeScale']
 }) {
@@ -448,8 +448,7 @@ function KeyPage({
       }}
     >
       <Text style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 2 }}>
-        {t('pdf:key.title', { title: sanitizeText(test.title) })}
-        {variantLabel ? ` ${t('pdf:key.variant', { variant: variantLabel })}` : ''}
+        {t('pdf:key.title', { title: sanitizeText(title) })}
       </Text>
       {test.graded ? (
         <View style={{ marginBottom: 10 }}>
@@ -520,7 +519,7 @@ function KeyPage({
   )
 }
 
-function Footer({ variant, testTitle }: { variant: 'A' | 'B' | null; testTitle: string }) {
+function Footer({ title }: { title: string }) {
   return (
     <View
       fixed
@@ -542,8 +541,7 @@ function Footer({ variant, testTitle }: { variant: 'A' | 'B' | null; testTitle: 
       }}
     >
       <Text style={{ fontSize: 8, color: '#777' }}>
-        {sanitizeText(testTitle)}
-        {variant ? ` · ${t('pdf:footer.variant', { variant })}` : ''}
+        {sanitizeText(title)}
       </Text>
       <Text
         style={{ fontSize: 8, color: '#777' }}

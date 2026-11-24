@@ -311,6 +311,7 @@ interface TestOption {
   title: string
   updatedAt?: string
   mine?: boolean | number
+  visibility?: string
 }
 
 interface Confirmation {
@@ -625,8 +626,12 @@ export function PuzzleWorkshop({
     setTests('loading')
     try {
       const data = await requestJson<{ tests: TestOption[] }>('/api/tests', undefined, t('puzzles:workshop.tests.loadFailed'))
-      // Only own tests can be added to; tests shared by colleagues are read-only.
-      setTests((data.tests ?? []).filter((test) => test.mine === undefined || Boolean(test.mine)))
+      // Only own tests and those shared for editing can be added to; others are read-only.
+      setTests(
+        (data.tests ?? []).filter(
+          (test) => test.mine === undefined || Boolean(test.mine) || test.visibility === 'skola_uprava',
+        ),
+      )
     } catch (error) {
       setTests(null)
       toast.error(errorMessage(error, t('puzzles:workshop.tests.loadFailed')))

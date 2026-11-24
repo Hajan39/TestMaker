@@ -23,6 +23,14 @@ export type TestItemKind = (typeof TEST_ITEM_KINDS)[number]
 export const testKindSchema = z.enum(['pisemka', 'pracovni_list'])
 export type TestKind = z.infer<typeof testKindSchema>
 
+/**
+ * Who besides the author sees a test: `soukrome` nobody, `skola` colleagues
+ * in the school read, print and copy it, `skola_uprava` they may also edit it.
+ * Deleting it and changing this value stay with the author.
+ */
+export const testVisibilitySchema = z.enum(['soukrome', 'skola', 'skola_uprava'])
+export type TestVisibility = z.infer<typeof testVisibilitySchema>
+
 /* ------------------------------------------------- worksheet items */
 
 /** Short text, or a boxed fun fact. The text itself is in the `text` column. */
@@ -84,8 +92,13 @@ export function parseItemContent(kind: 'text' | 'table', raw: unknown): TextItem
  * same brief.
  */
 export const worksheetBriefSchema = z.object({
-  /** Name of the topic or free-form brief at creation time. */
+  /** Name of the topic(s) or free-form brief at creation time. */
   title: z.string(),
+  /**
+   * Every library topic the worksheet was made from, in the teacher's order
+   * (`tests.topic_id` keeps only the first). Missing on older worksheets.
+   */
+  topicIds: z.array(z.string()).optional(),
   instructions: z.string().default(''),
   ownText: z.string().default(''),
   /**
@@ -120,6 +133,29 @@ export const testHeaderConfigSchema = z.object({
 })
 
 export type TestHeaderConfig = z.infer<typeof testHeaderConfigSchema>
+
+/**
+ * How variant B is built from variant A. Stored on the test (`variant_options`,
+ * `null` = defaults) and used only when the test has two variants.
+ */
+export const variantOptionsSchema = z.object({
+  /** `shuffle` = random order within sections, `reverse` = questions of each section backwards. */
+  order: z.enum(['shuffle', 'reverse']).default('shuffle'),
+  /** Shuffle options inside questions too (choices, statements, matching). */
+  shuffleOptions: z.boolean().default(true),
+  /**
+   * "Zamíchat znovu" increments it. 0 keeps the original seed, so tests printed
+   * before the option existed still come out the same.
+   */
+  seed: z.number().int().min(0).default(0),
+})
+export type VariantOptions = z.infer<typeof variantOptionsSchema>
+
+/** Stored variant options; missing or corrupted ones fall back to the defaults. */
+export function parseVariantOptions(raw: unknown): VariantOptions {
+  const parsed = variantOptionsSchema.safeParse(raw ?? {})
+  return parsed.success ? parsed.data : variantOptionsSchema.parse({})
+}
 
 export interface TestItem {
   id: string
@@ -261,8 +297,8 @@ export interface Test {
   id: string
   /** Who composed the test. Other people's tests are neither shown nor printed. */
   ownerId: string
-  /** `soukrome` is visible only to the author, `skola` also to colleagues. */
-  visibility: 'soukrome' | 'skola'
+  /** Sharing with colleagues, see `testVisibilitySchema`. */
+  visibility: TestVisibility
   kind: TestKind
   /** Topic the worksheet was made from; `null` for tests and free-form briefs. */
   topicId: string | null
@@ -278,6 +314,8 @@ export interface Test {
   header: TestHeaderConfig
   /** 1 = variant A only, 2 = A and B. */
   variants: 1 | 2
+  /** How variant B is built; defaults when absent (older data, standalone puzzles). */
+  variantOptions?: VariantOptions
   showKey: boolean
   createdAt: string
   updatedAt: string

@@ -3,7 +3,7 @@ import { t } from '@testmaker/core/i18n'
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { and, asc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
 import { auditLog, db, schools, sessions, users } from '@/db'
 import { newId } from '@/lib/ids'
 import { isAdministratorRole, roleCanEdit, roleCanManage, type Role } from '@/lib/role'
@@ -459,7 +459,22 @@ export function visibleTest(
   if (isAdministratorRole(scope.role)) return eq(table.schoolId, scope.schoolId)
   return and(
     eq(table.schoolId, scope.schoolId),
-    or(eq(table.ownerId, scope.userId), eq(table.visibility, 'skola')),
+    or(eq(table.ownerId, scope.userId), inArray(table.visibility, ['skola', 'skola_uprava'])),
+  )
+}
+
+/**
+ * A test whose content may be saved: one's own, or one the author shared for
+ * editing (`skola_uprava`). Deleting and changing visibility stay `ownedBy`.
+ */
+export function editableTest(
+  scope: Scope,
+  table: { schoolId: AnyColumn; ownerId: AnyColumn; visibility: AnyColumn },
+) {
+  if (isAdministratorRole(scope.role)) return eq(table.schoolId, scope.schoolId)
+  return and(
+    eq(table.schoolId, scope.schoolId),
+    or(eq(table.ownerId, scope.userId), eq(table.visibility, 'skola_uprava')),
   )
 }
 

@@ -40,6 +40,28 @@ import { t } from '@testmaker/core/i18n'
 import { formatPoints, type DraftItem, type WorksheetControls } from './types'
 import { TableItemEditor, TextItemEditor } from './WorksheetItems'
 
+/** Draft items in the shape the PDF renderer, pagination and `buildVariant` read; `id` is the draft key. */
+export function resolveDraft(items: DraftItem[]): ResolvedTestItem[] {
+  return items.map((item, index) => ({
+    id: item.key,
+    testId: 'draft',
+    order: index,
+    kind: item.kind,
+    questionId: item.questionId,
+    text: item.text,
+    pointsOverride: item.pointsOverride,
+    linesOverride: item.linesOverride,
+    wordBankHidden: item.wordBankHidden,
+    question: item.question,
+    // Without the puzzle content the estimate would give it zero height and
+    // the preview would have fewer pages than the PDF.
+    puzzleId: item.puzzleId,
+    puzzle: item.puzzle,
+    table: item.table,
+    textContent: item.textContent,
+  }))
+}
+
 /**
  * The test page — preview and content of the test in one surface.
  *
@@ -69,6 +91,7 @@ export function TestPage({
   onEditBankQuestion,
   reloading = null,
   worksheet,
+  variant = 'A',
 }: {
   items: DraftItem[]
   title: string
@@ -90,6 +113,8 @@ export function TestPage({
   reloading?: string | null
   /** Worksheet controls; absent for a written test. */
   worksheet?: WorksheetControls
+  /** Which variant the page shows — the order of an `ordering` question differs between A and B. */
+  variant?: 'A' | 'B'
 }) {
   // Which questions have their solution revealed. The state belongs here, not
   // in the item: it is not saved with the test and nobody misses it later.
@@ -101,28 +126,7 @@ export function TestPage({
   )
 
   /** Items in the shape the PDF renderer and pagination read. */
-  const resolved = useMemo<ResolvedTestItem[]>(
-    () =>
-      items.map((item, index) => ({
-        id: item.key,
-        testId: 'draft',
-        order: index,
-        kind: item.kind,
-        questionId: item.questionId,
-        text: item.text,
-        pointsOverride: item.pointsOverride,
-        linesOverride: item.linesOverride,
-        wordBankHidden: item.wordBankHidden,
-        question: item.question,
-        // Without the puzzle content the estimate would give it zero height and
-        // the preview would have fewer pages than the PDF.
-        puzzleId: item.puzzleId,
-        puzzle: item.puzzle,
-        table: item.table,
-        textContent: item.textContent,
-      })),
-    [items],
-  )
+  const resolved = useMemo(() => resolveDraft(items), [items])
 
   /**
    * Splitting into pages. `paginate` does not return page breaks in the pages
@@ -288,6 +292,7 @@ export function TestPage({
                             onEditBankQuestion={onEditBankQuestion}
                             reloading={reloading === item.key}
                             worksheet={worksheet}
+                            variant={variant}
                           />
                         </Fragment>
                       ))}
@@ -407,8 +412,10 @@ function PageRow({
   onEditBankQuestion,
   reloading,
   worksheet,
+  variant,
 }: {
   worksheet?: WorksheetControls
+  variant: 'A' | 'B'
   item: DraftItem
   /** Question position in the test (zero-based); `null` for other items. */
   number: number | null
@@ -600,6 +607,7 @@ function PageRow({
             lines={item.linesOverride}
             style={resolveQuestionStyle(config, question.type)}
             theme={config.theme}
+            variant={variant}
           />
           {revealed ? (
             // Off the paper, in another colour: a note for the teacher, not the pupils.
@@ -608,7 +616,7 @@ function PageRow({
               className="mt-1 rounded-[var(--radius-inner)] bg-brand-bg px-2 py-1 text-xs text-fg-soft"
             >
               <span className="font-medium">{t('tests:page.sampleAnswer')}</span>
-              {formatAnswer(question, 'A')}
+              {formatAnswer(question, variant)}
               {formatAcceptedAnswers(question) ? (
                 <span className="block text-xs text-fg-muted" data-testid="accepted-answers">
                   {formatAcceptedAnswers(question)}

@@ -141,6 +141,8 @@ export const AI_SETTINGS = {
     materialChars: 40_000,
     /** Chunk size used to sample a long material evenly across the text. */
     materialChunkChars: 2_000,
+    /** Most library topics one worksheet can be made from; they share `materialChars`. */
+    maxTopics: 10,
     /** Longest own text the teacher can put into the request. */
     ownTextMax: 20_000,
     /** Longest instruction for the worksheet. */

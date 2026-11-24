@@ -286,6 +286,62 @@ describe('re-saving a test', () => {
   })
 })
 
+describe('variant B options', () => {
+  const reverse = { order: 'reverse', shuffleOptions: false, seed: 0 }
+
+  it('a new test without options loads the defaults', async () => {
+    const id = await createTest([], { variants: 2 })
+    expect((await loadTest(ACCOUNT, id))?.variantOptions).toEqual({ order: 'shuffle', shuffleOptions: true, seed: 0 })
+  })
+
+  it('saves, re-saves and copies the options', async () => {
+    const id = await createTest([], { variants: 2, variantOptions: reverse })
+    expect((await loadTest(ACCOUNT, id))?.variantOptions).toEqual(reverse)
+
+    const reshuffled = { order: 'shuffle', shuffleOptions: true, seed: 2 }
+    const response = await PUT(
+      jsonReq('/api/tests', 'PUT', {
+        id,
+        title: 'Písemka',
+        templateId,
+        header: emptyHeader,
+        variants: 2,
+        variantOptions: reshuffled,
+        items: [],
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect((await loadTest(ACCOUNT, id))?.variantOptions).toEqual(reshuffled)
+
+    const copy = await POST(req(`/api/tests?copyOf=${encodeURIComponent(id)}`, { method: 'POST' }))
+    expect(copy.status).toBe(200)
+    const { id: copyId } = (await copy.json()) as { id: string }
+    expect((await loadTest(ACCOUNT, copyId))?.variantOptions).toEqual(reshuffled)
+  })
+
+  it('rejects invalid options with 400 and saves nothing', async () => {
+    for (const variantOptions of [
+      { order: 'sideways', shuffleOptions: true, seed: 0 },
+      { order: 'shuffle', shuffleOptions: true, seed: -1 },
+      { order: 'shuffle', shuffleOptions: true, seed: 1.5 },
+      { order: 'shuffle', shuffleOptions: 'yes', seed: 0 },
+    ]) {
+      const response = await POST(
+        jsonReq('/api/tests', 'POST', {
+          title: 'Neplatné varianty',
+          templateId,
+          header: emptyHeader,
+          variants: 2,
+          variantOptions,
+          items: [],
+        }),
+      )
+      expect(response.status, JSON.stringify(variantOptions)).toBe(400)
+    }
+    expect(await db.select().from(tests).where(eq(tests.title, 'Neplatné varianty'))).toEqual([])
+  })
+})
+
 describe('worksheet materials-only toggle', () => {
   it('re-saving a worksheet stores the toggle in its brief and keeps the rest of the brief', async () => {
     const brief = JSON.stringify({ title: 'Sopky', instructions: 'víc tabulek', ownText: '', onlyMaterials: true })

@@ -168,6 +168,18 @@ describe('backup and restore', () => {
     expect(tableItem).toMatchObject({ kind: 'table', content: table, needsCheck: true })
   })
 
+  it('variant B options survive export and restore', async () => {
+    await seedLibrary()
+    const variantOptions = { order: 'reverse' as const, shuffleOptions: false, seed: 3 }
+    await db.update(tests).set({ variants: 2, variantOptions })
+    const text = await download()
+    await wipe()
+    await restoreViaApi(text)
+
+    const [test] = await db.select().from(tests)
+    expect(test).toMatchObject({ variants: 2, variantOptions })
+  })
+
   it('an older backup without worksheet columns restores with defaults', async () => {
     await seedLibrary()
     const backup = JSON.parse(await download()) as { tabulky: Record<string, Record<string, unknown>[]> }

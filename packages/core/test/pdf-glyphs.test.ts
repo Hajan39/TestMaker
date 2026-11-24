@@ -63,11 +63,28 @@ describe('PDF — bold font after a previous render', () => {
       assets: {},
     })
     const { text } = await extractPdf(new Uint8Array(buffer))
-    expect(text).toContain('varianta A')
+    // Two variants: header, footer and key read "Dýchací soustava A".
+    expect(text.split('Dýchací soustava A').length - 1).toBeGreaterThanOrEqual(3)
+    expect(text).not.toContain('varianta')
     expect(text).toMatch(/strana 1 \/ \d/)
     // Key pages are not counted into the test's total page count.
     const total = Number(/strana 1 \/ (\d+)/.exec(text)?.[1])
     expect(text).toContain(`strana ${total} / ${total}`)
     expect(text).not.toContain(`strana ${total + 1} /`)
+  })
+
+  it('prints a single-variant test under its plain title', async () => {
+    const buffer = await renderTestToBuffer({
+      test: makeTest({ variants: 1 }),
+      template: makeTemplate('klasicka'),
+      items: makeItems(),
+      variant: 'A',
+      withKey: true,
+      assets: {},
+    })
+    const { text } = await extractPdf(new Uint8Array(buffer))
+    expect(text).toContain('Klíč – Dýchací soustava')
+    expect(text).not.toContain('Dýchací soustava A')
+    expect(text).not.toContain('varianta')
   })
 })

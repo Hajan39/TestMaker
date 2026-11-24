@@ -1,7 +1,7 @@
 'use client'
 
 import { Check } from 'lucide-react'
-import { templatesFor, type Template } from '@testmaker/core/schema'
+import { templatesFor, testVisibilitySchema, type Template } from '@testmaker/core/schema'
 import {
   Button,
   Checkbox,
@@ -33,12 +33,15 @@ export function TestSettings({
   templates,
   onChange,
   worksheet = false,
+  visibilityLocked = false,
 }: {
   value: TestSettingsValue
   templates: Template[]
   onChange: (next: TestSettingsValue) => void
   /** Worksheet: no grades and no variants — nothing on a worksheet is graded or copied. */
   worksheet?: boolean
+  /** A colleague editing a shared test: who sees it is the author's call. */
+  visibilityLocked?: boolean
 }) {
   return (
     <Sheet>
@@ -158,22 +161,35 @@ export function TestSettings({
               />
               {t('tests:settings.graded')}
             </label>
-            {/* Otherwise a test is visible only to its author. Sharing helps when
-                someone is ill and a colleague covers the class — she can at
-                least print it instead of building it again. */}
-            <label className="flex items-center gap-2 text-sm text-fg-soft">
-              <Checkbox
-                checked={value.visibility === 'skola'}
-                onCheckedChange={() =>
-                  onChange({
-                    ...value,
-                    visibility: value.visibility === 'skola' ? 'soukrome' : 'skola',
-                  })
-                }
-              />
-              {t('tests:settings.share')}
-            </label>
           </div>
+          {/* Sharing helps when someone is ill and a colleague covers the class —
+              she can at least print it instead of building it again, or even
+              fix it when the author allows editing. Only the author decides. */}
+          {visibilityLocked ? null : (
+            <div>
+              <Label htmlFor="test-visibility">{t('tests:settings.visibility')}</Label>
+              <Select
+                value={value.visibility}
+                onValueChange={(next) => onChange({ ...value, visibility: testVisibilitySchema.parse(next) })}
+              >
+                <SelectTrigger id="test-visibility" className="w-full" aria-describedby="test-visibility-hint">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="soukrome">{t('tests:settings.visibilityPrivate')}</SelectItem>
+                  <SelectItem value="skola">{t('tests:settings.visibilitySchool')}</SelectItem>
+                  <SelectItem value="skola_uprava">{t('tests:settings.visibilitySchoolEdit')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p id="test-visibility-hint" className="mt-1 text-xs text-fg-muted">
+                {value.visibility === 'soukrome'
+                  ? t('tests:settings.visibilityPrivateHint')
+                  : value.visibility === 'skola'
+                    ? t('tests:settings.visibilitySchoolHint')
+                    : t('tests:settings.visibilitySchoolEditHint')}
+              </p>
+            </div>
+          )}
           {worksheet ? (
             <div>
               <label className="flex items-center gap-2 text-sm text-fg-soft">

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { parseWorksheetBrief, type Question, type QuestionContent, type ResolvedTestItem, type Template, type Test } from '@testmaker/core/schema'
+import { parseVariantOptions, parseWorksheetBrief, type Question, type QuestionContent, type ResolvedTestItem, type Template, type Test } from '@testmaker/core/schema'
 import type { WorksheetItemDraft, WorksheetTarget } from '@testmaker/core/ai'
+import { buildVariant } from '@testmaker/core/pdf/layout'
 import {
   Button,
   Input,
@@ -27,7 +28,8 @@ import { testPath } from '@/app/tests/paths'
 import { emptyTable } from '@/components/test-builder/WorksheetItems'
 import { TestVariantMenu } from '@/components/TestVariantMenu'
 import { BankPanel } from '@/components/test-builder/BankPanel'
-import { TestPage } from '@/components/test-builder/TestPage'
+import { resolveDraft, TestPage } from '@/components/test-builder/TestPage'
+import { VariantOptionsFields } from '@/components/test-builder/VariantOptionsFields'
 import { RandomDialog, type InsertMode } from '@/components/test-builder/RandomDialog'
 import { TestSettings } from '@/components/test-builder/TestSettings'
 import {
@@ -92,14 +94,17 @@ export function TestBuilder({
   /**
    * Does the test belong to the signed-in user? The server won't let anyone
    * overwrite a colleague's shared test, so it is only read and printed, and a
-   * copy is offered for edits.
+   * copy is offered for edits — unless it is shared for editing (`skola_uprava`).
    */
   mine?: boolean
   /** Print link settings from the server (`shareSecret()`, `isMailConfigured()`); offered only to the author. */
   share?: { available: boolean; mail: boolean }
 }) {
   const router = useRouter()
-  const readOnly = !mine
+  // A colleague's test shared for editing (`skola_uprava`) is edited like one's
+  // own; only its visibility and the print link stay with the author.
+  const colleagueEdit = !mine && test?.visibility === 'skola_uprava'
+  const readOnly = !mine && !colleagueEdit
   const narrow = useMatchesMedia('(max-width: 1023.98px)')
   // A worksheet is always created from the "Nový pracovní list" form, so it
   // arrives in the editor already saved and its kind comes from the test.
@@ -112,6 +117,7 @@ export function TestBuilder({
     templateId: test?.templateId ?? defaultTemplateId(templates, kind),
     header: test?.header ?? emptyHeader(),
     variants: test?.variants ?? 1,
+    variantOptions: parseVariantOptions(test?.variantOptions),
     // The key is no longer set on the test but chosen at print time ("Zadání
     // pro žáky" / "Vyplněná pro mě"). The DB column stays; nothing changes it.
     showKey: test?.showKey ?? true,
@@ -626,6 +632,7 @@ export function TestBuilder({
       gradeId: gradeId ?? null,
       header: settings.header,
       variants: settings.variants,
+      variantOptions: settings.variantOptions,
       showKey: settings.showKey,
       visibility: settings.visibility,
       ...(worksheet ? { onlyMaterials: settings.onlyMaterials } : {}),
@@ -663,6 +670,14 @@ export function TestBuilder({
     return id
   }
 
+  // A test with variants A and B shows both pages: A to work on, B read-only,
+  // so the teacher sees what pupils with B get before she prints it.
+  const twoVariants = !worksheet && settings.variants === 2
+  const [variantTab, setVariantTab] = useState<'A' | 'B'>('A')
+  const pageTitle = (variant: 'A' | 'B') =>
+    twoVariants && settings.title.trim()
+      ? t('tests:builder.variantTitle', { title: settings.title, variant })
+      : settings.title
   const bank = (
     <BankPanel
       topics={topics}
@@ -677,7 +692,7 @@ export function TestBuilder({
   const sheet = (
     <TestPage
       items={draft}
-      title={settings.title}
+      title={pageTitle('A')}
       description={settings.description}
       header={settings.header}
       graded={settings.graded}
@@ -703,6 +718,59 @@ export function TestBuilder({
       }
     />
   )
+  // Computed from the current draft and options, so unsaved edits show at once.
+  // The seed is the saved test id — the same one the PDF uses.
+  const variantItems = useMemo(() => {
+    if (!twoVariants || !savedId) return null
+    const byKey = new Map(draft.map((item) => [item.key, item]))
+    return buildVariant(resolveDraft(draft), 'B', savedId, settings.variantOptions).map((item) => ({
+      ...(byKey.get(item.id) as DraftItem),
+      question: item.question ?? null,
+    }))
+  }, [twoVariants, savedId, draft, settings.variantOptions])
+  const ignore = () => {}
+  const variantSheet = twoVariants ? (
+    <Tabs value={variantTab} onValueChange={(next) => setVariantTab(next === 'B' ? 'B' : 'A')} className="h-full">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <TabsList aria-label={t('tests:builder.variantTabs')}>
+          <TabsTrigger value="A">{t('tests:builder.variantTab', { variant: 'A' })}</TabsTrigger>
+          <TabsTrigger value="B">{t('tests:builder.variantTab', { variant: 'B' })}</TabsTrigger>
+        </TabsList>
+        <VariantOptionsFields
+          value={settings.variantOptions}
+          disabled={readOnly}
+          onChange={(variantOptions) => setSettings({ ...settings, variantOptions })}
+        />
+      </div>
+      <TabsContent value="A" className="min-h-0">
+        {readOnly ? <fieldset disabled className="contents">{sheet}</fieldset> : sheet}
+      </TabsContent>
+      <TabsContent value="B" className="min-h-0">
+        {variantItems ? (
+          // B is derived from A — it is changed through A and the options above, never directly.
+          <fieldset disabled className="contents">
+            <TestPage
+              items={variantItems}
+              title={pageTitle('B')}
+              description={settings.description}
+              header={settings.header}
+              graded={settings.graded}
+              template={template}
+              onReorder={ignore}
+              onRemove={ignore}
+              onPatch={ignore}
+              onAdd={ignore}
+              variant="B"
+            />
+          </fieldset>
+        ) : (
+          <p className="text-sm text-fg-muted" data-testid="variant-b-unsaved">
+            {t('tests:builder.variantBUnsaved')}
+          </p>
+        )}
+      </TabsContent>
+    </Tabs>
+  ) : null
   const narrowHint = <p className="text-sm text-fg-muted">{t('tests:builder.narrowHint')}</p>
   const editedQuestion = questionDialog?.key
     ? (draft.find((item) => item.key === questionDialog.key)?.question ?? null)
@@ -755,7 +823,7 @@ export function TestBuilder({
             variants={settings.variants}
             unsaved={!readOnly && (dirty || !savedId)}
             ensureSaved={savedForPrint}
-            share={readOnly ? undefined : share}
+            share={mine ? share : undefined}
           />
           {readOnly ? (
             <Button size="sm" disabled={copying} aria-busy={copying || undefined} onClick={() => savedId && copyMutation.mutate(savedId)}>
@@ -776,7 +844,13 @@ export function TestBuilder({
           {readOnly ? null : (
             <>
               {worksheet ? null : <RandomDialog topics={topics} hasDraft={draft.length > 0} onInsert={insertRandom} />}
-              <TestSettings value={settings} templates={templates} onChange={setSettings} worksheet={worksheet} />
+              <TestSettings
+                value={settings}
+                templates={templates}
+                onChange={setSettings}
+                worksheet={worksheet}
+                visibilityLocked={colleagueEdit}
+              />
               {dirty ? (
                 <span className="text-sm text-fg-muted" role="status">
                   {t('common:status.unsavedChanges')}
@@ -791,6 +865,14 @@ export function TestBuilder({
       {readOnly ? (
         <p className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft">
           {t('tests:builder.sharedReadOnly')}
+        </p>
+      ) : null}
+      {colleagueEdit ? (
+        <p
+          className="rounded-[var(--radius-inner)] bg-surface-muted px-3 py-2 text-sm text-fg-soft"
+          data-testid="colleague-edit-note"
+        >
+          {t('tests:builder.colleagueEdit')}
         </p>
       ) : null}
 
@@ -838,9 +920,13 @@ export function TestBuilder({
       {readOnly ? (
         // A shared test is view-only: the bank would be useless and
         // `fieldset disabled` turns off all page controls at once.
-        <fieldset disabled className="contents">
-          <div className="h-[75vh]">{sheet}</div>
-        </fieldset>
+        variantSheet ? (
+          <div className="h-[75vh]">{variantSheet}</div>
+        ) : (
+          <fieldset disabled className="contents">
+            <div className="h-[75vh]">{sheet}</div>
+          </fieldset>
+        )
       ) : worksheet ? (
         // A worksheet has no bank — the page gets the full width. On a phone the
         // page scrolls with the window; a nested scroller there traps the finger.
@@ -862,7 +948,7 @@ export function TestBuilder({
           <TabsContent value="banka">{bank}</TabsContent>
           <TabsContent value="stranka" className="space-y-2">
             {narrowHint}
-            {sheet}
+            {variantSheet ?? sheet}
           </TabsContent>
         </Tabs>
       ) : (
@@ -870,7 +956,7 @@ export function TestBuilder({
         // room — it shows how the test prints and is where the work happens.
         <div className="grid h-[70vh] gap-4 grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="min-h-0">{bank}</div>
-          <div className="min-h-0">{sheet}</div>
+          <div className="min-h-0">{variantSheet ?? sheet}</div>
         </div>
       )}
     </div>

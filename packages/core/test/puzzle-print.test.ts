@@ -323,7 +323,7 @@ describe('standalone puzzle', () => {
 
   it('the key of a test still mentions the variant', async () => {
     const pages = await renderPages(inTest(CRYPTO, 'klasicka'))
-    expect(pages.map(pageText).join(' ')).toContain('(varianta A)')
+    expect(pages.map(pageText).join(' ')).toContain('Klíč – Dýchací soustava A')
   })
 })
 

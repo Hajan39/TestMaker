@@ -68,7 +68,13 @@
     "description": "Podtitul / úvodní věta (nepovinné)",
     "variants": "Varianty",
     "variantsA": "Jen A",
-    "variantsAB": "A i B (přeházené pořadí)",
+    "variantsAB": "A i B",
+    "variantOrder": "Pořadí ve variantě B",
+    "variantOrderShuffle": "Náhodně",
+    "variantOrderReverse": "Opačně",
+    "variantReshuffle": "Zamíchat znovu",
+    "variantReshuffleHint": "Změní pořadí ve variantě B — už vytištěné papíry B pak nebudou sedět.",
+    "variantShuffleOptions": "Přemíchat i možnosti v otázkách",
     "school": "Škola",
     "subject": "Předmět",
     "className": "Třída",
@@ -76,7 +82,13 @@
     "blankLine": "prázdné = linka k doplnění",
     "template": "Šablona",
     "graded": "Test na známky (tiskne body a políčko na známku)",
-    "share": "Sdílet s kolegyněmi ze školy (uvidí ho a vytisknou, měnit ho nemohou)"
+    "visibility": "Sdílení",
+    "visibilityPrivate": "Jen pro mě",
+    "visibilitySchool": "Sdílený se školou",
+    "visibilitySchoolEdit": "Sdílený k úpravám",
+    "visibilityPrivateHint": "Kolegyně ho neuvidí.",
+    "visibilitySchoolHint": "Kolegyně ze školy ho uvidí, vytisknou a zkopírují, měnit ho nemohou.",
+    "visibilitySchoolEditHint": "Kolegyně ze školy ho mohou i upravovat. Smazat ho a změnit sdílení můžeš jen ty."
   },
   "overview": {
     "title": "Testy",
@@ -250,6 +262,10 @@
     "removed": "Položka je odebraná ze stránky."
   },
   "builder": {
+    "variantTabs": "Varianty písemky",
+    "variantTab": "Varianta {{variant}}",
+    "variantTitle": "{{title}} {{variant}}",
+    "variantBUnsaved": "Variantu B uvidíš po prvním uložení.",
     "newSection": "Nová část",
     "copied": "Kopie je hotová — teď ji můžeš upravit.",
     "titleRequired": "Vyplň název testu.",
@@ -262,6 +278,7 @@
     "titlePlaceholder": "Např. Čtvrtletní test – přírodopis",
     "saveBeforeVariant": "Nejdřív ulož test — verze vzniká z uložené podoby, ne z rozpracované úpravy.",
     "sharedReadOnly": "Sdílený test — pro úpravy si vytvoř kopii.",
+    "colleagueEdit": "Upravuješ práci kolegyně, kterou sdílela k úpravám. Změny uvidí i ona; platí to, co se uloží naposled.",
     "tabBank": "Banka",
     "tabPage": "Stránka ({{count}})",
     "narrowHint": "Stránku pohodlněji upravíš na tabletu nebo počítači."

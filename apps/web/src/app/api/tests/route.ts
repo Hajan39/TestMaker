@@ -8,6 +8,8 @@ import {
   TEST_ITEM_KINDS,
   testHeaderConfigSchema,
   testKindSchema,
+  testVisibilitySchema,
+  variantOptionsSchema,
   type TestKind,
 } from '@testmaker/core/schema'
 import { t } from '@testmaker/core/i18n'
@@ -21,7 +23,8 @@ import {
   resolveTopic,
   testConditions,
 } from '@/lib/tests'
-import { inSchool, withScope, ownedBy, type SignedInUser } from '@/lib/user'
+import { isAdministratorRole } from '@/lib/role'
+import { editableTest, inSchool, withScope, ownedBy, type SignedInUser } from '@/lib/user'
 
 export const runtime = 'nodejs'
 
@@ -57,7 +60,7 @@ const itemSchema = z.object({
 const testSchema = z.object({
   title: z.string().min(1).max(200),
   /** Sharing with colleagues; shared with the school by default (the author can hide it). */
-  visibility: z.enum(['soukrome', 'skola']).default('skola'),
+  visibility: testVisibilitySchema.default('skola'),
   description: z.string().max(1000).nullable().default(null),
   graded: z.boolean().default(true),
   templateId: z.string().min(1),
@@ -65,6 +68,8 @@ const testSchema = z.object({
   gradeId: z.string().min(1).nullable().default(null),
   header: testHeaderConfigSchema,
   variants: z.union([z.literal(1), z.literal(2)]).default(1),
+  /** How variant B is built; `null` = defaults. */
+  variantOptions: variantOptionsSchema.nullable().default(null),
   showKey: z.boolean().default(true),
   items: z.array(itemSchema).default([]),
   /** Written test or worksheet. Set only on creation. */
@@ -221,14 +226,18 @@ export async function PUT(request: Request) {
   const { id, items, gradeId: gradeIdInput, onlyMaterials, ...test } = parsed.data
   const gradeId = gradeIdInput === undefined ? undefined : await resolveGradeId(account, gradeIdInput)
 
-  // Only the owner may edit: a shared test can be read and printed, not
-  // overwritten.
+  // The owner edits; colleagues only when she shared the test for editing
+  // (`skola_uprava`). A merely shared test can be read and printed, not overwritten.
   const [original] = await db
-    .select({ kind: tests.kind, brief: tests.brief })
+    .select({ kind: tests.kind, brief: tests.brief, ownerId: tests.ownerId, visibility: tests.visibility })
     .from(tests)
-    .where(and(eq(tests.id, id), ownedBy(account, tests)))
+    .where(and(eq(tests.id, id), editableTest(account, tests)))
     .limit(1)
   if (!original) return Response.json({ error: t('tests:api.testNotFoundShort') }, { status: 404 })
+  // Who sees the test is the author's call: a colleague's save keeps the stored value.
+  if (original.ownerId !== account.userId && !isAdministratorRole(account.role)) {
+    test.visibility = original.visibility
+  }
   // An older worksheet may have no brief at all; the toggle then starts one.
   const brief =
     original.kind === 'pracovni_list' && onlyMaterials !== undefined
@@ -245,6 +254,7 @@ export async function PUT(request: Request) {
     .select({
       id: testItems.id,
       questionSnapshot: testItems.questionSnapshot,
+      puzzleId: testItems.puzzleId,
       puzzleSnapshot: testItems.puzzleSnapshot,
     })
     .from(testItems)
@@ -260,6 +270,7 @@ export async function PUT(request: Request) {
     ids: new Set(existing.map((row) => row.id)),
     snapshots: keptSnapshots,
     puzzleSnapshots: keptPuzzleSnapshots,
+    puzzleIds: new Set(existing.map((row) => row.puzzleId).filter((id): id is string => Boolean(id))),
   })
   if (rows instanceof Response) return rows
 
@@ -277,7 +288,7 @@ export async function PUT(request: Request) {
         ...(brief !== undefined ? { brief } : {}),
         updatedAt: new Date().toISOString(),
       })
-      .where(and(eq(tests.id, id), ownedBy(account, tests))),
+      .where(and(eq(tests.id, id), editableTest(account, tests))),
     db.delete(testItems).where(and(inSchool(account, testItems), eq(testItems.testId, id))),
     ...(rows.length > 0 ? [db.insert(testItems).values(rows)] : []),
   ])
@@ -311,6 +322,8 @@ interface KeptItems {
   ids: Set<string>
   snapshots: Map<string, string>
   puzzleSnapshots: Map<string, string>
+  /** Puzzles already in the test — kept even when not the saver's own (a colleague editing). */
+  puzzleIds: Set<string>
 }
 
 /**
@@ -322,7 +335,7 @@ async function itemRows(
   testId: string,
   kind: TestKind,
   items: Item[],
-  kept: KeptItems = { ids: new Set(), snapshots: new Map(), puzzleSnapshots: new Map() },
+  kept: KeptItems = { ids: new Set(), snapshots: new Map(), puzzleSnapshots: new Map(), puzzleIds: new Set() },
 ): Promise<Response | (typeof testItems.$inferInsert & { id: string })[]> {
   if (items.length === 0) return []
   const keptSnapshots = kept.snapshots
@@ -339,15 +352,14 @@ async function itemRows(
   )
 
   // Same for puzzles: what was added to the test keeps a snapshot. Only an
-  // own puzzle can be frozen — a foreign one can't get in even by a guessed id.
+  // own puzzle can be added — a foreign one can't get in even by a guessed id;
+  // one already in the test stays (a colleague may edit a test shared for editing).
   const givenPuzzles = items
     .filter((item) => item.kind === 'puzzle')
     .map((item) => item.puzzleId)
     .filter((id): id is string => Boolean(id))
   const puzzleSnapshots = await buildPuzzleSnapshots(account, givenPuzzles)
-  const foreign = givenPuzzles.filter(
-    (id) => !puzzleSnapshots.has(id) && !keptPuzzleSnapshots.has(id),
-  )
+  const foreign = givenPuzzles.filter((id) => !puzzleSnapshots.has(id) && !kept.puzzleIds.has(id))
   if (foreign.length > 0) {
     return Response.json(
       { error: t('tests:api.foreignPuzzle') },

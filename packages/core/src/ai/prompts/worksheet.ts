@@ -14,7 +14,10 @@ export interface WorksheetRequest {
   title: string
   subjectName: string | null
   gradeName: string | null
-  /** Text of the topic's materials (without duplicates), files separated by `=== name ===`; may be empty. */
+  /**
+   * Text of the topics' materials (without duplicates) from `combineTopicMaterials`:
+   * each topic under its heading, files separated by `=== name ===`; may be empty.
+   */
   materials: string
   /** Own text the teacher put into the brief; may be empty. */
   ownText: string
@@ -77,6 +80,11 @@ export function buildWorksheetSystemPrompt(gradeName: string | null): string {
   ].join('\n')
 }
 
+/** Opens one topic's materials, so the model knows which part belongs to which topic. */
+export function topicMaterialsHeading(topicName: string): string {
+  return `## Téma: ${topicName}`
+}
+
 function sourceSections(request: WorksheetRequest, materials: string): string[] {
   const sections = [
     `Předmět: ${request.subjectName ?? 'neurčen'}`,
@@ -88,7 +96,7 @@ function sourceSections(request: WorksheetRequest, materials: string): string[] 
   }
   const ownText = request.ownText.trim()
   if (ownText) sections.push('', 'Text, který učitelka dodala (vycházej z něj přednostně):', '"""', ownText, '"""')
-  if (materials.trim()) sections.push('', 'Materiály k tématu:', '"""', materials.trim(), '"""')
+  if (materials.trim()) sections.push('', 'Materiály (každé téma pod svým nadpisem „## Téma: …“):', '"""', materials.trim(), '"""')
   if (!ownText && !materials.trim()) {
     sections.push(
       '',

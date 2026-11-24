@@ -34,7 +34,7 @@
     "clues": "Otázky:"
   },
   "header": {
-    "variantB": "(varianta B)",
+    "variantTitle": "{{title}} {{variant}}",
     "points": "Body: ______ / {{total}}",
     "grade": "Známka: ______",
     "teacher": "Vyučující: {{name}}",
@@ -42,7 +42,6 @@
   },
   "key": {
     "title": "Klíč – {{title}}",
-    "variant": "(varianta {{variant}})",
     "totalPoints": "Celkem {{points}} bodů",
     "solution": "Řešení – {{title}}",
     "grades": "Známky: {{list}}",
@@ -50,7 +49,6 @@
     "gradeSingle": "{{grade}}: {{from}}"
   },
   "footer": {
-    "variant": "varianta {{variant}}",
     "page": "strana {{page}} / {{total}}"
   },
   "compose": {

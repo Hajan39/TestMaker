@@ -96,7 +96,7 @@ export function PaperQuestion({
         ) : label ? (
           <span className="font-bold" style={{ marginRight: pt(5) }}>{label}</span>
         ) : null}
-        <span className="min-w-0 flex-1 font-bold break-words">{prompt}</span>
+        <span className="min-w-0 flex-1 font-bold break-words" data-testid="question-prompt">{prompt}</span>
         {points != null ? (
           <span className="shrink-0 opacity-70" style={{ fontSize: pt(8), marginLeft: pt(6) }}>
             {t('ui:paper.question.points', { points: formatPoints(points) })}
