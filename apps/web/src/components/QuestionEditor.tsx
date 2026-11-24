@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -31,7 +31,7 @@ import {
   SelectValue,
   Textarea,
 } from '@testmaker/ui'
-import { emptyPayload } from '@/lib/questionDefaults'
+import { emptyPayload, switchPayload } from '@/lib/questionDefaults'
 import { errorMessage, jsonBody, requestJson } from '@/lib/requestJson'
 import { PayloadFields } from './PayloadFields'
 import { useAiConfigured } from './useRegenerateQuestion'
@@ -144,11 +144,17 @@ export function QuestionEditorForm({
   const completion = useCompleteAnswers(topicId, getValues, setValue, setError, clearErrors)
   const payload = useWatch({ control, name: 'payload' })
   const promptFilled = String(payload?.prompt ?? '').trim().length >= 3
+  // Content of each type the teacher has been on, so switching back restores it.
+  const earlierPayloads = useRef(new Map<QuestionType, Record<string, unknown>>())
 
   function changeType(next: QuestionType) {
     completion.reset()
+    // What the teacher wrote survives a type change: shared fields go over and
+    // switching back restores the earlier type's content.
+    const current = getValues('payload')
+    earlierPayloads.current.set(type, current)
+    setValue('payload', switchPayload(type, current, next, earlierPayloads.current.get(next)))
     setValue('type', next)
-    setValue('payload', emptyPayload(next))
     setValue('points', DEFAULT_POINTS[next])
   }
 
