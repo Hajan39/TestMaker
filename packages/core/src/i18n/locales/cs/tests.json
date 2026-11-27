@@ -109,8 +109,10 @@
     "printFilled": "Vytisknout vyplněnou pro mě{{suffix}}",
     "downloadStudents": "Stáhnout zadání pro žáky{{suffix}}",
     "downloadFilled": "Stáhnout vyplněnou pro mě{{suffix}}",
+    "downloadWord": "Stáhnout zadání ve Wordu{{suffix}}",
     "preparingPrint": "Připravuji tisk…",
     "preparingPdf": "Připravuji PDF…",
+    "preparingWord": "Připravuji Word…",
     "menu": "Tisk a PDF",
     "saveFirst": "Neuložené změny se před tiskem uloží — tiskne se uložená podoba.",
     "savedAndPrinting": "Změny jsou uložené, připravuji tisk."

@@ -5,7 +5,7 @@ import type { Question } from '../schema/question'
 import type { QuestionStyle, TemplateConfig } from '../schema/template'
 import { answerLines } from '../schema/test'
 import { formatAcceptedAnswers } from './answerKey'
-import { numberedBlanks, tableBlankNumbers } from './layout'
+import { IMAGE_MAX_HEIGHT, numberedBlanks, tableBlankNumbers } from './layout'
 import { displayOrder } from './shuffle'
 import { LETTERS } from './styles'
 import { sanitizeText } from './text'
@@ -29,13 +29,6 @@ const BORDER = '1pt solid #444'
 const LIGHT = '0.6pt solid #999'
 /** Colour of answers in the filled-in copy — like a teacher's red pen. */
 const ANSWER = '#c62828'
-
-/**
- * Image height cap in points (PDF pt). Without it a tall image (e.g. a
- * portrait scanned photo) could take the whole page and push the rest of the
- * question onto the next page, with no way to see that from the data upfront.
- */
-const IMAGE_MAX_HEIGHT = 260
 
 /** Question body — everything below the prompt: options, lines, tables, images. */
 export function QuestionBody({ question, style, config, variant, assets, linesOverride, filled = false }: Props) {

@@ -9,7 +9,9 @@
  */
 
 import type { PuzzleContent, PuzzleEntry } from '../schema/puzzle'
+import { itemQuestion, type ResolvedTestItem, type Test } from '../schema/test'
 import { buildPuzzle, markedOffsets, puzzleProblems, type BuiltPuzzle, type CryptogramResult } from '../puzzle/index'
+import { buildVariant } from './shuffle'
 
 export { LETTERS, questionLabel } from './styles'
 export { buildVariant, displayOrder } from './shuffle'
@@ -157,4 +159,30 @@ export function puzzleForVariant(puzzle: PuzzleContent, variant: 'A' | 'B'): Puz
   const other = { ...puzzle, payload: { ...puzzle.payload, seed: `${puzzle.payload.seed}:B` } } as PuzzleContent
   const worse = puzzleProblems(buildPuzzle(other)).length > puzzleProblems(buildPuzzle(puzzle)).length
   return worse ? puzzle : other
+}
+
+/**
+ * Image height cap in points. Without it a tall image (e.g. a portrait
+ * scanned photo) could take the whole page and push the rest of the question
+ * onto the next page, with no way to see that from the data upfront.
+ */
+export const IMAGE_MAX_HEIGHT = 260
+
+/**
+ * Test items as one variant prints them: the variant's order, its puzzle seed
+ * (grid and key then use the same one) and the per-item question settings.
+ * PDF and Word both start here, so they cannot disagree on what is on paper.
+ */
+export function printedItems(
+  items: ResolvedTestItem[],
+  variant: 'A' | 'B',
+  test: Pick<Test, 'id' | 'variantOptions'>,
+): ResolvedTestItem[] {
+  return buildVariant(items, variant, test.id, test.variantOptions).map((item) =>
+    item.kind === 'puzzle' && item.puzzle
+      ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) }
+      : item.kind === 'question' && item.question
+        ? { ...item, question: itemQuestion(item.question, item) }
+        : item,
+  )
 }

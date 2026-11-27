@@ -23,9 +23,9 @@ function fileName(header: string | undefined): string {
 }
 
 /** Clicks a menu item and returns the file name the server sent. */
-async function fileNameAfterClick(page: Page, testId: string, item: string): Promise<string> {
+async function fileNameAfterClick(page: Page, testId: string, item: string, format: 'pdf' | 'docx' = 'pdf'): Promise<string> {
   const response = page.waitForResponse(
-    (candidate) => candidate.url().includes(`/api/tests/${testId}/pdf`),
+    (candidate) => candidate.url().includes(`/api/tests/${testId}/${format}`),
     { timeout: 30_000 },
   )
   await page.getByRole('menuitem', { name: item }).click()
@@ -65,6 +65,18 @@ test.describe('printing the assignment and the key', () => {
     await page.getByRole('button', { name: 'Tisk a PDF' }).click()
     const key = await fileNameAfterClick(page, testId, 'Stáhnout vyplněnou pro mě')
     expect(key).toBe(`${TITLE} A vyplněná.pdf`)
+  })
+
+  test('builder: the assignment can be downloaded as a Word document', async ({ page }) => {
+    await page.goto(`/tests/${testId}`)
+
+    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    const download = page.waitForEvent('download')
+    const name = await fileNameAfterClick(page, testId, 'Stáhnout zadání ve Wordu', 'docx')
+    expect(name).toBe(`${TITLE} A.docx`)
+    // The browser saves it under that name — a `.docx`, not the PDF fallback name.
+    // WebKit hands the name out decomposed, the way macOS stores file names.
+    expect((await download).suggestedFilename().normalize('NFC')).toBe(`${TITLE} A.docx`)
   })
 
   test('test list: the same actions give the same result', async ({ page }) => {

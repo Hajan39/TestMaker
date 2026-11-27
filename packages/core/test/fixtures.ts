@@ -8,7 +8,7 @@ const id = (prefix: string) => `${prefix}-${(counter += 1)}`
 
 /**
  * Tall image (400 × 3200 px, aspect ratio 1 : 8) for tests of the image height
- * cap (`IMAGE_MAX_HEIGHT` in `QuestionBody.tsx`). Without the cap it would
+ * cap (`IMAGE_MAX_HEIGHT` in `pdf/layout.ts`). Without the cap it would
  * render at over 4000 pt in the column width — more than five A4 pages.
  */
 export const TALL_IMAGE_DATA_URL =

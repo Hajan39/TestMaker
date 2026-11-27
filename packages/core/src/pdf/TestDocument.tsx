@@ -3,14 +3,13 @@ import { t } from '../i18n'
 import type { Question } from '../schema/question'
 import { puzzleInstructions, type PuzzleContent } from '../schema/puzzle'
 import { resolveQuestionStyle, type TemplateConfig, type TemplateTheme } from '../schema/template'
-import { itemQuestion, type RenderableTest, type ResolvedTestItem } from '../schema/test'
+import type { RenderableTest, ResolvedTestItem } from '../schema/test'
 import { formatAcceptedAnswers, formatAnswer, formatGradeBoundaries, formatPartialScoring } from './answerKey'
 import { puzzleHeadShown, puzzleKeepsTogether } from './estimate'
-import { decorationColor, decorationShapes, formatPoints, PAGE_HEIGHT, PAGE_WIDTH, puzzleForVariant } from './layout'
+import { decorationColor, decorationShapes, formatPoints, PAGE_HEIGHT, PAGE_WIDTH, printedItems } from './layout'
 import { QuestionBody } from './QuestionBody'
 import { PuzzleBody } from './PuzzleBody'
 import { TableBlock, TextBlock } from './WorksheetBlocks'
-import { buildVariant } from './shuffle'
 import { pagePadding, questionLabel } from './styles'
 import { sanitizeText } from './text'
 
@@ -28,14 +27,7 @@ export function TestDocument({
   gradeScale,
 }: RenderableTest) {
   const config = template.config
-  // A puzzle in variant B gets a different seed — grid and key then use the same one.
-  const ordered = buildVariant(items, variant, test.id, test.variantOptions).map((item) =>
-    item.kind === 'puzzle' && item.puzzle
-      ? { ...item, puzzle: puzzleForVariant(item.puzzle, variant) }
-      : item.kind === 'question' && item.question
-        ? { ...item, question: itemQuestion(item.question, item) }
-        : item,
-  )
+  const ordered = printedItems(items, variant, test)
   const questions = ordered.filter((i) => i.kind === 'question' && i.question)
   const total = questions.reduce(
     (sum, i) => sum + (i.pointsOverride ?? i.question?.points ?? 0),

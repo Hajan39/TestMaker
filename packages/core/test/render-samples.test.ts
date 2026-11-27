@@ -7,15 +7,17 @@
  * exist, be a real PDF and contain the text the sample is made for. Otherwise
  * nobody would notice an empty or broken sample before reaching the printer.
  */
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createElement } from 'react'
 import { renderToFile } from '@react-pdf/renderer'
+import JSZip from 'jszip'
 import { expect, it } from 'vitest'
+import { renderTestToDocx } from '../src/docx'
 import { TestDocument } from '../src/pdf/TestDocument'
 import { registerServerFonts } from '../src/pdf/node'
 import { extractPdf } from '../src/extract/pdf'
-import type { ResolvedTestItem } from '../src/schema/test'
+import type { RenderableTest, ResolvedTestItem } from '../src/schema/test'
 import { puzzleContentSchema } from '../src/schema/puzzle'
 import { DEFAULT_GRADE_SCALE, type GradeScaleRow } from '../src/schema/gradeScale'
 import { makeItems, makeQuestion, makeTemplate, makeTest, makeWorksheetItems, TALL_IMAGE_DATA_URL } from './fixtures'
@@ -38,6 +40,16 @@ async function checkSample(path: string, expectedText: string[]): Promise<void> 
 
   const { text } = await extractPdf(new Uint8Array(buffer))
   for (const needle of expectedText) expect(text, path).toContain(needle)
+}
+
+/**
+ * The Word version of a sample, next to its PDF. Whether Word opens it cleanly
+ * and it reads well can only be judged by opening the file.
+ */
+async function docxSample(path: string, renderable: RenderableTest, expectedText: string[]): Promise<void> {
+  writeFileSync(path, await renderTestToDocx(renderable))
+  const xml = await (await JSZip.loadAsync(readFileSync(path))).file('word/document.xml')!.async('string')
+  for (const needle of expectedText) expect(xml, path).toContain(needle)
 }
 
 /** Partial scoring of the sample matching question (3 points, 3 pairs). */
@@ -246,18 +258,21 @@ it.runIf(process.env.RENDER_SAMPLES)('generates a sample with an image question 
   for (const slug of ['klasicka', 'kompaktni', 'pracovni-list']) {
     for (const variant of ['A', 'B'] as const) {
       const path = resolve(OUT, `full-${slug}-${variant}.pdf`)
-      await renderToFile(
-        createElement(TestDocument, {
-          test: makeTest({ graded: slug !== 'pracovni-list' }),
-          template: makeTemplate(slug),
-          items,
-          variant,
-          withKey: true,
-          assets: { 'img-1': TINY_PNG },
-        }) as never,
-        path,
-      )
+      const renderable: RenderableTest = {
+        test: makeTest({ graded: slug !== 'pracovni-list' }),
+        template: makeTemplate(slug),
+        items,
+        variant,
+        withKey: true,
+        assets: { 'img-1': TINY_PNG },
+      }
+      await renderToFile(createElement(TestDocument, renderable) as never, path)
       await checkSample(path, ['Pozorně si přečti obrázek', 'Část B – Obrázek', 'Popiš očíslované části obrázku.'])
+      // No heading here: the compact template prints it in capitals, and Word has no key page to repeat it plainly.
+      await docxSample(resolve(OUT, `full-${slug}-${variant}.docx`), renderable, [
+        'Pozorně si přečti obrázek',
+        'Popiš očíslované části obrázku.',
+      ])
     }
   }
 })
@@ -309,18 +324,17 @@ it.runIf(process.env.RENDER_SAMPLES)('generates a puzzles sample', async () => {
   ]
 
   const path = resolve(OUT, 'puzzles.pdf')
-  await renderToFile(
-    createElement(TestDocument, {
-      test: makeTest({ graded: false }),
-      template: makeTemplate('klasicka'),
-      items,
-      variant: 'A',
-      withKey: true,
-      assets: {},
-    }) as never,
-    path,
-  )
+  const renderable: RenderableTest = {
+    test: makeTest({ graded: false }),
+    template: makeTemplate('klasicka'),
+    items,
+    variant: 'A',
+    withKey: true,
+    assets: {},
+  }
+  await renderToFile(createElement(TestDocument, renderable) as never, path)
   await checkSample(path, ['Osmisměrka: části rostliny', 'CHLOROPLAST', 'Tajenka', 'Řešení'])
+  await docxSample(resolve(OUT, 'puzzles.docx'), renderable, ['Osmisměrka: části rostliny', 'CHLOROPLAST', 'Tajenka'])
   // The key must have filled boxes: the template line height used to wipe
   // letters from the cells entirely and an empty key grid would only be
   // noticed at the printer.
@@ -347,18 +361,18 @@ it.runIf(process.env.RENDER_SAMPLES)('generates a worksheet sample', async () =>
     { ...first!, id: 'w-h2', text: 'Za tabulkou' },
   ]
   const path = resolve(OUT, 'worksheet.pdf')
-  await renderToFile(
-    createElement(TestDocument, {
-      test: makeTest({ graded: false, kind: 'pracovni_list', variants: 1, title: 'Pracovní list – dýchání' }),
-      template: makeTemplate('pracovni-list'),
-      items,
-      variant: 'A',
-      withKey: true,
-      assets: {},
-    }) as never,
-    path,
-  )
+  const renderable: RenderableTest = {
+    test: makeTest({ graded: false, kind: 'pracovni_list', variants: 1, title: 'Pracovní list – dýchání' }),
+    template: makeTemplate('pracovni-list'),
+    items,
+    variant: 'A',
+    withKey: true,
+    assets: {},
+  }
+  await renderToFile(createElement(TestDocument, renderable) as never, path)
   await checkSample(path, ['Věděli jste?', 'Doplň tabulku orgánů', 'funkce 12'])
+  // The pupils' sheet has the cells to fill in empty; the answers are only in the PDF key.
+  await docxSample(resolve(OUT, 'worksheet.docx'), renderable, ['Věděli jste?', 'Doplň tabulku orgánů', 'Orgán 12'])
 })
 
 it.runIf(process.env.RENDER_SAMPLES)('generates the playful worksheet templates', async () => {

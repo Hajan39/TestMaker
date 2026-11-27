@@ -20,7 +20,7 @@
   },
   "print": {
     "preparing": "Připravuji tisk…",
-    "failed": "PDF se nepodařilo připravit.",
+    "failed": "Soubor se nepodařilo připravit.",
     "retry": "Zkus to za chvíli znovu; když to nepomůže, obnov stránku."
   },
   "threePane": {

@@ -98,6 +98,12 @@ Dekorace kreslí PDF i náhled z jednoho seznamu `pdf/decorations.ts`.
 provádí registraci fontů i render nad touž instancí `@react-pdf/renderer`.
 Volat `renderToBuffer` z aplikace znamená druhou instanci a nenačtené fonty.
 
+**Word je druhý výstup týchž dat.** `renderTestToDocx` v `packages/core/src/docx`
+staví ze zadání pro žáky upravitelný dokument (odstavce a tabulky, žádný obrázek
+stránky) přímo nad `jszip`, bez další knihovny. Pořadí položek, číslování
+a rozměry bere z `pdf/layout.ts` stejně jako PDF — co se změní na papíře, musí se
+změnit i tam. Vyplněná verze, klíč, dekorace okrajů a patička ve Wordu nejsou.
+
 **Extrakce textu běží v prohlížeči.** Na server se posílá jen text. Nikdy
 neposílej originální soubory — jsou velké a limit požadavku na Vercelu je 4,5 MB.
 Jediná výjimka jsou fotky (HEIC/JPEG/PNG nahrané samostatně, ne ve složce):

@@ -85,6 +85,13 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
           busyLabel: t('tests:print.preparingPdf'),
           run: () => downloadPdf(pdfHref(testId, variant, true)),
         },
+        {
+          // Word is for editing the assignment further, so only the pupil version has it.
+          key: `word-zadani-${variant}`,
+          label: t('tests:print.downloadWord', { suffix }),
+          busyLabel: t('tests:print.preparingWord'),
+          run: () => downloadPdf(`/api/tests/${testId}/docx?variant=${variant}`, 'test.docx'),
+        },
       ],
     }
   })
