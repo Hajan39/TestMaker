@@ -185,8 +185,8 @@ test.describe('picking questions for a test', () => {
     await expect(rowsAfterSave.filter({ hasText: a })).toHaveCount(1)
     await expect(rowsAfterSave.filter({ hasText: otherPrompt })).toHaveCount(1)
 
-    // The print menu responds — the PDF content is not checked here, only that it is generated.
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    // The download menu responds — the PDF content is not checked here, only that it is generated.
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
     const pdfResponse = page.waitForResponse((candidate) => candidate.url().includes('/pdf'))
     await page.getByRole('menuitem', { name: 'Stáhnout zadání pro žáky' }).click()
     expect((await pdfResponse).ok()).toBe(true)

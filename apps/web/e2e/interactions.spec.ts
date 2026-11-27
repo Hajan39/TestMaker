@@ -79,9 +79,9 @@ test.describe('generation menu', () => {
   })
 })
 
-test.describe('tisk testu', () => {
-  test('the button embeds the PDF in the page and triggers printing', async ({ page }) => {
-    // Prepare a test with one item via the API so there is something to print.
+test.describe('stažení testu', () => {
+  test('the test list saves the PDF as a file under the test title', async ({ page }) => {
+    // Prepare a test with one item via the API so there is something to render.
     const created = await page.request.post('/api/tests', {
       data: {
         title: 'Zkouška tisku',
@@ -99,16 +99,14 @@ test.describe('tisk testu', () => {
 
     try {
       await page.goto('/tests')
-      const pdf = page.waitForResponse((response) => response.url().includes(`/api/tests/${id}/pdf`))
+      const download = page.waitForEvent('download', { timeout: 30_000 })
       await page.getByRole('button', { name: 'Akce' }).first().click()
-      await page.getByRole('menuitem', { name: 'Vytisknout zadání pro žáky' }).click()
+      await page.getByRole('menuitem', { name: 'Stáhnout zadání pro žáky' }).click()
 
-      // The PDF is downloaded first (so a server error does not get printed as text)
-      // and the result goes into the frame as a blob; that is the observable effect.
-      expect((await pdf).ok()).toBe(true)
-      await expect
-        .poll(async () => page.locator('iframe[src^="blob:"]').count(), { timeout: 10_000 })
-        .toBeGreaterThan(0)
+      // The file is fetched first (so a server error is not saved as a PDF) and
+      // then handed to the browser under the name the server sent.
+      // WebKit hands the name out decomposed, the way macOS stores file names.
+      expect((await download).suggestedFilename().normalize('NFC')).toBe('Zkouška tisku A.pdf')
     } finally {
       await page.request.delete(`/api/tests?id=${encodeURIComponent(id)}`)
     }

@@ -130,9 +130,8 @@ export function TestActions({ row }: { row: TestRowData }) {
         {/* The menu closes on click — copying shows in place of the
             three-dot button, just like printing. */}
         <DropdownMenuItem onSelect={() => copyMutation.mutate()}>{t('tests:row.copy')}</DropdownMenuItem>
-        {/* Print and download take their labels from the shared menu — so the
-            test list and the builder cannot disagree on what "Vytisknout"
-            actually does with the answer key. */}
+        {/* Downloads take their labels from the shared menu — so the test list
+            and the builder cannot disagree on which file carries the answers. */}
         <PrintMenuItems
           testId={row.id}
           variants={row.variants}

@@ -50,8 +50,8 @@
       "title": "Doplň název hlavolamu — podle něj ho najdeš v knihovně."
     },
     "blocked": {
-      "unfinished": "Tisknout a zařadit do písemky půjde, až bude hlavolam hotový (viz výše, co chybí).",
-      "problems": "Tisknout a zařadit do písemky půjde, až opravíš potíže vypsané výš — jinak by žák hledal, co na papíře není."
+      "unfinished": "Stáhnout a zařadit do písemky půjde, až bude hlavolam hotový (viz výše, co chybí).",
+      "problems": "Stáhnout a zařadit do písemky půjde, až opravíš potíže vypsané výš — jinak by žák hledal, co na papíře není."
     },
     "discard": {
       "title": "Zahodit neuložené změny?",
@@ -84,10 +84,10 @@
       "buttonChanges": "Uložit změny"
     },
     "print": {
-      "savedAndPrinting": "Změny jsou uložené, posílám hlavolam do tisku.",
-      "failed": "Hlavolam se nepodařilo vytisknout.",
-      "preparing": "Připravuji tisk…",
-      "withKey": "Vytisknout s řešením"
+      "savedAndPrinting": "Změny jsou uložené, připravuji PDF.",
+      "failed": "Hlavolam se nepodařilo stáhnout.",
+      "preparing": "Připravuji PDF…",
+      "withKey": "Stáhnout s řešením"
     },
     "tests": {
       "loadFailed": "Seznam písemek se nepodařilo načíst.",

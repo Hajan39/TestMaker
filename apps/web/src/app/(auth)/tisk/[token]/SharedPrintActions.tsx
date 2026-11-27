@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { BusyButton, downloadPdf, printPdf, toast } from '@testmaker/ui'
+import { BusyButton, downloadPdf, toast } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
 
-/** Print and download of the pupil version, per variant when the test has two. */
+/** Download of the pupil version, per variant when the test has two. */
 export function SharedPrintActions({ token, variants }: { token: string; variants: number }) {
   const [busy, setBusy] = useState<string | null>(null)
   const list: ('A' | 'B')[] = variants === 2 ? ['A', 'B'] : ['A']
@@ -28,15 +28,6 @@ export function SharedPrintActions({ token, variants }: { token: string; variant
         return (
           <div key={variant} className="flex flex-wrap gap-2">
             <BusyButton
-              busy={busy === `print-${variant}`}
-              busyLabel={t('tests:share.page.preparing')}
-              disabled={busy !== null}
-              onClick={() => void run(`print-${variant}`, () => printPdf(href))}
-            >
-              {t('tests:share.page.print', { suffix })}
-            </BusyButton>
-            <BusyButton
-              variant="outline"
               busy={busy === `pdf-${variant}`}
               busyLabel={t('tests:share.page.preparing')}
               disabled={busy !== null}

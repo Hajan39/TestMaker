@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Print link page for anyone without an account: the test title, how long the
- * link works, and print/download of the blank pupil version.
+ * link works, and the download of the blank pupil version.
  */
 export default async function SharedPrintPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params

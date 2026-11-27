@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   downloadPdf,
-  printPdf,
   toast,
 } from '@testmaker/ui'
 import { t } from '@testmaker/core/i18n'
@@ -20,20 +19,21 @@ import { errorMessage } from '@/lib/requestJson'
 import { ShareLinkDialog, requestShareLink } from '@/components/ShareLinkDialog'
 
 /**
- * Printing and downloading a test in one place.
+ * Downloading a test in one place.
  *
- * "Vytisknout" in the builder and "Vytisknout" in the test list used to behave
- * differently: the builder attached the answer key (the "Přiložit klíč" setting
- * was on by default), the list never did. The teacher could not tell from the
- * label what would come out of the printer — and at worst handed the solutions
- * to the pupils.
+ * The builder and the test list used to disagree on whether the answer key was
+ * attached: the teacher could not tell from the label what would come out of
+ * the printer — and at worst handed the solutions to the pupils.
  *
- * So there are only two actions, named after who the paper is for:
- * **Zadání pro žáky** (blank) and **Vyplněná pro mě** (the same paper with the
- * correct answers written in red — easier to grade against than a separate
- * key list; `key=1` still renders the old key page for API callers). Both can be
- * printed or downloaded, for variant A and B. Both places in the app take this
- * list from here so their labels cannot drift apart again.
+ * So the actions are named after who the paper is for: **Zadání pro žáky**
+ * (blank) and **Vyplněná pro mě** (the same paper with the correct answers
+ * written in red — easier to grade against than a separate key list; `key=1`
+ * still renders the old key page for API callers), for variant A and B. Both
+ * places in the app take this list from here so their labels cannot drift apart
+ * again.
+ *
+ * There is no separate "print" action: the file is downloaded and printed from
+ * wherever the teacher opens it.
  */
 
 /** One menu item: what happens, what it is called and what to show while waiting. */
@@ -61,18 +61,6 @@ export function printGroups(testId: string, variants: number): { variant: 'A' | 
     return {
       variant,
       actions: [
-        {
-          key: `print-zadani-${variant}`,
-          label: t('tests:print.printStudents', { suffix }),
-          busyLabel: t('tests:print.preparingPrint'),
-          run: () => printPdf(pdfHref(testId, variant, false)),
-        },
-        {
-          key: `print-vyplnena-${variant}`,
-          label: t('tests:print.printFilled', { suffix }),
-          busyLabel: t('tests:print.preparingPrint'),
-          run: () => printPdf(pdfHref(testId, variant, true)),
-        },
         {
           key: `pdf-zadani-${variant}`,
           label: t('tests:print.downloadStudents', { suffix }),
@@ -134,8 +122,8 @@ export function PrintMenuItems({
  * Standalone menu for the builder bar — including waiting and the error message.
  *
  * The PDF is rendered on the server from the saved state. With unsaved changes
- * an older version than the one the teacher sees would print — so the menu
- * saves first (`ensureSaved`) and prints what was just saved.
+ * an older version than the one the teacher sees would download — so the menu
+ * saves first (`ensureSaved`) and renders what was just saved.
  */
 export function PrintMenu({
   testId,
@@ -147,7 +135,7 @@ export function PrintMenu({
   /** `null` for a test that was never saved. */
   testId: string | null
   variants: number
-  /** Unsaved changes (or a never-saved test) — they are saved before printing. */
+  /** Unsaved changes (or a never-saved test) — they are saved before the download. */
   unsaved?: boolean
   /** Saves the test and resolves to its id; `null` when saving failed (the caller shows why). */
   ensureSaved?: () => Promise<string | null>

@@ -38,7 +38,7 @@ test('the author copies a print link and a stranger prints the pupil version', a
 
     const page = await author.newPage()
     await page.goto(`/tests/${id}`)
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Odkaz na tisk (7 dní)' }).click()
 
     const dialog = page.getByRole('dialog', { name: 'Odkaz na tisk' })
@@ -61,9 +61,10 @@ test('the author copies a print link and a stranger prints the pupil version', a
     await expect(visitor.getByRole('heading', { name: TITLE })).toBeVisible()
     await expect(visitor.getByRole('link', { name: 'Ročníky' })).toHaveCount(0)
     await expect(visitor.getByRole('button', { name: 'Stáhnout PDF, varianta B' })).toBeEnabled()
+    await expect(visitor.getByRole('button', { name: /Vytisknout/ })).toHaveCount(0)
 
     const pdf = visitor.waitForResponse((response) => response.url().includes('/api/tisk/'), { timeout: 60_000 })
-    await visitor.getByRole('button', { name: 'Vytisknout, varianta A' }).click()
+    await visitor.getByRole('button', { name: 'Stáhnout PDF, varianta A' }).click()
     const response = await pdf
     expect(response.status()).toBe(200)
     expect(response.headers()['content-type']).toBe('application/pdf')

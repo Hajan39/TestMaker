@@ -105,17 +105,14 @@
   },
   "print": {
     "variantSuffix": ", varianta {{variant}}",
-    "printStudents": "Vytisknout zadání pro žáky{{suffix}}",
-    "printFilled": "Vytisknout vyplněnou pro mě{{suffix}}",
     "downloadStudents": "Stáhnout zadání pro žáky{{suffix}}",
     "downloadFilled": "Stáhnout vyplněnou pro mě{{suffix}}",
     "downloadWord": "Stáhnout zadání ve Wordu{{suffix}}",
-    "preparingPrint": "Připravuji tisk…",
     "preparingPdf": "Připravuji PDF…",
     "preparingWord": "Připravuji Word…",
-    "menu": "Tisk a PDF",
-    "saveFirst": "Neuložené změny se před tiskem uloží — tiskne se uložená podoba.",
-    "savedAndPrinting": "Změny jsou uložené, připravuji tisk."
+    "menu": "Stáhnout",
+    "saveFirst": "Neuložené změny se před stažením uloží — stáhne se uložená podoba.",
+    "savedAndPrinting": "Změny jsou uložené, připravuji soubor."
   },
   "variant": {
     "menu": "Verze testu",
@@ -315,7 +312,6 @@
     "page": {
       "metaTitle": "Tisk testu – TestMaker",
       "validUntil": "Odkaz platí do {{date}}.",
-      "print": "Vytisknout{{suffix}}",
       "download": "Stáhnout PDF{{suffix}}",
       "preparing": "Připravuji PDF…",
       "expiredTitle": "Odkaz už neplatí",

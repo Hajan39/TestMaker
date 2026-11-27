@@ -46,7 +46,7 @@ import {
   LoadingLines,
   PaperPuzzle,
   PaperSheet,
-  printPdf,
+  downloadPdf,
   Select,
   SelectContent,
   SelectItem,
@@ -596,7 +596,7 @@ export function PuzzleWorkshop({
     return save({ quiet: true })
   }
 
-  /** Printing always goes from the saved puzzle, so the paper matches the library. */
+  /** The PDF always comes from the saved puzzle, so the paper matches the library. */
   async function print(withKey: boolean): Promise<void> {
     if (blockedReason) {
       toast.error(blockedReason)
@@ -608,7 +608,7 @@ export function PuzzleWorkshop({
       const id = await savedId()
       if (!id) return
       if (wasDirty) toast.success(t('puzzles:workshop.print.savedAndPrinting'))
-      await printPdf(`/api/puzzles/${id}/pdf${withKey ? '?key=1' : ''}`)
+      await downloadPdf(`/api/puzzles/${id}/pdf${withKey ? '?key=1' : ''}`)
     } catch (error) {
       toast.error(errorMessage(error, t('puzzles:workshop.print.failed')))
     } finally {
@@ -1116,7 +1116,7 @@ export function PuzzleWorkshop({
                 aria-describedby={showBlocked ? 'puzzle-blocked' : undefined}
                 onClick={() => void print(false)}
               >
-                {t('common:actions.print')}
+                {t('common:actions.download')}
               </BusyButton>
               <BusyButton
                 variant="outline"

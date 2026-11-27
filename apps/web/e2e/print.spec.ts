@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 
 /**
- * Printing must not hand the solutions out to pupils.
+ * The paper for pupils must not hand the solutions out.
  *
- * "Přiložit klíč" used to be on by default for a test and the builder's
- * "Vytisknout" button attached the key based on it, while the button of the same
- * name in the test list never attached it. Now there are two actions — "zadání
- * pro žáky" and "vyplněná pro mě" — and they must behave the same in both places.
+ * "Přiložit klíč" used to be on by default for a test and the builder's print
+ * button attached the key based on it, while the button of the same name in the
+ * test list never attached it. Now the files are named after who they are for —
+ * "zadání pro žáky" and "vyplněná pro mě" — and they must behave the same in
+ * both places. The app only downloads; there is no separate print action.
  *
  * What the server actually sent is told by the file name in the
  * `content-disposition` header (see `src/app/api/tests/[id]/pdf/route.ts`): the
@@ -32,7 +33,7 @@ async function fileNameAfterClick(page: Page, testId: string, item: string, form
   return fileName((await response).headers()['content-disposition'])
 }
 
-test.describe('printing the assignment and the key', () => {
+test.describe('downloading the assignment and the key', () => {
   let testId: string
 
   test.beforeEach(async ({ page }) => {
@@ -58,11 +59,18 @@ test.describe('printing the assignment and the key', () => {
   test('builder: the assignment has no key, the teacher copy is filled in', async ({ page }) => {
     await page.goto(`/tests/${testId}`)
 
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
+    // Download only: two PDFs and the Word file, no separate print items.
+    await expect(page.getByRole('menuitem', { name: /^Stáhnout/ })).toHaveText([
+      'Stáhnout zadání pro žáky',
+      'Stáhnout vyplněnou pro mě',
+      'Stáhnout zadání ve Wordu',
+    ])
+    await expect(page.getByRole('menuitem', { name: /Vytisknout/ })).toHaveCount(0)
     const assignment = await fileNameAfterClick(page, testId, 'Stáhnout zadání pro žáky')
     expect(assignment).toBe(`${TITLE} A.pdf`)
 
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
     const key = await fileNameAfterClick(page, testId, 'Stáhnout vyplněnou pro mě')
     expect(key).toBe(`${TITLE} A vyplněná.pdf`)
   })
@@ -70,7 +78,7 @@ test.describe('printing the assignment and the key', () => {
   test('builder: the assignment can be downloaded as a Word document', async ({ page }) => {
     await page.goto(`/tests/${testId}`)
 
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
     const download = page.waitForEvent('download')
     const name = await fileNameAfterClick(page, testId, 'Stáhnout zadání ve Wordu', 'docx')
     expect(name).toBe(`${TITLE} A.docx`)
@@ -95,27 +103,20 @@ test.describe('printing the assignment and the key', () => {
     expect(key).toBe(`${TITLE} A vyplněná.pdf`)
   })
 
-  test('builder: unsaved changes are saved before printing, and an unsavable test is not printed', async ({ page }) => {
+  test('builder: unsaved changes are saved before the download, and an unsavable test is not rendered', async ({ page }) => {
     await page.goto(`/tests/${testId}`)
     let pdfRequested = false
     page.on('request', (request) => {
       if (request.url().includes(`/api/tests/${testId}/pdf`)) pdfRequested = true
     })
 
-    // An empty title cannot be saved — so nothing may print from the stale saved state.
+    // An empty title cannot be saved — so nothing may render from the stale saved state.
     const title = page.getByLabel('Název testu')
     await title.fill('')
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
     await expect(page.getByTestId('print-save-first')).toBeVisible()
     await page.getByRole('menuitem', { name: 'Stáhnout zadání pro žáky' }).click()
     await expect(title).toHaveAttribute('aria-invalid', 'true')
     expect(pdfRequested).toBe(false)
-  })
-
-  test('printing the assignment sends a PDF without the key to the printer', async ({ page }) => {
-    await page.goto(`/tests/${testId}`)
-    await page.getByRole('button', { name: 'Tisk a PDF' }).click()
-    const printed = await fileNameAfterClick(page, testId, 'Vytisknout zadání pro žáky')
-    expect(printed).toBe(`${TITLE} A.pdf`)
   })
 })

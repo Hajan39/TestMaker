@@ -79,7 +79,7 @@ test.describe('puzzles', () => {
     await expect(page.locator('[data-slot="puzzle-problems"]')).toContainText('nevejde')
   })
 
-  test('a cryptogram shows rows and the solution and can be printed', async ({ page }) => {
+  test('a cryptogram shows rows and the solution and can be downloaded', async ({ page }) => {
     const modelCalls: string[] = []
     page.on('request', (request) => {
       if (request.url().includes('/api/puzzles/words')) modelCalls.push(request.url())
@@ -104,11 +104,11 @@ test.describe('puzzles', () => {
     await page.getByLabel('Ukázat řešení').click()
     await expect(page.locator('[data-slot="puzzle-rows"]')).toContainText('L')
 
-    const print = page.waitForResponse(
+    const pdf = page.waitForResponse(
       (response) => response.url().includes('/api/puzzles/') && response.url().includes('/pdf'),
     )
-    await page.getByRole('button', { name: 'Vytisknout', exact: true }).click()
-    expect((await print).status()).toBe(200)
+    await page.getByRole('button', { name: 'Stáhnout', exact: true }).click()
+    expect((await pdf).status()).toBe(200)
 
     expect(modelCalls, 'model se z obrazovky volat nesmí').toEqual([])
   })
@@ -126,8 +126,8 @@ test.describe('puzzles', () => {
     await expect(page.locator('[data-slot="puzzle-problems"]')).toContainText('nevejde')
 
     // Printing and adding are locked and say why.
-    await expect(page.getByRole('button', { name: 'Vytisknout', exact: true })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Vytisknout s řešením' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Stáhnout', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Stáhnout s řešením' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Zařadit do písemky' })).toBeDisabled()
     await expect(page.locator('[data-slot="puzzle-blocked"]')).toContainText('opravíš potíže')
 
